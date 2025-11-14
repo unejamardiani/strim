@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Strim.Api</RootNamespace>
+    <AssemblyName>Strim.Api</AssemblyName>
+  </PropertyGroup>
+</Project>

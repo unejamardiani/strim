@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://0.0.0.0:5142
+    ports:
+      - "5142:5142"
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: http://api:5142
+    ports:
+      - "5173:4173"
+    depends_on:
+      - api
+
+  db:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=strim
+      - POSTGRES_PASSWORD=strim
+      - POSTGRES_DB=strim
+    ports:
+      - "5432:5432"
+    volumes:
+      - strim-db:/var/lib/postgresql/data
+
+volumes:
+  strim-db:
