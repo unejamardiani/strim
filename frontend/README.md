@@ -1,6 +1,6 @@
 # Strim Frontend
 
-This folder contains the React single-page application scaffolded with Vite and TypeScript. It provides a lightweight integration surface to communicate with the Strim backend during development.
+This folder contains the React single-page application scaffolded with Vite and TypeScript. It now surfaces playlist ingestion workflows and visualizes stored playlists.
 
 ## Available Scripts
 
@@ -9,12 +9,19 @@ This folder contains the React single-page application scaffolded with Vite and 
 - `npm run build` – Type-check and bundle the application for production.
 - `npm run lint` – Run ESLint across the TypeScript source files.
 
+## Features
+
+- Backend health status with manual refresh controls.
+- Playlist ingestion form accepting either a provider URL or a filesystem path reachable by the API container.
+- Preview of the most recent ingest (first 25 channels).
+- Table of all stored playlists, including channel counts and timestamps.
+
 ## Environment Variables
 
 Add a `.env.local` file to override the backend API URL if required:
 
-```bash
+```
 VITE_API_URL=https://example.com
 ```
 
-Update the Axios instance in `src/App.tsx` to use the custom value if you plan to deploy separately from the backend.
+The application automatically trims trailing slashes and falls back to relative paths when no override is specified.

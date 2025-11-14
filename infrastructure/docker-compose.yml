@@ -8,6 +8,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://0.0.0.0:5142
+      - ConnectionStrings__Database=Host=db;Port=5432;Database=strim;Username=strim;Password=strim
     ports:
       - "5142:5142"
     depends_on:

@@ -1,17 +1,22 @@
 using System.Net;
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
 namespace Strim.Tests;
 
-public class SampleHealthCheckTests
+public class SampleHealthCheckTests : IClassFixture<PlaylistApplicationFactory>
 {
+    private readonly PlaylistApplicationFactory _factory;
+
+    public SampleHealthCheckTests(PlaylistApplicationFactory factory)
+    {
+        _factory = factory;
+    }
+
     [Fact]
     public async Task HealthEndpoint_ReturnsHealthyPayload()
     {
-        await using var factory = new WebApplicationFactory<Program>();
-        using var client = factory.CreateClient();
+        using var client = _factory.CreateClient();
 
         var response = await client.GetAsync("/api/health");
 

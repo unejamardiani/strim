@@ -1,12 +1,12 @@
 # Strim
 
-Strim is a toolkit for ingesting IPTV playlists, applying configurable cleaning rules, and exporting streamlined channel lists. This repository currently contains the foundational scaffolding for the backend API, frontend SPA, and infrastructure required to run the platform locally or in CI.
+Strim is a toolkit for ingesting IPTV playlists, applying configurable cleaning rules, and exporting streamlined channel lists. The repository now includes playlist ingestion, persistence, and preview capabilities alongside the original project scaffolding.
 
 ## Project Structure
 
 ```
 .
-├── backend/            # ASP.NET Core solution with API and tests
+├── backend/            # ASP.NET Core API, EF Core data layer, and automated tests
 ├── frontend/           # React + Vite single-page application
 ├── infrastructure/     # Docker Compose definitions and supporting scripts
 ├── .github/workflows/  # Continuous integration pipelines
@@ -14,48 +14,62 @@ Strim is a toolkit for ingesting IPTV playlists, applying configurable cleaning 
 └── Strim.sln           # Solution file referencing backend projects
 ```
 
-## Getting Started
+## Backend
 
-### Prerequisites
+The API exposes endpoints for health checks and playlist management:
 
-- .NET 8 SDK (for local backend development)
-- Node.js 20 (for the React frontend)
-- Docker (optional, to use the compose environment)
+- `GET /api/health` – Service heartbeat.
+- `POST /api/playlists/parse` – Ingest a playlist from a URL or filesystem path, persist it, and return a preview of the first 25 channels.
+- `GET /api/playlists` – List stored playlists with channel counts and metadata.
 
-### Backend
+### Local Development
 
-```bash
+```
 dotnet restore
 dotnet run --project backend/src/Strim.Api/Strim.Api.csproj
 ```
 
-The API hosts Swagger UI in development at `http://localhost:5142/swagger` and exposes a health endpoint at `http://localhost:5142/api/health`.
+The API hosts Swagger UI in development at `http://localhost:5142/swagger`.
 
-### Frontend
+### Database & Migrations
 
-```bash
+Entity Framework Core targets PostgreSQL by default. The sample connection string is configured in `appsettings.json` and can be overridden through the standard `ConnectionStrings__Database` environment variable. Migrations are applied automatically on startup; generate new migrations locally with:
+
+```
+dotnet ef migrations add <Name> --project backend/src/Strim.Api/Strim.Api.csproj --output-dir Data/Migrations
+```
+
+## Frontend
+
+```
 cd frontend
 npm install
 npm run dev
 ```
 
-The development server runs on `http://localhost:5173` and proxies API requests to the backend server.
+The development server runs on `http://localhost:5173` and proxies API requests. The UI offers:
 
-### Docker Compose
+- Backend health status and manual refresh controls.
+- A playlist ingestion form supporting URL or file path sources.
+- A preview of the most recent ingest, plus a table of all stored playlists.
+
+Set `VITE_API_URL` in `.env.local` when developing against a remote backend.
+
+## Docker Compose
 
 To run the full stack, including PostgreSQL, use:
 
-```bash
+```
 cd infrastructure
 docker compose up --build
 ```
 
-This command starts the backend API, frontend static host, and a Postgres database with persistent storage.
+This command starts the backend API, applies database migrations, serves the frontend statically, and provisions a Postgres database with persistent storage.
 
-### Continuous Integration
+## Continuous Integration
 
-GitHub Actions (see `.github/workflows/ci.yml`) restores, builds, and tests the backend, while linting and building the frontend on each push or pull request.
+GitHub Actions (see `.github/workflows/ci.yml`) restore, build, and test the backend, while linting and building the frontend on each push or pull request.
 
 ## Next Steps
 
-The remaining milestones from `spec.md`—such as playlist ingestion, rule management, and the cleaner engine—will be implemented incrementally on top of this foundation.
+The remaining milestones from `spec.md`—such as rule management, the cleaner engine, scheduling, and advanced playlist transformations—will build on this ingestion layer.

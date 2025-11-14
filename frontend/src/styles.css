@@ -18,8 +18,8 @@ body {
 }
 
 .app-shell {
-  width: min(640px, 90vw);
-  margin-top: 4rem;
+  width: min(960px, 92vw);
+  margin: 3rem 0 4rem;
 }
 
 header {
@@ -37,6 +37,10 @@ header {
   padding: 2rem;
   border-radius: 1rem;
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
+}
+
+.card h2 {
+  margin-top: 0;
 }
 
 .health-grid {
@@ -72,7 +76,169 @@ button:hover {
   box-shadow: 0 12px 30px rgba(99, 102, 241, 0.4);
 }
 
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.45);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
 .error {
   color: #fca5a5;
   font-weight: 500;
+  margin-top: 0.5rem;
+}
+
+.helper-text {
+  margin-top: 0.25rem;
+  color: #cbd5f5;
+  font-size: 0.95rem;
+}
+
+.form-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+input[type="text"],
+input[type="url"] {
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  background: rgba(15, 23, 42, 0.65);
+  color: #f8fafc;
+}
+
+input[type="text"]:focus,
+input[type="url"]:focus {
+  outline: none;
+  border-color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+}
+
+input[type="text"]:disabled,
+input[type="url"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.parse-results {
+  margin-top: 2rem;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.parse-results ul {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.parse-results li {
+  padding: 0.5rem 0.75rem;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 0.75rem;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.2);
+}
+
+.channel-name {
+  font-weight: 600;
+}
+
+.channel-meta {
+  margin-left: 0.75rem;
+  font-size: 0.9rem;
+  color: #94a3b8;
+  display: inline-block;
+}
+
+.channel-url {
+  margin-left: 0;
+  display: block;
+  font-size: 0.8rem;
+  color: #64748b;
+  word-break: break-all;
+}
+
+.playlist-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.table-scroll {
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+.playlist-table th,
+.playlist-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.playlist-table th {
+  font-weight: 600;
+  color: #bfdbfe;
+}
+
+.playlist-table tbody td:first-child {
+  font-weight: 600;
+}
+
+.playlist-table tbody tr:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.source-type {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #93c5fd;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.source-value {
+  display: block;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    width: 92vw;
+  }
+
+  .playlist-table th,
+  .playlist-table td {
+    padding: 0.6rem;
+  }
+
+  .source-value {
+    max-width: 200px;
+  }
 }
