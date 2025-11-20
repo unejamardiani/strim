@@ -1,0 +1,266 @@
+const state = {
+  channels: [],
+  groups: new Map(),
+  disabledGroups: new Set(),
+  sourceName: 'untitled',
+};
+
+const statusPill = document.getElementById('status-pill');
+const stats = document.getElementById('stats');
+const groupsGrid = document.getElementById('groups');
+const outputArea = document.getElementById('output');
+const outputSize = document.getElementById('output-size');
+const shareUrlInput = document.getElementById('share-url');
+
+const samplePlaylist = `#EXTM3U
+#EXTINF:-1 tvg-name="News HD" group-title="News" tvg-logo="https://placehold.co/40x40",Global News HD
+http://example.com/streams/global-news.m3u8
+#EXTINF:-1 tvg-name="Sports 1" group-title="Sports" tvg-logo="https://placehold.co/40x40",Sports One
+http://example.com/streams/sports1.m3u8
+#EXTINF:-1 tvg-name="Sports 2" group-title="Sports" tvg-logo="https://placehold.co/40x40",Sports Two
+http://example.com/streams/sports2.m3u8
+#EXTINF:-1 tvg-name="Kids" group-title="Family" tvg-logo="https://placehold.co/40x40",Kids Central
+http://example.com/streams/kids.m3u8
+#EXTINF:-1 tvg-name="Drama" group-title="Entertainment" tvg-logo="https://placehold.co/40x40",Drama Now
+http://example.com/streams/drama.m3u8`;
+
+const fetchButton = document.getElementById('fetch-playlist');
+const parseRawButton = document.getElementById('parse-raw');
+const loadSampleButton = document.getElementById('load-sample');
+const toggleAllButton = document.getElementById('toggle-all');
+const refreshButton = document.getElementById('refresh-output');
+const copyButton = document.getElementById('copy-output');
+const downloadButton = document.getElementById('download-output');
+const serveButton = document.getElementById('serve-output');
+
+fetchButton.addEventListener('click', () => {
+  const urlInput = document.getElementById('playlist-url');
+  const url = urlInput.value.trim();
+  if (!url) {
+    setStatus('Enter a URL to fetch', 'warn');
+    return;
+  }
+  setStatus('Fetching playlist…', 'info');
+  fetchPlaylist(url);
+});
+
+parseRawButton.addEventListener('click', () => {
+  const text = document.getElementById('playlist-raw').value.trim();
+  if (!text) {
+    setStatus('Paste M3U text to parse', 'warn');
+    return;
+  }
+  hydrateState(text, 'pasted-playlist');
+});
+
+loadSampleButton.addEventListener('click', () => {
+  document.getElementById('playlist-raw').value = samplePlaylist;
+  hydrateState(samplePlaylist, 'sample.m3u');
+});
+
+refreshButton.addEventListener('click', () => {
+  updateOutput();
+});
+
+copyButton.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(outputArea.value);
+    setStatus('Copied filtered playlist to clipboard', 'success');
+  } catch (err) {
+    console.error(err);
+    setStatus('Clipboard failed. You can still download the file.', 'warn');
+  }
+});
+
+downloadButton.addEventListener('click', () => {
+  const blob = new Blob([outputArea.value], { type: 'application/x-mpegURL' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${state.sourceName || 'playlist'}-filtered.m3u`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+
+serveButton.addEventListener('click', () => {
+  const blob = new Blob([outputArea.value], { type: 'application/x-mpegURL' });
+  const url = URL.createObjectURL(blob);
+  shareUrlInput.value = url;
+  shareUrlInput.focus();
+  shareUrlInput.select();
+  setStatus('Shareable object URL generated. Keep this tab open.', 'info');
+});
+
+function setStatus(text, tone = 'info') {
+  statusPill.textContent = text;
+  statusPill.className = 'pill';
+  statusPill.classList.add(`tone-${tone}`);
+}
+
+async function fetchPlaylist(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const text = await res.text();
+    hydrateState(text, url);
+  } catch (error) {
+    console.error(error);
+    setStatus('Unable to fetch playlist (CORS or network error). Paste it instead.', 'warn');
+  }
+}
+
+function hydrateState(text, sourceName = 'playlist') {
+  const parsed = parseM3U(text);
+  state.channels = parsed.channels;
+  state.groups = parsed.groups;
+  state.disabledGroups = new Set();
+  state.sourceName = sourceName;
+  renderGroups();
+  renderStats();
+  updateOutput();
+  setStatus(`Loaded ${state.channels.length} channels from ${sourceName}`, 'success');
+}
+
+function parseM3U(text) {
+  const lines = text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const channels = [];
+  const groups = new Map();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.startsWith('#EXTINF')) continue;
+    const extinf = line;
+    const url = lines[i + 1] || '';
+    i++;
+
+    const attributes = {};
+    const attrRegex = /(\w[\w-]*)="([^"]*)"/g;
+    let match;
+    while ((match = attrRegex.exec(extinf)) !== null) {
+      attributes[match[1]] = match[2];
+    }
+
+    const name = extinf.split(',').slice(1).join(',').trim() || attributes['tvg-name'] || 'Unknown';
+    const groupTitle = attributes['group-title'] || 'Ungrouped';
+
+    const channel = {
+      extinf,
+      url,
+      name,
+      groupTitle,
+      attributes,
+    };
+
+    channels.push(channel);
+    groups.set(groupTitle, (groups.get(groupTitle) || 0) + 1);
+  }
+
+  return { channels, groups };
+}
+
+function renderGroups() {
+  groupsGrid.innerHTML = '';
+  const fragment = document.createDocumentFragment();
+
+  [...state.groups.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([groupTitle, count]) => {
+      const card = document.createElement('div');
+      card.className = 'group-card';
+      if (state.disabledGroups.has(groupTitle)) card.classList.add('disabled');
+
+      const row = document.createElement('div');
+      row.className = 'group-row';
+      const label = document.createElement('strong');
+      label.textContent = groupTitle;
+      const chip = document.createElement('span');
+      chip.className = 'count';
+      chip.textContent = `${count} channel${count === 1 ? '' : 's'}`;
+      row.append(label, chip);
+
+      const toggleWrapper = document.createElement('label');
+      toggleWrapper.className = 'switch';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = !state.disabledGroups.has(groupTitle);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) state.disabledGroups.delete(groupTitle);
+        else state.disabledGroups.add(groupTitle);
+        renderGroups();
+        renderStats();
+        updateOutput();
+      });
+      const slider = document.createElement('span');
+      slider.className = 'slider';
+      toggleWrapper.append(checkbox, slider);
+
+      card.append(row, toggleWrapper);
+      fragment.append(card);
+    });
+
+  groupsGrid.append(fragment);
+}
+
+function renderStats() {
+  stats.innerHTML = '';
+  const total = state.channels.length;
+  const disabled = [...state.disabledGroups.values()].length;
+  const groupsTotal = state.groups.size;
+  const keptGroups = groupsTotal - disabled;
+
+  const cards = [
+    { label: 'Channels', value: total },
+    { label: 'Groups enabled', value: keptGroups },
+    { label: 'Groups disabled', value: disabled },
+  ];
+
+  cards.forEach((card) => {
+    const div = document.createElement('div');
+    div.className = 'stat-card';
+    div.innerHTML = `<div class="eyebrow">${card.label}</div><div class="stat-value">${card.value}</div>`;
+    stats.append(div);
+  });
+}
+
+function generateFilteredM3U() {
+  const disabled = state.disabledGroups;
+  const filtered = state.channels.filter((c) => !disabled.has(c.groupTitle));
+  const outputLines = ['#EXTM3U'];
+
+  filtered.forEach((channel) => {
+    const hasGroup = /group-title="[^"]*"/i.test(channel.extinf);
+    const extinf = hasGroup
+      ? channel.extinf
+      : `${channel.extinf} group-title="${channel.groupTitle}"`;
+    outputLines.push(extinf);
+    outputLines.push(channel.url);
+  });
+
+  outputSize.textContent = `${filtered.length} channels`;
+  return outputLines.join('\n');
+}
+
+function updateOutput() {
+  const text = generateFilteredM3U();
+  outputArea.value = text;
+}
+
+toggleAllButton.addEventListener('click', () => {
+  if (state.disabledGroups.size > 0) {
+    state.disabledGroups.clear();
+    toggleAllButton.textContent = 'Disable none';
+  } else {
+    state.groups.forEach((_, key) => state.disabledGroups.add(key));
+    toggleAllButton.textContent = 'Enable all';
+  }
+  renderGroups();
+  renderStats();
+  updateOutput();
+});
+
+// Initialize with sample to give users something to see immediately.
+hydrateState(samplePlaylist, 'sample.m3u');
