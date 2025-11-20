@@ -97,18 +97,39 @@ function setStatus(text, tone = 'info') {
 }
 
 async function fetchPlaylist(url) {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const text = await res.text();
-    hydrateState(text, url);
-  } catch (error) {
-    console.error(error);
-    setStatus('Unable to fetch playlist (CORS or network error). Paste it instead.', 'warn');
+  const sources = [
+    { label: 'direct', url },
+    {
+      label: 'CORS proxy',
+      url: `https://cors.isomorphic-git.org/${encodeURIComponent(url)}`,
+    },
+    {
+      label: 'CORS proxy (fallback)',
+      url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    },
+  ];
+
+  let lastError;
+
+  for (const source of sources) {
+    try {
+      const res = await fetch(source.url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const text = await res.text();
+      const note = source.label === 'direct' ? '' : source.label;
+      hydrateState(text, url, note);
+      return;
+    } catch (error) {
+      lastError = error;
+      console.warn(`Failed via ${source.label}:`, error);
+    }
   }
+
+  console.error(lastError);
+  setStatus('Unable to fetch playlist (CORS or network error). Try pasting it instead.', 'warn');
 }
 
-function hydrateState(text, sourceName = 'playlist') {
+function hydrateState(text, sourceName = 'playlist', note = '') {
   const parsed = parseM3U(text);
   state.channels = parsed.channels;
   state.groups = parsed.groups;
@@ -117,7 +138,8 @@ function hydrateState(text, sourceName = 'playlist') {
   renderGroups();
   renderStats();
   updateOutput();
-  setStatus(`Loaded ${state.channels.length} channels from ${sourceName}`, 'success');
+  const noteSuffix = note ? ` (${note})` : '';
+  setStatus(`Loaded ${state.channels.length} channels from ${sourceName}${noteSuffix}`.trim(), 'success');
 }
 
 function parseM3U(text) {

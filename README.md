@@ -19,3 +19,10 @@ filesystem.
 
 Deploy the contents of this directory to Azure Static Web Apps or an App Service configured for
 static files. The app has no server-side dependencies.
+
+## Playlist fetching and CORS
+
+Some playlist hosts do not send CORS headers, which blocks direct browser fetches. strim will
+automatically retry through lightweight public CORS proxies (isomorphic-git and AllOrigins) if a
+direct request fails. If a host also blocks those proxies, paste the playlist text into the app
+instead.
