@@ -97,8 +97,16 @@ function setStatus(text, tone = 'info') {
 }
 
 async function fetchPlaylist(url) {
+  const isHttpOnHttps = window.location.protocol === 'https:' && url.startsWith('http:');
+
+  if (isHttpOnHttps) {
+    setStatus('HTTPS pages cannot fetch HTTP playlists directly. Trying through proxies…', 'warn');
+  }
+
   const sources = [
-    { label: 'direct', url },
+    // Skip the direct attempt if we know the browser will block mixed content when the app is
+    // served over HTTPS and the playlist is HTTP only.
+    ...(!isHttpOnHttps ? [{ label: 'direct', url }] : []),
     {
       label: 'CORS proxy',
       url: `https://cors.isomorphic-git.org/${encodeURIComponent(url)}`,
@@ -106,6 +114,10 @@ async function fetchPlaylist(url) {
     {
       label: 'CORS proxy (fallback)',
       url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    },
+    {
+      label: 'CORS proxy (alt)',
+      url: `https://corsproxy.io/?${encodeURIComponent(url)}`,
     },
   ];
 
