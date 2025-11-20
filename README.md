@@ -23,9 +23,20 @@ static files. The app has no server-side dependencies.
 ## Playlist fetching and CORS
 
 Some playlist hosts do not send CORS headers, which blocks direct browser fetches. strim will
-automatically retry through lightweight public CORS proxies (isomorphic-git, AllOrigins, and
-corsproxy.io) if a direct request fails. If a host also blocks those proxies, paste the playlist
-text into the app instead.
+automatically retry through lightweight public CORS proxies if a direct request fails. If a host
+also blocks those proxies, paste the playlist text into the app instead.
+
+### CORS proxy list
+
+The app will try each of these in order until one succeeds:
+
+- `https://cors.isomorphic-git.org/…`
+- `https://api.allorigins.win/raw?url=…`
+- `https://corsproxy.io/?…`
+- `https://r.jina.ai/<your-url-without-scheme>`
+- `https://thingproxy.freeboard.io/fetch/<your-url>`
+
+If none of them work the UI now shows a per-proxy error summary so you can see what failed.
 
 ### HTTPS page loading HTTP playlists
 

@@ -119,9 +119,22 @@ async function fetchPlaylist(url) {
       label: 'CORS proxy (alt)',
       url: `https://corsproxy.io/?${encodeURIComponent(url)}`,
     },
+    {
+      label: 'CORS proxy (jina.ai)',
+      url: (() => {
+        const stripped = url.replace(/^https?:\/\//, '');
+        const scheme = url.startsWith('https:') ? 'https' : 'http';
+        return `https://r.jina.ai/${scheme}://${stripped}`;
+      })(),
+    },
+    {
+      label: 'CORS proxy (thingproxy)',
+      url: `https://thingproxy.freeboard.io/fetch/${url}`,
+    },
   ];
 
   let lastError;
+  const errors = [];
 
   for (const source of sources) {
     try {
@@ -133,12 +146,17 @@ async function fetchPlaylist(url) {
       return;
     } catch (error) {
       lastError = error;
+      errors.push(`${source.label}: ${error.message}`);
       console.warn(`Failed via ${source.label}:`, error);
     }
   }
 
   console.error(lastError);
-  setStatus('Unable to fetch playlist (CORS or network error). Try pasting it instead.', 'warn');
+  const detail = errors.length ? ` Details: ${errors.join(' | ')}` : '';
+  setStatus(
+    `Unable to fetch playlist (CORS or network error). Try pasting it instead.${detail}`,
+    'warn'
+  );
 }
 
 function hydrateState(text, sourceName = 'playlist', note = '') {
