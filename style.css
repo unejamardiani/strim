@@ -255,19 +255,19 @@ button:active,
 
 .group-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .group-card {
-  padding: 12px;
-  border-radius: 14px;
+  padding: 10px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.03);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .group-card.disabled {
@@ -279,22 +279,22 @@ button:active,
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .group-row strong {
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .count {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .switch {
   position: relative;
-  width: 46px;
-  height: 26px;
+  width: 42px;
+  height: 22px;
 }
 
 .switch input {
@@ -316,8 +316,8 @@ button:active,
 .slider:before {
   position: absolute;
   content: '';
-  height: 18px;
-  width: 18px;
+  height: 15px;
+  width: 15px;
   left: 4px;
   bottom: 3px;
   background-color: #0b0b12;
@@ -331,7 +331,7 @@ input:checked + .slider {
 }
 
 input:checked + .slider:before {
-  transform: translateX(18px);
+  transform: translateX(17px);
 }
 
 .actions,
