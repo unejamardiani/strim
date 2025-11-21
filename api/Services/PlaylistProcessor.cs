@@ -1,12 +1,14 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Api.Models;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace Api.Services;
 
 public static class PlaylistProcessor
 {
   private static readonly Regex AttrRegex = new(@"(\w[\w-]*)=""([^""]*)""", RegexOptions.Compiled);
+  private static readonly string[] ExpirationKeys = new[] { "exp", "expires", "expire", "expiration" };
 
   public static (Dictionary<string, int> Groups, int Total) CountGroups(string text)
   {
@@ -89,6 +91,35 @@ public static class PlaylistProcessor
   public static List<GroupResult> ToGroupResults(Dictionary<string, int> groups)
   {
     return groups.Select(kvp => new GroupResult(kvp.Key, kvp.Value)).ToList();
+  }
+
+  public static DateTimeOffset? TryExtractExpiration(Uri? uri)
+  {
+    if (uri is null) return null;
+    var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+    foreach (var keyCandidate in ExpirationKeys)
+    {
+      if (!query.TryGetValue(keyCandidate, out var values)) continue;
+      foreach (var raw in values)
+      {
+        if (string.IsNullOrWhiteSpace(raw)) continue;
+
+        if (long.TryParse(raw, out var num))
+        {
+          if (num > 1000000000000) num /= 1000; // likely ms
+          if (num > 1000000000)
+          {
+            return DateTimeOffset.FromUnixTimeSeconds(num);
+          }
+        }
+
+        if (DateTimeOffset.TryParse(raw, out var parsed))
+        {
+          return parsed;
+        }
+      }
+    }
+    return null;
   }
 
   private static string[] NormalizeLines(string text) =>

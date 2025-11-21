@@ -18,12 +18,14 @@ public class Playlist
   [MaxLength(200)]
   public string? SourceName { get; set; }
 
-  public string RawText { get; set; } = string.Empty;
-
-  public string FilteredText { get; set; } = string.Empty;
-
   [Column(TypeName = "jsonb")]
   public List<string> DisabledGroups { get; set; } = new();
+
+  public int TotalChannels { get; set; }
+
+  public int GroupCount { get; set; }
+
+  public DateTimeOffset? ExpirationUtc { get; set; }
 
   public DateTimeOffset CreatedAt { get; set; }
 

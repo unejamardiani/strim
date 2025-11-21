@@ -7,6 +7,7 @@ const state = {
   backendSession: null,
   localPlaylist: null,
   totalChannels: 0,
+  groupCount: 0,
   groupEntries: [],
   lastOutput: '',
 };
@@ -17,7 +18,6 @@ const groupsGrid = document.getElementById('groups');
 const outputSize = document.getElementById('output-size');
 const shareUrlInput = document.getElementById('share-url');
 const playlistNameInput = document.getElementById('playlist-name');
-const playlistSourceInput = document.getElementById('playlist-source');
 const savedListContainer = document.getElementById('saved-list');
 const savedEmptyState = document.getElementById('saved-empty');
 
@@ -66,9 +66,6 @@ fetchButton.addEventListener('click', () => {
   if (!url) {
     setStatus('Enter a URL to fetch', 'warn');
     return;
-  }
-  if (playlistSourceInput) {
-    playlistSourceInput.value = url;
   }
   setStatus('Fetching playlist…', 'info');
   loadPlaylistFromSource(url);
@@ -189,6 +186,7 @@ function hydrateFromAnalysis(analysis, options = {}) {
   (analysis.groups || []).forEach((g) => groups.set(g.name, g.count));
   state.groups = groups;
   state.totalChannels = analysis.totalChannels || Array.from(groups.values()).reduce((acc, val) => acc + val, 0);
+  state.groupCount = analysis.groupCount || groups.size || 0;
   const restoredDisabled = (options.disabledGroups || []).filter((g) => groups.has(g));
   state.disabledGroups = new Set(restoredDisabled);
   state.currentPlaylistId = options.id || null;
@@ -196,6 +194,8 @@ function hydrateFromAnalysis(analysis, options = {}) {
     cacheKey: analysis.cacheKey,
     sourceUrl: analysis.sourceUrl || options.sourceUrl || '',
     totalChannels: state.totalChannels,
+    groupCount: state.groupCount,
+    expirationUtc: analysis.expirationUtc ? new Date(analysis.expirationUtc).toISOString() : null,
   };
   state.localPlaylist = null;
   state.lastOutput = '';
@@ -205,9 +205,6 @@ function hydrateFromAnalysis(analysis, options = {}) {
 
   if (playlistNameInput) {
     playlistNameInput.value = nameChoice;
-  }
-  if (playlistSourceInput && (analysis.sourceUrl || options.sourceUrl)) {
-    playlistSourceInput.value = analysis.sourceUrl || options.sourceUrl;
   }
   renderGroups();
   renderStats();
@@ -220,6 +217,7 @@ function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options 
   const parsed = parseM3U(text);
   state.groups = parsed.groups;
   state.totalChannels = parsed.channels.length;
+  state.groupCount = parsed.groups.size;
   const restoredDisabled = (options.disabledGroups || []).filter((g) => parsed.groups.has(g));
   state.disabledGroups = new Set(restoredDisabled);
   state.currentPlaylistId = options.id || null;
@@ -236,9 +234,6 @@ function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options 
 
   if (playlistNameInput) {
     playlistNameInput.value = nameChoice;
-  }
-  if (playlistSourceInput && options.sourceUrl) {
-    playlistSourceInput.value = options.sourceUrl;
   }
   renderGroups();
   renderStats();
@@ -333,6 +328,9 @@ function sanitizePlaylistRecord(pl) {
     sourceUrl: pl.sourceUrl,
     sourceName: pl.sourceName,
     disabledGroups: Array.isArray(pl.disabledGroups) ? pl.disabledGroups : [],
+    totalChannels: pl.totalChannels || 0,
+    groupCount: pl.groupCount || 0,
+    expirationUtc: pl.expirationUtc || null,
     createdAt: pl.createdAt,
     updatedAt: pl.updatedAt,
   };
@@ -340,6 +338,19 @@ function sanitizePlaylistRecord(pl) {
 
 function hasLoadedPlaylist() {
   return Boolean(state.backendSession || state.localPlaylist);
+}
+
+function formatExpiration(expiration) {
+  if (!expiration) return 'Expiry unknown';
+  const date = new Date(expiration);
+  if (Number.isNaN(date.getTime())) return 'Expiry unknown';
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 async function apiRequest(path, { method = 'GET', body } = {}) {
@@ -380,9 +391,7 @@ async function handleSavePlaylist() {
   }
 
   const name = (playlistNameInput && playlistNameInput.value.trim()) || state.sourceName || 'Untitled playlist';
-  const sourceUrl =
-    (playlistSourceInput && playlistSourceInput.value.trim()) ||
-    document.getElementById('playlist-url').value.trim();
+  const sourceUrl = document.getElementById('playlist-url').value.trim();
   const disabledGroups = Array.from(state.disabledGroups);
   const isUpdate = Boolean(state.currentPlaylistId);
   let statusTone = 'success';
@@ -395,6 +404,9 @@ async function handleSavePlaylist() {
     sourceUrl,
     sourceName: state.sourceName,
     disabledGroups,
+    totalChannels: state.totalChannels,
+    groupCount: state.groupCount,
+    expirationUtc: state.backendSession?.expirationUtc || null,
   };
 
   let saved;
@@ -434,7 +446,6 @@ async function loadSavedPlaylist(id) {
 
   const name = playlist.name || playlist.sourceName || 'playlist';
   if (playlistNameInput) playlistNameInput.value = name;
-  if (playlistSourceInput) playlistSourceInput.value = playlist.sourceUrl || '';
   const urlField = document.getElementById('playlist-url');
   if (urlField) urlField.value = playlist.sourceUrl || '';
 
@@ -513,8 +524,12 @@ function renderSavedPlaylists() {
     sub.className = 'saved-sub';
     const filters = pl.disabledGroups ? pl.disabledGroups.length : 0;
     const parts = [];
-    if (pl.sourceUrl) parts.push(pl.sourceUrl);
-    parts.push(`${filters} group filter${filters === 1 ? '' : 's'}`);
+    const channels = Number.isFinite(Number(pl.totalChannels)) ? Number(pl.totalChannels) : 0;
+    const groups = Number.isFinite(Number(pl.groupCount)) ? Number(pl.groupCount) : 0;
+    parts.push(formatExpiration(pl.expirationUtc));
+    parts.push(`${channels.toLocaleString()} channel${channels === 1 ? '' : 's'}`);
+    parts.push(`${groups.toLocaleString()} group${groups === 1 ? '' : 's'}`);
+    parts.push(`${filters} filter${filters === 1 ? '' : 's'}`);
     sub.textContent = parts.join(' • ');
 
     meta.append(name, sub);
@@ -699,7 +714,7 @@ function renderStats() {
   stats.innerHTML = '';
   const total = state.totalChannels || 0;
   const disabled = state.disabledGroups.size;
-  const groupsTotal = state.groups.size;
+  const groupsTotal = state.groupCount || state.groups.size;
   const keptGroups = Math.max(0, groupsTotal - disabled);
 
   const cards = [

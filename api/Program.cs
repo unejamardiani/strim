@@ -47,6 +47,28 @@ using (var scope = app.Services.CreateScope())
 {
   var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
   db.Database.EnsureCreated();
+  // Backward-compatible schema patching for new columns when the table already exists.
+  try
+  {
+    db.Database.ExecuteSqlRaw(@"
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'totalchannels') THEN
+          ALTER TABLE playlists ADD COLUMN totalchannels integer NOT NULL DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'groupcount') THEN
+          ALTER TABLE playlists ADD COLUMN groupcount integer NOT NULL DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'expirationutc') THEN
+          ALTER TABLE playlists ADD COLUMN expirationutc timestamptz NULL;
+        END IF;
+      END $$;
+    ");
+  }
+  catch
+  {
+    // Non-fatal; the app can continue even if this migration helper fails.
+  }
 }
 
 async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFactory)
@@ -98,9 +120,10 @@ app.MapPost("/api/playlists", async (PlaylistRequest input, AppDbContext db) =>
     Name = input.Name.Trim(),
     SourceUrl = input.SourceUrl,
     SourceName = input.SourceName,
-    RawText = string.Empty,
-    FilteredText = string.Empty,
     DisabledGroups = input.DisabledGroups ?? new List<string>(),
+    TotalChannels = input.TotalChannels ?? 0,
+    GroupCount = input.GroupCount ?? 0,
+    ExpirationUtc = input.ExpirationUtc,
   };
 
   db.Playlists.Add(entity);
@@ -121,9 +144,10 @@ app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, Ap
   entity.Name = input.Name.Trim();
   entity.SourceUrl = input.SourceUrl;
   entity.SourceName = input.SourceName;
-  entity.RawText = string.Empty;
-  entity.FilteredText = string.Empty;
   entity.DisabledGroups = input.DisabledGroups ?? new List<string>();
+  entity.TotalChannels = input.TotalChannels ?? entity.TotalChannels;
+  entity.GroupCount = input.GroupCount ?? entity.GroupCount;
+  entity.ExpirationUtc = input.ExpirationUtc ?? entity.ExpirationUtc;
 
   await db.SaveChangesAsync();
   return Results.Ok(entity);
@@ -155,6 +179,12 @@ app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpC
     var cacheKey = $"pl-{Guid.NewGuid():N}";
     cache.Set(cacheKey, playlistText, TimeSpan.FromMinutes(15));
 
+    DateTimeOffset? expiration = null;
+    if (!string.IsNullOrWhiteSpace(input.SourceUrl) && Uri.TryCreate(input.SourceUrl, UriKind.Absolute, out var parsedUri))
+    {
+      expiration = PlaylistProcessor.TryExtractExpiration(parsedUri);
+    }
+
     var friendlyName = string.IsNullOrWhiteSpace(input.SourceName)
       ? PlaylistProcessor.DeriveNameFromUrl(input.SourceUrl)
       : input.SourceName!.Trim();
@@ -164,6 +194,8 @@ app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpC
       input.SourceUrl,
       friendlyName,
       total,
+      groupsMap.Count,
+      expiration,
       PlaylistProcessor.ToGroupResults(groupsMap));
 
     return Results.Ok(response);
@@ -317,6 +349,9 @@ public record PlaylistRequest(
   string Name,
   string? SourceUrl,
   string? SourceName,
-  List<string>? DisabledGroups);
+  List<string>? DisabledGroups,
+  int? TotalChannels,
+  int? GroupCount,
+  DateTimeOffset? ExpirationUtc);
 
 public record FetchRequest(string Url);

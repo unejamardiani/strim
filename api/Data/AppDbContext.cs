@@ -18,6 +18,9 @@ public class AppDbContext : DbContext
       entity.Property(p => p.SourceUrl).HasMaxLength(2048);
       entity.Property(p => p.SourceName).HasMaxLength(200);
       entity.Property(p => p.DisabledGroups).HasColumnType("jsonb");
+      entity.Property(p => p.TotalChannels).HasDefaultValue(0);
+      entity.Property(p => p.GroupCount).HasDefaultValue(0);
+      entity.Property(p => p.ExpirationUtc);
     });
   }
 
