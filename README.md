@@ -104,3 +104,11 @@ the status pill. Buttons are disabled while generation runs to prevent accidenta
 Additionally, the Groups list uses a virtualized renderer so only visible group rows are
 rendered to the DOM. This keeps toggling individual groups extremely fast even when there are
 hundreds of thousands of groups.
+
+## Maintainer
+
+Strim is maintained by [unejamardiani](https://github.com/unejamardiani). Decisions about releases and roadmap come from the maintainer; contributions via issues and pull requests are welcome.
+
+## Attribution
+
+This project was created entirely with AI assistance.
