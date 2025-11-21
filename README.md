@@ -20,6 +20,36 @@ filesystem.
 Deploy the contents of this directory to Azure Static Web Apps or an App Service configured for
 static files. The app has no server-side dependencies.
 
+## Backend persistence (Postgres + .NET 8 minimal API)
+
+If you want playlists to survive browser resets and be shared across devices, run the included
+backend:
+
+1. Provide a connection string via `POSTGRES_CONNECTION`, e.g.  
+   `export POSTGRES_CONNECTION="Host=localhost;Port=5432;Database=strim;Username=postgres;Password=postgres"`
+2. Start the API: `dotnet run --project api`
+3. Serve the frontend (for example `python3 -m http.server 8000`). The API is CORS-open.
+4. Point the UI at the API by either serving both from the same origin, or adding `?api=http://localhost:5000/api`
+   to the page URL (this is remembered in `localStorage` as `strim.apiBase`).
+
+The API uses EF Core with PostgreSQL and auto-creates the `playlists` table on first run. If the API
+is unreachable, the UI falls back to local browser storage so you do not lose work while offline.
+
+### One-command Docker (app + Postgres)
+
+Build and run everything together with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+This starts:
+- `app` on http://localhost:8080 serving the SPA and the `/api` endpoints
+- `db` (Postgres 16) with database `strimdb` and user/password `strim`
+
+Data is stored in the `pgdata` named volume. The app sets `POSTGRES_CONNECTION` automatically to talk
+to the bundled database.
+
 ## Playlist fetching and CORS
 
 Some playlist hosts do not send CORS headers, which blocks direct browser fetches. strim will

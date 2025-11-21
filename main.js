@@ -44,6 +44,22 @@ const serveButton = document.getElementById('serve-output');
 const savePlaylistButton = document.getElementById('save-playlist');
 
 const STORAGE_KEY = 'strim.playlists.v1';
+const savedApiBase = (() => {
+  try {
+    return localStorage.getItem('strim.apiBase') || '';
+  } catch {
+    return '';
+  }
+})();
+const queryApiBase = new URLSearchParams(window.location.search).get('api') || '';
+const API_BASE = queryApiBase || window.STRIM_API_BASE || savedApiBase || '/api';
+if (queryApiBase) {
+  try {
+    localStorage.setItem('strim.apiBase', queryApiBase);
+  } catch {
+    // ignore
+  }
+}
 
 fetchButton.addEventListener('click', () => {
   const urlInput = document.getElementById('playlist-url');
@@ -159,106 +175,30 @@ function setStatus(text, tone = 'info') {
 }
 
 async function fetchPlaylist(url) {
-  const isHttpOnHttps = window.location.protocol === 'https:' && url.startsWith('http:');
-
-  if (isHttpOnHttps) {
-    setStatus('HTTPS pages cannot fetch HTTP playlists directly. Trying through proxies…', 'warn');
+  if (!API_BASE) {
+    setStatus('Backend URL not configured; cannot fetch playlist.', 'warn');
+    return;
   }
 
-  const sources = [
-    ...(!isHttpOnHttps
-      ? [
-          {
-            label: 'direct',
-            url,
-            mode: 'cors',
-          },
-        ]
-      : []),
-    {
-      label: 'local proxy',
-      url: `http://localhost:8080/?url=${encodeURIComponent(url)}`,
-      mode: 'cors',
-    },
-    {
-      label: 'AllOrigins (JSON)',
-      url: `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-      mode: 'cors',
-      parseJson: true,
-    },
-    {
-      label: 'AllOrigins (raw)',
-      url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      mode: 'cors',
-    },
-    {
-      label: 'CORS.io',
-      url: `https://cors.io/?${url}`,
-      mode: 'cors',
-    },
-    {
-      label: 'ThingProxy',
-      url: `https://thingproxy.freeboard.io/fetch/${url}`,
-      mode: 'cors',
-    },
-    {
-      label: 'CORS Proxy',
-      url: `https://corsproxy.io/?${encodeURIComponent(url)}`,
-      mode: 'cors',
-    },
-  ];
-
-  let lastError;
-  const errors = [];
-
-  for (const source of sources) {
-    try {
-      setStatus(`Trying to fetch via ${source.label}…`, 'info');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-      const res = await fetch(source.url, {
-        cache: 'no-store',
-        signal: controller.signal,
-        mode: source.mode || 'cors',
-        headers: {
-          Accept: 'text/plain, application/x-mpegurl, */*',
-        },
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-
-      let text;
-      if (source.parseJson) {
-        const json = await res.json();
-        text = json.contents || json.data || '';
-      } else {
-        text = await res.text();
-      }
-
-      if (!text || (!text.includes('#EXTM3U') && !text.includes('#EXTINF'))) {
-        throw new Error('Response does not appear to be an M3U playlist');
-      }
-
-      const note = source.label === 'direct' ? '' : `via ${source.label}`;
-      const friendlyName = (playlistNameInput && playlistNameInput.value.trim()) || deriveNameFromUrl(url);
-      hydrateState(text, friendlyName, note, { sourceUrl: url, name: friendlyName });
-      return;
-    } catch (error) {
-      lastError = error;
-      const errorMsg = error.name === 'AbortError' ? 'timeout' : error.message;
-      errors.push(`${source.label}: ${errorMsg}`);
-      console.warn(`Failed via ${source.label}:`, error);
+  try {
+    setStatus('Fetching playlist via backend…', 'info');
+    const res = await fetch(`${API_BASE}/fetch`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const text = await res.text();
+    if (!text || (!text.includes('#EXTM3U') && !text.includes('#EXTINF'))) {
+      throw new Error('Response does not appear to be an M3U playlist');
     }
+    const friendlyName = (playlistNameInput && playlistNameInput.value.trim()) || deriveNameFromUrl(url);
+    hydrateState(text, friendlyName, 'via backend', { sourceUrl: url, name: friendlyName });
+  } catch (err) {
+    console.error('Backend fetch failed', err);
+    setStatus(`Unable to fetch playlist from backend: ${err.message || err}`, 'warn');
   }
-
-  console.error(lastError);
-  const detail = errors.length > 0 ? `\n\nAttempts: ${errors.join(' | ')}` : '';
-  setStatus(
-    `Unable to fetch playlist. All proxy attempts failed. Try pasting the content directly instead.${detail}`,
-    'warn'
-  );
 }
 
 function hydrateState(text, sourceName = 'playlist', note = '', options = {}) {
@@ -345,24 +285,51 @@ function deriveNameFromUrl(url) {
   }
 }
 
-function loadSavedPlaylistsFromStorage() {
+function readLocalPlaylists() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    state.savedPlaylists = Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
     console.warn('Failed to read saved playlists', err);
-    state.savedPlaylists = [];
+    return [];
   }
-  renderSavedPlaylists();
 }
 
-function persistSavedPlaylists() {
+function writeLocalPlaylists(playlists) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedPlaylists));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(playlists));
   } catch (err) {
     console.warn('Failed to persist playlists', err);
   }
+}
+
+async function apiRequest(path, { method = 'GET', body } = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+async function loadSavedPlaylists() {
+  try {
+    const data = await apiRequest('/playlists');
+    state.savedPlaylists = Array.isArray(data) ? data : [];
+    writeLocalPlaylists(state.savedPlaylists);
+  } catch (err) {
+    console.warn('API load failed, falling back to local storage', err);
+    state.savedPlaylists = readLocalPlaylists();
+  }
+  renderSavedPlaylists();
 }
 
 async function handleSavePlaylist() {
@@ -376,33 +343,51 @@ async function handleSavePlaylist() {
     (playlistSourceInput && playlistSourceInput.value.trim()) ||
     document.getElementById('playlist-url').value.trim();
   const disabledGroups = Array.from(state.disabledGroups);
+  const isUpdate = Boolean(state.currentPlaylistId);
+  let statusTone = 'success';
+  let statusMessage = isUpdate ? 'Playlist updated' : 'Playlist saved';
 
   setStatus('Saving playlist…', 'info');
   const filteredText = await updateOutput();
   const now = Date.now();
-  const existing = state.savedPlaylists.find((p) => p.id === state.currentPlaylistId);
-  const id =
-    (existing && existing.id) ||
-    (crypto.randomUUID ? crypto.randomUUID() : `${now}-${Math.random().toString(16).slice(2)}`);
-
-  const record = {
-    id,
+  const payload = {
     name,
     sourceUrl,
     sourceName: state.sourceName,
     rawText: state.rawText,
-    disabledGroups,
     filteredText,
-    updatedAt: now,
-    createdAt: existing?.createdAt || now,
+    disabledGroups,
   };
 
-  state.savedPlaylists = [record, ...state.savedPlaylists.filter((p) => p.id !== id)];
-  state.currentPlaylistId = id;
-  persistSavedPlaylists();
+  let saved;
+  try {
+    if (state.currentPlaylistId) {
+      saved = await apiRequest(`/playlists/${state.currentPlaylistId}`, { method: 'PUT', body: payload });
+    } else {
+      saved = await apiRequest('/playlists', { method: 'POST', body: payload });
+    }
+  } catch (err) {
+    console.warn('API save failed, storing locally only', err);
+    const existing = state.savedPlaylists.find((p) => p.id === state.currentPlaylistId);
+    const id =
+      (existing && existing.id) ||
+      (crypto.randomUUID ? crypto.randomUUID() : `${now}-${Math.random().toString(16).slice(2)}`);
+    saved = {
+      ...payload,
+      id,
+      updatedAt: now,
+      createdAt: existing?.createdAt || now,
+    };
+    statusTone = 'warn';
+    statusMessage = 'Saved locally (API unavailable)';
+  }
+
+  state.savedPlaylists = [saved, ...state.savedPlaylists.filter((p) => p.id !== saved.id)];
+  state.currentPlaylistId = saved.id;
+  writeLocalPlaylists(state.savedPlaylists);
   renderSavedPlaylists();
   updateSaveButtonLabel();
-  setStatus(existing ? 'Playlist updated' : 'Playlist saved', 'success');
+  setStatus(statusMessage, statusTone);
 }
 
 function loadSavedPlaylist(id) {
@@ -427,6 +412,7 @@ function loadSavedPlaylist(id) {
     }
   );
   renderSavedPlaylists();
+  updateSaveButtonLabel();
   if (playlist.filteredText) {
     outputArea.value = playlist.filteredText;
     const channelCount = (playlist.filteredText.match(/\nhttps?:\/\//g) || []).length;
@@ -436,15 +422,18 @@ function loadSavedPlaylist(id) {
   setStatus(`Loaded saved playlist "${name}"`, 'success');
 }
 
-function deleteSavedPlaylist(id) {
-  const next = state.savedPlaylists.filter((p) => p.id !== id);
-  if (next.length === state.savedPlaylists.length) return;
-  state.savedPlaylists = next;
+async function deleteSavedPlaylist(id) {
+  try {
+    await apiRequest(`/playlists/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    console.warn('API delete failed, removing locally only', err);
+  }
+  state.savedPlaylists = state.savedPlaylists.filter((p) => p.id !== id);
   if (state.currentPlaylistId === id) {
     state.currentPlaylistId = null;
     updateSaveButtonLabel();
   }
-  persistSavedPlaylists();
+  writeLocalPlaylists(state.savedPlaylists);
   renderSavedPlaylists();
   setStatus('Playlist deleted', 'success');
 }
@@ -452,7 +441,11 @@ function deleteSavedPlaylist(id) {
 function renderSavedPlaylists() {
   if (!savedListContainer || !savedEmptyState) return;
   savedListContainer.replaceChildren();
-  const playlists = [...state.savedPlaylists].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const playlists = [...state.savedPlaylists].sort((a, b) => {
+    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    return bTime - aTime;
+  });
   if (playlists.length === 0) {
     savedEmptyState.style.display = 'block';
     return;
@@ -744,7 +737,16 @@ function setControlsDisabled(disabled) {
   });
 }
 
-loadSavedPlaylistsFromStorage();
-updateSaveButtonLabel();
-hydrateState(samplePlaylist, 'sample.m3u');
-updateOutput({ useWorker: false });
+async function init() {
+  await loadSavedPlaylists();
+  updateSaveButtonLabel();
+  hydrateState(samplePlaylist, 'sample.m3u');
+  await updateOutput({ useWorker: false });
+}
+
+init().catch((err) => {
+  console.error('Failed to initialize app', err);
+  setStatus('Failed to load saved playlists', 'warn');
+  hydrateState(samplePlaylist, 'sample.m3u');
+  updateOutput({ useWorker: false });
+});
