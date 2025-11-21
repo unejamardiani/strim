@@ -3,6 +3,7 @@ const state = {
   groups: new Map(),
   disabledGroups: new Set(),
   sourceName: 'untitled',
+  rawText: '',
 };
 
 const statusPill = document.getElementById('status-pill');
@@ -58,12 +59,14 @@ loadSampleButton.addEventListener('click', () => {
   hydrateState(samplePlaylist, 'sample.m3u');
 });
 
-refreshButton.addEventListener('click', () => {
-  updateOutput();
+refreshButton.addEventListener('click', async () => {
+  await updateOutput();
 });
 
 copyButton.addEventListener('click', async () => {
   try {
+    // Ensure we copy the up-to-date filtered output.
+    await updateOutput();
     await navigator.clipboard.writeText(outputArea.value);
     setStatus('Copied filtered playlist to clipboard', 'success');
   } catch (err) {
@@ -72,16 +75,22 @@ copyButton.addEventListener('click', async () => {
   }
 });
 
-downloadButton.addEventListener('click', () => {
+downloadButton.addEventListener('click', async () => {
+  setStatus('Generating filtered playlist…', 'info');
+  // Ensure output is up-to-date with current toggles before downloading.
+  await updateOutput();
   const blob = new Blob([outputArea.value], { type: 'application/x-mpegURL' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = `${state.sourceName || 'playlist'}-filtered.m3u`;
   link.click();
   URL.revokeObjectURL(link.href);
+  setStatus('Download started', 'success');
 });
 
-serveButton.addEventListener('click', () => {
+serveButton.addEventListener('click', async () => {
+  // Generate output on demand so it matches the current selection.
+  await updateOutput();
   const blob = new Blob([outputArea.value], { type: 'application/x-mpegURL' });
   const url = URL.createObjectURL(blob);
   shareUrlInput.value = url;
@@ -104,32 +113,41 @@ async function fetchPlaylist(url) {
   }
 
   const sources = [
-    // Skip the direct attempt if we know the browser will block mixed content when the app is
-    // served over HTTPS and the playlist is HTTP only.
-    ...(!isHttpOnHttps ? [{ label: 'direct', url }] : []),
+    // Try direct first with no CORS restrictions (won't read response but may work for same-origin)
+    ...(!isHttpOnHttps ? [
+      { label: 'direct', url, mode: 'cors' },
+    ] : []),
+    // Local CORS proxy (if running)
     {
-      label: 'CORS proxy',
-      url: `https://cors.isomorphic-git.org/${encodeURIComponent(url)}`,
+      label: 'local proxy',
+      url: `http://localhost:8080/?url=${encodeURIComponent(url)}`,
+      mode: 'cors',
     },
     {
-      label: 'CORS proxy (fallback)',
+      label: 'AllOrigins (JSON)',
+      url: `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+      mode: 'cors',
+      parseJson: true,
+    },
+    {
+      label: 'AllOrigins (raw)',
       url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      mode: 'cors',
     },
     {
-      label: 'CORS proxy (alt)',
-      url: `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      label: 'CORS.io',
+      url: `https://cors.io/?${url}`,
+      mode: 'cors',
     },
     {
-      label: 'CORS proxy (jina.ai)',
-      url: (() => {
-        const stripped = url.replace(/^https?:\/\//, '');
-        const scheme = url.startsWith('https:') ? 'https' : 'http';
-        return `https://r.jina.ai/${scheme}://${stripped}`;
-      })(),
-    },
-    {
-      label: 'CORS proxy (thingproxy)',
+      label: 'ThingProxy',
       url: `https://thingproxy.freeboard.io/fetch/${url}`,
+      mode: 'cors',
+    },
+    {
+      label: 'CORS Proxy',
+      url: `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      mode: 'cors',
     },
   ];
 
@@ -138,23 +156,50 @@ async function fetchPlaylist(url) {
 
   for (const source of sources) {
     try {
-      const res = await fetch(source.url, { cache: 'no-store' });
+      setStatus(`Trying to fetch via ${source.label}…`, 'info');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+      const res = await fetch(source.url, { 
+        cache: 'no-store',
+        signal: controller.signal,
+        mode: source.mode || 'cors',
+        headers: {
+          'Accept': 'text/plain, application/x-mpegurl, */*',
+        },
+      });
+      clearTimeout(timeoutId);
+      
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      const text = await res.text();
-      const note = source.label === 'direct' ? '' : source.label;
+      
+      let text;
+      if (source.parseJson) {
+        const json = await res.json();
+        text = json.contents || json.data || '';
+      } else {
+        text = await res.text();
+      }
+      
+      // Basic validation that we got M3U content
+      if (!text || (!text.includes('#EXTM3U') && !text.includes('#EXTINF'))) {
+        throw new Error('Response does not appear to be an M3U playlist');
+      }
+      
+      const note = source.label === 'direct' ? '' : `via ${source.label}`;
       hydrateState(text, url, note);
       return;
     } catch (error) {
       lastError = error;
-      errors.push(`${source.label}: ${error.message}`);
+      const errorMsg = error.name === 'AbortError' ? 'timeout' : error.message;
+      errors.push(`${source.label}: ${errorMsg}`);
       console.warn(`Failed via ${source.label}:`, error);
     }
   }
 
   console.error(lastError);
-  const detail = errors.length ? ` Details: ${errors.join(' | ')}` : '';
+  const detail = errors.length > 0 ? `\n\nAttempts: ${errors.join(' | ')}` : '';
   setStatus(
-    `Unable to fetch playlist (CORS or network error). Try pasting it instead.${detail}`,
+    `Unable to fetch playlist. All proxy attempts failed. Try pasting the content directly instead.${detail}`,
     'warn'
   );
 }
@@ -163,11 +208,11 @@ function hydrateState(text, sourceName = 'playlist', note = '') {
   const parsed = parseM3U(text);
   state.channels = parsed.channels;
   state.groups = parsed.groups;
+  state.rawText = text;
   state.disabledGroups = new Set();
   state.sourceName = sourceName;
   renderGroups();
   renderStats();
-  updateOutput();
   const noteSuffix = note ? ` (${note})` : '';
   setStatus(`Loaded ${state.channels.length} channels from ${sourceName}${noteSuffix}`.trim(), 'success');
 }
@@ -214,53 +259,176 @@ function parseM3U(text) {
   return { channels, groups };
 }
 
+// Debounce helper
+let outputUpdateTimer = null;
+function scheduleOutputUpdate() {
+  if (outputUpdateTimer) clearTimeout(outputUpdateTimer);
+  outputUpdateTimer = setTimeout(() => {
+    updateOutput();
+    outputUpdateTimer = null;
+  }, 150);
+}
+
 function renderGroups() {
+  // Virtualized list implementation: render only visible items into a small pool.
+  // Prepare sorted entries array for consistent indexing.
+  state.groupEntries = [...state.groups.entries()].sort((a, b) => b[1] - a[1]);
+
+  // Constants for virtualization
+  const ITEM_HEIGHT = 56; // px, should match CSS
+  const BUFFER = 6; // items buffer above and below
+
+  // Clear and set up container
   groupsGrid.innerHTML = '';
-  const fragment = document.createDocumentFragment();
+  groupsGrid.classList.remove('group-list');
+  groupsGrid.classList.add('group-virtual');
+  groupsGrid.style.position = 'relative';
+  groupsGrid.style.overflowY = 'auto';
 
-  [...state.groups.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .forEach(([groupTitle, count]) => {
-      const card = document.createElement('div');
-      card.className = 'group-card';
-      if (state.disabledGroups.has(groupTitle)) card.classList.add('disabled');
+  const totalItems = state.groupEntries.length;
+  const spacer = document.createElement('div');
+  spacer.className = 'group-spacer';
+  spacer.style.height = `${totalItems * ITEM_HEIGHT}px`;
+  spacer.style.width = '100%';
+  spacer.style.pointerEvents = 'none';
 
-      const row = document.createElement('div');
-      row.className = 'group-row';
-      const label = document.createElement('strong');
-      label.textContent = groupTitle;
-      const chip = document.createElement('span');
-      chip.className = 'count';
-      chip.textContent = `${count} channel${count === 1 ? '' : 's'}`;
-      row.append(label, chip);
+  const itemsLayer = document.createElement('div');
+  itemsLayer.className = 'group-items-layer';
+  itemsLayer.style.position = 'absolute';
+  itemsLayer.style.top = '0';
+  itemsLayer.style.left = '0';
+  itemsLayer.style.right = '0';
 
-      const toggleWrapper = document.createElement('label');
-      toggleWrapper.className = 'switch';
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = !state.disabledGroups.has(groupTitle);
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) state.disabledGroups.delete(groupTitle);
-        else state.disabledGroups.add(groupTitle);
-        renderGroups();
-        renderStats();
-        updateOutput();
-      });
-      const slider = document.createElement('span');
-      slider.className = 'slider';
-      toggleWrapper.append(checkbox, slider);
+  groupsGrid.append(spacer, itemsLayer);
 
-      card.append(row, toggleWrapper);
-      fragment.append(card);
+  // Calculate pool size based on container height
+  const containerHeight = Math.max(groupsGrid.clientHeight, 300);
+  const visibleCount = Math.ceil(containerHeight / ITEM_HEIGHT);
+  const poolSize = Math.min(totalItems, visibleCount + BUFFER * 2);
+
+  // Create pooled nodes
+  const pool = [];
+  for (let i = 0; i < poolSize; i++) {
+    const node = document.createElement('div');
+    node.className = 'group-list-item';
+    node.style.position = 'absolute';
+    node.style.height = `${ITEM_HEIGHT - 6}px`;
+    node.style.left = '0';
+    node.style.right = '0';
+    node.dataset.poolIndex = i;
+
+    const info = document.createElement('div');
+    info.className = 'group-info';
+    info.style.display = 'flex';
+    info.style.flexDirection = 'column';
+
+    const title = document.createElement('span');
+    title.className = 'group-title';
+    title.style.fontSize = '14px';
+    title.style.fontWeight = '600';
+
+    const count = document.createElement('span');
+    count.className = 'group-count';
+    count.style.fontSize = '12px';
+    count.style.color = 'var(--muted)';
+
+    info.append(title, count);
+
+    const switchLabel = document.createElement('label');
+    switchLabel.className = 'switch';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'group-toggle';
+    const slider = document.createElement('span');
+    slider.className = 'slider';
+    switchLabel.append(checkbox, slider);
+
+    node.append(info, switchLabel);
+    // Keep references for quick updates
+    pool.push({ node, title, count, checkbox });
+    itemsLayer.append(node);
+  }
+
+  // Render a slice of items starting at startIndex
+  let lastStart = -1;
+  function renderSlice(startIndex) {
+    startIndex = Math.max(0, Math.min(startIndex, Math.max(0, totalItems - poolSize)));
+    if (startIndex === lastStart) return;
+    lastStart = startIndex;
+    for (let i = 0; i < pool.length; i++) {
+      const idx = startIndex + i;
+      const poolItem = pool[i];
+      if (idx >= totalItems) {
+        poolItem.node.style.display = 'none';
+        continue;
+      }
+      const [groupTitle, cnt] = state.groupEntries[idx];
+      poolItem.node.style.display = 'flex';
+      poolItem.node.style.transform = `translateY(${idx * ITEM_HEIGHT}px)`;
+      poolItem.title.textContent = groupTitle;
+      poolItem.count.textContent = `${cnt.toLocaleString()} channel${cnt === 1 ? '' : 's'}`;
+      const disabled = state.disabledGroups.has(groupTitle);
+      poolItem.checkbox.checked = !disabled;
+      poolItem.node.classList.toggle('disabled', disabled);
+      // attach dataset index for change handler
+      poolItem.checkbox.dataset.index = idx;
+    }
+  }
+
+  // Initial render
+  renderSlice(0);
+
+  // Scroll handler to compute visible start index
+  let scrollTick = null;
+  function onScroll() {
+    if (scrollTick) return;
+    scrollTick = requestAnimationFrame(() => {
+      const scrollTop = groupsGrid.scrollTop;
+      const start = Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER;
+      renderSlice(start);
+      scrollTick = null;
     });
+  }
 
-  groupsGrid.append(fragment);
+  groupsGrid.addEventListener('scroll', onScroll);
+
+  // Resize handling
+  let resizeObserver = null;
+  if (window.ResizeObserver) {
+    resizeObserver = new ResizeObserver(() => {
+      // recompute pool/visible counts on resize by re-rendering
+      renderGroups();
+    });
+    resizeObserver.observe(groupsGrid);
+  } else {
+    window.addEventListener('resize', () => renderGroups());
+  }
+
+  // Event delegation for toggles
+  itemsLayer.addEventListener('change', (e) => {
+    const target = e.target;
+    if (!target.classList.contains('group-toggle')) return;
+    const idx = Number(target.dataset.index);
+    const [groupTitle] = state.groupEntries[idx];
+    if (target.checked) {
+      state.disabledGroups.delete(groupTitle);
+    } else {
+      state.disabledGroups.add(groupTitle);
+    }
+    // Update stats quickly
+    renderStats();
+    // Update visual state of the pool item
+    const poolIdx = idx - lastStart;
+    if (poolIdx >= 0 && poolIdx < pool.length) {
+      pool[poolIdx].node.classList.toggle('disabled', state.disabledGroups.has(groupTitle));
+    }
+  });
 }
 
 function renderStats() {
   stats.innerHTML = '';
   const total = state.channels.length;
-  const disabled = [...state.disabledGroups.values()].length;
+  const disabled = state.disabledGroups.size;
   const groupsTotal = state.groups.size;
   const keptGroups = groupsTotal - disabled;
 
@@ -279,6 +447,7 @@ function renderStats() {
 }
 
 function generateFilteredM3U() {
+  // Synchronous fallback kept for small playlists or when workers are unavailable.
   const disabled = state.disabledGroups;
   const filtered = state.channels.filter((c) => !disabled.has(c.groupTitle));
   const outputLines = ['#EXTM3U'];
@@ -296,9 +465,52 @@ function generateFilteredM3U() {
   return outputLines.join('\n');
 }
 
-function updateOutput() {
+// Updated to optionally run generation in a Web Worker and report progress.
+function updateOutput({ useWorker = true } = {}) {
+  // If no raw text available or worker support missing, fall back to sync
+  if (useWorker && window.Worker && state.rawText) {
+    return new Promise((resolve, reject) => {
+      setStatus('Generating filtered playlist (background)…', 'info');
+      // Disable action buttons while generating
+      setControlsDisabled(true);
+      const worker = new Worker('filter-worker.js');
+      const disabledArr = Array.from(state.disabledGroups);
+      worker.postMessage({ cmd: 'generate', text: state.rawText, disabled: disabledArr });
+      worker.addEventListener('message', (ev) => {
+        const msg = ev.data || {};
+        if (msg.type === 'progress') {
+          // Update status with progress
+          setStatus(`Generating… ${Math.min(100, Math.round((msg.processed / msg.totalLines) * 100))}%`, 'info');
+        } else if (msg.type === 'result') {
+          outputArea.value = msg.text;
+          // Count channels in output by counting lines that are not comments and are URLs
+          const channelCount = (msg.text.match(/\nhttps?:\/\//g) || []).length;
+          outputSize.textContent = `${channelCount} channels`;
+          setStatus('Filtered playlist ready', 'success');
+          setControlsDisabled(false);
+          worker.terminate();
+          resolve(msg.text);
+        }
+      });
+      worker.addEventListener('error', (err) => {
+        console.error('Worker error', err);
+        setControlsDisabled(false);
+        worker.terminate();
+        reject(err);
+      });
+    });
+  }
+
+  // Fallback synchronous generation
   const text = generateFilteredM3U();
   outputArea.value = text;
+  return Promise.resolve(text);
+}
+
+function setControlsDisabled(disabled) {
+  [downloadButton, copyButton, serveButton, refreshButton].forEach((b) => {
+    if (b) b.disabled = disabled;
+  });
 }
 
 toggleAllButton.addEventListener('click', () => {
@@ -311,7 +523,8 @@ toggleAllButton.addEventListener('click', () => {
   }
   renderGroups();
   renderStats();
-  updateOutput();
+  // Do not regenerate output here to avoid heavy work on large lists.
+  // The user can click "Refresh" or Download to get the updated file.
 });
 
 // Initialize with sample to give users something to see immediately.
