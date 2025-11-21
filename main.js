@@ -8,12 +8,12 @@ const state = {
   localPlaylist: null,
   totalChannels: 0,
   groupEntries: [],
+  lastOutput: '',
 };
 
 const statusPill = document.getElementById('status-pill');
 const stats = document.getElementById('stats');
 const groupsGrid = document.getElementById('groups');
-const outputArea = document.getElementById('output');
 const outputSize = document.getElementById('output-size');
 const shareUrlInput = document.getElementById('share-url');
 const playlistNameInput = document.getElementById('playlist-name');
@@ -34,7 +34,6 @@ http://example.com/streams/kids.m3u8
 http://example.com/streams/drama.m3u8`;
 
 const fetchButton = document.getElementById('fetch-playlist');
-const parseRawButton = document.getElementById('parse-raw');
 const loadSampleButton = document.getElementById('load-sample');
 const toggleAllButton = document.getElementById('toggle-all');
 const refreshButton = document.getElementById('refresh-output');
@@ -75,19 +74,7 @@ fetchButton.addEventListener('click', () => {
   loadPlaylistFromSource(url);
 });
 
-parseRawButton.addEventListener('click', () => {
-  const text = document.getElementById('playlist-raw').value.trim();
-  if (!text) {
-    setStatus('Paste M3U text to parse', 'warn');
-    return;
-  }
-  const chosenName = (playlistNameInput && playlistNameInput.value.trim()) || 'pasted-playlist';
-  const sourceUrl = (playlistSourceInput && playlistSourceInput.value.trim()) || '';
-  hydrateLocalPlaylist(text, chosenName, '', { name: chosenName, sourceUrl });
-});
-
 loadSampleButton.addEventListener('click', () => {
-  document.getElementById('playlist-raw').value = samplePlaylist;
   hydrateLocalPlaylist(samplePlaylist, 'sample.m3u', '', {
     name: 'Sample playlist',
     sourceUrl: 'https://example.com/sample.m3u',
@@ -101,8 +88,8 @@ refreshButton.addEventListener('click', async () => {
 copyButton.addEventListener('click', async () => {
   try {
     // Ensure we copy the up-to-date filtered output.
-    await updateOutput();
-    await navigator.clipboard.writeText(outputArea.value);
+    const text = await updateOutput();
+    await navigator.clipboard.writeText(text || '');
     setStatus('Copied filtered playlist to clipboard', 'success');
   } catch (err) {
     console.error(err);
@@ -113,8 +100,8 @@ copyButton.addEventListener('click', async () => {
 downloadButton.addEventListener('click', async () => {
   setStatus('Generating filtered playlist…', 'info');
   // Ensure output is up-to-date with current toggles before downloading.
-  await updateOutput();
-  const blob = new Blob([outputArea.value], { type: 'application/x-mpegURL' });
+  const text = await updateOutput();
+  const blob = new Blob([text || ''], { type: 'application/x-mpegURL' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = `${state.sourceName || 'playlist'}-filtered.m3u`;
@@ -125,8 +112,8 @@ downloadButton.addEventListener('click', async () => {
 
 serveButton.addEventListener('click', async () => {
   // Generate output on demand so it matches the current selection.
-  await updateOutput();
-  const blob = new Blob([outputArea.value], { type: 'application/x-mpegURL' });
+  const text = await updateOutput();
+  const blob = new Blob([text || ''], { type: 'application/x-mpegURL' });
   const url = URL.createObjectURL(blob);
   shareUrlInput.value = url;
   shareUrlInput.focus();
@@ -211,6 +198,7 @@ function hydrateFromAnalysis(analysis, options = {}) {
     totalChannels: state.totalChannels,
   };
   state.localPlaylist = null;
+  state.lastOutput = '';
 
   const nameChoice = options.name || analysis.sourceName || (playlistNameInput && playlistNameInput.value.trim()) || 'playlist';
   state.sourceName = nameChoice;
@@ -241,6 +229,7 @@ function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options 
     channels: parsed.channels,
     channelLines: parsed.channelLines,
   };
+  state.lastOutput = '';
 
   const nameChoice = options.name || (playlistNameInput && playlistNameInput.value.trim()) || sourceName;
   state.sourceName = nameChoice;
@@ -755,14 +744,14 @@ async function updateOutput({ useWorker = true } = {}) {
         disabledGroups: Array.from(state.disabledGroups),
       };
       const res = await apiRequest('/playlist/generate', { method: 'POST', body });
-      outputArea.value = res.filteredText || '';
+      state.lastOutput = res.filteredText || '';
       const channelCount = res.keptChannels ?? (res.filteredText ? (res.filteredText.match(/\nhttps?:\/\//g) || []).length : 0);
       outputSize.textContent = `${channelCount} channel${channelCount === 1 ? '' : 's'}`;
       state.totalChannels = res.totalChannels || state.totalChannels;
       renderStats();
       setStatus('Filtered playlist ready', 'success');
       setControlsDisabled(false);
-      return res.filteredText;
+      return state.lastOutput;
     } catch (err) {
       console.error('Backend generation failed; attempting local fallback', err);
       setStatus('Backend generation failed; falling back to local processing.', 'warn');
@@ -785,7 +774,7 @@ async function updateOutput({ useWorker = true } = {}) {
             'info'
           );
         } else if (msg.type === 'result') {
-          outputArea.value = msg.text;
+          state.lastOutput = msg.text;
           const channelCount = (msg.text.match(/\nhttps?:\/\//g) || []).length;
           outputSize.textContent = `${channelCount} channel${channelCount === 1 ? '' : 's'}`;
           setStatus('Filtered playlist ready', 'success');
@@ -800,7 +789,7 @@ async function updateOutput({ useWorker = true } = {}) {
         worker.terminate();
         setStatus('Worker failed; falling back to synchronous generation.', 'warn');
         const text = generateFilteredM3U();
-        outputArea.value = text;
+        state.lastOutput = text;
         setStatus('Filtered playlist ready', 'success');
         resolve(text);
       });
@@ -808,7 +797,7 @@ async function updateOutput({ useWorker = true } = {}) {
   }
 
   const text = generateFilteredM3U();
-  outputArea.value = text;
+  state.lastOutput = text;
   setStatus(text ? 'Filtered playlist ready' : 'Load a playlist to generate output', text ? 'success' : 'warn');
   return text;
 }

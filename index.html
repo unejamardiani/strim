@@ -63,13 +63,8 @@
               <button id="fetch-playlist" class="primary">Load</button>
             </div>
             <p class="hint">
-              We fetch the playlist through the backend downloader. If it fails, paste the text below.
+              We fetch the playlist through the backend downloader.
             </p>
-            <label for="playlist-raw">Or paste raw M3U text</label>
-            <textarea id="playlist-raw" rows="6" placeholder="#EXTM3U..." spellcheck="false"></textarea>
-            <div class="input-row end">
-              <button id="parse-raw" class="ghost">Parse pasted text</button>
-            </div>
           </div>
           <div class="stats" id="stats"></div>
         </section>
@@ -115,7 +110,6 @@
             <button id="serve-output" class="ghost">Generate shareable URL</button>
             <input id="share-url" type="text" readonly placeholder="Your shareable URL will appear here" />
           </div>
-          <textarea id="output" class="output" rows="10" readonly></textarea>
         </section>
       </main>
     </div>
