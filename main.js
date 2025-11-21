@@ -3,12 +3,9 @@ const state = {
   groups: new Map(),
   disabledGroups: new Set(),
   sourceName: 'untitled',
-<<<<<<< HEAD
   rawText: '',
-=======
   channelLines: [],
-  groupRows: new Map(),
->>>>>>> ef544c15608d31de0a9d87e24711a0a4d366aeaa
+  groupEntries: [],
 };
 
 const statusPill = document.getElementById('status-pill');
@@ -104,6 +101,20 @@ serveButton.addEventListener('click', async () => {
   setStatus('Shareable object URL generated. Keep this tab open.', 'info');
 });
 
+toggleAllButton.addEventListener('click', () => {
+  const shouldEnableAll = state.disabledGroups.size === state.groups.size;
+  state.disabledGroups = new Set();
+
+  if (!shouldEnableAll) {
+    state.groups.forEach((_, key) => state.disabledGroups.add(key));
+  }
+
+  renderGroups();
+  renderStats();
+  updateToggleAllLabel();
+  // We intentionally do not regenerate output automatically to keep toggling fast for huge lists.
+});
+
 function setStatus(text, tone = 'info') {
   statusPill.textContent = text;
   statusPill.className = 'pill';
@@ -118,11 +129,15 @@ async function fetchPlaylist(url) {
   }
 
   const sources = [
-    // Try direct first with no CORS restrictions (won't read response but may work for same-origin)
-    ...(!isHttpOnHttps ? [
-      { label: 'direct', url, mode: 'cors' },
-    ] : []),
-    // Local CORS proxy (if running)
+    ...(!isHttpOnHttps
+      ? [
+          {
+            label: 'direct',
+            url,
+            mode: 'cors',
+          },
+        ]
+      : []),
     {
       label: 'local proxy',
       url: `http://localhost:8080/?url=${encodeURIComponent(url)}`,
@@ -163,20 +178,20 @@ async function fetchPlaylist(url) {
     try {
       setStatus(`Trying to fetch via ${source.label}…`, 'info');
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-      
-      const res = await fetch(source.url, { 
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const res = await fetch(source.url, {
         cache: 'no-store',
         signal: controller.signal,
         mode: source.mode || 'cors',
         headers: {
-          'Accept': 'text/plain, application/x-mpegurl, */*',
+          Accept: 'text/plain, application/x-mpegurl, */*',
         },
       });
       clearTimeout(timeoutId);
-      
+
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      
+
       let text;
       if (source.parseJson) {
         const json = await res.json();
@@ -184,12 +199,11 @@ async function fetchPlaylist(url) {
       } else {
         text = await res.text();
       }
-      
-      // Basic validation that we got M3U content
+
       if (!text || (!text.includes('#EXTM3U') && !text.includes('#EXTINF'))) {
         throw new Error('Response does not appear to be an M3U playlist');
       }
-      
+
       const note = source.label === 'direct' ? '' : `via ${source.label}`;
       hydrateState(text, url, note);
       return;
@@ -213,11 +227,8 @@ function hydrateState(text, sourceName = 'playlist', note = '') {
   const parsed = parseM3U(text);
   state.channels = parsed.channels;
   state.groups = parsed.groups;
-<<<<<<< HEAD
   state.rawText = text;
-=======
   state.channelLines = parsed.channelLines;
->>>>>>> ef544c15608d31de0a9d87e24711a0a4d366aeaa
   state.disabledGroups = new Set();
   state.sourceName = sourceName;
   renderGroups();
@@ -274,32 +285,20 @@ function parseM3U(text) {
   return { channels, groups, channelLines };
 }
 
-// Debounce helper
-let outputUpdateTimer = null;
-function scheduleOutputUpdate() {
-  if (outputUpdateTimer) clearTimeout(outputUpdateTimer);
-  outputUpdateTimer = setTimeout(() => {
-    updateOutput();
-    outputUpdateTimer = null;
-  }, 150);
-}
+let groupsResizeObserver = null;
+let windowResizeHooked = false;
 
 function renderGroups() {
-  // Virtualized list implementation: render only visible items into a small pool.
-  // Prepare sorted entries array for consistent indexing.
   state.groupEntries = [...state.groups.entries()].sort((a, b) => b[1] - a[1]);
 
-  // Constants for virtualization
-  const ITEM_HEIGHT = 56; // px, should match CSS
-  const BUFFER = 6; // items buffer above and below
+  const ITEM_HEIGHT = 56;
+  const BUFFER = 6;
 
-  // Clear and set up container
-  groupsGrid.innerHTML = '';
-<<<<<<< HEAD
   groupsGrid.classList.remove('group-list');
   groupsGrid.classList.add('group-virtual');
   groupsGrid.style.position = 'relative';
   groupsGrid.style.overflowY = 'auto';
+  groupsGrid.replaceChildren();
 
   const totalItems = state.groupEntries.length;
   const spacer = document.createElement('div');
@@ -317,12 +316,10 @@ function renderGroups() {
 
   groupsGrid.append(spacer, itemsLayer);
 
-  // Calculate pool size based on container height
   const containerHeight = Math.max(groupsGrid.clientHeight, 300);
   const visibleCount = Math.ceil(containerHeight / ITEM_HEIGHT);
   const poolSize = Math.min(totalItems, visibleCount + BUFFER * 2);
 
-  // Create pooled nodes
   const pool = [];
   for (let i = 0; i < poolSize; i++) {
     const node = document.createElement('div');
@@ -360,12 +357,10 @@ function renderGroups() {
     switchLabel.append(checkbox, slider);
 
     node.append(info, switchLabel);
-    // Keep references for quick updates
     pool.push({ node, title, count, checkbox });
     itemsLayer.append(node);
   }
 
-  // Render a slice of items starting at startIndex
   let lastStart = -1;
   function renderSlice(startIndex) {
     startIndex = Math.max(0, Math.min(startIndex, Math.max(0, totalItems - poolSize)));
@@ -386,119 +381,57 @@ function renderGroups() {
       const disabled = state.disabledGroups.has(groupTitle);
       poolItem.checkbox.checked = !disabled;
       poolItem.node.classList.toggle('disabled', disabled);
-      // attach dataset index for change handler
       poolItem.checkbox.dataset.index = idx;
     }
   }
 
-  // Initial render
   renderSlice(0);
 
-  // Scroll handler to compute visible start index
   let scrollTick = null;
-  function onScroll() {
+  groupsGrid.onscroll = () => {
     if (scrollTick) return;
     scrollTick = requestAnimationFrame(() => {
       const scrollTop = groupsGrid.scrollTop;
       const start = Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER;
       renderSlice(start);
       scrollTick = null;
-=======
-  state.groupRows = new Map();
-  const fragment = document.createDocumentFragment();
-
-  [...state.groups.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .forEach(([groupTitle, count]) => {
-      const item = document.createElement('label');
-      item.className = 'group-item';
-      item.dataset.group = groupTitle;
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.className = 'group-checkbox';
-      checkbox.checked = !state.disabledGroups.has(groupTitle);
-      checkbox.addEventListener('change', () => handleGroupToggle(groupTitle, checkbox.checked));
-
-      const box = document.createElement('span');
-      box.className = 'checkbox-box';
-
-      const title = document.createElement('div');
-      title.className = 'group-title';
-      title.textContent = groupTitle;
-
-      const chip = document.createElement('div');
-      chip.className = 'count';
-      chip.textContent = `${count} channel${count === 1 ? '' : 's'}`;
-
-      item.append(checkbox, box, title, chip);
-      fragment.append(item);
-
-      state.groupRows.set(groupTitle, { item, checkbox });
-      syncGroupRowState(groupTitle);
->>>>>>> ef544c15608d31de0a9d87e24711a0a4d366aeaa
     });
-  }
+  };
 
-<<<<<<< HEAD
-  groupsGrid.addEventListener('scroll', onScroll);
-
-  // Resize handling
-  let resizeObserver = null;
-  if (window.ResizeObserver) {
-    resizeObserver = new ResizeObserver(() => {
-      // recompute pool/visible counts on resize by re-rendering
+  if (!groupsResizeObserver && window.ResizeObserver) {
+    groupsResizeObserver = new ResizeObserver(() => {
       renderGroups();
     });
-    resizeObserver.observe(groupsGrid);
-  } else {
+    groupsResizeObserver.observe(groupsGrid);
+  } else if (!window.ResizeObserver && !windowResizeHooked) {
     window.addEventListener('resize', () => renderGroups());
+    windowResizeHooked = true;
   }
 
-  // Event delegation for toggles
-  itemsLayer.addEventListener('change', (e) => {
+  itemsLayer.onchange = (e) => {
     const target = e.target;
     if (!target.classList.contains('group-toggle')) return;
     const idx = Number(target.dataset.index);
-    const [groupTitle] = state.groupEntries[idx];
+    const [groupTitle] = state.groupEntries[idx] || [];
+    if (!groupTitle) return;
     if (target.checked) {
       state.disabledGroups.delete(groupTitle);
     } else {
       state.disabledGroups.add(groupTitle);
     }
-    // Update stats quickly
     renderStats();
-    // Update visual state of the pool item
+    updateToggleAllLabel();
     const poolIdx = idx - lastStart;
     if (poolIdx >= 0 && poolIdx < pool.length) {
       pool[poolIdx].node.classList.toggle('disabled', state.disabledGroups.has(groupTitle));
     }
-  });
-=======
-  groupsGrid.append(fragment);
-  updateToggleAllLabel();
-}
+  };
 
-function handleGroupToggle(groupTitle, isChecked) {
-  if (isChecked) state.disabledGroups.delete(groupTitle);
-  else state.disabledGroups.add(groupTitle);
-  syncGroupRowState(groupTitle);
   updateToggleAllLabel();
-  renderStats();
-  updateOutput();
-}
-
-function syncGroupRowState(groupTitle) {
-  const ref = state.groupRows.get(groupTitle);
-  if (!ref) return;
-  const isDisabled = state.disabledGroups.has(groupTitle);
-  ref.item.classList.toggle('disabled', isDisabled);
-  ref.checkbox.checked = !isDisabled;
 }
 
 function updateToggleAllLabel() {
   toggleAllButton.textContent = state.disabledGroups.size === state.groups.size ? 'Enable all' : 'Disable none';
->>>>>>> ef544c15608d31de0a9d87e24711a0a4d366aeaa
 }
 
 function renderStats() {
@@ -523,7 +456,6 @@ function renderStats() {
 }
 
 function generateFilteredM3U() {
-  // Synchronous fallback kept for small playlists or when workers are unavailable.
   const disabled = state.disabledGroups;
   const outputLines = ['#EXTM3U'];
 
@@ -539,13 +471,10 @@ function generateFilteredM3U() {
   return outputLines.join('\n');
 }
 
-// Updated to optionally run generation in a Web Worker and report progress.
 function updateOutput({ useWorker = true } = {}) {
-  // If no raw text available or worker support missing, fall back to sync
   if (useWorker && window.Worker && state.rawText) {
     return new Promise((resolve, reject) => {
       setStatus('Generating filtered playlist (background)…', 'info');
-      // Disable action buttons while generating
       setControlsDisabled(true);
       const worker = new Worker('filter-worker.js');
       const disabledArr = Array.from(state.disabledGroups);
@@ -553,11 +482,12 @@ function updateOutput({ useWorker = true } = {}) {
       worker.addEventListener('message', (ev) => {
         const msg = ev.data || {};
         if (msg.type === 'progress') {
-          // Update status with progress
-          setStatus(`Generating… ${Math.min(100, Math.round((msg.processed / msg.totalLines) * 100))}%`, 'info');
+          setStatus(
+            `Generating… ${Math.min(100, Math.round((msg.processed / msg.totalLines) * 100))}%`,
+            'info'
+          );
         } else if (msg.type === 'result') {
           outputArea.value = msg.text;
-          // Count channels in output by counting lines that are not comments and are URLs
           const channelCount = (msg.text.match(/\nhttps?:\/\//g) || []).length;
           outputSize.textContent = `${channelCount} channels`;
           setStatus('Filtered playlist ready', 'success');
@@ -570,14 +500,18 @@ function updateOutput({ useWorker = true } = {}) {
         console.error('Worker error', err);
         setControlsDisabled(false);
         worker.terminate();
-        reject(err);
+        setStatus('Worker failed; falling back to synchronous generation.', 'warn');
+        const text = generateFilteredM3U();
+        outputArea.value = text;
+        setStatus('Filtered playlist ready', 'success');
+        resolve(text);
       });
     });
   }
 
-  // Fallback synchronous generation
   const text = generateFilteredM3U();
   outputArea.value = text;
+  setStatus('Filtered playlist ready', 'success');
   return Promise.resolve(text);
 }
 
@@ -587,20 +521,5 @@ function setControlsDisabled(disabled) {
   });
 }
 
-toggleAllButton.addEventListener('click', () => {
-  const shouldEnableAll = state.disabledGroups.size === state.groups.size;
-  state.disabledGroups = new Set();
-
-  if (!shouldEnableAll) {
-    state.groups.forEach((_, key) => state.disabledGroups.add(key));
-  }
-
-  state.groupRows.forEach((_, groupTitle) => syncGroupRowState(groupTitle));
-  updateToggleAllLabel();
-  renderStats();
-  // Do not regenerate output here to avoid heavy work on large lists.
-  // The user can click "Refresh" or Download to get the updated file.
-});
-
-// Initialize with sample to give users something to see immediately.
 hydrateState(samplePlaylist, 'sample.m3u');
+updateOutput({ useWorker: false });
