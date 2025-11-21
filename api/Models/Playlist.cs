@@ -21,11 +21,18 @@ public class Playlist
   [Column(TypeName = "jsonb")]
   public List<string> DisabledGroups { get; set; } = new();
 
+  [Column("totalchannels")]
   public int TotalChannels { get; set; }
 
+  [Column("groupcount")]
   public int GroupCount { get; set; }
 
+  [Column("expirationutc")]
   public DateTimeOffset? ExpirationUtc { get; set; }
+
+  [MaxLength(64)]
+  [Column("sharecode")]
+  public string? ShareCode { get; set; } = string.Empty;
 
   public DateTimeOffset CreatedAt { get; set; }
 

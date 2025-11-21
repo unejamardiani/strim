@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
       entity.Property(p => p.TotalChannels).HasDefaultValue(0);
       entity.Property(p => p.GroupCount).HasDefaultValue(0);
       entity.Property(p => p.ExpirationUtc);
+      entity.Property(p => p.ShareCode).HasMaxLength(64);
     });
   }
 

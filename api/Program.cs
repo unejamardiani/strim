@@ -62,12 +62,29 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'expirationutc') THEN
           ALTER TABLE playlists ADD COLUMN expirationutc timestamptz NULL;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'sharecode') THEN
+          ALTER TABLE playlists ADD COLUMN sharecode varchar(64) NULL;
+        END IF;
       END $$;
     ");
   }
   catch
   {
     // Non-fatal; the app can continue even if this migration helper fails.
+  }
+
+  // Backfill missing share codes without materializing entities (avoid null casting faults).
+  try
+  {
+    db.Database.ExecuteSqlRaw(@"
+      UPDATE playlists
+      SET sharecode = md5(random()::text || clock_timestamp()::text)
+      WHERE sharecode IS NULL OR sharecode = '';
+    ");
+  }
+  catch
+  {
+    // Non-fatal; best-effort.
   }
 }
 
@@ -115,20 +132,28 @@ app.MapPost("/api/playlists", async (PlaylistRequest input, AppDbContext db) =>
     return Results.BadRequest(new { error = "Name is required." });
   }
 
-  var entity = new Playlist
+  try
   {
-    Name = input.Name.Trim(),
-    SourceUrl = input.SourceUrl,
-    SourceName = input.SourceName,
-    DisabledGroups = input.DisabledGroups ?? new List<string>(),
-    TotalChannels = input.TotalChannels ?? 0,
-    GroupCount = input.GroupCount ?? 0,
-    ExpirationUtc = input.ExpirationUtc,
-  };
+    var entity = new Playlist
+    {
+      Name = input.Name.Trim(),
+      SourceUrl = input.SourceUrl,
+      SourceName = input.SourceName,
+      DisabledGroups = input.DisabledGroups ?? new List<string>(),
+      TotalChannels = input.TotalChannels ?? 0,
+      GroupCount = input.GroupCount ?? 0,
+      ExpirationUtc = input.ExpirationUtc,
+      ShareCode = string.IsNullOrWhiteSpace(input.ShareCode) ? Guid.NewGuid().ToString("N") : input.ShareCode.Trim(),
+    };
 
-  db.Playlists.Add(entity);
-  await db.SaveChangesAsync();
-  return Results.Created($"/api/playlists/{entity.Id}", entity);
+    db.Playlists.Add(entity);
+    await db.SaveChangesAsync();
+    return Results.Created($"/api/playlists/{entity.Id}", entity);
+  }
+  catch (Exception ex)
+  {
+    return Results.Problem($"Failed to save playlist: {ex.Message}", statusCode: 500);
+  }
 });
 
 app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, AppDbContext db) =>
@@ -141,16 +166,31 @@ app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, Ap
     return Results.BadRequest(new { error = "Name is required." });
   }
 
-  entity.Name = input.Name.Trim();
-  entity.SourceUrl = input.SourceUrl;
-  entity.SourceName = input.SourceName;
-  entity.DisabledGroups = input.DisabledGroups ?? new List<string>();
-  entity.TotalChannels = input.TotalChannels ?? entity.TotalChannels;
-  entity.GroupCount = input.GroupCount ?? entity.GroupCount;
-  entity.ExpirationUtc = input.ExpirationUtc ?? entity.ExpirationUtc;
+  try
+  {
+    entity.Name = input.Name.Trim();
+    entity.SourceUrl = input.SourceUrl;
+    entity.SourceName = input.SourceName;
+    entity.DisabledGroups = input.DisabledGroups ?? new List<string>();
+    entity.TotalChannels = input.TotalChannels ?? entity.TotalChannels;
+    entity.GroupCount = input.GroupCount ?? entity.GroupCount;
+    entity.ExpirationUtc = input.ExpirationUtc ?? entity.ExpirationUtc;
+    if (!string.IsNullOrWhiteSpace(input.ShareCode))
+    {
+      entity.ShareCode = input.ShareCode.Trim();
+    }
+    if (string.IsNullOrWhiteSpace(entity.ShareCode))
+    {
+      entity.ShareCode = Guid.NewGuid().ToString("N");
+    }
 
-  await db.SaveChangesAsync();
-  return Results.Ok(entity);
+    await db.SaveChangesAsync();
+    return Results.Ok(entity);
+  }
+  catch (Exception ex)
+  {
+    return Results.Problem($"Failed to update playlist: {ex.Message}", statusCode: 500);
+  }
 });
 
 app.MapDelete("/api/playlists/{id:guid}", async (Guid id, AppDbContext db) =>
@@ -272,6 +312,42 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
   return Results.Ok(response);
 });
 
+app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code, AppDbContext db, IHttpClientFactory httpClientFactory) =>
+{
+  var playlist = await db.Playlists.FindAsync(id);
+  if (playlist is null) return Results.NotFound();
+  if (!string.Equals(playlist.ShareCode, code, StringComparison.Ordinal))
+  {
+    return Results.Unauthorized();
+  }
+  if (string.IsNullOrWhiteSpace(playlist.SourceUrl))
+  {
+    return Results.BadRequest(new { error = "Playlist is missing sourceUrl." });
+  }
+
+  try
+  {
+    var text = await FetchPlaylistText(playlist.SourceUrl, httpClientFactory);
+    var disabled = new HashSet<string>(playlist.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+    var filtered = PlaylistProcessor.GenerateFiltered(text, disabled);
+    var fileName = $"{(playlist.SourceName ?? playlist.Name ?? "playlist")}-filtered.m3u";
+    return Results.File(Encoding.UTF8.GetBytes(filtered.Text), "application/x-mpegurl", fileDownloadName: fileName);
+  }
+  catch (TaskCanceledException)
+  {
+    return Results.Problem("Fetch timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
+  }
+  catch (HttpRequestException ex)
+  {
+    var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
+    return Results.Problem(ex.Message, statusCode: status);
+  }
+  catch (Exception ex)
+  {
+    return Results.Problem(ex.Message, statusCode: (int)HttpStatusCode.BadGateway);
+  }
+});
+
 app.MapGet("/api/fetch", async (string url, IHttpClientFactory httpClientFactory) =>
 {
   if (string.IsNullOrWhiteSpace(url))
@@ -352,6 +428,7 @@ public record PlaylistRequest(
   List<string>? DisabledGroups,
   int? TotalChannels,
   int? GroupCount,
-  DateTimeOffset? ExpirationUtc);
+  DateTimeOffset? ExpirationUtc,
+  string? ShareCode);
 
 public record FetchRequest(string Url);

@@ -10,6 +10,7 @@ const state = {
   groupCount: 0,
   groupEntries: [],
   lastOutput: '',
+  shareCode: null,
 };
 
 const statusPill = document.getElementById('status-pill');
@@ -96,7 +97,17 @@ copyButton.addEventListener('click', async () => {
 
 downloadButton.addEventListener('click', async () => {
   setStatus('Generating filtered playlist…', 'info');
-  // Ensure output is up-to-date with current toggles before downloading.
+  // Prefer backend-streamed download when a saved playlist exists.
+  if (state.currentPlaylistId && state.shareCode && API_BASE) {
+    const link = document.createElement('a');
+    link.href = buildShareUrl();
+    link.download = `${state.sourceName || 'playlist'}-filtered.m3u`;
+    link.rel = 'noopener';
+    link.click();
+    setStatus('Download started', 'success');
+    return;
+  }
+  // Fallback to client-side generation.
   const text = await updateOutput();
   const blob = new Blob([text || ''], { type: 'application/x-mpegURL' });
   const link = document.createElement('a');
@@ -108,14 +119,15 @@ downloadButton.addEventListener('click', async () => {
 });
 
 serveButton.addEventListener('click', async () => {
-  // Generate output on demand so it matches the current selection.
-  const text = await updateOutput();
-  const blob = new Blob([text || ''], { type: 'application/x-mpegURL' });
-  const url = URL.createObjectURL(blob);
+  if (!state.currentPlaylistId || !state.shareCode) {
+    setStatus('Save the playlist first to get a shareable URL.', 'warn');
+    return;
+  }
+  const url = buildShareUrl();
   shareUrlInput.value = url;
   shareUrlInput.focus();
   shareUrlInput.select();
-  setStatus('Shareable object URL generated. Keep this tab open.', 'info');
+  setStatus('Shareable URL ready', 'success');
 });
 
 if (savePlaylistButton) {
@@ -199,6 +211,7 @@ function hydrateFromAnalysis(analysis, options = {}) {
   };
   state.localPlaylist = null;
   state.lastOutput = '';
+  state.shareCode = null;
 
   const nameChoice = options.name || analysis.sourceName || (playlistNameInput && playlistNameInput.value.trim()) || 'playlist';
   state.sourceName = nameChoice;
@@ -228,6 +241,7 @@ function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options 
     channelLines: parsed.channelLines,
   };
   state.lastOutput = '';
+  state.shareCode = options.shareCode || null;
 
   const nameChoice = options.name || (playlistNameInput && playlistNameInput.value.trim()) || sourceName;
   state.sourceName = nameChoice;
@@ -331,6 +345,7 @@ function sanitizePlaylistRecord(pl) {
     totalChannels: pl.totalChannels || 0,
     groupCount: pl.groupCount || 0,
     expirationUtc: pl.expirationUtc || null,
+    shareCode: pl.shareCode || null,
     createdAt: pl.createdAt,
     updatedAt: pl.updatedAt,
   };
@@ -338,6 +353,15 @@ function sanitizePlaylistRecord(pl) {
 
 function hasLoadedPlaylist() {
   return Boolean(state.backendSession || state.localPlaylist);
+}
+
+function buildShareUrl() {
+  if (!API_BASE || !state.currentPlaylistId || !state.shareCode) return '';
+  // Ensure absolute URL even if API_BASE is a relative /api path.
+  const base = API_BASE.startsWith('http')
+    ? API_BASE.replace(/\/$/, '')
+    : new URL(API_BASE.replace(/\/$/, ''), window.location.origin).toString();
+  return `${base}/playlists/${state.currentPlaylistId}/share/${state.shareCode}`;
 }
 
 function formatExpiration(expiration) {
@@ -407,6 +431,7 @@ async function handleSavePlaylist() {
     totalChannels: state.totalChannels,
     groupCount: state.groupCount,
     expirationUtc: state.backendSession?.expirationUtc || null,
+    shareCode: state.shareCode,
   };
 
   let saved;
@@ -434,6 +459,7 @@ async function handleSavePlaylist() {
 
   state.savedPlaylists = [saved, ...state.savedPlaylists.filter((p) => p.id !== saved.id)];
   state.currentPlaylistId = saved.id;
+  state.shareCode = saved.shareCode || state.shareCode;
   writeLocalPlaylists(state.savedPlaylists);
   renderSavedPlaylists();
   updateSaveButtonLabel();
@@ -448,6 +474,7 @@ async function loadSavedPlaylist(id) {
   if (playlistNameInput) playlistNameInput.value = name;
   const urlField = document.getElementById('playlist-url');
   if (urlField) urlField.value = playlist.sourceUrl || '';
+  state.shareCode = playlist.shareCode || null;
 
   const hydrateOpts = {
     disabledGroups: playlist.disabledGroups || [],
@@ -471,6 +498,7 @@ async function loadSavedPlaylist(id) {
     await loadPlaylistFromSource(playlist.sourceUrl, hydrateOpts);
     renderSavedPlaylists();
     updateSaveButtonLabel();
+    state.shareCode = playlist.shareCode || state.shareCode;
     setStatus(`Loaded saved playlist "${name}"`, 'success');
     return;
   }
@@ -771,6 +799,9 @@ async function updateOutput({ useWorker = true } = {}) {
       console.error('Backend generation failed; attempting local fallback', err);
       setStatus('Backend generation failed; falling back to local processing.', 'warn');
       setControlsDisabled(false);
+      if (state.lastOutput) {
+        return state.lastOutput;
+      }
     }
   }
 
