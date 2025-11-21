@@ -7,20 +7,60 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using Npgsql;
+using Microsoft.Data.Sqlite;
+using System.Data.Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString =
-  builder.Configuration.GetConnectionString("Postgres") ??
-  builder.Configuration["POSTGRES_CONNECTION"] ??
-  "Host=localhost;Port=5432;Database=strim;Username=postgres;Password=postgres";
+var configuredProvider = (builder.Configuration["DB_PROVIDER"] ?? builder.Configuration["DATABASE_PROVIDER"])?.ToLowerInvariant();
+var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres") ??
+  builder.Configuration["POSTGRES_CONNECTION"];
+var sqliteConnectionString = builder.Configuration.GetConnectionString("Sqlite") ??
+  builder.Configuration["SQLITE_CONNECTION"];
+var sqlitePathOverride = builder.Configuration["SQLITE_PATH"];
 
-// Configure Npgsql data source with dynamic JSON enabled so we can store List<string> as jsonb.
-var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
-dataSourceBuilder.EnableDynamicJson();
-var dataSource = dataSourceBuilder.Build();
+// Default to SQLite when no Postgres connection string is provided unless explicitly overridden.
+var useSqlite = string.Equals(configuredProvider, "sqlite", StringComparison.OrdinalIgnoreCase) ||
+  (string.IsNullOrWhiteSpace(configuredProvider) && string.IsNullOrWhiteSpace(postgresConnectionString));
 
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(dataSource));
+if (useSqlite)
+{
+  var sqliteBuilder = new SqliteConnectionStringBuilder(
+    string.IsNullOrWhiteSpace(sqliteConnectionString)
+      ? $"Data Source={Path.Combine(AppContext.BaseDirectory, "data", "strim.db")}"
+      : sqliteConnectionString);
+
+  if (!string.IsNullOrWhiteSpace(sqlitePathOverride))
+  {
+    sqliteBuilder.DataSource = sqlitePathOverride;
+  }
+
+  if (!Path.IsPathRooted(sqliteBuilder.DataSource))
+  {
+    sqliteBuilder.DataSource = Path.GetFullPath(sqliteBuilder.DataSource, AppContext.BaseDirectory);
+  }
+
+  var sqliteDirectory = Path.GetDirectoryName(sqliteBuilder.DataSource);
+  if (!string.IsNullOrWhiteSpace(sqliteDirectory))
+  {
+    Directory.CreateDirectory(sqliteDirectory);
+  }
+
+  builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlite(sqliteBuilder.ConnectionString));
+}
+else
+{
+  var connectionString = postgresConnectionString ??
+    "Host=localhost;Port=5432;Database=strim;Username=postgres;Password=postgres";
+
+  // Configure Npgsql data source with dynamic JSON enabled so we can store List<string> as jsonb.
+  var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+  dataSourceBuilder.EnableDynamicJson();
+  var dataSource = dataSourceBuilder.Build();
+
+  builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(dataSource));
+}
 builder.Services.AddCors(options =>
 {
   options.AddPolicy("default", policy =>
@@ -46,8 +86,30 @@ app.UseStaticFiles();
 using (var scope = app.Services.CreateScope())
 {
   var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+  EnsureSchema(db);
+}
+
+void EnsureSchema(AppDbContext db)
+{
   db.Database.EnsureCreated();
-  // Backward-compatible schema patching for new columns when the table already exists.
+
+  if (db.Database.IsNpgsql())
+  {
+    TryPatchPostgresSchema(db);
+    TryBackfillPostgresShareCodes(db);
+  }
+  else if (db.Database.IsSqlite())
+  {
+    TryAddSqliteColumn(db, "totalchannels", "INTEGER NOT NULL DEFAULT 0");
+    TryAddSqliteColumn(db, "groupcount", "INTEGER NOT NULL DEFAULT 0");
+    TryAddSqliteColumn(db, "expirationutc", "TEXT NULL");
+    TryAddSqliteColumn(db, "sharecode", "TEXT NULL");
+    TryBackfillSqliteShareCodes(db);
+  }
+}
+
+void TryPatchPostgresSchema(AppDbContext db)
+{
   try
   {
     db.Database.ExecuteSqlRaw(@"
@@ -72,13 +134,70 @@ using (var scope = app.Services.CreateScope())
   {
     // Non-fatal; the app can continue even if this migration helper fails.
   }
+}
 
-  // Backfill missing share codes without materializing entities (avoid null casting faults).
+void TryBackfillPostgresShareCodes(AppDbContext db)
+{
   try
   {
     db.Database.ExecuteSqlRaw(@"
       UPDATE playlists
       SET sharecode = md5(random()::text || clock_timestamp()::text)
+      WHERE sharecode IS NULL OR sharecode = '';
+    ");
+  }
+  catch
+  {
+    // Non-fatal; best-effort.
+  }
+}
+
+void TryAddSqliteColumn(AppDbContext db, string columnName, string definition)
+{
+  try
+  {
+    var connection = db.Database.GetDbConnection();
+    db.Database.OpenConnection();
+
+    var columnExists = false;
+    using (var cmd = connection.CreateCommand())
+    {
+      cmd.CommandText = "PRAGMA table_info('playlists');";
+      using var reader = cmd.ExecuteReader();
+      while (reader.Read())
+      {
+        if (reader.FieldCount > 1 && string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+        {
+          columnExists = true;
+          break;
+        }
+      }
+    }
+
+    if (!columnExists)
+    {
+      using var alter = connection.CreateCommand();
+      alter.CommandText = $"ALTER TABLE playlists ADD COLUMN {columnName} {definition};";
+      alter.ExecuteNonQuery();
+    }
+  }
+  catch
+  {
+    // Non-fatal; best-effort; SQLite schemas are patched opportunistically.
+  }
+  finally
+  {
+    db.Database.CloseConnection();
+  }
+}
+
+void TryBackfillSqliteShareCodes(AppDbContext db)
+{
+  try
+  {
+    db.Database.ExecuteSqlRaw(@"
+      UPDATE playlists
+      SET sharecode = lower(hex(randomblob(16)))
       WHERE sharecode IS NULL OR sharecode = '';
     ");
   }

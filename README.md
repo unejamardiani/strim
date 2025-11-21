@@ -20,20 +20,24 @@ filesystem.
 Deploy the contents of this directory to Azure Static Web Apps or an App Service configured for
 static files. The app has no server-side dependencies.
 
-## Backend persistence (Postgres + .NET 8 minimal API)
+## Backend persistence (.NET 8 minimal API)
 
 If you want playlists to survive browser resets and be shared across devices, run the included
-backend:
+backend. It now supports either Postgres or SQLite so you can run everything in a single container.
 
-1. Provide a connection string via `POSTGRES_CONNECTION`, e.g.  
-   `export POSTGRES_CONNECTION="Host=localhost;Port=5432;Database=strim;Username=postgres;Password=postgres"`
-2. Start the API: `dotnet run --project api`
-3. Serve the frontend (for example `python3 -m http.server 8000`). The API is CORS-open.
-4. Point the UI at the API by either serving both from the same origin, or adding `?api=http://localhost:5000/api`
+1. Pick a provider (defaults to SQLite if no Postgres connection string is present):
+   - `DB_PROVIDER=sqlite` (recommended for a cheap single-container deploy)
+   - `DB_PROVIDER=postgres` (existing behavior; requires `POSTGRES_CONNECTION`)
+2. Set a connection/file location:
+   - SQLite: optionally set `SQLITE_PATH=/app/data/strim.db` (default inside the container) or a full `SQLITE_CONNECTION` string. Mount that directory to Azure Files/Blob storage for persistence.
+   - Postgres: `POSTGRES_CONNECTION="Host=...;Port=...;Database=...;Username=...;Password=..."`
+3. Start the API: `dotnet run --project api`
+4. Serve the frontend (for example `python3 -m http.server 8000`). The API is CORS-open.
+5. Point the UI at the API by either serving both from the same origin, or adding `?api=http://localhost:5000/api`
    to the page URL (this is remembered in `localStorage` as `strim.apiBase`).
 
-The API uses EF Core with PostgreSQL and auto-creates the `playlists` table on first run. If the API
-is unreachable, the UI falls back to local browser storage so you do not lose work while offline.
+The API auto-creates the database schema for either provider. If the API is unreachable, the UI falls
+back to local browser storage so you do not lose work while offline.
 
 ### One-command Docker (app + Postgres)
 
@@ -49,6 +53,21 @@ This starts:
 
 Data is stored in the `pgdata` named volume. The app sets `POSTGRES_CONNECTION` automatically to talk
 to the bundled database.
+
+### Single-container Docker (SQLite)
+
+For a cheapest, single-container deploy without Postgres, build and run with SQLite:
+
+```bash
+docker build -t strim .
+docker run -p 8080:8080 \
+  -e DB_PROVIDER=sqlite \
+  -v strim-data:/app/data \
+  strim
+```
+
+Mount `/app/data` (or your `SQLITE_PATH`) to Azure Files/Blob storage to persist the `.db` file
+across restarts.
 
 ## Playlist fetching and CORS
 

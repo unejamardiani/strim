@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Api.Data;
 
@@ -11,19 +14,37 @@ public class AppDbContext : DbContext
 
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
+    var disabledGroupsConverter = new ValueConverter<List<string>, string>(
+      v => SerializeDisabledGroups(v),
+      v => DeserializeDisabledGroups(v));
+
+    var disabledGroupsComparer = new ValueComparer<List<string>>(
+      (a, b) => (a ?? new List<string>()).SequenceEqual(b ?? new List<string>()),
+      v => (v ?? new List<string>()).Aggregate(0, (hash, item) => HashCode.Combine(hash, item == null ? 0 : item.GetHashCode())),
+      v => v == null ? new List<string>() : v.ToList());
+
     modelBuilder.Entity<Playlist>(entity =>
     {
       entity.ToTable("playlists");
       entity.Property(p => p.Name).IsRequired().HasMaxLength(200);
       entity.Property(p => p.SourceUrl).HasMaxLength(2048);
       entity.Property(p => p.SourceName).HasMaxLength(200);
-      entity.Property(p => p.DisabledGroups).HasColumnType("jsonb");
+      var disabled = entity.Property(p => p.DisabledGroups)
+        .HasConversion(disabledGroupsConverter);
+      disabled.HasColumnType("jsonb");
+      disabled.Metadata.SetValueComparer(disabledGroupsComparer);
       entity.Property(p => p.TotalChannels).HasDefaultValue(0);
       entity.Property(p => p.GroupCount).HasDefaultValue(0);
       entity.Property(p => p.ExpirationUtc);
       entity.Property(p => p.ShareCode).HasMaxLength(64);
     });
   }
+
+  private static string SerializeDisabledGroups(List<string>? groups) =>
+    JsonSerializer.Serialize(groups ?? new List<string>());
+
+  private static List<string> DeserializeDisabledGroups(string? value) =>
+    string.IsNullOrWhiteSpace(value) ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(value) ?? new List<string>());
 
   public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
   {
