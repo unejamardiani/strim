@@ -9,6 +9,7 @@ const state = {
   totalChannels: 0,
   groupCount: 0,
   groupEntries: [],
+  groupFilter: '',
   lastOutput: '',
   shareCode: null,
 };
@@ -16,6 +17,7 @@ const state = {
 const statusPill = document.getElementById('status-pill');
 const stats = document.getElementById('stats');
 const groupsGrid = document.getElementById('groups');
+const groupSearchInput = document.getElementById('group-search');
 const outputSize = document.getElementById('output-size');
 const shareUrlInput = document.getElementById('share-url');
 const playlistNameInput = document.getElementById('playlist-name');
@@ -163,6 +165,14 @@ toggleAllButton.addEventListener('click', () => {
   updateToggleAllLabel();
   // We intentionally do not regenerate output automatically to keep toggling fast for huge lists.
 });
+
+if (groupSearchInput) {
+  groupSearchInput.addEventListener('input', (e) => {
+    state.groupFilter = e.target.value || '';
+    if (groupsGrid) groupsGrid.scrollTop = 0;
+    renderGroups();
+  });
+}
 
 function setStatus(text, tone = 'info') {
   statusPill.textContent = text;
@@ -593,7 +603,10 @@ let groupsResizeObserver = null;
 let windowResizeHooked = false;
 
 function renderGroups() {
-  state.groupEntries = [...state.groups.entries()].sort((a, b) => b[1] - a[1]);
+  const filterTerm = (state.groupFilter || '').trim().toLowerCase();
+  const groupsArray = [...state.groups.entries()];
+  const filtered = filterTerm ? groupsArray.filter(([name]) => name.toLowerCase().includes(filterTerm)) : groupsArray;
+  state.groupEntries = filtered.sort((a, b) => b[1] - a[1]);
 
   const ITEM_HEIGHT = 56;
   const BUFFER = 6;
@@ -605,6 +618,14 @@ function renderGroups() {
   groupsGrid.replaceChildren();
 
   const totalItems = state.groupEntries.length;
+  if (totalItems === 0) {
+    const message = document.createElement('div');
+    message.className = 'hint';
+    message.textContent = filterTerm ? 'No groups match your search.' : 'Load a playlist to see groups.';
+    groupsGrid.append(message);
+    return;
+  }
+
   const spacer = document.createElement('div');
   spacer.className = 'group-spacer';
   spacer.style.height = `${totalItems * ITEM_HEIGHT}px`;

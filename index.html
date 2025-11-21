@@ -31,6 +31,37 @@
         </div>
       </header>
 
+      <section class="workflow">
+        <div class="workflow-step">
+          <span class="step-number">1</span>
+          <div class="step-body">
+            <p class="step-title">Load a playlist</p>
+            <p class="step-copy">Name it, drop in your M3U/M3U8 URL, and fetch through the backend.</p>
+          </div>
+        </div>
+        <div class="workflow-step">
+          <span class="step-number">2</span>
+          <div class="step-body">
+            <p class="step-title">Save & share</p>
+            <p class="step-copy">Persist your filters so you can regenerate and share on demand.</p>
+          </div>
+        </div>
+        <div class="workflow-step">
+          <span class="step-number">3</span>
+          <div class="step-body">
+            <p class="step-title">Toggle groups</p>
+            <p class="step-copy">Cull noisy bundles fast; search or disable everything with one tap.</p>
+          </div>
+        </div>
+        <div class="workflow-step">
+          <span class="step-number">4</span>
+          <div class="step-body">
+            <p class="step-title">Export cleanly</p>
+            <p class="step-copy">Refresh, copy, or download the filtered playlist whenever you need it.</p>
+          </div>
+        </div>
+      </section>
+
       <main class="grid">
         <section class="panel glass">
           <div class="panel-header">
@@ -79,6 +110,17 @@
             <div>
               <p class="eyebrow">Groups</p>
               <h2>Toggle visibility</h2>
+            </div>
+          </div>
+          <div class="group-actions">
+            <div class="group-search">
+              <input
+                id="group-search"
+                type="search"
+                placeholder="Search groups..."
+                autocomplete="off"
+                spellcheck="false"
+              />
             </div>
             <button id="toggle-all" class="ghost">Disable none</button>
           </div>
