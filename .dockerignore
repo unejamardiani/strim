@@ -1,0 +1,9 @@
+bin/
+obj/
+node_modules/
+**/.git
+**/.DS_Store
+**/Thumbs.db
+*.log
+api/bin/
+api/obj/

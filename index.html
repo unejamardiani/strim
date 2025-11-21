@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>strim · M3U cleaner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="brand">
+          <div class="brand-mark">S</div>
+          <div>
+            <h1>strim</h1>
+            <p class="subtitle">Clean up M3U and M3U8 playlists in seconds.</p>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <button id="load-sample" class="ghost">Use sample playlist</button>
+          <a
+            class="primary"
+            href="https://learn.microsoft.com/azure/app-service/overview"
+            target="_blank"
+            rel="noreferrer"
+            >Cheap to host on Azure →</a
+          >
+        </div>
+      </header>
+
+      <section class="workflow">
+        <div class="workflow-step">
+          <span class="step-number">1</span>
+          <div class="step-body">
+            <p class="step-title">Load a playlist</p>
+            <p class="step-copy">Name it, drop in your M3U/M3U8 URL, and fetch through the backend.</p>
+          </div>
+        </div>
+        <div class="workflow-step">
+          <span class="step-number">2</span>
+          <div class="step-body">
+            <p class="step-title">Save & share</p>
+            <p class="step-copy">Persist your filters so you can regenerate and share on demand.</p>
+          </div>
+        </div>
+        <div class="workflow-step">
+          <span class="step-number">3</span>
+          <div class="step-body">
+            <p class="step-title">Toggle groups</p>
+            <p class="step-copy">Cull noisy bundles fast; search or disable everything with one tap.</p>
+          </div>
+        </div>
+        <div class="workflow-step">
+          <span class="step-number">4</span>
+          <div class="step-body">
+            <p class="step-title">Export cleanly</p>
+            <p class="step-copy">Refresh, copy, or download the filtered playlist whenever you need it.</p>
+          </div>
+        </div>
+      </section>
+
+      <main class="grid">
+        <section class="panel glass">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Source</p>
+              <h2>Load playlist</h2>
+            </div>
+            <div class="pill" id="status-pill">Waiting for input</div>
+          </div>
+          <div class="form">
+            <label for="playlist-name">Playlist name</label>
+            <input id="playlist-name" type="text" placeholder="My provider lineup" autocomplete="off" spellcheck="false" />
+            <label for="playlist-url">URL to M3U / M3U8</label>
+            <div class="input-row">
+              <input
+                type="url"
+                id="playlist-url"
+                placeholder="https://example.com/list.m3u8"
+                autocomplete="url"
+                spellcheck="false"
+              />
+              <button id="fetch-playlist" class="primary">Load</button>
+            </div>
+            <p class="hint">
+              We fetch the playlist through the backend downloader.
+            </p>
+          </div>
+          <div class="stats" id="stats"></div>
+        </section>
+
+        <section class="panel glass">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Playlists</p>
+            <h2>Save & manage</h2>
+          </div>
+          <button id="save-playlist" class="primary">Save playlist</button>
+        </div>
+        <p class="hint">Save the source URL and filters. The cleaned playlist is generated on the backend when you need it.</p>
+        <div id="saved-empty" class="hint">No saved playlists yet.</div>
+        <div id="saved-list" class="saved-list"></div>
+      </section>
+
+        <section class="panel glass">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Groups</p>
+              <h2>Toggle visibility</h2>
+            </div>
+          </div>
+          <div class="group-actions">
+            <div class="group-search">
+              <input
+                id="group-search"
+                type="search"
+                placeholder="Search groups..."
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <button id="toggle-all" class="ghost">Disable none</button>
+          </div>
+          <div id="groups" class="group-panel-body"></div>
+        </section>
+
+        <section class="panel glass full">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Output</p>
+              <h2>Filtered playlist</h2>
+            </div>
+            <div class="chip" id="output-size">0 channels</div>
+          </div>
+          <div class="actions">
+            <button id="refresh-output" class="ghost">Refresh</button>
+            <button id="copy-output" class="ghost">Copy</button>
+            <button id="download-output" class="primary">Download .m3u</button>
+          </div>
+          <div class="serve-row">
+            <button id="serve-output" class="ghost">Generate shareable URL</button>
+            <input id="share-url" type="text" readonly placeholder="Your shareable URL will appear here" />
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <footer class="footer">
+      <p>
+        strim keeps your playlists lean. Designed to be hosted cheaply as static files on Azure Static
+        Web Apps or App Service.
+      </p>
+      <p>
+        Built and maintained by
+        <a href="https://github.com/unejamardiani" target="_blank" rel="noopener noreferrer">unejamardiani</a>
+        with AI.
+      </p>
+      <p>
+        Source available at
+        <a href="https://github.com/unejamardiani/strim" target="_blank" rel="noopener noreferrer">github.com/unejamardiani/strim</a>.
+      </p>
+    </footer>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
