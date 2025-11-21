@@ -291,6 +291,7 @@ button:active,
   opacity: 0.55;
   border-color: rgba(255, 123, 123, 0.6);
   background: rgba(255, 123, 123, 0.08);
+  opacity: 0.78;
 }
 
 .group-info {

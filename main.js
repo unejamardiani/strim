@@ -3,7 +3,12 @@ const state = {
   groups: new Map(),
   disabledGroups: new Set(),
   sourceName: 'untitled',
+<<<<<<< HEAD
   rawText: '',
+=======
+  channelLines: [],
+  groupRows: new Map(),
+>>>>>>> ef544c15608d31de0a9d87e24711a0a4d366aeaa
 };
 
 const statusPill = document.getElementById('status-pill');
@@ -208,7 +213,11 @@ function hydrateState(text, sourceName = 'playlist', note = '') {
   const parsed = parseM3U(text);
   state.channels = parsed.channels;
   state.groups = parsed.groups;
+<<<<<<< HEAD
   state.rawText = text;
+=======
+  state.channelLines = parsed.channelLines;
+>>>>>>> ef544c15608d31de0a9d87e24711a0a4d366aeaa
   state.disabledGroups = new Set();
   state.sourceName = sourceName;
   renderGroups();
@@ -226,6 +235,7 @@ function parseM3U(text) {
 
   const channels = [];
   const groups = new Map();
+  const channelLines = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -244,8 +254,12 @@ function parseM3U(text) {
     const name = extinf.split(',').slice(1).join(',').trim() || attributes['tvg-name'] || 'Unknown';
     const groupTitle = attributes['group-title'] || 'Ungrouped';
 
+    const hasGroup = /group-title="[^"]*"/i.test(extinf);
+    const normalizedExtinf = hasGroup ? extinf : `${extinf} group-title="${groupTitle}"`;
+
     const channel = {
       extinf,
+      normalizedExtinf,
       url,
       name,
       groupTitle,
@@ -254,9 +268,10 @@ function parseM3U(text) {
 
     channels.push(channel);
     groups.set(groupTitle, (groups.get(groupTitle) || 0) + 1);
+    channelLines.push(`${normalizedExtinf}\n${url}`);
   }
 
-  return { channels, groups };
+  return { channels, groups, channelLines };
 }
 
 // Debounce helper
@@ -280,6 +295,7 @@ function renderGroups() {
 
   // Clear and set up container
   groupsGrid.innerHTML = '';
+<<<<<<< HEAD
   groupsGrid.classList.remove('group-list');
   groupsGrid.classList.add('group-virtual');
   groupsGrid.style.position = 'relative';
@@ -387,9 +403,44 @@ function renderGroups() {
       const start = Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER;
       renderSlice(start);
       scrollTick = null;
+=======
+  state.groupRows = new Map();
+  const fragment = document.createDocumentFragment();
+
+  [...state.groups.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([groupTitle, count]) => {
+      const item = document.createElement('label');
+      item.className = 'group-item';
+      item.dataset.group = groupTitle;
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'group-checkbox';
+      checkbox.checked = !state.disabledGroups.has(groupTitle);
+      checkbox.addEventListener('change', () => handleGroupToggle(groupTitle, checkbox.checked));
+
+      const box = document.createElement('span');
+      box.className = 'checkbox-box';
+
+      const title = document.createElement('div');
+      title.className = 'group-title';
+      title.textContent = groupTitle;
+
+      const chip = document.createElement('div');
+      chip.className = 'count';
+      chip.textContent = `${count} channel${count === 1 ? '' : 's'}`;
+
+      item.append(checkbox, box, title, chip);
+      fragment.append(item);
+
+      state.groupRows.set(groupTitle, { item, checkbox });
+      syncGroupRowState(groupTitle);
+>>>>>>> ef544c15608d31de0a9d87e24711a0a4d366aeaa
     });
   }
 
+<<<<<<< HEAD
   groupsGrid.addEventListener('scroll', onScroll);
 
   // Resize handling
@@ -423,6 +474,31 @@ function renderGroups() {
       pool[poolIdx].node.classList.toggle('disabled', state.disabledGroups.has(groupTitle));
     }
   });
+=======
+  groupsGrid.append(fragment);
+  updateToggleAllLabel();
+}
+
+function handleGroupToggle(groupTitle, isChecked) {
+  if (isChecked) state.disabledGroups.delete(groupTitle);
+  else state.disabledGroups.add(groupTitle);
+  syncGroupRowState(groupTitle);
+  updateToggleAllLabel();
+  renderStats();
+  updateOutput();
+}
+
+function syncGroupRowState(groupTitle) {
+  const ref = state.groupRows.get(groupTitle);
+  if (!ref) return;
+  const isDisabled = state.disabledGroups.has(groupTitle);
+  ref.item.classList.toggle('disabled', isDisabled);
+  ref.checkbox.checked = !isDisabled;
+}
+
+function updateToggleAllLabel() {
+  toggleAllButton.textContent = state.disabledGroups.size === state.groups.size ? 'Enable all' : 'Disable none';
+>>>>>>> ef544c15608d31de0a9d87e24711a0a4d366aeaa
 }
 
 function renderStats() {
@@ -449,19 +525,17 @@ function renderStats() {
 function generateFilteredM3U() {
   // Synchronous fallback kept for small playlists or when workers are unavailable.
   const disabled = state.disabledGroups;
-  const filtered = state.channels.filter((c) => !disabled.has(c.groupTitle));
   const outputLines = ['#EXTM3U'];
 
-  filtered.forEach((channel) => {
-    const hasGroup = /group-title="[^"]*"/i.test(channel.extinf);
-    const extinf = hasGroup
-      ? channel.extinf
-      : `${channel.extinf} group-title="${channel.groupTitle}"`;
-    outputLines.push(extinf);
-    outputLines.push(channel.url);
-  });
+  let kept = 0;
+  for (let i = 0; i < state.channels.length; i++) {
+    const channel = state.channels[i];
+    if (disabled.has(channel.groupTitle)) continue;
+    outputLines.push(state.channelLines[i]);
+    kept++;
+  }
 
-  outputSize.textContent = `${filtered.length} channels`;
+  outputSize.textContent = `${kept} channel${kept === 1 ? '' : 's'}`;
   return outputLines.join('\n');
 }
 
@@ -514,14 +588,15 @@ function setControlsDisabled(disabled) {
 }
 
 toggleAllButton.addEventListener('click', () => {
-  if (state.disabledGroups.size > 0) {
-    state.disabledGroups.clear();
-    toggleAllButton.textContent = 'Disable none';
-  } else {
+  const shouldEnableAll = state.disabledGroups.size === state.groups.size;
+  state.disabledGroups = new Set();
+
+  if (!shouldEnableAll) {
     state.groups.forEach((_, key) => state.disabledGroups.add(key));
-    toggleAllButton.textContent = 'Enable all';
   }
-  renderGroups();
+
+  state.groupRows.forEach((_, groupTitle) => syncGroupRowState(groupTitle));
+  updateToggleAllLabel();
   renderStats();
   // Do not regenerate output here to avoid heavy work on large lists.
   // The user can click "Refresh" or Download to get the updated file.
