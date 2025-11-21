@@ -1,0 +1,16 @@
+version: '3.9'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_PROVIDER: sqlite
+      SQLITE_PATH: /app/data/strim.db
+    volumes:
+      - strim-sqlite-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  strim-sqlite-data:
