@@ -1,12 +1,12 @@
 const state = {
-  channels: [],
   groups: new Map(),
   disabledGroups: new Set(),
   sourceName: 'untitled',
   savedPlaylists: [],
   currentPlaylistId: null,
-  rawText: '',
-  channelLines: [],
+  backendSession: null,
+  localPlaylist: null,
+  totalChannels: 0,
   groupEntries: [],
 };
 
@@ -72,7 +72,7 @@ fetchButton.addEventListener('click', () => {
     playlistSourceInput.value = url;
   }
   setStatus('Fetching playlist…', 'info');
-  fetchPlaylist(url);
+  loadPlaylistFromSource(url);
 });
 
 parseRawButton.addEventListener('click', () => {
@@ -83,12 +83,12 @@ parseRawButton.addEventListener('click', () => {
   }
   const chosenName = (playlistNameInput && playlistNameInput.value.trim()) || 'pasted-playlist';
   const sourceUrl = (playlistSourceInput && playlistSourceInput.value.trim()) || '';
-  hydrateState(text, chosenName, '', { name: chosenName, sourceUrl });
+  hydrateLocalPlaylist(text, chosenName, '', { name: chosenName, sourceUrl });
 });
 
 loadSampleButton.addEventListener('click', () => {
   document.getElementById('playlist-raw').value = samplePlaylist;
-  hydrateState(samplePlaylist, 'sample.m3u', '', {
+  hydrateLocalPlaylist(samplePlaylist, 'sample.m3u', '', {
     name: 'Sample playlist',
     sourceUrl: 'https://example.com/sample.m3u',
   });
@@ -174,42 +174,73 @@ function setStatus(text, tone = 'info') {
   statusPill.classList.add(`tone-${tone}`);
 }
 
-async function fetchPlaylist(url) {
+async function loadPlaylistFromSource(url, hydrateOptions = {}) {
   if (!API_BASE) {
     setStatus('Backend URL not configured; cannot fetch playlist.', 'warn');
     return;
   }
 
   try {
-    setStatus('Fetching playlist via backend…', 'info');
-    const res = await fetch(`${API_BASE}/fetch`, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const text = await res.text();
-    if (!text || (!text.includes('#EXTM3U') && !text.includes('#EXTINF'))) {
-      throw new Error('Response does not appear to be an M3U playlist');
+    setStatus('Fetching and analyzing playlist via backend…', 'info');
+    const payload = { sourceUrl: url };
+    const providedName = playlistNameInput && playlistNameInput.value.trim();
+    if (providedName) {
+      payload.sourceName = providedName;
     }
-    const friendlyName = (playlistNameInput && playlistNameInput.value.trim()) || deriveNameFromUrl(url);
-    hydrateState(text, friendlyName, 'via backend', { sourceUrl: url, name: friendlyName });
+    const analysis = await apiRequest('/playlist/analyze', { method: 'POST', body: payload });
+    const friendlyName = analysis.sourceName || deriveNameFromUrl(url);
+    hydrateFromAnalysis(analysis, { ...hydrateOptions, sourceUrl: url, name: friendlyName });
+    await updateOutput({ useWorker: false });
   } catch (err) {
     console.error('Backend fetch failed', err);
     setStatus(`Unable to fetch playlist from backend: ${err.message || err}`, 'warn');
   }
 }
 
-function hydrateState(text, sourceName = 'playlist', note = '', options = {}) {
+function hydrateFromAnalysis(analysis, options = {}) {
+  const groups = new Map();
+  (analysis.groups || []).forEach((g) => groups.set(g.name, g.count));
+  state.groups = groups;
+  state.totalChannels = analysis.totalChannels || Array.from(groups.values()).reduce((acc, val) => acc + val, 0);
+  const restoredDisabled = (options.disabledGroups || []).filter((g) => groups.has(g));
+  state.disabledGroups = new Set(restoredDisabled);
+  state.currentPlaylistId = options.id || null;
+  state.backendSession = {
+    cacheKey: analysis.cacheKey,
+    sourceUrl: analysis.sourceUrl || options.sourceUrl || '',
+    totalChannels: state.totalChannels,
+  };
+  state.localPlaylist = null;
+
+  const nameChoice = options.name || analysis.sourceName || (playlistNameInput && playlistNameInput.value.trim()) || 'playlist';
+  state.sourceName = nameChoice;
+
+  if (playlistNameInput) {
+    playlistNameInput.value = nameChoice;
+  }
+  if (playlistSourceInput && (analysis.sourceUrl || options.sourceUrl)) {
+    playlistSourceInput.value = analysis.sourceUrl || options.sourceUrl;
+  }
+  renderGroups();
+  renderStats();
+  const noteSuffix = options.note ? ` (${options.note})` : '';
+  setStatus(`Loaded ${state.totalChannels.toLocaleString()} channels from ${state.sourceName}${noteSuffix}`.trim(), 'success');
+  updateSaveButtonLabel();
+}
+
+function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options = {}) {
   const parsed = parseM3U(text);
-  state.channels = parsed.channels;
   state.groups = parsed.groups;
-  state.rawText = text;
-  state.channelLines = parsed.channelLines;
+  state.totalChannels = parsed.channels.length;
   const restoredDisabled = (options.disabledGroups || []).filter((g) => parsed.groups.has(g));
   state.disabledGroups = new Set(restoredDisabled);
   state.currentPlaylistId = options.id || null;
+  state.backendSession = null;
+  state.localPlaylist = {
+    text,
+    channels: parsed.channels,
+    channelLines: parsed.channelLines,
+  };
 
   const nameChoice = options.name || (playlistNameInput && playlistNameInput.value.trim()) || sourceName;
   state.sourceName = nameChoice;
@@ -223,7 +254,7 @@ function hydrateState(text, sourceName = 'playlist', note = '', options = {}) {
   renderGroups();
   renderStats();
   const noteSuffix = note ? ` (${note})` : '';
-  setStatus(`Loaded ${state.channels.length} channels from ${state.sourceName}${noteSuffix}`.trim(), 'success');
+  setStatus(`Loaded ${state.totalChannels.toLocaleString()} channels from ${state.sourceName}${noteSuffix}`.trim(), 'success');
   updateSaveButtonLabel();
 }
 
@@ -289,7 +320,7 @@ function readLocalPlaylists() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.map(sanitizePlaylistRecord).filter(Boolean) : [];
   } catch (err) {
     console.warn('Failed to read saved playlists', err);
     return [];
@@ -298,13 +329,34 @@ function readLocalPlaylists() {
 
 function writeLocalPlaylists(playlists) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(playlists));
+    const trimmed = (playlists || []).map(sanitizePlaylistRecord).filter(Boolean);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
   } catch (err) {
     console.warn('Failed to persist playlists', err);
   }
 }
 
+function sanitizePlaylistRecord(pl) {
+  if (!pl) return null;
+  return {
+    id: pl.id,
+    name: pl.name,
+    sourceUrl: pl.sourceUrl,
+    sourceName: pl.sourceName,
+    disabledGroups: Array.isArray(pl.disabledGroups) ? pl.disabledGroups : [],
+    createdAt: pl.createdAt,
+    updatedAt: pl.updatedAt,
+  };
+}
+
+function hasLoadedPlaylist() {
+  return Boolean(state.backendSession || state.localPlaylist);
+}
+
 async function apiRequest(path, { method = 'GET', body } = {}) {
+  if (!API_BASE) {
+    throw new Error('Backend API not configured.');
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
@@ -323,7 +375,7 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
 async function loadSavedPlaylists() {
   try {
     const data = await apiRequest('/playlists');
-    state.savedPlaylists = Array.isArray(data) ? data : [];
+    state.savedPlaylists = Array.isArray(data) ? data.map(sanitizePlaylistRecord).filter(Boolean) : [];
     writeLocalPlaylists(state.savedPlaylists);
   } catch (err) {
     console.warn('API load failed, falling back to local storage', err);
@@ -333,7 +385,7 @@ async function loadSavedPlaylists() {
 }
 
 async function handleSavePlaylist() {
-  if (!state.rawText) {
+  if (!hasLoadedPlaylist()) {
     setStatus('Load a playlist before saving', 'warn');
     return;
   }
@@ -348,14 +400,11 @@ async function handleSavePlaylist() {
   let statusMessage = isUpdate ? 'Playlist updated' : 'Playlist saved';
 
   setStatus('Saving playlist…', 'info');
-  const filteredText = await updateOutput();
   const now = Date.now();
   const payload = {
     name,
     sourceUrl,
     sourceName: state.sourceName,
-    rawText: state.rawText,
-    filteredText,
     disabledGroups,
   };
 
@@ -390,7 +439,7 @@ async function handleSavePlaylist() {
   setStatus(statusMessage, statusTone);
 }
 
-function loadSavedPlaylist(id) {
+async function loadSavedPlaylist(id) {
   const playlist = state.savedPlaylists.find((p) => p.id === id);
   if (!playlist) return;
 
@@ -400,26 +449,33 @@ function loadSavedPlaylist(id) {
   const urlField = document.getElementById('playlist-url');
   if (urlField) urlField.value = playlist.sourceUrl || '';
 
-  hydrateState(
-    playlist.rawText,
+  const hydrateOpts = {
+    disabledGroups: playlist.disabledGroups || [],
+    id: playlist.id,
     name,
-    playlist.sourceUrl ? `saved from ${playlist.sourceUrl}` : 'saved playlist',
-    {
-      disabledGroups: playlist.disabledGroups || [],
-      id: playlist.id,
-      name,
-      sourceUrl: playlist.sourceUrl,
-    }
-  );
-  renderSavedPlaylists();
-  updateSaveButtonLabel();
-  if (playlist.filteredText) {
-    outputArea.value = playlist.filteredText;
-    const channelCount = (playlist.filteredText.match(/\nhttps?:\/\//g) || []).length;
-    outputSize.textContent = `${channelCount} channel${channelCount === 1 ? '' : 's'}`;
+    sourceUrl: playlist.sourceUrl,
+    note: playlist.sourceUrl ? `saved from ${playlist.sourceUrl}` : 'saved playlist',
+  };
+
+  // Backward compatibility: if a legacy saved entry still has rawText, use it locally.
+  if (playlist.rawText) {
+    hydrateLocalPlaylist(playlist.rawText, name, hydrateOpts.note, hydrateOpts);
+    renderSavedPlaylists();
+    updateSaveButtonLabel();
+    await updateOutput({ useWorker: true });
+    setStatus(`Loaded saved playlist "${name}"`, 'success');
+    return;
   }
-  updateOutput({ useWorker: false });
-  setStatus(`Loaded saved playlist "${name}"`, 'success');
+
+  if (playlist.sourceUrl) {
+    await loadPlaylistFromSource(playlist.sourceUrl, hydrateOpts);
+    renderSavedPlaylists();
+    updateSaveButtonLabel();
+    setStatus(`Loaded saved playlist "${name}"`, 'success');
+    return;
+  }
+
+  setStatus('Saved playlist is missing a source URL', 'warn');
 }
 
 async function deleteSavedPlaylist(id) {
@@ -652,10 +708,10 @@ function updateToggleAllLabel() {
 
 function renderStats() {
   stats.innerHTML = '';
-  const total = state.channels.length;
+  const total = state.totalChannels || 0;
   const disabled = state.disabledGroups.size;
   const groupsTotal = state.groups.size;
-  const keptGroups = groupsTotal - disabled;
+  const keptGroups = Math.max(0, groupsTotal - disabled);
 
   const cards = [
     { label: 'Channels', value: total },
@@ -672,14 +728,15 @@ function renderStats() {
 }
 
 function generateFilteredM3U() {
+  if (!state.localPlaylist) return '';
   const disabled = state.disabledGroups;
   const outputLines = ['#EXTM3U'];
 
   let kept = 0;
-  for (let i = 0; i < state.channels.length; i++) {
-    const channel = state.channels[i];
+  for (let i = 0; i < state.localPlaylist.channels.length; i++) {
+    const channel = state.localPlaylist.channels[i];
     if (disabled.has(channel.groupTitle)) continue;
-    outputLines.push(state.channelLines[i]);
+    outputLines.push(state.localPlaylist.channelLines[i]);
     kept++;
   }
 
@@ -687,14 +744,39 @@ function generateFilteredM3U() {
   return outputLines.join('\n');
 }
 
-function updateOutput({ useWorker = true } = {}) {
-  if (useWorker && window.Worker && state.rawText) {
-    return new Promise((resolve, reject) => {
+async function updateOutput({ useWorker = true } = {}) {
+  if (state.backendSession && API_BASE) {
+    try {
+      setStatus('Generating filtered playlist on server…', 'info');
+      setControlsDisabled(true);
+      const body = {
+        cacheKey: state.backendSession.cacheKey,
+        sourceUrl: state.backendSession.sourceUrl,
+        disabledGroups: Array.from(state.disabledGroups),
+      };
+      const res = await apiRequest('/playlist/generate', { method: 'POST', body });
+      outputArea.value = res.filteredText || '';
+      const channelCount = res.keptChannels ?? (res.filteredText ? (res.filteredText.match(/\nhttps?:\/\//g) || []).length : 0);
+      outputSize.textContent = `${channelCount} channel${channelCount === 1 ? '' : 's'}`;
+      state.totalChannels = res.totalChannels || state.totalChannels;
+      renderStats();
+      setStatus('Filtered playlist ready', 'success');
+      setControlsDisabled(false);
+      return res.filteredText;
+    } catch (err) {
+      console.error('Backend generation failed; attempting local fallback', err);
+      setStatus('Backend generation failed; falling back to local processing.', 'warn');
+      setControlsDisabled(false);
+    }
+  }
+
+  if (useWorker && window.Worker && state.localPlaylist?.text) {
+    return new Promise((resolve) => {
       setStatus('Generating filtered playlist (background)…', 'info');
       setControlsDisabled(true);
       const worker = new Worker('filter-worker.js');
       const disabledArr = Array.from(state.disabledGroups);
-      worker.postMessage({ cmd: 'generate', text: state.rawText, disabled: disabledArr });
+      worker.postMessage({ cmd: 'generate', text: state.localPlaylist.text, disabled: disabledArr });
       worker.addEventListener('message', (ev) => {
         const msg = ev.data || {};
         if (msg.type === 'progress') {
@@ -705,7 +787,7 @@ function updateOutput({ useWorker = true } = {}) {
         } else if (msg.type === 'result') {
           outputArea.value = msg.text;
           const channelCount = (msg.text.match(/\nhttps?:\/\//g) || []).length;
-          outputSize.textContent = `${channelCount} channels`;
+          outputSize.textContent = `${channelCount} channel${channelCount === 1 ? '' : 's'}`;
           setStatus('Filtered playlist ready', 'success');
           setControlsDisabled(false);
           worker.terminate();
@@ -727,8 +809,8 @@ function updateOutput({ useWorker = true } = {}) {
 
   const text = generateFilteredM3U();
   outputArea.value = text;
-  setStatus('Filtered playlist ready', 'success');
-  return Promise.resolve(text);
+  setStatus(text ? 'Filtered playlist ready' : 'Load a playlist to generate output', text ? 'success' : 'warn');
+  return text;
 }
 
 function setControlsDisabled(disabled) {
@@ -740,13 +822,13 @@ function setControlsDisabled(disabled) {
 async function init() {
   await loadSavedPlaylists();
   updateSaveButtonLabel();
-  hydrateState(samplePlaylist, 'sample.m3u');
+  hydrateLocalPlaylist(samplePlaylist, 'sample.m3u');
   await updateOutput({ useWorker: false });
 }
 
 init().catch((err) => {
   console.error('Failed to initialize app', err);
   setStatus('Failed to load saved playlists', 'warn');
-  hydrateState(samplePlaylist, 'sample.m3u');
+  hydrateLocalPlaylist(samplePlaylist, 'sample.m3u');
   updateOutput({ useWorker: false });
 });
