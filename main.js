@@ -3,6 +3,8 @@ const state = {
   groups: new Map(),
   disabledGroups: new Set(),
   sourceName: 'untitled',
+  savedPlaylists: [],
+  currentPlaylistId: null,
   rawText: '',
   channelLines: [],
   groupEntries: [],
@@ -14,6 +16,10 @@ const groupsGrid = document.getElementById('groups');
 const outputArea = document.getElementById('output');
 const outputSize = document.getElementById('output-size');
 const shareUrlInput = document.getElementById('share-url');
+const playlistNameInput = document.getElementById('playlist-name');
+const playlistSourceInput = document.getElementById('playlist-source');
+const savedListContainer = document.getElementById('saved-list');
+const savedEmptyState = document.getElementById('saved-empty');
 
 const samplePlaylist = `#EXTM3U
 #EXTINF:-1 tvg-name="News HD" group-title="News" tvg-logo="https://placehold.co/40x40",Global News HD
@@ -35,6 +41,9 @@ const refreshButton = document.getElementById('refresh-output');
 const copyButton = document.getElementById('copy-output');
 const downloadButton = document.getElementById('download-output');
 const serveButton = document.getElementById('serve-output');
+const savePlaylistButton = document.getElementById('save-playlist');
+
+const STORAGE_KEY = 'strim.playlists.v1';
 
 fetchButton.addEventListener('click', () => {
   const urlInput = document.getElementById('playlist-url');
@@ -42,6 +51,9 @@ fetchButton.addEventListener('click', () => {
   if (!url) {
     setStatus('Enter a URL to fetch', 'warn');
     return;
+  }
+  if (playlistSourceInput) {
+    playlistSourceInput.value = url;
   }
   setStatus('Fetching playlist…', 'info');
   fetchPlaylist(url);
@@ -53,12 +65,17 @@ parseRawButton.addEventListener('click', () => {
     setStatus('Paste M3U text to parse', 'warn');
     return;
   }
-  hydrateState(text, 'pasted-playlist');
+  const chosenName = (playlistNameInput && playlistNameInput.value.trim()) || 'pasted-playlist';
+  const sourceUrl = (playlistSourceInput && playlistSourceInput.value.trim()) || '';
+  hydrateState(text, chosenName, '', { name: chosenName, sourceUrl });
 });
 
 loadSampleButton.addEventListener('click', () => {
   document.getElementById('playlist-raw').value = samplePlaylist;
-  hydrateState(samplePlaylist, 'sample.m3u');
+  hydrateState(samplePlaylist, 'sample.m3u', '', {
+    name: 'Sample playlist',
+    sourceUrl: 'https://example.com/sample.m3u',
+  });
 });
 
 refreshButton.addEventListener('click', async () => {
@@ -100,6 +117,26 @@ serveButton.addEventListener('click', async () => {
   shareUrlInput.select();
   setStatus('Shareable object URL generated. Keep this tab open.', 'info');
 });
+
+if (savePlaylistButton) {
+  savePlaylistButton.addEventListener('click', async () => {
+    await handleSavePlaylist();
+  });
+}
+
+if (savedListContainer) {
+  savedListContainer.addEventListener('click', (e) => {
+    const target = e.target.closest('button[data-action]');
+    if (!target) return;
+    const { action, id } = target.dataset;
+    if (!id) return;
+    if (action === 'load') {
+      loadSavedPlaylist(id);
+    } else if (action === 'delete') {
+      deleteSavedPlaylist(id);
+    }
+  });
+}
 
 toggleAllButton.addEventListener('click', () => {
   const shouldEnableAll = state.disabledGroups.size === state.groups.size;
@@ -205,7 +242,8 @@ async function fetchPlaylist(url) {
       }
 
       const note = source.label === 'direct' ? '' : `via ${source.label}`;
-      hydrateState(text, url, note);
+      const friendlyName = (playlistNameInput && playlistNameInput.value.trim()) || deriveNameFromUrl(url);
+      hydrateState(text, friendlyName, note, { sourceUrl: url, name: friendlyName });
       return;
     } catch (error) {
       lastError = error;
@@ -223,18 +261,30 @@ async function fetchPlaylist(url) {
   );
 }
 
-function hydrateState(text, sourceName = 'playlist', note = '') {
+function hydrateState(text, sourceName = 'playlist', note = '', options = {}) {
   const parsed = parseM3U(text);
   state.channels = parsed.channels;
   state.groups = parsed.groups;
   state.rawText = text;
   state.channelLines = parsed.channelLines;
-  state.disabledGroups = new Set();
-  state.sourceName = sourceName;
+  const restoredDisabled = (options.disabledGroups || []).filter((g) => parsed.groups.has(g));
+  state.disabledGroups = new Set(restoredDisabled);
+  state.currentPlaylistId = options.id || null;
+
+  const nameChoice = options.name || (playlistNameInput && playlistNameInput.value.trim()) || sourceName;
+  state.sourceName = nameChoice;
+
+  if (playlistNameInput) {
+    playlistNameInput.value = nameChoice;
+  }
+  if (playlistSourceInput && options.sourceUrl) {
+    playlistSourceInput.value = options.sourceUrl;
+  }
   renderGroups();
   renderStats();
   const noteSuffix = note ? ` (${note})` : '';
-  setStatus(`Loaded ${state.channels.length} channels from ${sourceName}${noteSuffix}`.trim(), 'success');
+  setStatus(`Loaded ${state.channels.length} channels from ${state.sourceName}${noteSuffix}`.trim(), 'success');
+  updateSaveButtonLabel();
 }
 
 function parseM3U(text) {
@@ -283,6 +333,179 @@ function parseM3U(text) {
   }
 
   return { channels, groups, channelLines };
+}
+
+function deriveNameFromUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const lastSegment = parsed.pathname.split('/').filter(Boolean).pop();
+    return lastSegment || parsed.hostname || url || 'playlist';
+  } catch {
+    return url || 'playlist';
+  }
+}
+
+function loadSavedPlaylistsFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    state.savedPlaylists = Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn('Failed to read saved playlists', err);
+    state.savedPlaylists = [];
+  }
+  renderSavedPlaylists();
+}
+
+function persistSavedPlaylists() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedPlaylists));
+  } catch (err) {
+    console.warn('Failed to persist playlists', err);
+  }
+}
+
+async function handleSavePlaylist() {
+  if (!state.rawText) {
+    setStatus('Load a playlist before saving', 'warn');
+    return;
+  }
+
+  const name = (playlistNameInput && playlistNameInput.value.trim()) || state.sourceName || 'Untitled playlist';
+  const sourceUrl =
+    (playlistSourceInput && playlistSourceInput.value.trim()) ||
+    document.getElementById('playlist-url').value.trim();
+  const disabledGroups = Array.from(state.disabledGroups);
+
+  setStatus('Saving playlist…', 'info');
+  const filteredText = await updateOutput();
+  const now = Date.now();
+  const existing = state.savedPlaylists.find((p) => p.id === state.currentPlaylistId);
+  const id =
+    (existing && existing.id) ||
+    (crypto.randomUUID ? crypto.randomUUID() : `${now}-${Math.random().toString(16).slice(2)}`);
+
+  const record = {
+    id,
+    name,
+    sourceUrl,
+    sourceName: state.sourceName,
+    rawText: state.rawText,
+    disabledGroups,
+    filteredText,
+    updatedAt: now,
+    createdAt: existing?.createdAt || now,
+  };
+
+  state.savedPlaylists = [record, ...state.savedPlaylists.filter((p) => p.id !== id)];
+  state.currentPlaylistId = id;
+  persistSavedPlaylists();
+  renderSavedPlaylists();
+  updateSaveButtonLabel();
+  setStatus(existing ? 'Playlist updated' : 'Playlist saved', 'success');
+}
+
+function loadSavedPlaylist(id) {
+  const playlist = state.savedPlaylists.find((p) => p.id === id);
+  if (!playlist) return;
+
+  const name = playlist.name || playlist.sourceName || 'playlist';
+  if (playlistNameInput) playlistNameInput.value = name;
+  if (playlistSourceInput) playlistSourceInput.value = playlist.sourceUrl || '';
+  const urlField = document.getElementById('playlist-url');
+  if (urlField) urlField.value = playlist.sourceUrl || '';
+
+  hydrateState(
+    playlist.rawText,
+    name,
+    playlist.sourceUrl ? `saved from ${playlist.sourceUrl}` : 'saved playlist',
+    {
+      disabledGroups: playlist.disabledGroups || [],
+      id: playlist.id,
+      name,
+      sourceUrl: playlist.sourceUrl,
+    }
+  );
+  renderSavedPlaylists();
+  if (playlist.filteredText) {
+    outputArea.value = playlist.filteredText;
+    const channelCount = (playlist.filteredText.match(/\nhttps?:\/\//g) || []).length;
+    outputSize.textContent = `${channelCount} channel${channelCount === 1 ? '' : 's'}`;
+  }
+  updateOutput({ useWorker: false });
+  setStatus(`Loaded saved playlist "${name}"`, 'success');
+}
+
+function deleteSavedPlaylist(id) {
+  const next = state.savedPlaylists.filter((p) => p.id !== id);
+  if (next.length === state.savedPlaylists.length) return;
+  state.savedPlaylists = next;
+  if (state.currentPlaylistId === id) {
+    state.currentPlaylistId = null;
+    updateSaveButtonLabel();
+  }
+  persistSavedPlaylists();
+  renderSavedPlaylists();
+  setStatus('Playlist deleted', 'success');
+}
+
+function renderSavedPlaylists() {
+  if (!savedListContainer || !savedEmptyState) return;
+  savedListContainer.replaceChildren();
+  const playlists = [...state.savedPlaylists].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (playlists.length === 0) {
+    savedEmptyState.style.display = 'block';
+    return;
+  }
+  savedEmptyState.style.display = 'none';
+
+  playlists.forEach((pl) => {
+    const row = document.createElement('div');
+    row.className = 'saved-item';
+    if (pl.id === state.currentPlaylistId) row.classList.add('active');
+
+    const meta = document.createElement('div');
+    meta.className = 'saved-meta';
+
+    const name = document.createElement('div');
+    name.className = 'saved-name';
+    name.textContent = pl.name || pl.sourceName || 'Untitled playlist';
+
+    const sub = document.createElement('div');
+    sub.className = 'saved-sub';
+    const filters = pl.disabledGroups ? pl.disabledGroups.length : 0;
+    const parts = [];
+    if (pl.sourceUrl) parts.push(pl.sourceUrl);
+    parts.push(`${filters} group filter${filters === 1 ? '' : 's'}`);
+    sub.textContent = parts.join(' • ');
+
+    meta.append(name, sub);
+
+    const actions = document.createElement('div');
+    actions.className = 'saved-actions';
+
+    const loadBtn = document.createElement('button');
+    loadBtn.className = pl.id === state.currentPlaylistId ? 'primary' : 'ghost';
+    loadBtn.textContent = pl.id === state.currentPlaylistId ? 'Loaded' : 'Load';
+    loadBtn.dataset.action = 'load';
+    loadBtn.dataset.id = pl.id;
+    loadBtn.disabled = pl.id === state.currentPlaylistId;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'ghost';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.dataset.action = 'delete';
+    deleteBtn.dataset.id = pl.id;
+
+    actions.append(loadBtn, deleteBtn);
+    row.append(meta, actions);
+    savedListContainer.append(row);
+  });
+}
+
+function updateSaveButtonLabel() {
+  if (!savePlaylistButton) return;
+  savePlaylistButton.textContent = state.currentPlaylistId ? 'Update playlist' : 'Save playlist';
 }
 
 let groupsResizeObserver = null;
@@ -521,5 +744,7 @@ function setControlsDisabled(disabled) {
   });
 }
 
+loadSavedPlaylistsFromStorage();
+updateSaveButtonLabel();
 hydrateState(samplePlaylist, 'sample.m3u');
 updateOutput({ useWorker: false });

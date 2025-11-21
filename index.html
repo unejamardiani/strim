@@ -41,6 +41,16 @@
             <div class="pill" id="status-pill">Waiting for input</div>
           </div>
           <div class="form">
+            <label for="playlist-name">Playlist name</label>
+            <input id="playlist-name" type="text" placeholder="My provider lineup" autocomplete="off" spellcheck="false" />
+            <label for="playlist-source">Source URL (for reference)</label>
+            <input
+              type="url"
+              id="playlist-source"
+              placeholder="https://example.com/list.m3u8"
+              autocomplete="url"
+              spellcheck="false"
+            />
             <label for="playlist-url">URL to M3U / M3U8</label>
             <div class="input-row">
               <input
@@ -63,6 +73,19 @@
             </div>
           </div>
           <div class="stats" id="stats"></div>
+        </section>
+
+        <section class="panel glass">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Playlists</p>
+              <h2>Save & manage</h2>
+            </div>
+            <button id="save-playlist" class="primary">Save playlist</button>
+          </div>
+          <p class="hint">Save the current source, filters, and generated playlist locally in your browser.</p>
+          <div id="saved-empty" class="hint">No saved playlists yet.</div>
+          <div id="saved-list" class="saved-list"></div>
         </section>
 
         <section class="panel glass">
