@@ -255,83 +255,74 @@ button:active,
 
 .group-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 6px;
   margin-top: 10px;
 }
 
-.group-card {
-  padding: 10px;
+.group-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.03);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  min-height: 36px;
 }
 
-.group-card.disabled {
+.group-item.disabled {
   border-color: rgba(255, 123, 123, 0.6);
   background: rgba(255, 123, 123, 0.08);
+  opacity: 0.78;
 }
 
-.group-row {
-  display: flex;
-  justify-content: space-between;
+.group-checkbox {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  cursor: pointer;
+}
+
+.checkbox-box {
+  width: 16px;
+  height: 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.group-row strong {
+.group-item input:checked + .checkbox-box {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  border-color: transparent;
+}
+
+.group-item input:checked + .checkbox-box::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: #0b0b12;
+}
+
+.group-title {
+  font-weight: 700;
   font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .count {
   color: var(--muted);
-  font-size: 13px;
-}
-
-.switch {
-  position: relative;
-  width: 42px;
-  height: 22px;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.1);
-  transition: 0.2s;
-  border-radius: 26px;
-  border: 1px solid var(--border);
-}
-
-.slider:before {
-  position: absolute;
-  content: '';
-  height: 15px;
-  width: 15px;
-  left: 4px;
-  bottom: 3px;
-  background-color: #0b0b12;
-  transition: 0.2s;
-  border-radius: 50%;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
-}
-
-input:checked + .slider {
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-}
-
-input:checked + .slider:before {
-  transform: translateX(17px);
+  font-size: 12px;
+  justify-self: end;
 }
 
 .actions,

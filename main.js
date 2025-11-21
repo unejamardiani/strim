@@ -3,6 +3,8 @@ const state = {
   groups: new Map(),
   disabledGroups: new Set(),
   sourceName: 'untitled',
+  channelLines: [],
+  groupRows: new Map(),
 };
 
 const statusPill = document.getElementById('status-pill');
@@ -163,6 +165,7 @@ function hydrateState(text, sourceName = 'playlist', note = '') {
   const parsed = parseM3U(text);
   state.channels = parsed.channels;
   state.groups = parsed.groups;
+  state.channelLines = parsed.channelLines;
   state.disabledGroups = new Set();
   state.sourceName = sourceName;
   renderGroups();
@@ -181,6 +184,7 @@ function parseM3U(text) {
 
   const channels = [];
   const groups = new Map();
+  const channelLines = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -199,8 +203,12 @@ function parseM3U(text) {
     const name = extinf.split(',').slice(1).join(',').trim() || attributes['tvg-name'] || 'Unknown';
     const groupTitle = attributes['group-title'] || 'Ungrouped';
 
+    const hasGroup = /group-title="[^"]*"/i.test(extinf);
+    const normalizedExtinf = hasGroup ? extinf : `${extinf} group-title="${groupTitle}"`;
+
     const channel = {
       extinf,
+      normalizedExtinf,
       url,
       name,
       groupTitle,
@@ -209,52 +217,71 @@ function parseM3U(text) {
 
     channels.push(channel);
     groups.set(groupTitle, (groups.get(groupTitle) || 0) + 1);
+    channelLines.push(`${normalizedExtinf}\n${url}`);
   }
 
-  return { channels, groups };
+  return { channels, groups, channelLines };
 }
 
 function renderGroups() {
   groupsGrid.innerHTML = '';
+  state.groupRows = new Map();
   const fragment = document.createDocumentFragment();
 
   [...state.groups.entries()]
     .sort((a, b) => b[1] - a[1])
     .forEach(([groupTitle, count]) => {
-      const card = document.createElement('div');
-      card.className = 'group-card';
-      if (state.disabledGroups.has(groupTitle)) card.classList.add('disabled');
+      const item = document.createElement('label');
+      item.className = 'group-item';
+      item.dataset.group = groupTitle;
 
-      const row = document.createElement('div');
-      row.className = 'group-row';
-      const label = document.createElement('strong');
-      label.textContent = groupTitle;
-      const chip = document.createElement('span');
-      chip.className = 'count';
-      chip.textContent = `${count} channel${count === 1 ? '' : 's'}`;
-      row.append(label, chip);
-
-      const toggleWrapper = document.createElement('label');
-      toggleWrapper.className = 'switch';
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
+      checkbox.className = 'group-checkbox';
       checkbox.checked = !state.disabledGroups.has(groupTitle);
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) state.disabledGroups.delete(groupTitle);
-        else state.disabledGroups.add(groupTitle);
-        renderGroups();
-        renderStats();
-        updateOutput();
-      });
-      const slider = document.createElement('span');
-      slider.className = 'slider';
-      toggleWrapper.append(checkbox, slider);
+      checkbox.addEventListener('change', () => handleGroupToggle(groupTitle, checkbox.checked));
 
-      card.append(row, toggleWrapper);
-      fragment.append(card);
+      const box = document.createElement('span');
+      box.className = 'checkbox-box';
+
+      const title = document.createElement('div');
+      title.className = 'group-title';
+      title.textContent = groupTitle;
+
+      const chip = document.createElement('div');
+      chip.className = 'count';
+      chip.textContent = `${count} channel${count === 1 ? '' : 's'}`;
+
+      item.append(checkbox, box, title, chip);
+      fragment.append(item);
+
+      state.groupRows.set(groupTitle, { item, checkbox });
+      syncGroupRowState(groupTitle);
     });
 
   groupsGrid.append(fragment);
+  updateToggleAllLabel();
+}
+
+function handleGroupToggle(groupTitle, isChecked) {
+  if (isChecked) state.disabledGroups.delete(groupTitle);
+  else state.disabledGroups.add(groupTitle);
+  syncGroupRowState(groupTitle);
+  updateToggleAllLabel();
+  renderStats();
+  updateOutput();
+}
+
+function syncGroupRowState(groupTitle) {
+  const ref = state.groupRows.get(groupTitle);
+  if (!ref) return;
+  const isDisabled = state.disabledGroups.has(groupTitle);
+  ref.item.classList.toggle('disabled', isDisabled);
+  ref.checkbox.checked = !isDisabled;
+}
+
+function updateToggleAllLabel() {
+  toggleAllButton.textContent = state.disabledGroups.size === state.groups.size ? 'Enable all' : 'Disable none';
 }
 
 function renderStats() {
@@ -280,19 +307,17 @@ function renderStats() {
 
 function generateFilteredM3U() {
   const disabled = state.disabledGroups;
-  const filtered = state.channels.filter((c) => !disabled.has(c.groupTitle));
   const outputLines = ['#EXTM3U'];
 
-  filtered.forEach((channel) => {
-    const hasGroup = /group-title="[^"]*"/i.test(channel.extinf);
-    const extinf = hasGroup
-      ? channel.extinf
-      : `${channel.extinf} group-title="${channel.groupTitle}"`;
-    outputLines.push(extinf);
-    outputLines.push(channel.url);
-  });
+  let kept = 0;
+  for (let i = 0; i < state.channels.length; i++) {
+    const channel = state.channels[i];
+    if (disabled.has(channel.groupTitle)) continue;
+    outputLines.push(state.channelLines[i]);
+    kept++;
+  }
 
-  outputSize.textContent = `${filtered.length} channels`;
+  outputSize.textContent = `${kept} channel${kept === 1 ? '' : 's'}`;
   return outputLines.join('\n');
 }
 
@@ -302,14 +327,15 @@ function updateOutput() {
 }
 
 toggleAllButton.addEventListener('click', () => {
-  if (state.disabledGroups.size > 0) {
-    state.disabledGroups.clear();
-    toggleAllButton.textContent = 'Disable none';
-  } else {
+  const shouldEnableAll = state.disabledGroups.size === state.groups.size;
+  state.disabledGroups = new Set();
+
+  if (!shouldEnableAll) {
     state.groups.forEach((_, key) => state.disabledGroups.add(key));
-    toggleAllButton.textContent = 'Enable all';
   }
-  renderGroups();
+
+  state.groupRows.forEach((_, groupTitle) => syncGroupRowState(groupTitle));
+  updateToggleAllLabel();
   renderStats();
   updateOutput();
 });
