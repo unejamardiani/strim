@@ -23,7 +23,7 @@ docker_registry_username = "<github-username>"      # only needed for private im
 docker_registry_password = "<ghcr-read-pat>"        # scopes: read:packages
 
 # Optional overrides
-location            = "eastus"
+location            = "switzerlandnorth"
 project_name        = "strim"
 app_service_plan_sku = "B1"
 sqlite_mount_path   = "/var/strim/data"

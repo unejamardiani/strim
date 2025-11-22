@@ -19,7 +19,7 @@ permissions:
   id-token: write
 
 env:
-  AZURE_LOCATION: eastus
+  AZURE_LOCATION: switzerlandnorth
   ENVIRONMENT: ${{ inputs.environment || 'dev' }}
   IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'main' }}
   TF_VAR_project_name: strim-${{ inputs.environment || 'dev' }}
@@ -27,7 +27,7 @@ env:
   TF_VAR_app_service_plan_name: strim-${{ inputs.environment || 'dev' }}-plan
   TF_VAR_app_service_name: strim-${{ inputs.environment || 'dev' }}-app
   TF_VAR_file_share_name: strim${{ inputs.environment || 'dev' }}data
-  TF_VAR_location: eastus
+  TF_VAR_location: switzerlandnorth
   TF_VAR_docker_registry_url: https://index.docker.io/v1
   TF_VAR_container_port: 8080
   TF_VAR_sqlite_mount_path: /var/strim/data
