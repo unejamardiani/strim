@@ -66,10 +66,31 @@ else
 
   builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(dataSource));
 }
+
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ??
+  Array.Empty<string>();
+var envOrigins = builder.Configuration["ALLOWED_ORIGINS"];
+if (!string.IsNullOrWhiteSpace(envOrigins))
+{
+  var parsed = envOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+  allowedOrigins = allowedOrigins.Concat(parsed).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+}
+
 builder.Services.AddCors(options =>
 {
   options.AddPolicy("default", policy =>
-    policy.AllowAnyHeader().AllowAnyMethod().SetIsOriginAllowed(_ => true).AllowCredentials());
+  {
+    policy.AllowAnyHeader().AllowAnyMethod();
+    if (allowedOrigins.Any())
+    {
+      policy.WithOrigins(allowedOrigins).AllowCredentials();
+    }
+    else
+    {
+      // Fallback: no credentials when origin list is empty.
+      policy.AllowAnyOrigin();
+    }
+  });
 });
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient("fetcher", client =>
