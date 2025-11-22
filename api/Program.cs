@@ -1,10 +1,15 @@
 using Api.Data;
 using Api.Models;
 using Api.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Claims;
 using System.Text;
 using Npgsql;
 using Microsoft.Data.Sqlite;
@@ -64,7 +69,7 @@ else
 builder.Services.AddCors(options =>
 {
   options.AddPolicy("default", policy =>
-    policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
+    policy.AllowAnyHeader().AllowAnyMethod().SetIsOriginAllowed(_ => true).AllowCredentials());
 });
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient("fetcher", client =>
@@ -75,12 +80,88 @@ builder.Services.AddHttpClient("fetcher", client =>
   client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-mpegurl"));
   client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*", 0.8));
 });
+builder.Services.AddIdentityCore<IdentityUser>(options =>
+{
+  options.Password.RequireDigit = false;
+  options.Password.RequireLowercase = false;
+  options.Password.RequireNonAlphanumeric = false;
+  options.Password.RequireUppercase = false;
+  options.Password.RequiredLength = 6;
+})
+  .AddSignInManager()
+  .AddEntityFrameworkStores<AppDbContext>()
+  .AddDefaultTokenProviders();
+
+builder.Services.AddAuthentication(options =>
+{
+  options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+  options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+  options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+})
+  .AddIdentityCookies(options =>
+  {
+    options.ApplicationCookie?.Configure(o =>
+    {
+      o.SlidingExpiration = true;
+      o.Events.OnRedirectToLogin = ctx =>
+      {
+        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+      };
+      o.Events.OnRedirectToAccessDenied = ctx =>
+      {
+        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+      };
+    });
+    options.ExternalCookie?.Configure(o =>
+    {
+      o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+    });
+  });
+
+var googleClientId = builder.Configuration["Authentication:Google:ClientId"] ?? builder.Configuration["GOOGLE_CLIENT_ID"];
+var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? builder.Configuration["GOOGLE_CLIENT_SECRET"];
+var googleEnabled = !string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret);
+if (googleEnabled)
+{
+  builder.Services.AddAuthentication().AddGoogle(options =>
+  {
+    options.ClientId = googleClientId!;
+    options.ClientSecret = googleClientSecret!;
+    options.SignInScheme = IdentityConstants.ExternalScheme;
+  });
+}
+
+var msClientId = builder.Configuration["Authentication:Microsoft:ClientId"] ?? builder.Configuration["MICROSOFT_CLIENT_ID"];
+var msClientSecret = builder.Configuration["Authentication:Microsoft:ClientSecret"] ?? builder.Configuration["MICROSOFT_CLIENT_SECRET"];
+var tenantId = builder.Configuration["Authentication:Microsoft:TenantId"] ?? builder.Configuration["MICROSOFT_TENANT_ID"] ?? "common";
+var microsoftEnabled = !string.IsNullOrWhiteSpace(msClientId) && !string.IsNullOrWhiteSpace(msClientSecret);
+if (microsoftEnabled)
+{
+  builder.Services.AddAuthentication().AddOpenIdConnect("microsoft", options =>
+  {
+    options.SignInScheme = IdentityConstants.ExternalScheme;
+    options.ClientId = msClientId;
+    options.ClientSecret = msClientSecret;
+    options.Authority = $"https://login.microsoftonline.com/{tenantId}/v2.0";
+    options.ResponseType = "code";
+    options.SaveTokens = true;
+    options.CallbackPath = "/signin-microsoft";
+    options.Scope.Add("email");
+    options.Scope.Add("profile");
+  });
+}
+
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 app.UseCors("default");
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Ensure database exists and matches the model. For now we use EnsureCreated for simplicity.
 using (var scope = app.Services.CreateScope())
@@ -92,6 +173,7 @@ using (var scope = app.Services.CreateScope())
 void EnsureSchema(AppDbContext db)
 {
   db.Database.EnsureCreated();
+  EnsureIdentitySchema(db);
 
   if (db.Database.IsNpgsql())
   {
@@ -104,7 +186,178 @@ void EnsureSchema(AppDbContext db)
     TryAddSqliteColumn(db, "groupcount", "INTEGER NOT NULL DEFAULT 0");
     TryAddSqliteColumn(db, "expirationutc", "TEXT NULL");
     TryAddSqliteColumn(db, "sharecode", "TEXT NULL");
+    TryAddSqliteColumn(db, "ownerid", "TEXT NULL");
     TryBackfillSqliteShareCodes(db);
+  }
+}
+
+void EnsureIdentitySchema(AppDbContext db)
+{
+  if (db.Database.IsNpgsql())
+  {
+    TryEnsurePostgresIdentity(db);
+  }
+  else if (db.Database.IsSqlite())
+  {
+    TryEnsureSqliteIdentity(db);
+  }
+}
+
+void TryEnsureSqliteIdentity(AppDbContext db)
+{
+  try
+  {
+    db.Database.ExecuteSqlRaw(@"
+      CREATE TABLE IF NOT EXISTS AspNetRoles (
+        Id TEXT NOT NULL PRIMARY KEY,
+        Name TEXT NULL,
+        NormalizedName TEXT NULL,
+        ConcurrencyStamp TEXT NULL
+      );
+      CREATE TABLE IF NOT EXISTS AspNetUsers (
+        Id TEXT NOT NULL PRIMARY KEY,
+        UserName TEXT NULL,
+        NormalizedUserName TEXT NULL,
+        Email TEXT NULL,
+        NormalizedEmail TEXT NULL,
+        EmailConfirmed INTEGER NOT NULL DEFAULT 0,
+        PasswordHash TEXT NULL,
+        SecurityStamp TEXT NULL,
+        ConcurrencyStamp TEXT NULL,
+        PhoneNumber TEXT NULL,
+        PhoneNumberConfirmed INTEGER NOT NULL DEFAULT 0,
+        TwoFactorEnabled INTEGER NOT NULL DEFAULT 0,
+        LockoutEnd TEXT NULL,
+        LockoutEnabled INTEGER NOT NULL DEFAULT 0,
+        AccessFailedCount INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS AspNetRoleClaims (
+        Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        RoleId TEXT NOT NULL,
+        ClaimType TEXT NULL,
+        ClaimValue TEXT NULL,
+        CONSTRAINT FK_AspNetRoleClaims_Roles_RoleId FOREIGN KEY (RoleId) REFERENCES AspNetRoles (Id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS AspNetUserClaims (
+        Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        UserId TEXT NOT NULL,
+        ClaimType TEXT NULL,
+        ClaimValue TEXT NULL,
+        CONSTRAINT FK_AspNetUserClaims_Users_UserId FOREIGN KEY (UserId) REFERENCES AspNetUsers (Id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS AspNetUserLogins (
+        LoginProvider TEXT NOT NULL,
+        ProviderKey TEXT NOT NULL,
+        ProviderDisplayName TEXT NULL,
+        UserId TEXT NOT NULL,
+        PRIMARY KEY (LoginProvider, ProviderKey),
+        CONSTRAINT FK_AspNetUserLogins_Users_UserId FOREIGN KEY (UserId) REFERENCES AspNetUsers (Id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS AspNetUserRoles (
+        UserId TEXT NOT NULL,
+        RoleId TEXT NOT NULL,
+        PRIMARY KEY (UserId, RoleId),
+        CONSTRAINT FK_AspNetUserRoles_Roles_RoleId FOREIGN KEY (RoleId) REFERENCES AspNetRoles (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_AspNetUserRoles_Users_UserId FOREIGN KEY (UserId) REFERENCES AspNetUsers (Id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS AspNetUserTokens (
+        UserId TEXT NOT NULL,
+        LoginProvider TEXT NOT NULL,
+        Name TEXT NOT NULL,
+        Value TEXT NULL,
+        PRIMARY KEY (UserId, LoginProvider, Name),
+        CONSTRAINT FK_AspNetUserTokens_Users_UserId FOREIGN KEY (UserId) REFERENCES AspNetUsers (Id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS IX_AspNetRoleClaims_RoleId ON AspNetRoleClaims (RoleId);
+      CREATE INDEX IF NOT EXISTS IX_AspNetUserClaims_UserId ON AspNetUserClaims (UserId);
+      CREATE INDEX IF NOT EXISTS IX_AspNetUserLogins_UserId ON AspNetUserLogins (UserId);
+      CREATE INDEX IF NOT EXISTS IX_AspNetUserRoles_RoleId ON AspNetUserRoles (RoleId);
+      CREATE INDEX IF NOT EXISTS IX_AspNetUsers_NormalizedEmail ON AspNetUsers (NormalizedEmail);
+      CREATE UNIQUE INDEX IF NOT EXISTS IX_AspNetUsers_NormalizedUserName ON AspNetUsers (NormalizedUserName);
+    ");
+  }
+  catch
+  {
+    // Non-fatal; best-effort.
+  }
+}
+
+void TryEnsurePostgresIdentity(AppDbContext db)
+{
+  try
+  {
+    db.Database.ExecuteSqlRaw(@"
+      CREATE TABLE IF NOT EXISTS ""AspNetRoles"" (
+        ""Id"" varchar(450) NOT NULL PRIMARY KEY,
+        ""Name"" varchar(256) NULL,
+        ""NormalizedName"" varchar(256) NULL,
+        ""ConcurrencyStamp"" text NULL
+      );
+      CREATE TABLE IF NOT EXISTS ""AspNetUsers"" (
+        ""Id"" varchar(450) NOT NULL PRIMARY KEY,
+        ""UserName"" varchar(256) NULL,
+        ""NormalizedUserName"" varchar(256) NULL,
+        ""Email"" varchar(256) NULL,
+        ""NormalizedEmail"" varchar(256) NULL,
+        ""EmailConfirmed"" boolean NOT NULL DEFAULT false,
+        ""PasswordHash"" text NULL,
+        ""SecurityStamp"" text NULL,
+        ""ConcurrencyStamp"" text NULL,
+        ""PhoneNumber"" text NULL,
+        ""PhoneNumberConfirmed"" boolean NOT NULL DEFAULT false,
+        ""TwoFactorEnabled"" boolean NOT NULL DEFAULT false,
+        ""LockoutEnd"" timestamp with time zone NULL,
+        ""LockoutEnabled"" boolean NOT NULL DEFAULT false,
+        ""AccessFailedCount"" integer NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS ""AspNetRoleClaims"" (
+        ""Id"" serial NOT NULL PRIMARY KEY,
+        ""RoleId"" varchar(450) NOT NULL,
+        ""ClaimType"" text NULL,
+        ""ClaimValue"" text NULL,
+        CONSTRAINT ""FK_AspNetRoleClaims_Roles_RoleId"" FOREIGN KEY (""RoleId"") REFERENCES ""AspNetRoles""(""Id"") ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS ""AspNetUserClaims"" (
+        ""Id"" serial NOT NULL PRIMARY KEY,
+        ""UserId"" varchar(450) NOT NULL,
+        ""ClaimType"" text NULL,
+        ""ClaimValue"" text NULL,
+        CONSTRAINT ""FK_AspNetUserClaims_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""AspNetUsers""(""Id"") ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS ""AspNetUserLogins"" (
+        ""LoginProvider"" varchar(128) NOT NULL,
+        ""ProviderKey"" varchar(128) NOT NULL,
+        ""ProviderDisplayName"" text NULL,
+        ""UserId"" varchar(450) NOT NULL,
+        PRIMARY KEY (""LoginProvider"", ""ProviderKey""),
+        CONSTRAINT ""FK_AspNetUserLogins_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""AspNetUsers""(""Id"") ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS ""AspNetUserRoles"" (
+        ""UserId"" varchar(450) NOT NULL,
+        ""RoleId"" varchar(450) NOT NULL,
+        PRIMARY KEY (""UserId"", ""RoleId""),
+        CONSTRAINT ""FK_AspNetUserRoles_Roles_RoleId"" FOREIGN KEY (""RoleId"") REFERENCES ""AspNetRoles""(""Id"") ON DELETE CASCADE,
+        CONSTRAINT ""FK_AspNetUserRoles_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""AspNetUsers""(""Id"") ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS ""AspNetUserTokens"" (
+        ""UserId"" varchar(450) NOT NULL,
+        ""LoginProvider"" varchar(128) NOT NULL,
+        ""Name"" varchar(128) NOT NULL,
+        ""Value"" text NULL,
+        PRIMARY KEY (""UserId"", ""LoginProvider"", ""Name""),
+        CONSTRAINT ""FK_AspNetUserTokens_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""AspNetUsers""(""Id"") ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS ""IX_AspNetRoleClaims_RoleId"" ON ""AspNetRoleClaims"" (""RoleId"");
+      CREATE INDEX IF NOT EXISTS ""IX_AspNetUserClaims_UserId"" ON ""AspNetUserClaims"" (""UserId"");
+      CREATE INDEX IF NOT EXISTS ""IX_AspNetUserLogins_UserId"" ON ""AspNetUserLogins"" (""UserId"");
+      CREATE INDEX IF NOT EXISTS ""IX_AspNetUserRoles_RoleId"" ON ""AspNetUserRoles"" (""RoleId"");
+      CREATE INDEX IF NOT EXISTS ""IX_AspNetUsers_NormalizedEmail"" ON ""AspNetUsers"" (""NormalizedEmail"");
+      CREATE UNIQUE INDEX IF NOT EXISTS ""IX_AspNetUsers_NormalizedUserName"" ON ""AspNetUsers"" (""NormalizedUserName"");
+    ");
+  }
+  catch
+  {
+    // Non-fatal; best-effort.
   }
 }
 
@@ -126,6 +379,9 @@ void TryPatchPostgresSchema(AppDbContext db)
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'sharecode') THEN
           ALTER TABLE playlists ADD COLUMN sharecode varchar(64) NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'ownerid') THEN
+          ALTER TABLE playlists ADD COLUMN ownerid varchar(450) NULL;
         END IF;
       END $$;
     ");
@@ -207,6 +463,170 @@ void TryBackfillSqliteShareCodes(AppDbContext db)
   }
 }
 
+string BuildReturnUrl(string? returnUrl)
+{
+  if (string.IsNullOrWhiteSpace(returnUrl)) return "/";
+  if (Uri.TryCreate(returnUrl, UriKind.Relative, out _) && returnUrl.StartsWith('/'))
+  {
+    return returnUrl;
+  }
+  return "/";
+}
+
+bool ProviderEnabled(string provider) =>
+  provider.ToLowerInvariant() switch
+  {
+    "google" => googleEnabled,
+    "microsoft" => microsoftEnabled,
+    _ => false
+  };
+
+string? GetUserId(ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.NameIdentifier);
+
+var authGroup = app.MapGroup("/api/auth");
+authGroup.MapGet("/me", async (UserManager<IdentityUser> userManager, ClaimsPrincipal principal) =>
+{
+  var user = await userManager.GetUserAsync(principal);
+  if (user is null) return Results.Unauthorized();
+  return Results.Ok(new { userName = user.UserName, email = user.Email });
+});
+
+authGroup.MapPost("/register", async (RegisterRequest request, UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager) =>
+{
+  if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
+  {
+    return Results.BadRequest(new { error = "Username and password are required." });
+  }
+
+  try
+  {
+    var userName = request.UserName.Trim();
+    var existing = await userManager.FindByNameAsync(userName);
+    if (existing is not null)
+    {
+      return Results.BadRequest(new { error = "Username is already taken." });
+    }
+
+    var newUser = new IdentityUser
+    {
+      UserName = userName,
+      Email = request.Email?.Trim(),
+    };
+
+    var createResult = await userManager.CreateAsync(newUser, request.Password);
+    if (!createResult.Succeeded)
+    {
+      return Results.BadRequest(new { error = string.Join("; ", createResult.Errors.Select(e => e.Description)) });
+    }
+
+    await signInManager.SignInAsync(newUser, isPersistent: false);
+    return Results.Ok(new { userName = newUser.UserName, email = newUser.Email });
+  }
+  catch (Exception ex)
+  {
+    return Results.Problem($"Registration failed: {ex.Message}", statusCode: 500);
+  }
+});
+
+authGroup.MapPost("/login", async (LoginRequest request, SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager) =>
+{
+  if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
+  {
+    return Results.BadRequest(new { error = "Username and password are required." });
+  }
+
+  var userName = request.UserName.Trim();
+  var user = await userManager.FindByNameAsync(userName) ??
+    await userManager.FindByEmailAsync(userName);
+  if (user is null)
+  {
+    return Results.Unauthorized();
+  }
+
+  var result = await signInManager.PasswordSignInAsync(user, request.Password, isPersistent: false, lockoutOnFailure: false);
+  if (!result.Succeeded)
+  {
+    return Results.Unauthorized();
+  }
+
+  return Results.Ok(new { userName = user.UserName, email = user.Email });
+});
+
+authGroup.MapPost("/logout", async (SignInManager<IdentityUser> signInManager) =>
+{
+  await signInManager.SignOutAsync();
+  return Results.Ok();
+}).RequireAuthorization();
+
+authGroup.MapGet("/providers", () =>
+{
+  var providers = new List<object>();
+  if (googleEnabled) providers.Add(new { name = "google", displayName = "Google" });
+  if (microsoftEnabled) providers.Add(new { name = "microsoft", displayName = "Microsoft" });
+  return Results.Ok(providers);
+});
+
+authGroup.MapGet("/external/{provider}", (string provider, string? returnUrl, SignInManager<IdentityUser> signInManager) =>
+{
+  var normalized = provider.ToLowerInvariant();
+  var scheme = normalized switch
+  {
+    "google" => "Google",
+    "microsoft" => "microsoft",
+    _ => null
+  };
+
+  if (scheme is null || !ProviderEnabled(normalized))
+  {
+    return Results.NotFound();
+  }
+
+  var redirectUri = BuildReturnUrl(returnUrl);
+  var props = signInManager.ConfigureExternalAuthenticationProperties(
+    scheme,
+    $"/api/auth/external-callback?provider={normalized}&returnUrl={Uri.EscapeDataString(redirectUri)}");
+  return Results.Challenge(props, new[] { scheme });
+});
+
+authGroup.MapGet("/external-callback", async (string provider, string? returnUrl, SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager, HttpContext context) =>
+{
+  var info = await signInManager.GetExternalLoginInfoAsync();
+  if (info is null)
+  {
+    return Results.Redirect("/?auth=failed");
+  }
+
+  var signInResult = await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false);
+  IdentityUser? user = null;
+  if (!signInResult.Succeeded)
+  {
+    var email = info.Principal.FindFirstValue(ClaimTypes.Email);
+    user = !string.IsNullOrWhiteSpace(email) ? await userManager.FindByEmailAsync(email) : null;
+    var userName = email ?? $"{info.LoginProvider}-{info.ProviderKey}";
+    user ??= new IdentityUser
+    {
+      UserName = userName,
+      Email = email,
+    };
+
+    if (user.Id == default)
+    {
+      var create = await userManager.CreateAsync(user);
+      if (!create.Succeeded)
+      {
+        return Results.Redirect("/?auth=failed");
+      }
+    }
+
+    await userManager.AddLoginAsync(user, info);
+    await signInManager.SignInAsync(user, isPersistent: false);
+  }
+
+  await context.SignOutAsync(IdentityConstants.ExternalScheme);
+  var safeReturn = BuildReturnUrl(returnUrl);
+  return Results.Redirect(safeReturn);
+});
+
 async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFactory)
 {
   if (string.IsNullOrWhiteSpace(url))
@@ -232,20 +652,55 @@ async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFa
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 
-app.MapGet("/api/playlists", async (AppDbContext db) =>
+app.MapGet("/api/playlists", async (ClaimsPrincipal user, AppDbContext db) =>
 {
-  var items = await db.Playlists.OrderByDescending(p => p.UpdatedAt).ToListAsync();
-  return Results.Ok(items);
-});
+  var userId = GetUserId(user);
+  if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
 
-app.MapGet("/api/playlists/{id:guid}", async (Guid id, AppDbContext db) =>
-{
-  var item = await db.Playlists.FindAsync(id);
-  return item is null ? Results.NotFound() : Results.Ok(item);
-});
+  try
+  {
+    var items = await db.Playlists
+      .Where(p => p.OwnerId == userId)
+      .ToListAsync();
 
-app.MapPost("/api/playlists", async (PlaylistRequest input, AppDbContext db) =>
+    // SQLite cannot ORDER BY DateTimeOffset; sort in-memory for portability.
+    items = items
+      .OrderByDescending(p => p.UpdatedAt)
+      .ThenByDescending(p => p.CreatedAt)
+      .ToList();
+
+    return Results.Ok(items);
+  }
+  catch (Exception ex)
+  {
+    // Surface DB schema errors so the client can see what's wrong.
+    return Results.Problem($"Failed to load playlists: {ex.Message}", statusCode: 500);
+  }
+}).RequireAuthorization();
+
+app.MapGet("/api/playlists/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
 {
+  var userId = GetUserId(user);
+  if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+  try
+  {
+    var item = await db.Playlists
+      .Where(p => p.OwnerId == userId && p.Id == id)
+      .FirstOrDefaultAsync();
+    return item is null ? Results.NotFound() : Results.Ok(item);
+  }
+  catch (Exception ex)
+  {
+    return Results.Problem($"Failed to load playlist: {ex.Message}", statusCode: 500);
+  }
+}).RequireAuthorization();
+
+app.MapPost("/api/playlists", async (PlaylistRequest input, ClaimsPrincipal user, AppDbContext db) =>
+{
+  var userId = GetUserId(user);
+  if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
   if (string.IsNullOrWhiteSpace(input.Name))
   {
     return Results.BadRequest(new { error = "Name is required." });
@@ -263,6 +718,7 @@ app.MapPost("/api/playlists", async (PlaylistRequest input, AppDbContext db) =>
       GroupCount = input.GroupCount ?? 0,
       ExpirationUtc = input.ExpirationUtc,
       ShareCode = string.IsNullOrWhiteSpace(input.ShareCode) ? Guid.NewGuid().ToString("N") : input.ShareCode.Trim(),
+      OwnerId = userId,
     };
 
     db.Playlists.Add(entity);
@@ -273,11 +729,14 @@ app.MapPost("/api/playlists", async (PlaylistRequest input, AppDbContext db) =>
   {
     return Results.Problem($"Failed to save playlist: {ex.Message}", statusCode: 500);
   }
-});
+}).RequireAuthorization();
 
-app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, AppDbContext db) =>
+app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, ClaimsPrincipal user, AppDbContext db) =>
 {
-  var entity = await db.Playlists.FindAsync(id);
+  var userId = GetUserId(user);
+  if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+  var entity = await db.Playlists.FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId);
   if (entity is null) return Results.NotFound();
 
   if (string.IsNullOrWhiteSpace(input.Name))
@@ -310,16 +769,19 @@ app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, Ap
   {
     return Results.Problem($"Failed to update playlist: {ex.Message}", statusCode: 500);
   }
-});
+}).RequireAuthorization();
 
-app.MapDelete("/api/playlists/{id:guid}", async (Guid id, AppDbContext db) =>
+app.MapDelete("/api/playlists/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
 {
-  var entity = await db.Playlists.FindAsync(id);
+  var userId = GetUserId(user);
+  if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+  var entity = await db.Playlists.FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId);
   if (entity is null) return Results.NotFound();
   db.Playlists.Remove(entity);
   await db.SaveChangesAsync();
   return Results.NoContent();
-});
+}).RequireAuthorization();
 
 app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpClientFactory httpClientFactory, IMemoryCache cache) =>
 {
@@ -551,3 +1013,7 @@ public record PlaylistRequest(
   string? ShareCode);
 
 public record FetchRequest(string Url);
+
+public record RegisterRequest(string UserName, string Password, string? Email);
+
+public record LoginRequest(string UserName, string Password);

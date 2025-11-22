@@ -30,6 +30,10 @@ public class Playlist
   [Column("expirationutc")]
   public DateTimeOffset? ExpirationUtc { get; set; }
 
+  [MaxLength(450)]
+  [Column("ownerid")]
+  public string? OwnerId { get; set; }
+
   [MaxLength(64)]
   [Column("sharecode")]
   public string? ShareCode { get; set; } = string.Empty;
