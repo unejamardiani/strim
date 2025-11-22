@@ -38,7 +38,10 @@ terraform apply
 ```
 
 ### Deploying with GitHub Actions
-- Set GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, and `AZURE_CLIENT_SECRET` (for Azure login), plus `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` for the container registry.
+- Required GitHub secrets (per the workflow in `.github/workflows/deploy-azure.yml`):
+  - Azure service principal: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
+  - Docker Hub pull access: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (a PAT or access token that can pull the `strim` image).
+  - No other variables are needed when using the defaults baked into the workflow; optional overrides (custom registry, port, mount path, etc.) are set via Terraform variables if you change the infrastructure.
 - The workflow keeps separate workspaces and state for `dev` and `prod`, creating a storage account named `strim<env>tfstate` for the backend.
 - On pushes to `main`, the workflow deploys `dev` with the `main` image tag. Run the workflow manually and choose `prod` to deploy a tagged release image.
 
