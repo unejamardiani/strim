@@ -38,7 +38,7 @@ terraform apply
 ```
 
 ### Deploying with GitHub Actions
-- Set GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (for Azure login), plus `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` for the container registry.
+- Set GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, and `AZURE_CLIENT_SECRET` (for Azure login), plus `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` for the container registry.
 - The workflow keeps separate workspaces and state for `dev` and `prod`, creating a storage account named `strim<env>tfstate` for the backend.
 - On pushes to `main`, the workflow deploys `dev` with the `main` image tag. Run the workflow manually and choose `prod` to deploy a tagged release image.
 
