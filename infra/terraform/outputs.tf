@@ -1,6 +1,6 @@
 output "app_url" {
   description = "HTTPS endpoint for the deployed app."
-  value       = "https://${azurerm_linux_web_app.strim.default_host_name}"
+  value       = "https://${azurerm_linux_web_app.strim.default_hostname}"
 }
 
 output "resource_group" {

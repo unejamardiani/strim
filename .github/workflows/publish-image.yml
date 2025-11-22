@@ -4,12 +4,24 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore:
-      - 'infra/**'
-      - '**/*.md'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.github/workflows/deploy-azure.yml'
+    paths:
+      # Core image build inputs
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      # App source and assets
+      - 'api/**'
+      - '**/*.js'
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.jsx'
+      - '**/*.json'
+      - '**/*.html'
+      - '**/*.css'
+      - 'main.js'
+      - 'filter-worker.js'
+      - 'cors-proxy.js'
+      - 'index.html'
+      - 'style.css'
   workflow_dispatch:
 
 permissions:
