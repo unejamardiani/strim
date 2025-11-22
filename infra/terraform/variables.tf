@@ -40,7 +40,7 @@ variable "container_image" {
   default     = ""
 
   validation {
-    condition     = length(trim(var.container_image)) > 0
+    condition     = length(trimspace(var.container_image)) > 0
     error_message = "Provide the container_image, e.g. ghcr.io/<owner>/strim."
   }
 }

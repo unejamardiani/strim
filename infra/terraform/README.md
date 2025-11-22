@@ -11,7 +11,7 @@ This Terraform stack deploys a `strim` container image (Docker Hub by default) t
 
 ## Prereqs
 - Terraform >= 1.5
-- Azure authentication: locally use `az login` (or export `ARM_*` vars for a service principal). GitHub Actions uses OIDC with a federated credential instead of a client secret; configure the app registration used by CI with a federated identity for this repo/branch (see [azure/login docs](https://github.com/Azure/login#configure-federated-credentials-in-azure-ad)). The principal needs `Contributor` for control plane operations **and** `Storage Blob Data Contributor` (or higher) on the state storage account to create the backend container when using Azure AD auth.
+- Azure authentication: locally use `az login` (or export `ARM_*` vars for a service principal). GitHub Actions uses OIDC with a federated credential instead of a client secret; configure the app registration used by CI with a federated identity for each GitHub environment that runs this workflow (see [azure/login docs](https://github.com/Azure/login#configure-federated-credentials-in-azure-ad)). The principal needs `Contributor` for control plane operations **and** `Storage Blob Data Contributor` (or higher) on the state storage account to create the backend container when using Azure AD auth.
 - The container image pushed by `.github/workflows/publish-image.yml` (default tag is `main` or the Git SHA`). By default this publishes to Docker Hub using `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN`; set registry credentials when the image is private.
 
 ## Usage
@@ -43,6 +43,21 @@ terraform apply
   - Docker Hub pull access: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (a PAT or access token that can pull the `strim` image).
   - No other variables are needed when using the defaults baked into the workflow; optional overrides (custom registry, port, mount path, etc.) are set via Terraform variables if you change the infrastructure.
 - The workflow keeps separate workspaces and state for `dev` and `prod`, creating a storage account named `strim<env>tfstate` for the backend.
+
+Federated credential subjects (GitHub environments):
+- The job uses GitHub Environments, so the OIDC subject is `repo:<owner>/<repo>:environment:<env-name>`.
+- Create one federated credential per environment you run (`dev`, `prod`, etc.) with issuer `https://token.actions.githubusercontent.com`, audience `api://AzureADTokenExchange`, and subject `repo:unejamardiani/strim:environment:dev` (and `...:prod`).
+CLI example:
+```bash
+APP_ID=<application_client_id>
+az ad app federated-credential create --id "$APP_ID" --parameters '{
+  "name": "gh-oidc-strim-dev",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:unejamardiani/strim:environment:dev",
+  "audiences": ["api://AzureADTokenExchange"]
+}'
+# Repeat with name/subject ending in prod for the prod environment.
+```
 - On pushes to `main`, the workflow deploys `dev` with the `main` image tag. Run the workflow manually and choose `prod` to deploy a tagged release image.
 
 Security notes:
