@@ -12,6 +12,9 @@ const state = {
   groupFilter: '',
   lastOutput: '',
   shareCode: null,
+  currentUser: null,
+  isAuthenticated: false,
+  authProviders: [],
 };
 
 const statusPill = document.getElementById('status-pill');
@@ -23,6 +26,14 @@ const shareUrlInput = document.getElementById('share-url');
 const playlistNameInput = document.getElementById('playlist-name');
 const savedListContainer = document.getElementById('saved-list');
 const savedEmptyState = document.getElementById('saved-empty');
+const authState = document.getElementById('auth-state');
+const authHint = document.getElementById('auth-hint');
+const authUserInput = document.getElementById('auth-username');
+const authPassInput = document.getElementById('auth-password');
+const authLoginButton = document.getElementById('auth-login');
+const authRegisterButton = document.getElementById('auth-register');
+const authLogoutButton = document.getElementById('auth-logout');
+const authProviderButtons = document.querySelectorAll('[data-auth-provider]');
 
 const samplePlaylist = `#EXTM3U
 #EXTINF:-1 tvg-name="News HD" group-title="News" tvg-logo="https://placehold.co/40x40",Global News HD
@@ -44,8 +55,12 @@ const copyButton = document.getElementById('copy-output');
 const downloadButton = document.getElementById('download-output');
 const serveButton = document.getElementById('serve-output');
 const savePlaylistButton = document.getElementById('save-playlist');
+const authTrigger = document.getElementById('auth-trigger');
+const authTriggerLabel = document.getElementById('auth-trigger-label');
+const authModal = document.getElementById('auth-modal');
+const authCloseButton = document.getElementById('auth-close');
+const authBackdrop = authModal ? authModal.querySelector('.auth-backdrop') : null;
 
-const STORAGE_KEY = 'strim.playlists.v1';
 const savedApiBase = (() => {
   try {
     return localStorage.getItem('strim.apiBase') || '';
@@ -100,7 +115,7 @@ copyButton.addEventListener('click', async () => {
 downloadButton.addEventListener('click', async () => {
   setStatus('Generating filtered playlist…', 'info');
   // Prefer backend-streamed download when a saved playlist exists.
-  if (state.currentPlaylistId && state.shareCode && API_BASE) {
+  if (state.isAuthenticated && state.currentPlaylistId && state.shareCode && API_BASE) {
     const link = document.createElement('a');
     link.href = buildShareUrl();
     link.download = `${state.sourceName || 'playlist'}-filtered.m3u`;
@@ -121,6 +136,10 @@ downloadButton.addEventListener('click', async () => {
 });
 
 serveButton.addEventListener('click', async () => {
+  if (!state.isAuthenticated) {
+    setStatus('Sign in to generate shareable URLs.', 'warn');
+    return;
+  }
   if (!state.currentPlaylistId || !state.shareCode) {
     setStatus('Save the playlist first to get a shareable URL.', 'warn');
     return;
@@ -152,6 +171,57 @@ if (savedListContainer) {
   });
 }
 
+if (authLoginButton) {
+  authLoginButton.addEventListener('click', async (e) => {
+    e.preventDefault();
+    await handleAuthSubmit('login');
+  });
+}
+
+if (authRegisterButton) {
+  authRegisterButton.addEventListener('click', async (e) => {
+    e.preventDefault();
+    await handleAuthSubmit('register');
+  });
+}
+
+if (authLogoutButton) {
+  authLogoutButton.addEventListener('click', async (e) => {
+    e.preventDefault();
+    await handleLogout();
+  });
+}
+
+if (authProviderButtons && authProviderButtons.length) {
+  authProviderButtons.forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const provider = btn.dataset.authProvider;
+      if (provider) startExternalProvider(provider);
+    });
+  });
+}
+
+if (authTrigger) {
+  authTrigger.addEventListener('click', () => {
+    openAuthModal();
+  });
+}
+
+if (authCloseButton) {
+  authCloseButton.addEventListener('click', () => closeAuthModal());
+}
+
+if (authBackdrop) {
+  authBackdrop.addEventListener('click', () => closeAuthModal());
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeAuthModal();
+  }
+});
+
 toggleAllButton.addEventListener('click', () => {
   const shouldEnableAll = state.disabledGroups.size === state.groups.size;
   state.disabledGroups = new Set();
@@ -178,6 +248,149 @@ function setStatus(text, tone = 'info') {
   statusPill.textContent = text;
   statusPill.className = 'pill';
   statusPill.classList.add(`tone-${tone}`);
+}
+
+function openAuthModal() {
+  if (!authModal) return;
+  authModal.classList.remove('hidden');
+}
+
+function closeAuthModal() {
+  if (!authModal) return;
+  authModal.classList.add('hidden');
+}
+
+function updateAuthUi() {
+  if (authState) {
+    authState.textContent = state.isAuthenticated
+      ? `Signed in${state.currentUser?.userName ? ` as ${state.currentUser.userName}` : ''}`
+      : 'Guest session';
+  }
+  if (authHint) {
+    authHint.textContent = state.isAuthenticated
+      ? 'Saved playlists stay with your account and can be shared.'
+      : 'Signed-out sessions are temporary; refresh clears your playlist.';
+  }
+  if (authLogoutButton) authLogoutButton.style.display = state.isAuthenticated ? 'inline-flex' : 'none';
+  if (authLoginButton) authLoginButton.style.display = state.isAuthenticated ? 'none' : 'inline-flex';
+  if (authRegisterButton) authRegisterButton.style.display = state.isAuthenticated ? 'none' : 'inline-flex';
+  if (authUserInput) authUserInput.disabled = state.isAuthenticated;
+  if (authPassInput) authPassInput.disabled = state.isAuthenticated;
+  if (authProviderButtons && authProviderButtons.length) {
+    authProviderButtons.forEach((btn) => {
+      const provider = btn.dataset.authProvider;
+      const enabled = state.authProviders.some((p) => p.name === provider);
+      btn.style.display = enabled ? 'inline-flex' : 'none';
+      btn.disabled = state.isAuthenticated || !enabled;
+    });
+  }
+  if (serveButton) {
+    serveButton.disabled = !state.isAuthenticated || !state.currentPlaylistId || !state.shareCode;
+  }
+  if (authTriggerLabel) {
+    authTriggerLabel.textContent = state.isAuthenticated
+      ? state.currentUser?.userName || 'Account'
+      : 'Sign in';
+  }
+  updateSaveButtonLabel();
+}
+
+async function fetchAuthProviders() {
+  if (!API_BASE) return;
+  try {
+    const providers = await apiRequest('/auth/providers');
+    state.authProviders = Array.isArray(providers) ? providers : [];
+  } catch (err) {
+    console.warn('Failed to load auth providers', err);
+    state.authProviders = [];
+  }
+  updateAuthUi();
+}
+
+async function fetchAuthState() {
+  if (!API_BASE) {
+    state.isAuthenticated = false;
+    state.currentUser = null;
+    updateAuthUi();
+    return;
+  }
+  try {
+    const me = await apiRequest('/auth/me');
+    state.currentUser = me;
+    state.isAuthenticated = true;
+  } catch (err) {
+    state.currentUser = null;
+    state.isAuthenticated = false;
+  }
+  updateAuthUi();
+}
+
+async function handleAuthSubmit(mode) {
+  if (!API_BASE) {
+    setStatus('Backend not configured for authentication.', 'warn');
+    return;
+  }
+  const username = (authUserInput && authUserInput.value.trim()) || '';
+  const password = (authPassInput && authPassInput.value) || '';
+  if (!username || !password) {
+    setStatus('Enter a username and password.', 'warn');
+    return;
+  }
+
+  try {
+    const path = mode === 'register' ? '/auth/register' : '/auth/login';
+    await apiRequest(path, {
+      method: 'POST',
+      body: {
+        userName: username,
+        password,
+        email: username.includes('@') ? username : undefined,
+      },
+    });
+    if (authPassInput) authPassInput.value = '';
+    setStatus(mode === 'register' ? 'Account created' : 'Signed in', 'success');
+    await fetchAuthState();
+    await loadSavedPlaylists();
+    closeAuthModal();
+  } catch (err) {
+    console.error('Authentication failed', err);
+    setStatus(err?.message || 'Authentication failed', 'warn');
+  }
+}
+
+async function handleLogout() {
+  try {
+    await apiRequest('/auth/logout', { method: 'POST' });
+  } catch (err) {
+    console.warn('Logout failed', err);
+  }
+  state.isAuthenticated = false;
+  state.currentUser = null;
+  state.savedPlaylists = [];
+  state.currentPlaylistId = null;
+  state.shareCode = null;
+  if (shareUrlInput) {
+    shareUrlInput.value = '';
+  }
+  renderSavedPlaylists();
+  updateAuthUi();
+  closeAuthModal();
+  setStatus('Signed out', 'info');
+}
+
+function startExternalProvider(provider) {
+  if (!API_BASE) {
+    setStatus('Backend not configured for authentication.', 'warn');
+    return;
+  }
+  const enabled = state.authProviders.some((p) => p.name === provider);
+  if (!enabled) {
+    setStatus('Provider not configured.', 'warn');
+    return;
+  }
+  const returnUrl = `${window.location.pathname}${window.location.search}`;
+  const url = `${API_BASE}/auth/external/${provider}?returnUrl=${encodeURIComponent(returnUrl)}`;
+  window.location.href = url;
 }
 
 async function loadPlaylistFromSource(url, hydrateOptions = {}) {
@@ -231,6 +444,7 @@ function hydrateFromAnalysis(analysis, options = {}) {
   }
   renderGroups();
   renderStats();
+  updateAuthUi();
   const noteSuffix = options.note ? ` (${options.note})` : '';
   setStatus(`Loaded ${state.totalChannels.toLocaleString()} channels from ${state.sourceName}${noteSuffix}`.trim(), 'success');
   updateSaveButtonLabel();
@@ -261,6 +475,7 @@ function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options 
   }
   renderGroups();
   renderStats();
+  updateAuthUi();
   const noteSuffix = note ? ` (${note})` : '';
   setStatus(`Loaded ${state.totalChannels.toLocaleString()} channels from ${state.sourceName}${noteSuffix}`.trim(), 'success');
   updateSaveButtonLabel();
@@ -324,26 +539,6 @@ function deriveNameFromUrl(url) {
   }
 }
 
-function readLocalPlaylists() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.map(sanitizePlaylistRecord).filter(Boolean) : [];
-  } catch (err) {
-    console.warn('Failed to read saved playlists', err);
-    return [];
-  }
-}
-
-function writeLocalPlaylists(playlists) {
-  try {
-    const trimmed = (playlists || []).map(sanitizePlaylistRecord).filter(Boolean);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-  } catch (err) {
-    console.warn('Failed to persist playlists', err);
-  }
-}
-
 function sanitizePlaylistRecord(pl) {
   if (!pl) return null;
   return {
@@ -366,7 +561,7 @@ function hasLoadedPlaylist() {
 }
 
 function buildShareUrl() {
-  if (!API_BASE || !state.currentPlaylistId || !state.shareCode) return '';
+  if (!state.isAuthenticated || !API_BASE || !state.currentPlaylistId || !state.shareCode) return '';
   // Ensure absolute URL even if API_BASE is a relative /api path.
   const base = API_BASE.startsWith('http')
     ? API_BASE.replace(/\/$/, '')
@@ -396,24 +591,42 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
     headers: {
       'Content-Type': 'application/json',
     },
+    credentials: 'include',
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || res.statusText);
+  if (res.status === 401) {
+    const err = new Error('Unauthorized');
+    err.code = 'unauthorized';
+    throw err;
+  }
+  if (res.status === 403) {
+    const err = new Error('Forbidden');
+    err.code = 'forbidden';
+    throw err;
   }
   if (res.status === 204) return null;
+  if (!res.ok) {
+    const text = await res.text();
+    const err = new Error(text || res.statusText);
+    err.code = res.status;
+    throw err;
+  }
   return res.json();
 }
 
 async function loadSavedPlaylists() {
+  if (!state.isAuthenticated) {
+    state.savedPlaylists = [];
+    renderSavedPlaylists();
+    return;
+  }
+
   try {
     const data = await apiRequest('/playlists');
     state.savedPlaylists = Array.isArray(data) ? data.map(sanitizePlaylistRecord).filter(Boolean) : [];
-    writeLocalPlaylists(state.savedPlaylists);
   } catch (err) {
-    console.warn('API load failed, falling back to local storage', err);
-    state.savedPlaylists = readLocalPlaylists();
+    console.warn('Failed to load saved playlists', err);
+    state.savedPlaylists = [];
   }
   renderSavedPlaylists();
 }
@@ -421,6 +634,11 @@ async function loadSavedPlaylists() {
 async function handleSavePlaylist() {
   if (!hasLoadedPlaylist()) {
     setStatus('Load a playlist before saving', 'warn');
+    return;
+  }
+
+  if (!state.isAuthenticated) {
+    setStatus('Sign in to save or share playlists', 'warn');
     return;
   }
 
@@ -432,7 +650,6 @@ async function handleSavePlaylist() {
   let statusMessage = isUpdate ? 'Playlist updated' : 'Playlist saved';
 
   setStatus('Saving playlist…', 'info');
-  const now = Date.now();
   const payload = {
     name,
     sourceUrl,
@@ -452,31 +669,26 @@ async function handleSavePlaylist() {
       saved = await apiRequest('/playlists', { method: 'POST', body: payload });
     }
   } catch (err) {
-    console.warn('API save failed, storing locally only', err);
-    const existing = state.savedPlaylists.find((p) => p.id === state.currentPlaylistId);
-    const id =
-      (existing && existing.id) ||
-      (crypto.randomUUID ? crypto.randomUUID() : `${now}-${Math.random().toString(16).slice(2)}`);
-    saved = {
-      ...payload,
-      id,
-      updatedAt: now,
-      createdAt: existing?.createdAt || now,
-    };
-    statusTone = 'warn';
-    statusMessage = 'Saved locally (API unavailable)';
+    console.warn('API save failed', err);
+    setStatus('Unable to save playlist. Please try again.', 'warn');
+    return;
   }
 
   state.savedPlaylists = [saved, ...state.savedPlaylists.filter((p) => p.id !== saved.id)];
   state.currentPlaylistId = saved.id;
   state.shareCode = saved.shareCode || state.shareCode;
-  writeLocalPlaylists(state.savedPlaylists);
   renderSavedPlaylists();
   updateSaveButtonLabel();
+  updateAuthUi();
   setStatus(statusMessage, statusTone);
 }
 
 async function loadSavedPlaylist(id) {
+  if (!state.isAuthenticated) {
+    setStatus('Sign in to load saved playlists', 'warn');
+    return;
+  }
+
   const playlist = state.savedPlaylists.find((p) => p.id === id);
   if (!playlist) return;
 
@@ -517,18 +729,24 @@ async function loadSavedPlaylist(id) {
 }
 
 async function deleteSavedPlaylist(id) {
+  if (!state.isAuthenticated) {
+    setStatus('Sign in to manage saved playlists', 'warn');
+    return;
+  }
+
   try {
     await apiRequest(`/playlists/${id}`, { method: 'DELETE' });
   } catch (err) {
-    console.warn('API delete failed, removing locally only', err);
+    console.warn('API delete failed', err);
   }
   state.savedPlaylists = state.savedPlaylists.filter((p) => p.id !== id);
   if (state.currentPlaylistId === id) {
     state.currentPlaylistId = null;
+    state.shareCode = null;
     updateSaveButtonLabel();
   }
-  writeLocalPlaylists(state.savedPlaylists);
   renderSavedPlaylists();
+  updateAuthUi();
   setStatus('Playlist deleted', 'success');
 }
 
@@ -540,6 +758,9 @@ function renderSavedPlaylists() {
     const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
     return bTime - aTime;
   });
+  savedEmptyState.textContent = state.isAuthenticated
+    ? 'No saved playlists yet.'
+    : 'Sign in to sync playlists across sessions.';
   if (playlists.length === 0) {
     savedEmptyState.style.display = 'block';
     return;
@@ -596,6 +817,12 @@ function renderSavedPlaylists() {
 
 function updateSaveButtonLabel() {
   if (!savePlaylistButton) return;
+  if (!state.isAuthenticated) {
+    savePlaylistButton.textContent = 'Sign in to save';
+    savePlaylistButton.disabled = true;
+    return;
+  }
+  savePlaylistButton.disabled = !hasLoadedPlaylist();
   savePlaylistButton.textContent = state.currentPlaylistId ? 'Update playlist' : 'Save playlist';
 }
 
@@ -870,14 +1097,18 @@ async function updateOutput({ useWorker = true } = {}) {
 }
 
 function setControlsDisabled(disabled) {
-  [downloadButton, copyButton, serveButton, refreshButton].forEach((b) => {
+  [downloadButton, copyButton, refreshButton].forEach((b) => {
     if (b) b.disabled = disabled;
   });
+  if (serveButton) {
+    serveButton.disabled = disabled || !state.isAuthenticated || !state.currentPlaylistId || !state.shareCode;
+  }
 }
 
 async function init() {
+  await fetchAuthProviders();
+  await fetchAuthState();
   await loadSavedPlaylists();
-  updateSaveButtonLabel();
   hydrateLocalPlaylist(samplePlaylist, 'sample.m3u');
   await updateOutput({ useWorker: false });
 }

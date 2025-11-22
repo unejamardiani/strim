@@ -36,8 +36,17 @@ backend. It now supports either Postgres or SQLite so you can run everything in 
 5. Point the UI at the API by either serving both from the same origin, or adding `?api=http://localhost:5000/api`
    to the page URL (this is remembered in `localStorage` as `strim.apiBase`).
 
-The API auto-creates the database schema for either provider. If the API is unreachable, the UI falls
-back to local browser storage so you do not lose work while offline.
+The API auto-creates the database schema for either provider. If the API is unreachable, saving is
+temporarily unavailable; guest sessions remain in-memory and reset on refresh.
+
+### Authentication & playlist ownership
+
+- Saving/updating/deleting playlists now requires signing in. Guest sessions can still fetch and clean playlists but nothing is persisted or shareable after a refresh.
+- Share URLs keep working for IPTV apps without requiring a login; anyone with the code can download the filtered playlist.
+- Username/password sign-up is built-in and uses cookies.
+- Optional federated sign-in:
+  - Google: set `Authentication:Google:ClientId` / `Authentication:Google:ClientSecret` or `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+  - Microsoft Entra ID: set `Authentication:Microsoft:TenantId` (default `common`), `Authentication:Microsoft:ClientId`, `Authentication:Microsoft:ClientSecret` or the `MICROSOFT_TENANT_ID` / `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` environment variables.
 
 ### One-command Docker (app + Postgres)
 

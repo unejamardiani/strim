@@ -1,12 +1,14 @@
 using System.Text.Json;
 using Api.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Api.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext : IdentityDbContext<IdentityUser>
 {
   public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -14,6 +16,8 @@ public class AppDbContext : DbContext
 
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
+    base.OnModelCreating(modelBuilder);
+
     var disabledGroupsConverter = new ValueConverter<List<string>, string>(
       v => SerializeDisabledGroups(v),
       v => DeserializeDisabledGroups(v));
@@ -37,6 +41,8 @@ public class AppDbContext : DbContext
       entity.Property(p => p.GroupCount).HasDefaultValue(0);
       entity.Property(p => p.ExpirationUtc);
       entity.Property(p => p.ShareCode).HasMaxLength(64);
+      entity.Property(p => p.OwnerId).HasMaxLength(450).HasColumnName("ownerid");
+      entity.HasIndex(p => new { p.OwnerId, p.UpdatedAt });
     });
   }
 
