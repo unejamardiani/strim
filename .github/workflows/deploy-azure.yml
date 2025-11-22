@@ -1,0 +1,119 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment to deploy
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_LOCATION: eastus
+  ENVIRONMENT: ${{ inputs.environment || 'dev' }}
+  IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'main' }}
+  TF_VAR_project_name: strim-${{ inputs.environment || 'dev' }}
+  TF_VAR_resource_group_name: strim-${{ inputs.environment || 'dev' }}-rg
+  TF_VAR_app_service_plan_name: strim-${{ inputs.environment || 'dev' }}-plan
+  TF_VAR_app_service_name: strim-${{ inputs.environment || 'dev' }}-app
+  TF_VAR_file_share_name: strim${{ inputs.environment || 'dev' }}data
+  TF_VAR_location: eastus
+  TF_VAR_docker_registry_url: https://index.docker.io/v1
+  TF_VAR_container_port: 8080
+  TF_VAR_sqlite_mount_path: /var/strim/data
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure remote state backend
+        env:
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          AZURE_LOCATION: ${{ env.AZURE_LOCATION }}
+        run: |
+          set -euo pipefail
+          RG="strim-${ENVIRONMENT}-tfstate"
+          STORAGE="strim${ENVIRONMENT}tfstate"
+          CONTAINER="tfstate"
+          KEY="strim-${ENVIRONMENT}.tfstate"
+
+          az group create --name "$RG" --location "$AZURE_LOCATION"
+          az storage account create \
+            --name "$STORAGE" \
+            --resource-group "$RG" \
+            --location "$AZURE_LOCATION" \
+            --sku Standard_LRS \
+            --kind StorageV2 \
+            --allow-blob-public-access false
+
+          ACCOUNT_KEY=$(az storage account keys list --resource-group "$RG" --account-name "$STORAGE" --query '[0].value' -o tsv)
+          az storage container create --name "$CONTAINER" --account-name "$STORAGE" --account-key "$ACCOUNT_KEY"
+
+          {
+            echo "TF_BACKEND_RG=$RG"
+            echo "TF_BACKEND_STORAGE=$STORAGE"
+            echo "TF_BACKEND_CONTAINER=$CONTAINER"
+            echo "TF_BACKEND_KEY=$KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${TF_BACKEND_RG}" \
+            -backend-config="storage_account_name=${TF_BACKEND_STORAGE}" \
+            -backend-config="container_name=${TF_BACKEND_CONTAINER}" \
+            -backend-config="key=${TF_BACKEND_KEY}"
+
+      - name: Select workspace
+        working-directory: infra/terraform
+        env:
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+        run: |
+          terraform workspace select "$ENVIRONMENT" || terraform workspace new "$ENVIRONMENT"
+
+      - name: Terraform plan
+        working-directory: infra/terraform
+        env:
+          TF_VAR_container_image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/strim
+          TF_VAR_container_image_tag: ${{ env.IMAGE_TAG }}
+          TF_VAR_docker_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          TF_VAR_docker_registry_password: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          terraform plan -input=false -out=tfplan
+
+      - name: Terraform apply
+        working-directory: infra/terraform
+        env:
+          TF_VAR_container_image: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/strim
+          TF_VAR_container_image_tag: ${{ env.IMAGE_TAG }}
+          TF_VAR_docker_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          TF_VAR_docker_registry_password: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          terraform apply -input=false -auto-approve tfplan
