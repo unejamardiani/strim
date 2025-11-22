@@ -22,15 +22,6 @@ env:
   AZURE_LOCATION: switzerlandnorth
   ENVIRONMENT: ${{ inputs.environment || 'dev' }}
   IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'main' }}
-  TF_VAR_project_name: strim-${{ inputs.environment || 'dev' }}
-  TF_VAR_resource_group_name: strim-${{ inputs.environment || 'dev' }}-rg
-  TF_VAR_app_service_plan_name: strim-${{ inputs.environment || 'dev' }}-plan
-  TF_VAR_app_service_name: strim-${{ inputs.environment || 'dev' }}-app
-  TF_VAR_file_share_name: strim${{ inputs.environment || 'dev' }}data
-  TF_VAR_location: switzerlandnorth
-  TF_VAR_docker_registry_url: https://index.docker.io/v1
-  TF_VAR_container_port: 8080
-  TF_VAR_sqlite_mount_path: /var/strim/data
 
 jobs:
   deploy:
@@ -53,6 +44,16 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Validate environment input
+        env:
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          case "$ENVIRONMENT" in
+            dev|prod) ;; 
+            *) echo "Unsupported environment '$ENVIRONMENT'. Use dev or prod." >&2; exit 1 ;;
+          esac
+
       - name: Configure remote state backend
         env:
           ENVIRONMENT: ${{ env.ENVIRONMENT }}
@@ -73,8 +74,10 @@ jobs:
             --kind StorageV2 \
             --allow-blob-public-access false
 
-          ACCOUNT_KEY=$(az storage account keys list --resource-group "$RG" --account-name "$STORAGE" --query '[0].value' -o tsv)
-          az storage container create --name "$CONTAINER" --account-name "$STORAGE" --account-key "$ACCOUNT_KEY"
+          az storage container create \
+            --name "$CONTAINER" \
+            --account-name "$STORAGE" \
+            --auth-mode login
 
           {
             echo "TF_BACKEND_RG=$RG"
@@ -86,6 +89,7 @@ jobs:
       - name: Terraform init
         working-directory: infra/terraform
         run: |
+          set -euo pipefail
           terraform init \
             -backend-config="resource_group_name=${TF_BACKEND_RG}" \
             -backend-config="storage_account_name=${TF_BACKEND_STORAGE}" \
@@ -97,6 +101,7 @@ jobs:
         env:
           ENVIRONMENT: ${{ env.ENVIRONMENT }}
         run: |
+          set -euo pipefail
           terraform workspace select "$ENVIRONMENT" || terraform workspace new "$ENVIRONMENT"
 
       - name: Terraform plan
@@ -106,8 +111,18 @@ jobs:
           TF_VAR_container_image_tag: ${{ env.IMAGE_TAG }}
           TF_VAR_docker_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
           TF_VAR_docker_registry_password: ${{ secrets.DOCKERHUB_TOKEN }}
+          TF_VAR_project_name: strim-${{ env.ENVIRONMENT }}
+          TF_VAR_resource_group_name: strim-${{ env.ENVIRONMENT }}-rg
+          TF_VAR_app_service_plan_name: strim-${{ env.ENVIRONMENT }}-plan
+          TF_VAR_app_service_name: strim-${{ env.ENVIRONMENT }}-app
+          TF_VAR_file_share_name: strim${{ env.ENVIRONMENT }}data
+          TF_VAR_location: ${{ env.AZURE_LOCATION }}
+          TF_VAR_docker_registry_url: https://index.docker.io/v1
+          TF_VAR_container_port: 8080
+          TF_VAR_sqlite_mount_path: /var/strim/data
         run: |
-          terraform plan -input=false -out=tfplan
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan -no-color
 
       - name: Terraform apply
         working-directory: infra/terraform
@@ -116,5 +131,29 @@ jobs:
           TF_VAR_container_image_tag: ${{ env.IMAGE_TAG }}
           TF_VAR_docker_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
           TF_VAR_docker_registry_password: ${{ secrets.DOCKERHUB_TOKEN }}
+          TF_VAR_project_name: strim-${{ env.ENVIRONMENT }}
+          TF_VAR_resource_group_name: strim-${{ env.ENVIRONMENT }}-rg
+          TF_VAR_app_service_plan_name: strim-${{ env.ENVIRONMENT }}-plan
+          TF_VAR_app_service_name: strim-${{ env.ENVIRONMENT }}-app
+          TF_VAR_file_share_name: strim${{ env.ENVIRONMENT }}data
+          TF_VAR_location: ${{ env.AZURE_LOCATION }}
+          TF_VAR_docker_registry_url: https://index.docker.io/v1
+          TF_VAR_container_port: 8080
+          TF_VAR_sqlite_mount_path: /var/strim/data
         run: |
-          terraform apply -input=false -auto-approve tfplan
+          set -euo pipefail
+          terraform apply -input=false -auto-approve tfplan -no-color
+
+      - name: Emit audit metadata
+        env:
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg action "terraform_apply" \
+            --arg environment "$ENVIRONMENT" \
+            --arg actor "${{ github.actor }}" \
+            --arg commit "${{ github.sha }}" \
+            --arg image_tag "$IMAGE_TAG" \
+            '{timestamp: now | todate, action: $action, environment: $environment, actor: $actor, commit: $commit, image_tag: $image_tag}'
