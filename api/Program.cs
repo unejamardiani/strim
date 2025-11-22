@@ -108,6 +108,9 @@ builder.Services.AddIdentityCore<IdentityUser>(options =>
   options.Password.RequireNonAlphanumeric = false;
   options.Password.RequireUppercase = true;
   options.Password.RequiredLength = 10;
+  options.Lockout.AllowedForNewUsers = true;
+  options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(10);
+  options.Lockout.MaxFailedAccessAttempts = 5;
 })
   .AddSignInManager()
   .AddEntityFrameworkStores<AppDbContext>()
@@ -532,6 +535,7 @@ authGroup.MapPost("/register", async (RegisterRequest request, UserManager<Ident
     {
       UserName = userName,
       Email = request.Email?.Trim(),
+      LockoutEnabled = true,
     };
 
     var createResult = await userManager.CreateAsync(newUser, request.Password);
@@ -557,14 +561,17 @@ authGroup.MapPost("/login", async (LoginRequest request, SignInManager<IdentityU
   }
 
   var userName = request.UserName.Trim();
-  var user = await userManager.FindByNameAsync(userName) ??
-    await userManager.FindByEmailAsync(userName);
+  var user = await userManager.FindByNameAsync(userName);
   if (user is null)
   {
     return Results.Unauthorized();
   }
 
-  var result = await signInManager.PasswordSignInAsync(user, request.Password, isPersistent: false, lockoutOnFailure: false);
+  var result = await signInManager.PasswordSignInAsync(user, request.Password, isPersistent: false, lockoutOnFailure: true);
+  if (result.IsLockedOut)
+  {
+    return Results.StatusCode(StatusCodes.Status423Locked);
+  }
   if (!result.Succeeded)
   {
     return Results.Unauthorized();
