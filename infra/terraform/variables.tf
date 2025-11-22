@@ -61,6 +61,7 @@ variable "docker_registry_username" {
   description = "Registry username. Required for private GHCR images."
   type        = string
   default     = ""
+  sensitive   = true
 }
 
 variable "docker_registry_password" {

@@ -11,7 +11,7 @@ This Terraform stack deploys a `strim` container image (Docker Hub by default) t
 
 ## Prereqs
 - Terraform >= 1.5
-- Azure credentials exported (e.g. `az login` plus `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` if using a service principal)
+- Azure credentials exported (e.g. `az login` plus `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` if using a service principal). The principal used by CI needs `Contributor` for control plane operations **and** `Storage Blob Data Contributor` (or higher) on the state storage account to create the backend container with Azure AD/OIDC instead of account keys.
 - The container image pushed by `.github/workflows/publish-image.yml` (default tag is `main` or the Git SHA`). By default this publishes to Docker Hub using `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN`; set registry credentials when the image is private.
 
 ## Usage
@@ -44,6 +44,10 @@ terraform apply
   - No other variables are needed when using the defaults baked into the workflow; optional overrides (custom registry, port, mount path, etc.) are set via Terraform variables if you change the infrastructure.
 - The workflow keeps separate workspaces and state for `dev` and `prod`, creating a storage account named `strim<env>tfstate` for the backend.
 - On pushes to `main`, the workflow deploys `dev` with the `main` image tag. Run the workflow manually and choose `prod` to deploy a tagged release image.
+
+Security notes:
+- Registry credentials are only injected into the Terraform plan/apply steps, and the related Terraform variables are marked `sensitive` to avoid logging. Remote state is stored in Azure Storage with provider-managed encryption at rest.
+- The workflow emits a small JSON audit event after apply that includes actor, commit, environment, and image tag for traceability within the Actions log.
 
 3) The output `app_url` points to the deployed site. The Azure Files share is exposed in the `storage_share` output and is mounted to the container path set in `SQLITE_PATH`.
 
