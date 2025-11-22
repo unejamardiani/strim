@@ -11,7 +11,7 @@ This Terraform stack deploys a `strim` container image (Docker Hub by default) t
 
 ## Prereqs
 - Terraform >= 1.5
-- Azure credentials exported (e.g. `az login` plus `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` if using a service principal). The principal used by CI needs `Contributor` for control plane operations **and** `Storage Blob Data Contributor` (or higher) on the state storage account to create the backend container with Azure AD/OIDC instead of account keys.
+- Azure authentication: locally use `az login` (or export `ARM_*` vars for a service principal). GitHub Actions uses OIDC with a federated credential instead of a client secret; configure the app registration used by CI with a federated identity for this repo/branch (see [azure/login docs](https://github.com/Azure/login#configure-federated-credentials-in-azure-ad)). The principal needs `Contributor` for control plane operations **and** `Storage Blob Data Contributor` (or higher) on the state storage account to create the backend container when using Azure AD auth.
 - The container image pushed by `.github/workflows/publish-image.yml` (default tag is `main` or the Git SHA`). By default this publishes to Docker Hub using `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN`; set registry credentials when the image is private.
 
 ## Usage
@@ -39,7 +39,7 @@ terraform apply
 
 ### Deploying with GitHub Actions
 - Required GitHub secrets (per the workflow in `.github/workflows/deploy-azure.yml`):
-  - Azure service principal: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
+  - Azure federated service principal: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (no client secret; relies on OIDC + federated credential on the app registration).
   - Docker Hub pull access: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (a PAT or access token that can pull the `strim` image).
   - No other variables are needed when using the defaults baked into the workflow; optional overrides (custom registry, port, mount path, etc.) are set via Terraform variables if you change the infrastructure.
 - The workflow keeps separate workspaces and state for `dev` and `prod`, creating a storage account named `strim<env>tfstate` for the backend.
