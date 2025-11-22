@@ -15,6 +15,7 @@ const state = {
   currentUser: null,
   isAuthenticated: false,
   authProviders: [],
+  filterSourceSelection: null,
 };
 
 const statusPill = document.getElementById('status-pill');
@@ -34,6 +35,10 @@ const authLoginButton = document.getElementById('auth-login');
 const authRegisterButton = document.getElementById('auth-register');
 const authLogoutButton = document.getElementById('auth-logout');
 const authProviderButtons = document.querySelectorAll('[data-auth-provider]');
+const filterSourceWrap = document.getElementById('filter-source-wrap');
+const filterSourceTrigger = document.getElementById('filter-source-trigger');
+const filterSourceMenu = document.getElementById('filter-source-menu');
+const applyFilterSourceButton = document.getElementById('apply-filter-source');
 
 const samplePlaylist = `#EXTM3U
 #EXTINF:-1 tvg-name="News HD" group-title="News" tvg-logo="https://placehold.co/40x40",Global News HD
@@ -170,6 +175,36 @@ if (savedListContainer) {
     }
   });
 }
+
+if (filterSourceTrigger) {
+  filterSourceTrigger.addEventListener('click', () => toggleFilterSourceMenu());
+}
+
+if (filterSourceMenu) {
+  filterSourceMenu.addEventListener('click', (e) => {
+    const option = e.target.closest('[data-id]');
+    if (!option) return;
+    const id = option.dataset.id;
+    selectFilterSource(id);
+    closeFilterSourceMenu();
+  });
+}
+
+if (applyFilterSourceButton) {
+  applyFilterSourceButton.addEventListener('click', () => applyFiltersFromPlaylist());
+}
+
+document.addEventListener('click', (e) => {
+  if (!filterSourceWrap) return;
+  if (filterSourceWrap.contains(e.target)) return;
+  closeFilterSourceMenu();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeFilterSourceMenu();
+  }
+});
 
 if (authLoginButton) {
   authLoginButton.addEventListener('click', async (e) => {
@@ -369,10 +404,12 @@ async function handleLogout() {
   state.savedPlaylists = [];
   state.currentPlaylistId = null;
   state.shareCode = null;
+  state.filterSourceSelection = null;
   if (shareUrlInput) {
     shareUrlInput.value = '';
   }
   renderSavedPlaylists();
+  renderFilterSources();
   updateAuthUi();
   closeAuthModal();
   setStatus('Signed out', 'info');
@@ -618,6 +655,7 @@ async function loadSavedPlaylists() {
   if (!state.isAuthenticated) {
     state.savedPlaylists = [];
     renderSavedPlaylists();
+    renderFilterSources();
     return;
   }
 
@@ -629,6 +667,7 @@ async function loadSavedPlaylists() {
     state.savedPlaylists = [];
   }
   renderSavedPlaylists();
+  renderFilterSources();
 }
 
 async function handleSavePlaylist() {
@@ -678,6 +717,7 @@ async function handleSavePlaylist() {
   state.currentPlaylistId = saved.id;
   state.shareCode = saved.shareCode || state.shareCode;
   renderSavedPlaylists();
+  renderFilterSources();
   updateSaveButtonLabel();
   updateAuthUi();
   setStatus(statusMessage, statusTone);
@@ -746,6 +786,7 @@ async function deleteSavedPlaylist(id) {
     updateSaveButtonLabel();
   }
   renderSavedPlaylists();
+  renderFilterSources();
   updateAuthUi();
   setStatus('Playlist deleted', 'success');
 }
@@ -824,6 +865,110 @@ function updateSaveButtonLabel() {
   }
   savePlaylistButton.disabled = !hasLoadedPlaylist();
   savePlaylistButton.textContent = state.currentPlaylistId ? 'Update playlist' : 'Save playlist';
+}
+
+function renderFilterSources() {
+  if (!filterSourceWrap || !filterSourceTrigger || !filterSourceMenu) return;
+  filterSourceMenu.replaceChildren();
+  closeFilterSourceMenu();
+
+  if (!state.isAuthenticated) {
+    filterSourceTrigger.textContent = 'Sign in to reuse filters';
+    filterSourceWrap.classList.add('disabled');
+    state.filterSourceSelection = null;
+    updateFilterSourceButtonState();
+    return;
+  }
+
+  if (!state.savedPlaylists.length) {
+    filterSourceTrigger.textContent = 'No saved playlists yet';
+    filterSourceWrap.classList.add('disabled');
+    state.filterSourceSelection = null;
+    updateFilterSourceButtonState();
+    return;
+  }
+
+  filterSourceWrap.classList.remove('disabled');
+
+  state.savedPlaylists.forEach((pl) => {
+    const option = document.createElement('div');
+    option.className = 'select-option';
+    option.setAttribute('role', 'option');
+    option.dataset.id = pl.id;
+    const name = document.createElement('span');
+    name.textContent = pl.name || pl.sourceName || 'Untitled';
+    const meta = document.createElement('small');
+    const filterCount = pl.disabledGroups ? pl.disabledGroups.length : 0;
+    meta.textContent = `${filterCount} filter${filterCount === 1 ? '' : 's'}`;
+    option.append(name, meta);
+    if (pl.id === state.filterSourceSelection) {
+      option.classList.add('active');
+    }
+    filterSourceMenu.append(option);
+  });
+
+  const selected =
+    state.savedPlaylists.find((p) => p.id === state.filterSourceSelection) ?? state.savedPlaylists[0];
+  state.filterSourceSelection = selected?.id || null;
+  if (selected) {
+    const count = selected.disabledGroups ? selected.disabledGroups.length : 0;
+    filterSourceTrigger.textContent = `${selected.name || selected.sourceName || 'Untitled'} • ${count} filter${count === 1 ? '' : 's'}`;
+  } else {
+    filterSourceTrigger.textContent = 'Select a saved playlist';
+  }
+  updateFilterSourceButtonState();
+}
+
+function selectFilterSource(id) {
+  state.filterSourceSelection = id || null;
+  renderFilterSources();
+}
+
+function updateFilterSourceButtonState() {
+  const disabled = !state.filterSourceSelection || !state.isAuthenticated;
+  if (applyFilterSourceButton) applyFilterSourceButton.disabled = disabled;
+}
+
+function toggleFilterSourceMenu() {
+  if (!filterSourceMenu || !filterSourceWrap) return;
+  if (filterSourceWrap.classList.contains('disabled')) return;
+  filterSourceMenu.classList.toggle('hidden');
+}
+
+function closeFilterSourceMenu() {
+  if (filterSourceMenu) {
+    filterSourceMenu.classList.add('hidden');
+  }
+}
+
+function applyFiltersFromPlaylist() {
+  if (!state.isAuthenticated) {
+    setStatus('Sign in to copy filters from a saved playlist.', 'warn');
+    return;
+  }
+  if (state.groups.size === 0) {
+    setStatus('Load a playlist before copying filters.', 'warn');
+    return;
+  }
+  const sourceId = state.filterSourceSelection;
+  if (!sourceId) {
+    setStatus('Choose a playlist to copy filters from.', 'warn');
+    return;
+  }
+  const source = state.savedPlaylists.find((p) => p.id === sourceId);
+  if (!source) {
+    setStatus('Could not find the selected playlist.', 'warn');
+    return;
+  }
+  const disabled = new Set((source.disabledGroups || []).filter((g) => state.groups.has(g)));
+  state.disabledGroups = disabled;
+  renderGroups();
+  renderStats();
+  updateToggleAllLabel();
+  setStatus(
+    `Copied ${disabled.size} filter${disabled.size === 1 ? '' : 's'} from "${source.name || source.sourceName || 'playlist'}"`,
+    'success'
+  );
 }
 
 let groupsResizeObserver = null;

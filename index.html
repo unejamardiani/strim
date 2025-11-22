@@ -128,6 +128,24 @@
             </div>
             <button id="toggle-all" class="ghost">Disable none</button>
           </div>
+          <div class="filters-panel glass-compact">
+            <div class="filters-head">
+              <div>
+                <p class="eyebrow">Copy filters</p>
+                <p class="hint">Pull filters from a saved playlist without reloading it.</p>
+              </div>
+              <div class="hint mini">Signed-in playlists only</div>
+            </div>
+            <div class="preset-form">
+              <div class="select-wrap select-custom" id="filter-source-wrap">
+                <button id="filter-source-trigger" type="button" class="select-trigger">Select a saved playlist</button>
+                <div id="filter-source-menu" class="select-menu hidden" role="listbox" aria-label="Saved playlists"></div>
+              </div>
+              <div class="preset-actions-inline">
+                <button id="apply-filter-source" class="ghost" disabled>Apply</button>
+              </div>
+            </div>
+          </div>
           <div id="groups" class="group-panel-body"></div>
         </section>
 
