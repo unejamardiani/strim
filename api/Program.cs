@@ -127,6 +127,10 @@ builder.Services.AddAuthentication(options =>
     options.ApplicationCookie?.Configure(o =>
     {
       o.SlidingExpiration = true;
+      o.Cookie.Name = "__Host-strim.auth";
+      o.Cookie.SameSite = SameSiteMode.None;
+      o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+      o.Cookie.HttpOnly = true;
       o.Events.OnRedirectToLogin = ctx =>
       {
         ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -141,6 +145,10 @@ builder.Services.AddAuthentication(options =>
     options.ExternalCookie?.Configure(o =>
     {
       o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+      o.Cookie.Name = "__Host-strim.external";
+      o.Cookie.SameSite = SameSiteMode.None;
+      o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+      o.Cookie.HttpOnly = true;
     });
   });
 
