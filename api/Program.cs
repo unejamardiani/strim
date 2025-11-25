@@ -693,21 +693,7 @@ async Task<DatabaseHealth> CheckDatabaseAsync(AppDbContext db)
     ? "postgres"
     : db.Database.IsSqlite() ? "sqlite" : db.Database.ProviderName ?? "unknown";
 
-  var details = new Dictionary<string, object?>();
   var connection = db.Database.GetDbConnection();
-
-  if (db.Database.IsSqlite() && connection is SqliteConnection sqlite)
-  {
-    details["dataSource"] = sqlite.DataSource;
-  }
-  else if (db.Database.IsNpgsql())
-  {
-    var builder = new NpgsqlConnectionStringBuilder(connection.ConnectionString);
-    details["host"] = builder.Host;
-    details["port"] = builder.Port;
-    details["database"] = builder.Database;
-    details["username"] = builder.Username;
-  }
 
   try
   {
@@ -729,14 +715,14 @@ async Task<DatabaseHealth> CheckDatabaseAsync(AppDbContext db)
 
     if (!string.IsNullOrWhiteSpace(schemaStatus))
     {
-      return new DatabaseHealth(provider, "degraded", schemaStatus, details);
+      return new DatabaseHealth(provider, "degraded", schemaStatus, null);
     }
 
-    return new DatabaseHealth(provider, "healthy", "Database reachable", details);
+    return new DatabaseHealth(provider, "healthy", "Database reachable", null);
   }
   catch (Exception ex)
   {
-    return new DatabaseHealth(provider, "unhealthy", $"Database connection failed: {ex.Message}", details);
+    return new DatabaseHealth(provider, "unhealthy", $"Database connection failed: {ex.Message}", null);
   }
   finally
   {
