@@ -14,6 +14,7 @@ using System.Text;
 using Npgsql;
 using Microsoft.Data.Sqlite;
 using System.Data.Common;
+using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -686,7 +687,80 @@ async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFa
   return Encoding.UTF8.GetString(bytes);
 }
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
+async Task<DatabaseHealth> CheckDatabaseAsync(AppDbContext db)
+{
+  var provider = db.Database.IsNpgsql()
+    ? "postgres"
+    : db.Database.IsSqlite() ? "sqlite" : db.Database.ProviderName ?? "unknown";
+
+  var details = new Dictionary<string, object?>();
+  var connection = db.Database.GetDbConnection();
+
+  if (db.Database.IsSqlite() && connection is SqliteConnection sqlite)
+  {
+    details["dataSource"] = sqlite.DataSource;
+  }
+  else if (db.Database.IsNpgsql())
+  {
+    var builder = new NpgsqlConnectionStringBuilder(connection.ConnectionString);
+    details["host"] = builder.Host;
+    details["port"] = builder.Port;
+    details["database"] = builder.Database;
+    details["username"] = builder.Username;
+  }
+
+  try
+  {
+    await db.Database.OpenConnectionAsync();
+    using var cmd = connection.CreateCommand();
+    cmd.CommandText = "SELECT 1;";
+    await cmd.ExecuteScalarAsync();
+
+    string? schemaStatus = null;
+    try
+    {
+      cmd.CommandText = "SELECT 1 FROM playlists LIMIT 1;";
+      await cmd.ExecuteScalarAsync();
+    }
+    catch (Exception schemaEx)
+    {
+      schemaStatus = $"Playlist table inaccessible: {schemaEx.Message}";
+    }
+
+    if (!string.IsNullOrWhiteSpace(schemaStatus))
+    {
+      return new DatabaseHealth(provider, "degraded", schemaStatus, details);
+    }
+
+    return new DatabaseHealth(provider, "healthy", "Database reachable", details);
+  }
+  catch (Exception ex)
+  {
+    return new DatabaseHealth(provider, "unhealthy", $"Database connection failed: {ex.Message}", details);
+  }
+  finally
+  {
+    await db.Database.CloseConnectionAsync();
+  }
+}
+
+app.MapGet("/api/health", async (AppDbContext db, IHostEnvironment env) =>
+{
+  var database = await CheckDatabaseAsync(db);
+  var auth = new AuthenticationHealth(
+    new AuthProviderHealth(googleEnabled, googleEnabled ? "configured" : "disabled",
+      googleEnabled ? "Google OAuth configured" : "Google OAuth is not configured"),
+    new AuthProviderHealth(microsoftEnabled, microsoftEnabled ? "configured" : "disabled",
+      microsoftEnabled ? $"Microsoft OAuth configured for tenant '{tenantId}'" : "Microsoft OAuth is not configured")
+  );
+
+  var overallStatus = database.Status == "unhealthy"
+    ? "unhealthy"
+    : database.Status == "degraded" ? "degraded" : "healthy";
+
+  var response = new HealthResponse(overallStatus, env.EnvironmentName, database, auth);
+  return Results.Ok(response);
+});
 
 app.MapGet("/api/playlists", async (ClaimsPrincipal user, AppDbContext db) =>
 {
@@ -1037,6 +1111,14 @@ app.MapPost("/api/fetch", async (FetchRequest request, IHttpClientFactory httpCl
 app.MapFallbackToFile("/index.html");
 
 app.Run();
+
+public record HealthResponse(string Status, string Environment, DatabaseHealth Database, AuthenticationHealth Authentication);
+
+public record DatabaseHealth(string Provider, string Status, string? Description, object? Details);
+
+public record AuthenticationHealth(AuthProviderHealth Google, AuthProviderHealth Microsoft);
+
+public record AuthProviderHealth(bool Enabled, string Status, string? Description);
 
 public record PlaylistRequest(
   string Name,
