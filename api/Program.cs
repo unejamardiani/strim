@@ -708,9 +708,9 @@ async Task<DatabaseHealth> CheckDatabaseAsync(AppDbContext db)
       cmd.CommandText = "SELECT 1 FROM playlists LIMIT 1;";
       await cmd.ExecuteScalarAsync();
     }
-    catch (Exception schemaEx)
+    catch (Exception)
     {
-      schemaStatus = $"Playlist table inaccessible: {schemaEx.Message}";
+      schemaStatus = "Playlist table inaccessible";
     }
 
     if (!string.IsNullOrWhiteSpace(schemaStatus))
@@ -720,9 +720,9 @@ async Task<DatabaseHealth> CheckDatabaseAsync(AppDbContext db)
 
     return new DatabaseHealth(provider, "healthy", "Database reachable", null);
   }
-  catch (Exception ex)
+  catch (Exception)
   {
-    return new DatabaseHealth(provider, "unhealthy", $"Database connection failed: {ex.Message}", null);
+    return new DatabaseHealth(provider, "unhealthy", "Database connection failed", null);
   }
   finally
   {
