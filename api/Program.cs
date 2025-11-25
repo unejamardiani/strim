@@ -733,12 +733,8 @@ async Task<DatabaseHealth> CheckDatabaseAsync(AppDbContext db)
 app.MapGet("/api/health", async (AppDbContext db, IHostEnvironment env) =>
 {
   var database = await CheckDatabaseAsync(db);
-  var auth = new AuthenticationHealth(
-    new AuthProviderHealth(googleEnabled, googleEnabled ? "configured" : "disabled",
-      googleEnabled ? "Google OAuth configured" : "Google OAuth is not configured"),
-    new AuthProviderHealth(microsoftEnabled, microsoftEnabled ? "configured" : "disabled",
-      microsoftEnabled ? $"Microsoft OAuth configured for tenant '{tenantId}'" : "Microsoft OAuth is not configured")
-  );
+  var authStatus = (googleEnabled || microsoftEnabled) ? "configured" : "not_configured";
+  var auth = new AuthenticationHealth(authStatus);
 
   var overallStatus = database.Status == "unhealthy"
     ? "unhealthy"
@@ -1102,9 +1098,7 @@ public record HealthResponse(string Status, string Environment, DatabaseHealth D
 
 public record DatabaseHealth(string Provider, string Status, string? Description, object? Details);
 
-public record AuthenticationHealth(AuthProviderHealth Google, AuthProviderHealth Microsoft);
-
-public record AuthProviderHealth(bool Enabled, string Status, string? Description);
+public record AuthenticationHealth(string Status);
 
 public record PlaylistRequest(
   string Name,
