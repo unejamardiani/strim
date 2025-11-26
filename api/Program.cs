@@ -730,18 +730,18 @@ async Task<DatabaseHealth> CheckDatabaseAsync(AppDbContext db)
   }
 }
 
-app.MapGet("/api/health", async (AppDbContext db, IHostEnvironment env) =>
+app.MapGet("/api/health", async (AppDbContext db) =>
 {
   var database = await CheckDatabaseAsync(db);
-  var authStatus = (googleEnabled || microsoftEnabled) ? "configured" : "not_configured";
-  var auth = new AuthenticationHealth(authStatus);
-
   var overallStatus = database.Status == "unhealthy"
-    ? "unhealthy"
-    : database.Status == "degraded" ? "degraded" : "healthy";
+    ? "Unhealthy"
+    : database.Status == "degraded" ? "Degraded" : "Healthy";
 
-  var response = new HealthResponse(overallStatus, env.EnvironmentName, database, auth);
-  return Results.Ok(response);
+  var statusCode = overallStatus == "Healthy"
+    ? StatusCodes.Status200OK
+    : StatusCodes.Status503ServiceUnavailable;
+
+  return Results.Json(new SimpleHealthResponse(overallStatus), statusCode: statusCode);
 });
 
 app.MapGet("/api/playlists", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -1094,11 +1094,9 @@ app.MapFallbackToFile("/index.html");
 
 app.Run();
 
-public record HealthResponse(string Status, string Environment, DatabaseHealth Database, AuthenticationHealth Authentication);
+public record SimpleHealthResponse(string Status);
 
 public record DatabaseHealth(string Provider, string Status, string? Description, object? Details);
-
-public record AuthenticationHealth(string Status);
 
 public record PlaylistRequest(
   string Name,
