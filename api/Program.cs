@@ -9,9 +9,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
+using System.Threading.RateLimiting;
 using Npgsql;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.Data.Sqlite;
 using System.Data.Common;
 
@@ -56,11 +60,15 @@ if (useSqlite)
 }
 else
 {
-  var connectionString = postgresConnectionString ??
-    "Host=localhost;Port=5432;Database=strim;Username=postgres;Password=postgres";
+  if (string.IsNullOrWhiteSpace(postgresConnectionString))
+  {
+    throw new InvalidOperationException(
+      "PostgreSQL connection string is required when DB_PROVIDER is set to 'postgres'. " +
+      "Set POSTGRES_CONNECTION environment variable or ConnectionStrings:Postgres in configuration.");
+  }
 
   // Configure Npgsql data source with dynamic JSON enabled so we can store List<string> as jsonb.
-  var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+  var dataSourceBuilder = new NpgsqlDataSourceBuilder(postgresConnectionString);
   dataSourceBuilder.EnableDynamicJson();
   var dataSource = dataSourceBuilder.Build();
 
@@ -93,6 +101,59 @@ builder.Services.AddCors(options =>
   });
 });
 builder.Services.AddMemoryCache();
+
+// Rate limiting configuration to prevent abuse
+builder.Services.AddRateLimiter(options =>
+{
+  options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+  // Strict rate limit for authentication endpoints (prevents brute force)
+  options.AddPolicy("auth", context =>
+    RateLimitPartition.GetFixedWindowLimiter(
+      partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+      factory: _ => new FixedWindowRateLimiterOptions
+      {
+        PermitLimit = 10,
+        Window = TimeSpan.FromMinutes(1),
+        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        QueueLimit = 0
+      }));
+
+  // Moderate rate limit for fetch/analyze endpoints (prevents abuse)
+  options.AddPolicy("fetch", context =>
+    RateLimitPartition.GetFixedWindowLimiter(
+      partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+      factory: _ => new FixedWindowRateLimiterOptions
+      {
+        PermitLimit = 30,
+        Window = TimeSpan.FromMinutes(1),
+        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        QueueLimit = 2
+      }));
+
+  // General rate limit for other API endpoints
+  options.AddPolicy("general", context =>
+    RateLimitPartition.GetFixedWindowLimiter(
+      partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+      factory: _ => new FixedWindowRateLimiterOptions
+      {
+        PermitLimit = 100,
+        Window = TimeSpan.FromMinutes(1),
+        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        QueueLimit = 5
+      }));
+});
+
+// Antiforgery for CSRF protection
+builder.Services.AddAntiforgery(options =>
+{
+  options.HeaderName = "X-CSRF-TOKEN";
+  options.Cookie.Name = "__Host-strim.csrf";
+  options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+  options.Cookie.SameSite = SameSiteMode.Strict;
+  options.Cookie.HttpOnly = true;
+});
+
 builder.Services.AddHttpClient("fetcher", client =>
 {
   client.Timeout = TimeSpan.FromSeconds(15);
@@ -194,6 +255,8 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
+app.UseAntiforgery();
 
 // Ensure database exists and matches the model. For now we use EnsureCreated for simplicity.
 using (var scope = app.Services.CreateScope())
@@ -515,7 +578,111 @@ bool ProviderEnabled(string provider) =>
 
 string? GetUserId(ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.NameIdentifier);
 
-var authGroup = app.MapGroup("/api/auth");
+// Generate cryptographically secure share codes (P0 fix: weak share code generation)
+string GenerateSecureShareCode()
+{
+  var bytes = new byte[32];
+  RandomNumberGenerator.Fill(bytes);
+  return Convert.ToBase64String(bytes)
+    .Replace("+", "-")
+    .Replace("/", "_")
+    .TrimEnd('=');
+}
+
+// SSRF protection: validate URLs and block internal/private IP addresses (P0 fix)
+bool IsBlockedUrl(Uri uri)
+{
+  // Block non-HTTP(S) schemes
+  if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+  {
+    return true;
+  }
+
+  // Resolve hostname to IP addresses and check each one
+  try
+  {
+    var host = uri.DnsSafeHost;
+
+    // Block common internal hostnames
+    var blockedHostnames = new[] { "localhost", "127.0.0.1", "::1", "0.0.0.0", "metadata", "metadata.google.internal" };
+    if (blockedHostnames.Any(h => host.Equals(h, StringComparison.OrdinalIgnoreCase)))
+    {
+      return true;
+    }
+
+    // Resolve DNS and check IP addresses
+    var addresses = Dns.GetHostAddresses(host);
+    foreach (var addr in addresses)
+    {
+      if (IsPrivateOrReservedIP(addr))
+      {
+        return true;
+      }
+    }
+  }
+  catch (SocketException)
+  {
+    // DNS resolution failed - block to be safe
+    return true;
+  }
+
+  return false;
+}
+
+bool IsPrivateOrReservedIP(IPAddress addr)
+{
+  var bytes = addr.GetAddressBytes();
+
+  // IPv4 checks
+  if (addr.AddressFamily == AddressFamily.InterNetwork && bytes.Length == 4)
+  {
+    // Loopback: 127.0.0.0/8
+    if (bytes[0] == 127) return true;
+
+    // Private: 10.0.0.0/8
+    if (bytes[0] == 10) return true;
+
+    // Private: 172.16.0.0/12
+    if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
+
+    // Private: 192.168.0.0/16
+    if (bytes[0] == 192 && bytes[1] == 168) return true;
+
+    // Link-local: 169.254.0.0/16 (AWS metadata, Azure IMDS, etc.)
+    if (bytes[0] == 169 && bytes[1] == 254) return true;
+
+    // Current network: 0.0.0.0/8
+    if (bytes[0] == 0) return true;
+
+    // Broadcast: 255.255.255.255
+    if (bytes.All(b => b == 255)) return true;
+
+    // Documentation/TEST-NET ranges
+    if (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 2) return true; // 192.0.2.0/24
+    if (bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100) return true; // 198.51.100.0/24
+    if (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113) return true; // 203.0.113.0/24
+  }
+
+  // IPv6 checks
+  if (addr.AddressFamily == AddressFamily.InterNetworkV6)
+  {
+    // Loopback ::1
+    if (IPAddress.IsLoopback(addr)) return true;
+
+    // Link-local fe80::/10
+    if (bytes.Length >= 2 && bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80) return true;
+
+    // Unique local fc00::/7
+    if (bytes.Length >= 1 && (bytes[0] & 0xfe) == 0xfc) return true;
+
+    // Unspecified ::
+    if (addr.Equals(IPAddress.IPv6None) || addr.Equals(IPAddress.IPv6Any)) return true;
+  }
+
+  return false;
+}
+
+var authGroup = app.MapGroup("/api/auth").RequireRateLimiting("auth");
 authGroup.MapGet("/me", async (UserManager<IdentityUser> userManager, ClaimsPrincipal principal) =>
 {
   var user = await userManager.GetUserAsync(principal);
@@ -523,8 +690,18 @@ authGroup.MapGet("/me", async (UserManager<IdentityUser> userManager, ClaimsPrin
   return Results.Ok(new { userName = user.UserName, email = user.Email });
 });
 
-authGroup.MapPost("/register", async (RegisterRequest request, UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager) =>
+authGroup.MapPost("/register", async (RegisterRequest request, UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager, IAntiforgery antiforgery, HttpContext context) =>
 {
+  // CSRF protection for state-changing operation (P0 security fix)
+  try
+  {
+    await antiforgery.ValidateRequestAsync(context);
+  }
+  catch (AntiforgeryValidationException)
+  {
+    return Results.BadRequest(new { error = "Invalid or missing CSRF token" });
+  }
+
   if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
   {
     return Results.BadRequest(new { error = "Username and password are required." });
@@ -561,8 +738,18 @@ authGroup.MapPost("/register", async (RegisterRequest request, UserManager<Ident
   }
 });
 
-authGroup.MapPost("/login", async (LoginRequest request, SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager) =>
+authGroup.MapPost("/login", async (LoginRequest request, SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager, IAntiforgery antiforgery, HttpContext context) =>
 {
+  // CSRF protection for state-changing operation (P0 security fix)
+  try
+  {
+    await antiforgery.ValidateRequestAsync(context);
+  }
+  catch (AntiforgeryValidationException)
+  {
+    return Results.BadRequest(new { error = "Invalid or missing CSRF token" });
+  }
+
   if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
   {
     return Results.BadRequest(new { error = "Username and password are required." });
@@ -600,6 +787,13 @@ authGroup.MapGet("/providers", () =>
   if (googleEnabled) providers.Add(new { name = "google", displayName = "Google" });
   if (microsoftEnabled) providers.Add(new { name = "microsoft", displayName = "Microsoft" });
   return Results.Ok(providers);
+});
+
+// Endpoint to get CSRF token for frontend (P0 security fix)
+authGroup.MapGet("/csrf-token", (IAntiforgery antiforgery, HttpContext context) =>
+{
+  var tokens = antiforgery.GetAndStoreTokens(context);
+  return Results.Ok(new { token = tokens.RequestToken });
 });
 
 authGroup.MapGet("/external/{provider}", (string provider, string? returnUrl, SignInManager<IdentityUser> signInManager) =>
@@ -673,6 +867,12 @@ async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFa
   if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
   {
     throw new InvalidOperationException("Only http/https URLs are allowed");
+  }
+
+  // SSRF protection: block requests to internal/private IPs (P0 security fix)
+  if (IsBlockedUrl(uri))
+  {
+    throw new InvalidOperationException("Access to internal or private network addresses is not allowed");
   }
 
   var client = httpClientFactory.CreateClient("fetcher");
@@ -753,7 +953,7 @@ app.MapPost("/api/playlists", async (PlaylistRequest input, ClaimsPrincipal user
       TotalChannels = input.TotalChannels ?? 0,
       GroupCount = input.GroupCount ?? 0,
       ExpirationUtc = input.ExpirationUtc,
-      ShareCode = string.IsNullOrWhiteSpace(input.ShareCode) ? Guid.NewGuid().ToString("N") : input.ShareCode.Trim(),
+      ShareCode = string.IsNullOrWhiteSpace(input.ShareCode) ? GenerateSecureShareCode() : input.ShareCode.Trim(),
       OwnerId = userId,
     };
 
@@ -795,7 +995,7 @@ app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, Cl
     }
     if (string.IsNullOrWhiteSpace(entity.ShareCode))
     {
-      entity.ShareCode = Guid.NewGuid().ToString("N");
+      entity.ShareCode = GenerateSecureShareCode();
     }
 
     await db.SaveChangesAsync();
@@ -872,9 +1072,9 @@ app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpC
   }
   catch (Exception ex)
   {
-    return Results.Problem(ex.Message, statusCode: (int)HttpStatusCode.BadGateway);
+    return Results.Problem("Failed to analyze playlist", statusCode: (int)HttpStatusCode.BadGateway);
   }
-});
+}).RequireRateLimiting("fetch");
 
 app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHttpClientFactory httpClientFactory, IMemoryCache cache) =>
 {
@@ -927,7 +1127,7 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
   var filtered = PlaylistProcessor.GenerateFiltered(playlistText, disabled);
   var response = new GeneratePlaylistResponse(filtered.Text, filtered.TotalChannels, filtered.KeptChannels);
   return Results.Ok(response);
-});
+}).RequireRateLimiting("fetch");
 
 app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code, AppDbContext db, IHttpClientFactory httpClientFactory) =>
 {
@@ -977,6 +1177,12 @@ app.MapGet("/api/fetch", async (string url, IHttpClientFactory httpClientFactory
     return Results.BadRequest(new { error = "Only http/https URLs are allowed" });
   }
 
+  // SSRF protection: block requests to internal/private IPs (P0 security fix)
+  if (IsBlockedUrl(uri))
+  {
+    return Results.BadRequest(new { error = "Access to internal or private network addresses is not allowed" });
+  }
+
   try
   {
     var client = httpClientFactory.CreateClient("fetcher");
@@ -995,9 +1201,9 @@ app.MapGet("/api/fetch", async (string url, IHttpClientFactory httpClientFactory
   }
   catch (Exception ex)
   {
-    return Results.Problem(ex.Message, statusCode: (int)HttpStatusCode.BadGateway);
+    return Results.Problem("Fetch failed", statusCode: (int)HttpStatusCode.BadGateway);
   }
-});
+}).RequireRateLimiting("fetch");
 
 app.MapPost("/api/fetch", async (FetchRequest request, IHttpClientFactory httpClientFactory) =>
 {
@@ -1010,6 +1216,12 @@ app.MapPost("/api/fetch", async (FetchRequest request, IHttpClientFactory httpCl
   if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
   {
     return Results.BadRequest(new { error = "Only http/https URLs are allowed" });
+  }
+
+  // SSRF protection: block requests to internal/private IPs (P0 security fix)
+  if (IsBlockedUrl(uri))
+  {
+    return Results.BadRequest(new { error = "Access to internal or private network addresses is not allowed" });
   }
 
   try
@@ -1029,9 +1241,9 @@ app.MapPost("/api/fetch", async (FetchRequest request, IHttpClientFactory httpCl
   }
   catch (Exception ex)
   {
-    return Results.Problem(ex.Message, statusCode: (int)HttpStatusCode.BadGateway);
+    return Results.Problem("Fetch failed", statusCode: (int)HttpStatusCode.BadGateway);
   }
-});
+}).RequireRateLimiting("fetch");
 
 // SPA fallback
 app.MapFallbackToFile("/index.html");
