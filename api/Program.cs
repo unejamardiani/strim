@@ -9,9 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Sockets;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
 using Npgsql;
@@ -646,109 +644,7 @@ bool ProviderEnabled(string provider) =>
 
 string? GetUserId(ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.NameIdentifier);
 
-// Generate cryptographically secure share codes (P0 fix: weak share code generation)
-string GenerateSecureShareCode()
-{
-  var bytes = new byte[32];
-  RandomNumberGenerator.Fill(bytes);
-  return Convert.ToBase64String(bytes)
-    .Replace("+", "-")
-    .Replace("/", "_")
-    .TrimEnd('=');
-}
-
-// SSRF protection: validate URLs and block internal/private IP addresses (P0 fix)
-bool IsBlockedUrl(Uri uri)
-{
-  // Block non-HTTP(S) schemes
-  if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
-  {
-    return true;
-  }
-
-  // Resolve hostname to IP addresses and check each one
-  try
-  {
-    var host = uri.DnsSafeHost;
-
-    // Block common internal hostnames
-    var blockedHostnames = new[] { "localhost", "127.0.0.1", "::1", "0.0.0.0", "metadata", "metadata.google.internal" };
-    if (blockedHostnames.Any(h => host.Equals(h, StringComparison.OrdinalIgnoreCase)))
-    {
-      return true;
-    }
-
-    // Resolve DNS and check IP addresses
-    var addresses = Dns.GetHostAddresses(host);
-    foreach (var addr in addresses)
-    {
-      if (IsPrivateOrReservedIP(addr))
-      {
-        return true;
-      }
-    }
-  }
-  catch (SocketException)
-  {
-    // DNS resolution failed - block to be safe
-    return true;
-  }
-
-  return false;
-}
-
-bool IsPrivateOrReservedIP(IPAddress addr)
-{
-  var bytes = addr.GetAddressBytes();
-
-  // IPv4 checks
-  if (addr.AddressFamily == AddressFamily.InterNetwork && bytes.Length == 4)
-  {
-    // Loopback: 127.0.0.0/8
-    if (bytes[0] == 127) return true;
-
-    // Private: 10.0.0.0/8
-    if (bytes[0] == 10) return true;
-
-    // Private: 172.16.0.0/12
-    if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
-
-    // Private: 192.168.0.0/16
-    if (bytes[0] == 192 && bytes[1] == 168) return true;
-
-    // Link-local: 169.254.0.0/16 (AWS metadata, Azure IMDS, etc.)
-    if (bytes[0] == 169 && bytes[1] == 254) return true;
-
-    // Current network: 0.0.0.0/8
-    if (bytes[0] == 0) return true;
-
-    // Broadcast: 255.255.255.255
-    if (bytes.All(b => b == 255)) return true;
-
-    // Documentation/TEST-NET ranges
-    if (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 2) return true; // 192.0.2.0/24
-    if (bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100) return true; // 198.51.100.0/24
-    if (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113) return true; // 203.0.113.0/24
-  }
-
-  // IPv6 checks
-  if (addr.AddressFamily == AddressFamily.InterNetworkV6)
-  {
-    // Loopback ::1
-    if (IPAddress.IsLoopback(addr)) return true;
-
-    // Link-local fe80::/10
-    if (bytes.Length >= 2 && bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80) return true;
-
-    // Unique local fc00::/7
-    if (bytes.Length >= 1 && (bytes[0] & 0xfe) == 0xfc) return true;
-
-    // Unspecified ::
-    if (addr.Equals(IPAddress.IPv6None) || addr.Equals(IPAddress.IPv6Any)) return true;
-  }
-
-  return false;
-}
+// Security helpers extracted to Api.Services.SecurityHelpers
 
 var authGroup = app.MapGroup("/api/auth").RequireRateLimiting("auth");
 authGroup.MapGet("/me", async (UserManager<IdentityUser> userManager, ClaimsPrincipal principal) =>
@@ -940,7 +836,7 @@ async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFa
   }
 
   // SSRF protection: block requests to internal/private IPs (P0 security fix)
-  if (IsBlockedUrl(uri))
+  if (SecurityHelpers.IsBlockedUrl(uri))
   {
     throw new InvalidOperationException("Access to internal or private network addresses is not allowed");
   }
@@ -1039,7 +935,7 @@ app.MapPost("/api/playlists", async (PlaylistRequest input, ClaimsPrincipal user
       TotalChannels = input.TotalChannels ?? 0,
       GroupCount = input.GroupCount ?? 0,
       ExpirationUtc = input.ExpirationUtc,
-      ShareCode = string.IsNullOrWhiteSpace(input.ShareCode) ? GenerateSecureShareCode() : input.ShareCode.Trim(),
+      ShareCode = string.IsNullOrWhiteSpace(input.ShareCode) ? SecurityHelpers.GenerateSecureShareCode() : input.ShareCode.Trim(),
       OwnerId = userId,
     };
 
@@ -1096,7 +992,7 @@ app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, Cl
     }
     if (string.IsNullOrWhiteSpace(entity.ShareCode))
     {
-      entity.ShareCode = GenerateSecureShareCode();
+      entity.ShareCode = SecurityHelpers.GenerateSecureShareCode();
     }
 
     await db.SaveChangesAsync();
@@ -1318,7 +1214,7 @@ app.MapGet("/api/fetch", async (string url, IHttpClientFactory httpClientFactory
   }
 
   // SSRF protection: block requests to internal/private IPs (P0 security fix)
-  if (IsBlockedUrl(uri))
+  if (SecurityHelpers.IsBlockedUrl(uri))
   {
     return Results.BadRequest(new { error = "Access to internal or private network addresses is not allowed" });
   }
@@ -1359,7 +1255,7 @@ app.MapPost("/api/fetch", async (FetchRequest request, IHttpClientFactory httpCl
   }
 
   // SSRF protection: block requests to internal/private IPs (P0 security fix)
-  if (IsBlockedUrl(uri))
+  if (SecurityHelpers.IsBlockedUrl(uri))
   {
     return Results.BadRequest(new { error = "Access to internal or private network addresses is not allowed" });
   }
