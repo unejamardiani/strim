@@ -117,7 +117,12 @@ builder.Services.AddCors(options =>
     }
   });
 });
-builder.Services.AddMemoryCache();
+builder.Services.AddMemoryCache(options =>
+{
+  // Limit cache to 500MB to prevent memory exhaustion
+  // Each cached playlist can be up to 50MB, so this allows ~10 concurrent cached playlists
+  options.SizeLimit = 500 * 1024 * 1024;
+});
 
 // Rate limiting configuration to prevent abuse
 builder.Services.AddRateLimiter(options =>
@@ -1126,7 +1131,10 @@ app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpC
 
     var (groupsMap, total) = PlaylistProcessor.CountGroups(playlistText);
     var cacheKey = $"pl-{Guid.NewGuid():N}";
-    cache.Set(cacheKey, playlistText, TimeSpan.FromMinutes(15));
+    var cacheOptions = new MemoryCacheEntryOptions()
+      .SetAbsoluteExpiration(TimeSpan.FromMinutes(15))
+      .SetSize(playlistText.Length * 2); // Approximate memory size (UTF-16)
+    cache.Set(cacheKey, playlistText, cacheOptions);
 
     DateTimeOffset? expiration = null;
     if (!string.IsNullOrWhiteSpace(input.SourceUrl) && Uri.TryCreate(input.SourceUrl, UriKind.Absolute, out var parsedUri))
@@ -1202,7 +1210,10 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
       playlistText = await FetchPlaylistText(input.SourceUrl!, httpClientFactory);
       if (!string.IsNullOrWhiteSpace(input.CacheKey))
       {
-        cache.Set(input.CacheKey!, playlistText, TimeSpan.FromMinutes(15));
+        var cacheOptions = new MemoryCacheEntryOptions()
+          .SetAbsoluteExpiration(TimeSpan.FromMinutes(15))
+          .SetSize(playlistText.Length * 2); // Approximate memory size (UTF-16)
+        cache.Set(input.CacheKey!, playlistText, cacheOptions);
       }
     }
   }

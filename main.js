@@ -1147,7 +1147,13 @@ function renderStats() {
   cards.forEach((card) => {
     const div = document.createElement('div');
     div.className = 'stat-card';
-    div.innerHTML = `<div class="eyebrow">${card.label}</div><div class="stat-value">${card.value}</div>`;
+    const eyebrow = document.createElement('div');
+    eyebrow.className = 'eyebrow';
+    eyebrow.textContent = card.label;
+    const statValue = document.createElement('div');
+    statValue.className = 'stat-value';
+    statValue.textContent = card.value;
+    div.append(eyebrow, statValue);
     stats.append(div);
   });
 }
