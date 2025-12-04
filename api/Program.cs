@@ -271,6 +271,22 @@ if (microsoftEnabled)
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+// Correlation ID middleware for request tracing
+app.Use(async (context, next) =>
+{
+  const string correlationIdHeader = "X-Correlation-ID";
+  var correlationId = context.Request.Headers[correlationIdHeader].FirstOrDefault()
+    ?? Guid.NewGuid().ToString("N");
+
+  context.Response.Headers[correlationIdHeader] = correlationId;
+
+  using (app.Logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
+  {
+    await next();
+  }
+});
+
 app.UseCors("default");
 
 app.UseDefaultFiles();
