@@ -21,6 +21,12 @@ using System.Data.Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// P1 fix: Input validation constants
+const int MaxUrlLength = 2048;
+const int MaxPlaylistNameLength = 200;
+const int MaxPlaylistTextSize = 50 * 1024 * 1024; // 50 MB max for playlist text
+const int MaxDisabledGroupsCount = 1000;
+
 var configuredProvider = (builder.Configuration["DB_PROVIDER"] ?? builder.Configuration["DATABASE_PROVIDER"])?.ToLowerInvariant();
 var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres") ??
   builder.Configuration["POSTGRES_CONNECTION"];
@@ -84,6 +90,8 @@ if (!string.IsNullOrWhiteSpace(envOrigins))
   allowedOrigins = allowedOrigins.Concat(parsed).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 }
 
+// P1 fix: CORS configuration - require explicit origins in production
+var isDevelopment = builder.Environment.IsDevelopment();
 builder.Services.AddCors(options =>
 {
   options.AddPolicy("default", policy =>
@@ -93,10 +101,19 @@ builder.Services.AddCors(options =>
     {
       policy.WithOrigins(allowedOrigins).AllowCredentials();
     }
+    else if (isDevelopment)
+    {
+      // Only allow permissive CORS in development mode
+      policy.AllowAnyOrigin();
+      Console.WriteLine("WARNING: CORS is configured to allow any origin. This is only acceptable in development.");
+    }
     else
     {
-      // Fallback: no credentials when origin list is empty.
-      policy.AllowAnyOrigin();
+      // Production: require explicit CORS origins configuration
+      // Default to same-origin only (no cross-origin requests allowed)
+      policy.SetIsOriginAllowed(_ => false);
+      Console.WriteLine("WARNING: No CORS origins configured. Cross-origin requests will be blocked. " +
+        "Set ALLOWED_ORIGINS environment variable or Cors:AllowedOrigins in configuration.");
     }
   });
 });
@@ -262,43 +279,44 @@ app.UseAntiforgery();
 using (var scope = app.Services.CreateScope())
 {
   var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-  EnsureSchema(db);
+  var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSchema");
+  EnsureSchema(db, logger);
 }
 
-void EnsureSchema(AppDbContext db)
+void EnsureSchema(AppDbContext db, ILogger logger)
 {
   db.Database.EnsureCreated();
-  EnsureIdentitySchema(db);
+  EnsureIdentitySchema(db, logger);
 
   if (db.Database.IsNpgsql())
   {
-    TryPatchPostgresSchema(db);
-    TryBackfillPostgresShareCodes(db);
+    TryPatchPostgresSchema(db, logger);
+    TryBackfillPostgresShareCodes(db, logger);
   }
   else if (db.Database.IsSqlite())
   {
-    TryAddSqliteColumn(db, "totalchannels", "INTEGER NOT NULL DEFAULT 0");
-    TryAddSqliteColumn(db, "groupcount", "INTEGER NOT NULL DEFAULT 0");
-    TryAddSqliteColumn(db, "expirationutc", "TEXT NULL");
-    TryAddSqliteColumn(db, "sharecode", "TEXT NULL");
-    TryAddSqliteColumn(db, "ownerid", "TEXT NULL");
-    TryBackfillSqliteShareCodes(db);
+    TryAddSqliteColumn(db, "totalchannels", "INTEGER NOT NULL DEFAULT 0", logger);
+    TryAddSqliteColumn(db, "groupcount", "INTEGER NOT NULL DEFAULT 0", logger);
+    TryAddSqliteColumn(db, "expirationutc", "TEXT NULL", logger);
+    TryAddSqliteColumn(db, "sharecode", "TEXT NULL", logger);
+    TryAddSqliteColumn(db, "ownerid", "TEXT NULL", logger);
+    TryBackfillSqliteShareCodes(db, logger);
   }
 }
 
-void EnsureIdentitySchema(AppDbContext db)
+void EnsureIdentitySchema(AppDbContext db, ILogger logger)
 {
   if (db.Database.IsNpgsql())
   {
-    TryEnsurePostgresIdentity(db);
+    TryEnsurePostgresIdentity(db, logger);
   }
   else if (db.Database.IsSqlite())
   {
-    TryEnsureSqliteIdentity(db);
+    TryEnsureSqliteIdentity(db, logger);
   }
 }
 
-void TryEnsureSqliteIdentity(AppDbContext db)
+void TryEnsureSqliteIdentity(AppDbContext db, ILogger logger)
 {
   try
   {
@@ -370,14 +388,16 @@ void TryEnsureSqliteIdentity(AppDbContext db)
       CREATE INDEX IF NOT EXISTS IX_AspNetUsers_NormalizedEmail ON AspNetUsers (NormalizedEmail);
       CREATE UNIQUE INDEX IF NOT EXISTS IX_AspNetUsers_NormalizedUserName ON AspNetUsers (NormalizedUserName);
     ");
+    logger.LogDebug("SQLite Identity schema ensured");
   }
-  catch
+  catch (Exception ex)
   {
-    // Non-fatal; best-effort.
+    // P1 fix: Log the error instead of silently swallowing
+    logger.LogWarning(ex, "Failed to ensure SQLite Identity schema: {Message}", ex.Message);
   }
 }
 
-void TryEnsurePostgresIdentity(AppDbContext db)
+void TryEnsurePostgresIdentity(AppDbContext db, ILogger logger)
 {
   try
   {
@@ -449,14 +469,16 @@ void TryEnsurePostgresIdentity(AppDbContext db)
       CREATE INDEX IF NOT EXISTS ""IX_AspNetUsers_NormalizedEmail"" ON ""AspNetUsers"" (""NormalizedEmail"");
       CREATE UNIQUE INDEX IF NOT EXISTS ""IX_AspNetUsers_NormalizedUserName"" ON ""AspNetUsers"" (""NormalizedUserName"");
     ");
+    logger.LogDebug("PostgreSQL Identity schema ensured");
   }
-  catch
+  catch (Exception ex)
   {
-    // Non-fatal; best-effort.
+    // P1 fix: Log the error instead of silently swallowing
+    logger.LogWarning(ex, "Failed to ensure PostgreSQL Identity schema: {Message}", ex.Message);
   }
 }
 
-void TryPatchPostgresSchema(AppDbContext db)
+void TryPatchPostgresSchema(AppDbContext db, ILogger logger)
 {
   try
   {
@@ -480,14 +502,16 @@ void TryPatchPostgresSchema(AppDbContext db)
         END IF;
       END $$;
     ");
+    logger.LogDebug("PostgreSQL schema patched successfully");
   }
-  catch
+  catch (Exception ex)
   {
-    // Non-fatal; the app can continue even if this migration helper fails.
+    // P1 fix: Log the error instead of silently swallowing
+    logger.LogWarning(ex, "Failed to patch PostgreSQL schema: {Message}", ex.Message);
   }
 }
 
-void TryBackfillPostgresShareCodes(AppDbContext db)
+void TryBackfillPostgresShareCodes(AppDbContext db, ILogger logger)
 {
   try
   {
@@ -496,15 +520,33 @@ void TryBackfillPostgresShareCodes(AppDbContext db)
       SET sharecode = md5(random()::text || clock_timestamp()::text)
       WHERE sharecode IS NULL OR sharecode = '';
     ");
+    logger.LogDebug("PostgreSQL share codes backfilled");
   }
-  catch
+  catch (Exception ex)
   {
-    // Non-fatal; best-effort.
+    // P1 fix: Log the error instead of silently swallowing
+    logger.LogWarning(ex, "Failed to backfill PostgreSQL share codes: {Message}", ex.Message);
   }
 }
 
-void TryAddSqliteColumn(AppDbContext db, string columnName, string definition)
+void TryAddSqliteColumn(AppDbContext db, string columnName, string definition, ILogger logger)
 {
+  // P1 fix: Validate column name against allowed list to prevent SQL injection
+  var allowedColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+  {
+    ["totalchannels"] = "INTEGER NOT NULL DEFAULT 0",
+    ["groupcount"] = "INTEGER NOT NULL DEFAULT 0",
+    ["expirationutc"] = "TEXT NULL",
+    ["sharecode"] = "TEXT NULL",
+    ["ownerid"] = "TEXT NULL"
+  };
+
+  if (!allowedColumns.TryGetValue(columnName, out var expectedDefinition))
+  {
+    logger.LogWarning("Attempted to add unauthorized column: {ColumnName}", columnName);
+    return;
+  }
+
   try
   {
     var connection = db.Database.GetDbConnection();
@@ -527,14 +569,17 @@ void TryAddSqliteColumn(AppDbContext db, string columnName, string definition)
 
     if (!columnExists)
     {
+      // Use the validated column name and expected definition from the whitelist
       using var alter = connection.CreateCommand();
-      alter.CommandText = $"ALTER TABLE playlists ADD COLUMN {columnName} {definition};";
+      alter.CommandText = $"ALTER TABLE playlists ADD COLUMN {columnName} {expectedDefinition};";
       alter.ExecuteNonQuery();
+      logger.LogInformation("Added SQLite column: {ColumnName}", columnName);
     }
   }
-  catch
+  catch (Exception ex)
   {
-    // Non-fatal; best-effort; SQLite schemas are patched opportunistically.
+    // P1 fix: Log the error instead of silently swallowing
+    logger.LogWarning(ex, "Failed to add SQLite column {ColumnName}: {Message}", columnName, ex.Message);
   }
   finally
   {
@@ -542,7 +587,7 @@ void TryAddSqliteColumn(AppDbContext db, string columnName, string definition)
   }
 }
 
-void TryBackfillSqliteShareCodes(AppDbContext db)
+void TryBackfillSqliteShareCodes(AppDbContext db, ILogger logger)
 {
   try
   {
@@ -551,10 +596,12 @@ void TryBackfillSqliteShareCodes(AppDbContext db)
       SET sharecode = lower(hex(randomblob(16)))
       WHERE sharecode IS NULL OR sharecode = '';
     ");
+    logger.LogDebug("SQLite share codes backfilled");
   }
-  catch
+  catch (Exception ex)
   {
-    // Non-fatal; best-effort.
+    // P1 fix: Log the error instead of silently swallowing
+    logger.LogWarning(ex, "Failed to backfill SQLite share codes: {Message}", ex.Message);
   }
 }
 
@@ -734,7 +781,9 @@ authGroup.MapPost("/register", async (RegisterRequest request, UserManager<Ident
   }
   catch (Exception ex)
   {
-    return Results.Problem($"Registration failed: {ex.Message}", statusCode: 500);
+    // P1 fix: Don't expose exception details to clients - log internally instead
+    app.Logger.LogError(ex, "Registration failed for user attempt");
+    return Results.Problem("Registration failed due to an internal error", statusCode: 500);
   }
 });
 
@@ -909,8 +958,9 @@ app.MapGet("/api/playlists", async (ClaimsPrincipal user, AppDbContext db) =>
   }
   catch (Exception ex)
   {
-    // Surface DB schema errors so the client can see what's wrong.
-    return Results.Problem($"Failed to load playlists: {ex.Message}", statusCode: 500);
+    // P1 fix: Don't expose exception details - log internally
+    app.Logger.LogError(ex, "Failed to load playlists for user");
+    return Results.Problem("Failed to load playlists due to an internal error", statusCode: 500);
   }
 }).RequireAuthorization();
 
@@ -928,7 +978,9 @@ app.MapGet("/api/playlists/{id:guid}", async (Guid id, ClaimsPrincipal user, App
   }
   catch (Exception ex)
   {
-    return Results.Problem($"Failed to load playlist: {ex.Message}", statusCode: 500);
+    // P1 fix: Don't expose exception details - log internally
+    app.Logger.LogError(ex, "Failed to load playlist {PlaylistId}", id);
+    return Results.Problem("Failed to load playlist due to an internal error", statusCode: 500);
   }
 }).RequireAuthorization();
 
@@ -937,9 +989,22 @@ app.MapPost("/api/playlists", async (PlaylistRequest input, ClaimsPrincipal user
   var userId = GetUserId(user);
   if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
 
+  // P1 fix: Input validation
   if (string.IsNullOrWhiteSpace(input.Name))
   {
     return Results.BadRequest(new { error = "Name is required." });
+  }
+  if (input.Name.Length > MaxPlaylistNameLength)
+  {
+    return Results.BadRequest(new { error = $"Name must be {MaxPlaylistNameLength} characters or less." });
+  }
+  if (!string.IsNullOrEmpty(input.SourceUrl) && input.SourceUrl.Length > MaxUrlLength)
+  {
+    return Results.BadRequest(new { error = $"Source URL must be {MaxUrlLength} characters or less." });
+  }
+  if (input.DisabledGroups?.Count > MaxDisabledGroupsCount)
+  {
+    return Results.BadRequest(new { error = $"Disabled groups list cannot exceed {MaxDisabledGroupsCount} items." });
   }
 
   try
@@ -963,7 +1028,9 @@ app.MapPost("/api/playlists", async (PlaylistRequest input, ClaimsPrincipal user
   }
   catch (Exception ex)
   {
-    return Results.Problem($"Failed to save playlist: {ex.Message}", statusCode: 500);
+    // P1 fix: Don't expose exception details - log internally
+    app.Logger.LogError(ex, "Failed to save playlist");
+    return Results.Problem("Failed to save playlist due to an internal error", statusCode: 500);
   }
 }).RequireAuthorization();
 
@@ -975,9 +1042,22 @@ app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, Cl
   var entity = await db.Playlists.FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId);
   if (entity is null) return Results.NotFound();
 
+  // P1 fix: Input validation
   if (string.IsNullOrWhiteSpace(input.Name))
   {
     return Results.BadRequest(new { error = "Name is required." });
+  }
+  if (input.Name.Length > MaxPlaylistNameLength)
+  {
+    return Results.BadRequest(new { error = $"Name must be {MaxPlaylistNameLength} characters or less." });
+  }
+  if (!string.IsNullOrEmpty(input.SourceUrl) && input.SourceUrl.Length > MaxUrlLength)
+  {
+    return Results.BadRequest(new { error = $"Source URL must be {MaxUrlLength} characters or less." });
+  }
+  if (input.DisabledGroups?.Count > MaxDisabledGroupsCount)
+  {
+    return Results.BadRequest(new { error = $"Disabled groups list cannot exceed {MaxDisabledGroupsCount} items." });
   }
 
   try
@@ -1003,7 +1083,9 @@ app.MapPut("/api/playlists/{id:guid}", async (Guid id, PlaylistRequest input, Cl
   }
   catch (Exception ex)
   {
-    return Results.Problem($"Failed to update playlist: {ex.Message}", statusCode: 500);
+    // P1 fix: Don't expose exception details - log internally
+    app.Logger.LogError(ex, "Failed to update playlist {PlaylistId}", id);
+    return Results.Problem("Failed to update playlist due to an internal error", statusCode: 500);
   }
 }).RequireAuthorization();
 
@@ -1024,6 +1106,16 @@ app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpC
   if (string.IsNullOrWhiteSpace(input.SourceUrl) && string.IsNullOrWhiteSpace(input.RawText))
   {
     return Results.BadRequest(new { error = "Provide a sourceUrl or rawText." });
+  }
+
+  // P1 fix: Input validation
+  if (!string.IsNullOrEmpty(input.SourceUrl) && input.SourceUrl.Length > MaxUrlLength)
+  {
+    return Results.BadRequest(new { error = $"Source URL must be {MaxUrlLength} characters or less." });
+  }
+  if (!string.IsNullOrEmpty(input.RawText) && input.RawText.Length > MaxPlaylistTextSize)
+  {
+    return Results.BadRequest(new { error = $"Playlist text exceeds maximum size of {MaxPlaylistTextSize / (1024 * 1024)} MB." });
   }
 
   try
@@ -1063,15 +1155,19 @@ app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpC
   }
   catch (InvalidOperationException ex)
   {
+    // InvalidOperationException contains controlled messages (SSRF, URL validation) - safe to expose
     return Results.BadRequest(new { error = ex.Message });
   }
   catch (HttpRequestException ex)
   {
+    // P1 fix: Don't expose raw HTTP error details
+    app.Logger.LogWarning(ex, "HTTP request failed during playlist analyze");
     var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    return Results.Problem(ex.Message, statusCode: status);
+    return Results.Problem("Failed to fetch the playlist from the source", statusCode: status);
   }
   catch (Exception ex)
   {
+    app.Logger.LogError(ex, "Unexpected error during playlist analyze");
     return Results.Problem("Failed to analyze playlist", statusCode: (int)HttpStatusCode.BadGateway);
   }
 }).RequireRateLimiting("fetch");
@@ -1081,6 +1177,16 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
   if (string.IsNullOrWhiteSpace(input.CacheKey) && string.IsNullOrWhiteSpace(input.SourceUrl))
   {
     return Results.BadRequest(new { error = "Provide a cacheKey or sourceUrl." });
+  }
+
+  // P1 fix: Input validation
+  if (!string.IsNullOrEmpty(input.SourceUrl) && input.SourceUrl.Length > MaxUrlLength)
+  {
+    return Results.BadRequest(new { error = $"Source URL must be {MaxUrlLength} characters or less." });
+  }
+  if (input.DisabledGroups?.Count > MaxDisabledGroupsCount)
+  {
+    return Results.BadRequest(new { error = $"Disabled groups list cannot exceed {MaxDisabledGroupsCount} items." });
   }
 
   string? playlistText = null;
@@ -1106,16 +1212,20 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
   }
   catch (InvalidOperationException ex)
   {
+    // InvalidOperationException contains controlled messages (SSRF, URL validation) - safe to expose
     return Results.BadRequest(new { error = ex.Message });
   }
   catch (HttpRequestException ex)
   {
+    // P1 fix: Don't expose raw HTTP error details
+    app.Logger.LogWarning(ex, "HTTP request failed during playlist generate");
     var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    return Results.Problem(ex.Message, statusCode: status);
+    return Results.Problem("Failed to fetch the playlist from the source", statusCode: status);
   }
   catch (Exception ex)
   {
-    return Results.Problem(ex.Message, statusCode: (int)HttpStatusCode.BadGateway);
+    app.Logger.LogError(ex, "Unexpected error during playlist generate");
+    return Results.Problem("Failed to generate playlist", statusCode: (int)HttpStatusCode.BadGateway);
   }
 
   if (playlistText is null)
@@ -1156,12 +1266,15 @@ app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code,
   }
   catch (HttpRequestException ex)
   {
+    // P1 fix: Don't expose raw HTTP error details
+    app.Logger.LogWarning(ex, "HTTP request failed during share download for playlist {PlaylistId}", id);
     var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    return Results.Problem(ex.Message, statusCode: status);
+    return Results.Problem("Failed to fetch the playlist from the source", statusCode: status);
   }
   catch (Exception ex)
   {
-    return Results.Problem(ex.Message, statusCode: (int)HttpStatusCode.BadGateway);
+    app.Logger.LogError(ex, "Unexpected error during share download for playlist {PlaylistId}", id);
+    return Results.Problem("Failed to process shared playlist", statusCode: (int)HttpStatusCode.BadGateway);
   }
 });
 
