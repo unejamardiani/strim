@@ -1,12 +1,16 @@
 version: '3.9'
 
+# WARNING: This compose file is for LOCAL DEVELOPMENT ONLY.
+# For production deployments, use proper secrets management (Azure Key Vault, Docker Secrets, etc.)
+
 services:
   app:
     build: .
     ports:
       - "8080:8080"
     environment:
-      POSTGRES_CONNECTION: Host=db;Port=5432;Database=strimdb;Username=strim;Password=strim
+      # Use environment variables or .env file for credentials - NEVER commit real secrets
+      POSTGRES_CONNECTION: Host=db;Port=5432;Database=${POSTGRES_DB:-strimdb};Username=${POSTGRES_USER:-strim};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     depends_on:
       - db
 
@@ -14,9 +18,10 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: strimdb
-      POSTGRES_USER: strim
-      POSTGRES_PASSWORD: strim
+      # Set these via .env file or environment variables
+      POSTGRES_DB: ${POSTGRES_DB:-strimdb}
+      POSTGRES_USER: ${POSTGRES_USER:-strim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - pgdata:/var/lib/postgresql/data
 
