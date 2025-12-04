@@ -43,6 +43,7 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
       entity.Property(p => p.ShareCode).HasMaxLength(64);
       entity.Property(p => p.OwnerId).HasMaxLength(450).HasColumnName("ownerid");
       entity.HasIndex(p => new { p.OwnerId, p.UpdatedAt });
+      entity.HasIndex(p => p.ShareCode).HasFilter("\"ShareCode\" IS NOT NULL");
     });
   }
 
