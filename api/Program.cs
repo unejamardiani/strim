@@ -16,6 +16,8 @@ using Npgsql;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.Data.Sqlite;
 using System.Data.Common;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -268,7 +270,49 @@ if (microsoftEnabled)
 
 builder.Services.AddAuthorization();
 
+// P4: Health checks for monitoring and container orchestration
+builder.Services.AddHealthChecks()
+  .AddDbContextCheck<AppDbContext>("database");
+
+// P4: OpenAPI documentation
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+  options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+  {
+    Title = "Strim API",
+    Version = "v1",
+    Description = "IPTV playlist management and filtering API"
+  });
+});
+
+// P4: Response compression for better performance
+builder.Services.AddResponseCompression(options =>
+{
+  options.EnableForHttps = true;
+  options.MimeTypes = new[] {
+    "application/json",
+    "text/plain",
+    "application/x-mpegurl",
+    "audio/x-mpegurl"
+  };
+});
+
 var app = builder.Build();
+
+// Response compression should be early in the pipeline
+app.UseResponseCompression();
+
+// P4: OpenAPI documentation (available in all environments at /swagger)
+app.UseSwagger();
+if (app.Environment.IsDevelopment())
+{
+  app.UseSwaggerUI(options =>
+  {
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "Strim API v1");
+    options.RoutePrefix = "swagger";
+  });
+}
 
 // Correlation ID middleware for request tracing
 app.Use(async (context, next) =>
@@ -645,6 +689,36 @@ bool ProviderEnabled(string provider) =>
 string? GetUserId(ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.NameIdentifier);
 
 // Security helpers extracted to Api.Services.SecurityHelpers
+
+// P4: Health check endpoints for monitoring and k8s probes
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+  ResponseWriter = async (context, report) =>
+  {
+    context.Response.ContentType = "application/json";
+    var result = new
+    {
+      status = report.Status.ToString(),
+      checks = report.Entries.Select(e => new
+      {
+        name = e.Key,
+        status = e.Value.Status.ToString(),
+        description = e.Value.Description
+      }),
+      duration = report.TotalDuration.TotalMilliseconds
+    };
+    await context.Response.WriteAsJsonAsync(result);
+  }
+});
+
+// Simple liveness probe (always returns healthy if app is running)
+app.MapGet("/health/live", () => Results.Ok(new { status = "Healthy" }));
+
+// Readiness probe (checks database connectivity)
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+  Predicate = check => check.Tags.Contains("ready") || check.Name == "database"
+});
 
 var authGroup = app.MapGroup("/api/auth").RequireRateLimiting("auth");
 authGroup.MapGet("/me", async (UserManager<IdentityUser> userManager, ClaimsPrincipal principal) =>
