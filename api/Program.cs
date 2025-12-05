@@ -18,8 +18,20 @@ using Microsoft.Data.Sqlite;
 using System.Data.Common;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure forwarded headers for proxy/load balancer scenarios
+// This allows the app to correctly identify HTTPS requests when behind a reverse proxy
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+  options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+  // Clear the known networks/proxies to accept headers from any proxy
+  // In production, you should configure specific proxy IPs for security
+  options.KnownNetworks.Clear();
+  options.KnownProxies.Clear();
+});
 
 // P1 fix: Input validation constants
 const int MaxUrlLength = 2048;
@@ -174,8 +186,9 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddAntiforgery(options =>
 {
   options.HeaderName = "X-CSRF-TOKEN";
-  options.Cookie.Name = "__Host-strim.csrf";
-  options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+  options.Cookie.Name = isDevelopment ? "strim.csrf" : "__Host-strim.csrf";
+  // Always require HTTPS in production; allow HTTP in development for local testing
+  options.Cookie.SecurePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
   options.Cookie.SameSite = SameSiteMode.None;
   options.Cookie.HttpOnly = true;
 });
@@ -218,9 +231,9 @@ builder.Services.AddAuthentication(options =>
     options.ApplicationCookie?.Configure(o =>
     {
       o.SlidingExpiration = true;
-      o.Cookie.Name = "__Host-strim.auth";
+      o.Cookie.Name = isDevelopment ? "strim.auth" : "__Host-strim.auth";
       o.Cookie.SameSite = SameSiteMode.None;
-      o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+      o.Cookie.SecurePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
       o.Cookie.HttpOnly = true;
       o.Events.OnRedirectToLogin = ctx =>
       {
@@ -236,9 +249,9 @@ builder.Services.AddAuthentication(options =>
     options.ExternalCookie?.Configure(o =>
     {
       o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
-      o.Cookie.Name = "__Host-strim.external";
+      o.Cookie.Name = isDevelopment ? "strim.external" : "__Host-strim.external";
       o.Cookie.SameSite = SameSiteMode.None;
-      o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+      o.Cookie.SecurePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
       o.Cookie.HttpOnly = true;
     });
   });
@@ -307,6 +320,10 @@ builder.Services.AddResponseCompression(options =>
 });
 
 var app = builder.Build();
+
+// Use forwarded headers middleware (must be before other middleware)
+// This reads X-Forwarded-Proto and X-Forwarded-For headers from the proxy
+app.UseForwardedHeaders();
 
 // Response compression should be early in the pipeline
 app.UseResponseCompression();
