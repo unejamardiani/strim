@@ -186,6 +186,10 @@ builder.Services.AddHttpClient("fetcher", client =>
   client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
   client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-mpegurl"));
   client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*", 0.8));
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+  // Disable auto-redirects to validate each redirect target for SSRF protection
+  AllowAutoRedirect = false
 });
 builder.Services.AddIdentityCore<IdentityUser>(options =>
 {
@@ -902,6 +906,8 @@ authGroup.MapGet("/external-callback", async (string provider, string? returnUrl
 
 async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFactory)
 {
+  const int maxRedirects = 5;
+
   if (string.IsNullOrWhiteSpace(url))
   {
     throw new ArgumentException("url is required", nameof(url));
@@ -919,14 +925,50 @@ async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFa
   }
 
   var client = httpClientFactory.CreateClient("fetcher");
-  using var res = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
-  if (!res.IsSuccessStatusCode)
+
+  // Manually handle redirects to validate each target for SSRF protection
+  var currentUri = uri;
+  for (int redirectCount = 0; redirectCount <= maxRedirects; redirectCount++)
   {
-    throw new HttpRequestException($"Upstream returned {(int)res.StatusCode}", null, res.StatusCode);
+    using var res = await client.GetAsync(currentUri, HttpCompletionOption.ResponseHeadersRead);
+
+    // Handle redirects manually with SSRF validation
+    if ((int)res.StatusCode >= 300 && (int)res.StatusCode < 400 && res.Headers.Location != null)
+    {
+      if (redirectCount >= maxRedirects)
+      {
+        throw new InvalidOperationException("Too many redirects");
+      }
+
+      var redirectUri = res.Headers.Location.IsAbsoluteUri
+        ? res.Headers.Location
+        : new Uri(currentUri, res.Headers.Location);
+
+      // Validate redirect target for SSRF
+      if (redirectUri.Scheme != Uri.UriSchemeHttp && redirectUri.Scheme != Uri.UriSchemeHttps)
+      {
+        throw new InvalidOperationException("Redirect to non-HTTP(S) URL is not allowed");
+      }
+
+      if (SecurityHelpers.IsBlockedUrl(redirectUri))
+      {
+        throw new InvalidOperationException("Redirect to internal or private network addresses is not allowed");
+      }
+
+      currentUri = redirectUri;
+      continue;
+    }
+
+    if (!res.IsSuccessStatusCode)
+    {
+      throw new HttpRequestException($"Upstream returned {(int)res.StatusCode}", null, res.StatusCode);
+    }
+
+    var bytes = await res.Content.ReadAsByteArrayAsync();
+    return Encoding.UTF8.GetString(bytes);
   }
 
-  var bytes = await res.Content.ReadAsByteArrayAsync();
-  return Encoding.UTF8.GetString(bytes);
+  throw new InvalidOperationException("Too many redirects");
 }
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
