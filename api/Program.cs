@@ -372,6 +372,21 @@ var app = builder.Build();
 // This reads X-Forwarded-Proto and X-Forwarded-For headers from the proxy
 app.UseForwardedHeaders();
 
+// Diagnostic logging: Log proxy IP on startup (remove after confirming it works)
+app.Use(async (context, next) =>
+{
+  if (context.Request.Path.StartsWithSegments("/health/live"))
+  {
+    var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    var forwardedFor = context.Request.Headers["X-Forwarded-For"].ToString();
+    var forwardedProto = context.Request.Headers["X-Forwarded-Proto"].ToString();
+    app.Logger.LogInformation(
+      "Connection from {RemoteIP} | X-Forwarded-For: {ForwardedFor} | X-Forwarded-Proto: {ForwardedProto}",
+      remoteIp, forwardedFor, forwardedProto);
+  }
+  await next();
+});
+
 // Response compression should be early in the pipeline
 app.UseResponseCompression();
 
