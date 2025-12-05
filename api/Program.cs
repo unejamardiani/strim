@@ -130,15 +130,16 @@ builder.Services.AddRateLimiter(options =>
   options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
   // Strict rate limit for authentication endpoints (prevents brute force)
+  // Allow 20 requests per minute with a small queue to handle legitimate retries
   options.AddPolicy("auth", context =>
     RateLimitPartition.GetFixedWindowLimiter(
       partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
       factory: _ => new FixedWindowRateLimiterOptions
       {
-        PermitLimit = 10,
+        PermitLimit = 20,
         Window = TimeSpan.FromMinutes(1),
         QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-        QueueLimit = 0
+        QueueLimit = 2
       }));
 
   // Moderate rate limit for fetch/analyze endpoints (prevents abuse)
@@ -837,7 +838,8 @@ authGroup.MapGet("/providers", () =>
 });
 
 // Endpoint to get CSRF token for frontend (P0 security fix)
-authGroup.MapGet("/csrf-token", (IAntiforgery antiforgery, HttpContext context) =>
+// Not rate-limited since it's needed before each auth operation
+app.MapGet("/api/auth/csrf-token", (IAntiforgery antiforgery, HttpContext context) =>
 {
   var tokens = antiforgery.GetAndStoreTokens(context);
   return Results.Ok(new { token = tokens.RequestToken });

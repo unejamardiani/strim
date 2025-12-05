@@ -619,18 +619,57 @@ function formatExpiration(expiration) {
   });
 }
 
+let cachedCsrfToken = null;
+
+async function getCsrfToken() {
+  if (cachedCsrfToken) return cachedCsrfToken;
+  if (!API_BASE) return null;
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/csrf-token`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (res.ok) {
+      const data = await res.json();
+      cachedCsrfToken = data.token;
+      return cachedCsrfToken;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch CSRF token', err);
+  }
+  return null;
+}
+
 async function apiRequest(path, { method = 'GET', body } = {}) {
   if (!API_BASE) {
     throw new Error('Backend API not configured.');
   }
+
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+
+  // Include CSRF token for state-changing requests
+  if (method !== 'GET' && method !== 'HEAD') {
+    const token = await getCsrfToken();
+    if (token) {
+      headers['X-CSRF-TOKEN'] = token;
+    }
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     credentials: 'include',
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  // Clear cached CSRF token on 400/403 as it might be invalid/expired
+  if ((res.status === 400 || res.status === 403) && method !== 'GET' && method !== 'HEAD') {
+    cachedCsrfToken = null;
+  }
+
   if (res.status === 401) {
     const err = new Error('Unauthorized');
     err.code = 'unauthorized';
