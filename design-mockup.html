@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Strim UI Redesign Mockup - Data Flow Architecture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* Enhanced Color System - Zone-based */
+      --bg-base: #050912;
+      --bg-gradient:
+        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+        radial-gradient(circle at 20% 20%, rgba(122, 214, 255, 0.12), transparent 35%),
+        radial-gradient(circle at 80% 0%, rgba(255, 185, 122, 0.18), transparent 40%),
+        #050912;
+
+      /* Zone Colors */
+      --zone-input: #4ac9ff;
+      --zone-input-glow: rgba(74, 201, 255, 0.3);
+      --zone-filter: #6df0c2;
+      --zone-filter-glow: rgba(109, 240, 194, 0.3);
+      --zone-output: #00ff9f;
+      --zone-output-glow: rgba(0, 255, 159, 0.3);
+
+      /* Base colors */
+      --panel: rgba(255, 255, 255, 0.04);
+      --panel-hover: rgba(255, 255, 255, 0.06);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #e7ecf5;
+      --text-muted: #aab6ce;
+      --danger: #ff9d7c;
+
+      /* Shadows */
+      --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 12px 40px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.4);
+      --shadow-glow: 0 8px 32px;
+
+      /* Spacing */
+      --spacing-xs: 6px;
+      --spacing-sm: 10px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      background: var(--bg-gradient);
+      background-size: 50px 50px, 50px 50px, 100% 100%, 100% 100%, 100% 100%;
+      color: var(--text);
+      min-height: 100vh;
+      padding: var(--spacing-lg);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-lg);
+    }
+
+    /* ============================================
+       HERO SECTION - Enhanced Branding
+       ============================================ */
+    .hero {
+      position: relative;
+      padding: var(--spacing-xl);
+      border-radius: 24px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -10%;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, var(--zone-filter-glow), transparent 60%);
+      animation: pulse 8s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1) translateY(0); opacity: 0.3; }
+      50% { transform: scale(1.1) translateY(-20px); opacity: 0.5; }
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--spacing-lg);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+    }
+
+    .brand-mark {
+      width: 72px;
+      height: 72px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, var(--zone-filter), var(--zone-input));
+      display: grid;
+      place-items: center;
+      font-size: 36px;
+      font-weight: 800;
+      color: #041018;
+      box-shadow: var(--shadow-glow) var(--zone-filter-glow);
+      position: relative;
+    }
+
+    .brand-mark::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, var(--zone-filter), var(--zone-input));
+      opacity: 0.3;
+      filter: blur(12px);
+      z-index: -1;
+    }
+
+    .brand-text h1 {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--zone-filter), var(--zone-output));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 4px;
+    }
+
+    .brand-tagline {
+      font-size: 16px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .brand-flow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .flow-item {
+      font-weight: 600;
+    }
+
+    .flow-arrow {
+      color: var(--zone-filter);
+      font-weight: 700;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: var(--spacing-sm);
+      align-items: center;
+    }
+
+    /* ============================================
+       WORKFLOW PIPELINE - Interactive Flow
+       ============================================ */
+    .workflow-pipeline {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      padding: var(--spacing-md);
+      border-radius: 20px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+      position: relative;
+    }
+
+    .workflow-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--spacing-sm);
+      padding: var(--spacing-lg);
+      position: relative;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .workflow-stage:hover {
+      transform: translateY(-4px);
+    }
+
+    .workflow-stage:not(:last-child)::after {
+      content: '→';
+      position: absolute;
+      right: -20px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--border);
+      z-index: 1;
+      animation: flowArrow 2s ease-in-out infinite;
+    }
+
+    @keyframes flowArrow {
+      0%, 100% { opacity: 0.3; transform: translateY(-50%) translateX(0); }
+      50% { opacity: 1; transform: translateY(-50%) translateX(5px); }
+    }
+
+    .stage-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+      font-weight: 800;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+
+    .workflow-stage:nth-child(1) .stage-icon {
+      background: linear-gradient(135deg, var(--zone-input), rgba(74, 201, 255, 0.5));
+      box-shadow: var(--shadow-glow) var(--zone-input-glow);
+      color: #041018;
+    }
+
+    .workflow-stage:nth-child(2) .stage-icon {
+      background: linear-gradient(135deg, var(--zone-filter), rgba(109, 240, 194, 0.5));
+      box-shadow: var(--shadow-glow) var(--zone-filter-glow);
+      color: #041018;
+    }
+
+    .workflow-stage:nth-child(3) .stage-icon {
+      background: linear-gradient(135deg, var(--zone-output), rgba(0, 255, 159, 0.5));
+      box-shadow: var(--shadow-glow) var(--zone-output-glow);
+      color: #041018;
+    }
+
+    .workflow-stage:hover .stage-icon {
+      transform: scale(1.1) rotate(5deg);
+    }
+
+    .stage-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .stage-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ============================================
+       MAIN WORKSPACE - 3-Stage Layout
+       ============================================ */
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr 2fr 1fr;
+      gap: var(--spacing-md);
+      align-items: start;
+    }
+
+    .zone-panel {
+      padding: var(--spacing-lg);
+      border-radius: 20px;
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-md);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Zone-specific accents */
+    .zone-panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      opacity: 0.6;
+    }
+
+    .zone-input::before {
+      background: linear-gradient(90deg, var(--zone-input), transparent);
+    }
+
+    .zone-filter::before {
+      background: linear-gradient(90deg, transparent, var(--zone-filter), transparent);
+    }
+
+    .zone-output::before {
+      background: linear-gradient(90deg, transparent, var(--zone-output));
+    }
+
+    .zone-header {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      padding-bottom: var(--spacing-sm);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .zone-icon {
+      font-size: 24px;
+    }
+
+    .zone-title {
+      flex: 1;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .zone-badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .zone-input .zone-badge {
+      background: var(--zone-input-glow);
+      color: var(--zone-input);
+    }
+
+    .zone-filter .zone-badge {
+      background: var(--zone-filter-glow);
+      color: var(--zone-filter);
+    }
+
+    .zone-output .zone-badge {
+      background: var(--zone-output-glow);
+      color: var(--zone-output);
+    }
+
+    /* Form elements */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-xs);
+    }
+
+    label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input[type="text"],
+    input[type="url"],
+    input[type="search"] {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font-size: 14px;
+      font-family: 'Space Grotesk', sans-serif;
+      transition: all 0.2s ease;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--zone-filter);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 3px var(--zone-filter-glow);
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 12px 20px;
+      border-radius: 12px;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: 'Space Grotesk', sans-serif;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--zone-filter), var(--zone-output));
+      color: #041018;
+      box-shadow: var(--shadow-glow) var(--zone-filter-glow);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-primary:hover {
+      box-shadow: var(--shadow-glow) var(--zone-output-glow);
+      transform: scale(1.02);
+    }
+
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-ghost:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Stats Dashboard */
+    .stats-bar {
+      padding: var(--spacing-md);
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+      border: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--spacing-md);
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--zone-filter), var(--zone-output));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Saved Playlists */
+    .playlist-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-sm);
+    }
+
+    .playlist-item {
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--spacing-sm);
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .playlist-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--zone-input);
+    }
+
+    .playlist-item.active {
+      border-color: var(--zone-filter);
+      background: var(--zone-filter-glow);
+    }
+
+    .playlist-name {
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .playlist-count {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Groups Panel - Center Focus */
+    .groups-container {
+      max-height: 500px;
+      overflow-y: auto;
+      padding: var(--spacing-sm);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+    }
+
+    .groups-container::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .groups-container::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 4px;
+    }
+
+    .groups-container::-webkit-scrollbar-thumb {
+      background: var(--zone-filter);
+      border-radius: 4px;
+    }
+
+    .group-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      margin-bottom: 8px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: all 0.2s ease;
+    }
+
+    .group-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      transform: translateX(4px);
+    }
+
+    .group-item.disabled {
+      opacity: 0.4;
+    }
+
+    .group-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .group-name {
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .group-count {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Toggle Switch */
+    .toggle {
+      width: 50px;
+      height: 26px;
+      position: relative;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 30px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      height: 18px;
+      width: 18px;
+      left: 4px;
+      bottom: 3px;
+      background: #041018;
+      border-radius: 50%;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background: linear-gradient(135deg, var(--zone-filter), var(--zone-output));
+      border-color: transparent;
+    }
+
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(22px);
+    }
+
+    /* Counter Badge */
+    .counter-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 30px;
+      background: linear-gradient(135deg, var(--zone-filter-glow), var(--zone-output-glow));
+      border: 1px solid var(--zone-filter);
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .counter-value {
+      color: var(--zone-filter);
+      font-size: 20px;
+    }
+
+    /* Output URL */
+    .share-url {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--zone-output);
+      background: var(--zone-output-glow);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: var(--spacing-xl);
+      padding: var(--spacing-lg);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .footer a {
+      color: var(--zone-filter);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .workflow-pipeline {
+        grid-template-columns: 1fr;
+      }
+
+      .workflow-stage:not(:last-child)::after {
+        content: '↓';
+        right: 50%;
+        top: auto;
+        bottom: -24px;
+        transform: translateX(50%);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- HERO SECTION -->
+    <div class="hero">
+      <div class="hero-content">
+        <div class="brand">
+          <div class="brand-mark">S</div>
+          <div class="brand-text">
+            <h1>strim</h1>
+            <p class="brand-tagline">Clean IPTV playlists in seconds. No noise, just signal.</p>
+            <div class="brand-flow">
+              <span class="flow-item">50,000+ channels</span>
+              <span class="flow-arrow">→</span>
+              <span class="flow-item">Filtered</span>
+              <span class="flow-arrow">→</span>
+              <span class="flow-item">Perfect</span>
+            </div>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <button class="btn btn-primary">Try Sample Playlist</button>
+          <button class="btn btn-ghost">Sign In</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS DASHBOARD -->
+    <div class="stats-bar">
+      <div class="stat-item">
+        <div class="stat-label">Total Channels</div>
+        <div class="stat-value">10,363</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Active Channels</div>
+        <div class="stat-value">8,493</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Groups</div>
+        <div class="stat-value">47</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Efficiency</div>
+        <div class="stat-value">82%</div>
+      </div>
+    </div>
+
+    <!-- WORKFLOW PIPELINE -->
+    <div class="workflow-pipeline">
+      <div class="workflow-stage">
+        <div class="stage-icon">📥</div>
+        <div class="stage-title">1. Load</div>
+        <div class="stage-desc">Import playlist from URL or file</div>
+      </div>
+      <div class="workflow-stage">
+        <div class="stage-icon">🎚️</div>
+        <div class="stage-title">2. Filter</div>
+        <div class="stage-desc">Toggle groups and customize</div>
+      </div>
+      <div class="workflow-stage">
+        <div class="stage-icon">✨</div>
+        <div class="stage-title">3. Export</div>
+        <div class="stage-desc">Download or share clean playlist</div>
+      </div>
+    </div>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="workspace">
+
+      <!-- INPUT ZONE -->
+      <div class="zone-panel zone-input">
+        <div class="zone-header">
+          <span class="zone-icon">📥</span>
+          <h2 class="zone-title">Source</h2>
+          <span class="zone-badge">Input</span>
+        </div>
+
+        <div class="form-group">
+          <label>Playlist Name</label>
+          <input type="text" placeholder="My IPTV Provider" value="My Daily Lineup">
+        </div>
+
+        <div class="form-group">
+          <label>M3U/M3U8 URL</label>
+          <input type="url" placeholder="https://example.com/playlist.m3u8">
+        </div>
+
+        <button class="btn btn-primary">Load Playlist</button>
+
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <label style="margin: 0;">Saved Playlists</label>
+            <span style="font-size: 12px; color: var(--text-muted);">3 saved</span>
+          </div>
+          <div class="playlist-list">
+            <div class="playlist-item active">
+              <div>
+                <div class="playlist-name">My Daily Lineup</div>
+                <div class="playlist-count">8,493 channels</div>
+              </div>
+            </div>
+            <div class="playlist-item">
+              <div>
+                <div class="playlist-name">Sports Only</div>
+                <div class="playlist-count">2,847 channels</div>
+              </div>
+            </div>
+            <div class="playlist-item">
+              <div>
+                <div class="playlist-name">Kids Safe</div>
+                <div class="playlist-count">412 channels</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILTER ZONE -->
+      <div class="zone-panel zone-filter">
+        <div class="zone-header">
+          <span class="zone-icon">🎚️</span>
+          <h2 class="zone-title">Filter Groups</h2>
+          <span class="zone-badge">Active</span>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <input type="search" placeholder="Search groups..." style="flex: 1;">
+          <button class="btn btn-ghost">Disable All</button>
+        </div>
+
+        <div class="counter-badge">
+          <span>Active:</span>
+          <span class="counter-value">8,493</span>
+          <span>/</span>
+          <span>10,363</span>
+        </div>
+
+        <div class="groups-container">
+          <div class="group-item">
+            <div class="group-info">
+              <div class="group-name">🏀 Sports</div>
+              <div class="group-count">2,847 channels</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="group-item">
+            <div class="group-info">
+              <div class="group-name">🎬 Movies HD</div>
+              <div class="group-count">5,234 channels</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="group-item disabled">
+            <div class="group-info">
+              <div class="group-name">🔞 XXX Content</div>
+              <div class="group-count">1,023 channels</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="group-item disabled">
+            <div class="group-info">
+              <div class="group-name">🧪 Test Streams</div>
+              <div class="group-count">847 channels</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="group-item">
+            <div class="group-info">
+              <div class="group-name">📰 News</div>
+              <div class="group-count">412 channels</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="group-item">
+            <div class="group-info">
+              <div class="group-name">👶 Kids</div>
+              <div class="group-count">687 channels</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="group-item">
+            <div class="group-info">
+              <div class="group-name">🎵 Music</div>
+              <div class="group-count">523 channels</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="group-item disabled">
+            <div class="group-info">
+              <div class="group-name">🌍 International - Arabic</div>
+              <div class="group-count">1,234 channels</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div style="padding: 12px; background: rgba(109, 240, 194, 0.1); border-radius: 12px; border: 1px solid var(--zone-filter); margin-top: 12px;">
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">💡 Pro Tip</div>
+          <div style="font-size: 13px;">Search for "test" or "xxx" to quickly disable unwanted groups</div>
+        </div>
+      </div>
+
+      <!-- OUTPUT ZONE -->
+      <div class="zone-panel zone-output">
+        <div class="zone-header">
+          <span class="zone-icon">✨</span>
+          <h2 class="zone-title">Output</h2>
+          <span class="zone-badge">Clean</span>
+        </div>
+
+        <div style="text-align: center; padding: 24px; background: var(--zone-output-glow); border-radius: 16px; border: 2px solid var(--zone-output);">
+          <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">Clean Channels</div>
+          <div style="font-size: 48px; font-weight: 800; background: linear-gradient(135deg, var(--zone-filter), var(--zone-output)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">8,493</div>
+          <div style="font-size: 13px; color: var(--zone-output); margin-top: 4px;">✓ Ready to export</div>
+        </div>
+
+        <button class="btn btn-ghost" style="width: 100%;">🔄 Refresh Output</button>
+        <button class="btn btn-ghost" style="width: 100%;">📋 Copy M3U Content</button>
+        <button class="btn btn-primary" style="width: 100%;">⬇️ Download .m3u</button>
+
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+          <label style="margin-bottom: 8px; display: block;">Share Link</label>
+          <input type="text" class="share-url" readonly value="https://strim.app/s/abc123def456" style="margin-bottom: 12px;">
+          <button class="btn btn-ghost" style="width: 100%; font-size: 13px;">🔗 Generate Shareable URL</button>
+        </div>
+
+        <div style="margin-top: 20px; padding: 12px; background: rgba(0, 255, 159, 0.05); border-radius: 12px; border: 1px dashed var(--zone-output); text-align: center;">
+          <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Last Updated</div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--zone-output); margin-top: 4px;">2 minutes ago</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <p>strim keeps your playlists lean. Built with ❤️ by <a href="https://github.com/unejamardiani">unejamardiani</a> •
+      <a href="https://github.com/unejamardiani/strim">View on GitHub</a> •
+      <a href="https://learn.microsoft.com/azure/app-service/overview">Cheap hosting on Azure →</a></p>
+    </div>
+
+  </div>
+</body>
+</html>
