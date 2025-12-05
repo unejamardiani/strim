@@ -7,214 +7,252 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+            },
+            colors: {
+              'zone-input': '#4ac9ff',
+              'zone-filter': '#6df0c2',
+              'zone-output': '#00ff9f',
+            },
+            animation: {
+              'pulse-glow': 'pulseGlow 8s ease-in-out infinite',
+              'flow-arrow': 'flowArrow 2s ease-in-out infinite',
+              'flow-arrow-vertical': 'flowArrowVertical 2s ease-in-out infinite',
+            },
+          },
+        },
+      }
+    </script>
     <link rel="stylesheet" href="style.css" />
   </head>
-  <body>
-    <div class="page-shell">
-      <header class="hero">
-        <div class="brand">
-          <div class="brand-mark">S</div>
+  <body class="m-0 font-sans bg-[#050912] text-[#e7ecf5] min-h-screen p-6 md:p-[26px] flex flex-col gap-6 md:gap-[26px] leading-relaxed">
+    <div class="w-full max-w-[1400px] mx-auto flex flex-col gap-6">
+
+      <!-- HERO SECTION -->
+      <header class="hero-gradient relative flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 md:p-8 rounded-3xl border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.4)] overflow-hidden">
+        <div class="brand flex items-center gap-3 md:gap-4 z-10">
+          <div class="brand-mark w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-zone-filter to-zone-input flex items-center justify-center text-3xl md:text-4xl font-extrabold text-[#041018] shadow-[0_8px_32px_rgba(109,240,194,0.3)] relative">
+            S
+          </div>
           <div>
-            <h1>strim</h1>
-            <p class="subtitle">Clean up M3U and M3U8 playlists in seconds.</p>
+            <h1 class="hero-title m-0 text-4xl md:text-[42px] font-extrabold tracking-tight bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">strim</h1>
+            <p class="mt-1 text-[#aab6ce] text-sm md:text-[15px] font-medium">Clean up M3U and M3U8 playlists in seconds.</p>
           </div>
         </div>
-        <div class="hero-actions">
-          <button id="load-sample" class="ghost">Use sample playlist</button>
+        <div class="hero-actions flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3 z-10 w-full md:w-auto">
+          <button id="load-sample" class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px">Use sample playlist</button>
           <a
-            class="primary"
+            class="primary px-4 py-3 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-sm shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:shadow-[0_8px_32px_rgba(0,255,159,0.3)] hover:scale-105 active:translate-y-px text-center no-underline"
             href="https://learn.microsoft.com/azure/app-service/overview"
             target="_blank"
             rel="noreferrer"
             >Cheap to host on Azure →</a
           >
-          <button id="auth-trigger" class="avatar-button">
-            <span class="avatar-dot"></span>
+          <button id="auth-trigger" class="avatar-button inline-flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 rounded-full border border-white/10 bg-white/6 text-[#e7ecf5] font-semibold text-sm shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all hover:bg-white/10 hover:scale-105">
+            <span class="avatar-dot w-2.5 h-2.5 rounded-full bg-zone-filter shadow-[0_0_0_4px_rgba(109,240,194,0.15)]"></span>
             <span id="auth-trigger-label">Guest</span>
           </button>
         </div>
       </header>
 
-      <section class="workflow">
-        <div class="workflow-step">
-          <span class="step-number">1</span>
-          <div class="step-body">
-            <p class="step-title">Load a playlist</p>
-            <p class="step-copy">Name it, drop in your M3U/M3U8 URL, and fetch through the backend.</p>
+      <!-- WORKFLOW PIPELINE -->
+      <section class="workflow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-0 md:gap-0 p-4 rounded-2xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] relative">
+        <div class="workflow-step group flex flex-col items-center gap-3 p-4 md:p-6 relative transition-all hover:-translate-y-1 hover:bg-white/[0.02] rounded-2xl cursor-pointer">
+          <span class="step-number w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-zone-input/90 to-zone-input/60 flex items-center justify-center text-lg md:text-xl font-extrabold text-[#031019] shadow-[0_8px_32px_rgba(74,201,255,0.3)] transition-all group-hover:scale-110 group-hover:rotate-[5deg]">1</span>
+          <div class="step-body flex flex-col gap-1 text-center">
+            <p class="step-title m-0 font-bold text-base tracking-tight">Load a playlist</p>
+            <p class="step-copy m-0 text-[#aab6ce] text-[13px] leading-snug">Name it, drop in your M3U/M3U8 URL, and fetch through the backend.</p>
           </div>
         </div>
-        <div class="workflow-step">
-          <span class="step-number">2</span>
-          <div class="step-body">
-            <p class="step-title">Save & share</p>
-            <p class="step-copy">Persist your filters so you can regenerate and share on demand.</p>
+        <div class="workflow-step group flex flex-col items-center gap-3 p-4 md:p-6 relative transition-all hover:-translate-y-1 hover:bg-white/[0.02] rounded-2xl cursor-pointer">
+          <span class="step-number w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-zone-filter/90 to-zone-filter/60 flex items-center justify-center text-lg md:text-xl font-extrabold text-[#031019] shadow-[0_8px_32px_rgba(109,240,194,0.3)] transition-all group-hover:scale-110 group-hover:rotate-[5deg]">2</span>
+          <div class="step-body flex flex-col gap-1 text-center">
+            <p class="step-title m-0 font-bold text-base tracking-tight">Save & share</p>
+            <p class="step-copy m-0 text-[#aab6ce] text-[13px] leading-snug">Persist your filters so you can regenerate and share on demand.</p>
           </div>
         </div>
-        <div class="workflow-step">
-          <span class="step-number">3</span>
-          <div class="step-body">
-            <p class="step-title">Toggle groups</p>
-            <p class="step-copy">Cull noisy bundles fast; search or disable everything with one tap.</p>
+        <div class="workflow-step group flex flex-col items-center gap-3 p-4 md:p-6 relative transition-all hover:-translate-y-1 hover:bg-white/[0.02] rounded-2xl cursor-pointer">
+          <span class="step-number w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-zone-filter/90 to-zone-filter/60 flex items-center justify-center text-lg md:text-xl font-extrabold text-[#031019] shadow-[0_8px_32px_rgba(109,240,194,0.3)] transition-all group-hover:scale-110 group-hover:rotate-[5deg]">3</span>
+          <div class="step-body flex flex-col gap-1 text-center">
+            <p class="step-title m-0 font-bold text-base tracking-tight">Toggle groups</p>
+            <p class="step-copy m-0 text-[#aab6ce] text-[13px] leading-snug">Cull noisy bundles fast; search or disable everything with one tap.</p>
           </div>
         </div>
-        <div class="workflow-step">
-          <span class="step-number">4</span>
-          <div class="step-body">
-            <p class="step-title">Export cleanly</p>
-            <p class="step-copy">Refresh, copy, or download the filtered playlist whenever you need it.</p>
+        <div class="workflow-step group flex flex-col items-center gap-3 p-4 md:p-6 relative transition-all hover:-translate-y-1 hover:bg-white/[0.02] rounded-2xl cursor-pointer">
+          <span class="step-number w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-zone-output/90 to-zone-output/60 flex items-center justify-center text-lg md:text-xl font-extrabold text-[#031019] shadow-[0_8px_32px_rgba(0,255,159,0.3)] transition-all group-hover:scale-110 group-hover:rotate-[5deg]">4</span>
+          <div class="step-body flex flex-col gap-1 text-center">
+            <p class="step-title m-0 font-bold text-base tracking-tight">Export cleanly</p>
+            <p class="step-copy m-0 text-[#aab6ce] text-[13px] leading-snug">Refresh, copy, or download the filtered playlist whenever you need it.</p>
           </div>
         </div>
       </section>
 
-      <main class="grid">
-        <section class="panel glass">
-          <div class="panel-header">
+      <!-- MAIN WORKSPACE -->
+      <main class="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-4 items-start">
+
+        <!-- INPUT ZONE -->
+        <section class="panel panel-input p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden">
+          <div class="panel-header flex justify-between items-center gap-3 pb-3 border-b border-white/10">
             <div>
-              <p class="eyebrow">Source</p>
-              <h2>Load playlist</h2>
+              <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Source</p>
+              <h2 class="m-0 text-xl font-bold tracking-tight">Load playlist</h2>
             </div>
-            <div class="pill" id="status-pill">Waiting for input</div>
+            <div class="pill px-3 py-2 rounded-full bg-white/8 border border-white/10 text-[#aab6ce] font-semibold text-[13px] whitespace-nowrap" id="status-pill">Waiting for input</div>
           </div>
-          <div class="form">
-            <label for="playlist-name">Playlist name</label>
-            <input id="playlist-name" type="text" placeholder="My provider lineup" autocomplete="off" spellcheck="false" />
-            <label for="playlist-url">URL to M3U / M3U8</label>
-            <div class="input-row">
+          <div class="form flex flex-col gap-2">
+            <label for="playlist-name" class="block mt-2 mb-1 font-semibold text-[13px] text-[#e7ecf5] uppercase tracking-wide">Playlist name</label>
+            <input id="playlist-name" type="text" placeholder="My provider lineup" autocomplete="off" spellcheck="false" class="w-full bg-white/[0.04] text-[#e7ecf5] border border-white/10 rounded-xl px-3 py-3 text-sm transition-all focus:outline-none focus:border-zone-filter focus:shadow-[0_0_0_3px_rgba(109,240,194,0.3)] focus:bg-white/8" />
+            <label for="playlist-url" class="block mt-2 mb-1 font-semibold text-[13px] text-[#e7ecf5] uppercase tracking-wide">URL to M3U / M3U8</label>
+            <div class="input-row flex flex-col md:flex-row gap-2 items-stretch md:items-center">
               <input
                 type="url"
                 id="playlist-url"
                 placeholder="https://example.com/list.m3u8"
                 autocomplete="url"
                 spellcheck="false"
+                class="flex-1 bg-white/[0.04] text-[#e7ecf5] border border-white/10 rounded-xl px-3 py-3 text-sm transition-all focus:outline-none focus:border-zone-filter focus:shadow-[0_0_0_3px_rgba(109,240,194,0.3)] focus:bg-white/8"
               />
-              <button id="fetch-playlist" class="primary">Load</button>
+              <button id="fetch-playlist" class="primary px-5 py-3 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-sm shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:shadow-[0_8px_32px_rgba(0,255,159,0.3)] hover:scale-105 active:translate-y-px whitespace-nowrap">Load</button>
             </div>
-            <p class="hint">
+            <p class="hint text-[#aab6ce] text-[13px] my-1 leading-snug">
               We fetch the playlist through the backend downloader.
             </p>
           </div>
-          <div class="stats" id="stats"></div>
+          <div class="stats mt-3 grid gap-2 grid-cols-[repeat(auto-fit,minmax(140px,1fr))]" id="stats"></div>
         </section>
 
-        <section class="panel glass">
-          <div class="panel-header">
+        <!-- FILTER ZONE (CENTER - 2x width) -->
+        <section class="panel panel-filter p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden">
+          <div class="panel-header flex justify-between items-center gap-3 pb-3 border-b border-white/10">
             <div>
-              <p class="eyebrow">Playlists</p>
-              <h2>Save & manage</h2>
-            </div>
-            <button id="save-playlist" class="primary">Save playlist</button>
-          </div>
-        <p class="hint">Sign in to save and share. Guests can still clean locally but nothing is persisted.</p>
-        <div id="saved-empty" class="hint">No saved playlists yet.</div>
-        <div id="saved-list" class="saved-list"></div>
-      </section>
-
-        <section class="panel glass">
-          <div class="panel-header">
-            <div>
-              <p class="eyebrow">Groups</p>
-              <h2>Toggle visibility</h2>
+              <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Groups</p>
+              <h2 class="m-0 text-xl font-bold tracking-tight">Toggle visibility</h2>
             </div>
           </div>
-          <div class="group-actions">
-            <div class="group-search">
+          <div class="group-actions flex flex-col md:flex-row gap-2 items-stretch md:items-center mb-2">
+            <div class="group-search flex-1 min-w-[240px]">
               <input
                 id="group-search"
                 type="search"
                 placeholder="Search groups..."
                 autocomplete="off"
                 spellcheck="false"
+                class="w-full bg-white/[0.04] text-[#e7ecf5] border border-white/10 rounded-xl px-3 py-3 text-sm transition-all focus:outline-none focus:border-zone-filter focus:shadow-[0_0_0_3px_rgba(109,240,194,0.3)] focus:bg-white/8"
               />
             </div>
-            <button id="toggle-all" class="ghost">Disable none</button>
+            <button id="toggle-all" class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px whitespace-nowrap">Disable none</button>
           </div>
-          <div class="filters-panel glass-compact">
-            <div class="filters-head">
+          <div class="filters-panel my-2 p-3 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/2">
+            <div class="filters-head flex items-start justify-between gap-2 mb-2">
               <div>
-                <p class="eyebrow">Copy filters</p>
-                <p class="hint">Pull filters from a saved playlist without reloading it.</p>
+                <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Copy filters</p>
+                <p class="hint text-[#aab6ce] text-[13px] my-0 leading-snug">Pull filters from a saved playlist without reloading it.</p>
               </div>
-              <div class="hint mini">Signed-in playlists only</div>
+              <div class="hint mini text-[#aab6ce] text-xs">Signed-in playlists only</div>
             </div>
-            <div class="preset-form">
-              <div class="select-wrap select-custom" id="filter-source-wrap">
-                <button id="filter-source-trigger" type="button" class="select-trigger">Select a saved playlist</button>
-                <div id="filter-source-menu" class="select-menu hidden" role="listbox" aria-label="Saved playlists"></div>
+            <div class="preset-form flex flex-col md:flex-row gap-2 items-stretch md:items-center">
+              <div class="select-wrap select-custom relative flex-1 min-w-[200px] bg-white/[0.02] rounded-2xl border border-white/10 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" id="filter-source-wrap">
+                <button id="filter-source-trigger" type="button" class="select-trigger w-full px-3 py-3 border-none rounded-xl bg-gradient-to-br from-white/8 to-white/2 text-[#e7ecf5] text-left cursor-pointer text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all hover:from-white/12 hover:to-white/4">Select a saved playlist</button>
+                <div id="filter-source-menu" class="select-menu hidden absolute top-[calc(100%+6px)] left-0 right-0 bg-[rgba(5,9,18,0.98)] border border-white/10 rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur-xl p-1.5 max-h-[280px] overflow-y-auto z-10" role="listbox" aria-label="Saved playlists"></div>
               </div>
-              <div class="preset-actions-inline">
-                <button id="apply-filter-source" class="ghost" disabled>Apply</button>
+              <div class="preset-actions-inline flex gap-2">
+                <button id="apply-filter-source" class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px disabled:opacity-50 disabled:cursor-not-allowed" disabled>Apply</button>
               </div>
             </div>
           </div>
-          <div id="groups" class="group-panel-body"></div>
+          <div id="groups" class="group-panel-body mt-1"></div>
         </section>
 
-        <section class="panel glass full">
-          <div class="panel-header">
+        <!-- SAVED PLAYLISTS (goes in same column as Input on desktop, stacks on mobile) -->
+        <section class="panel panel-output p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden lg:order-3">
+          <div class="panel-header flex justify-between items-center gap-3 pb-3 border-b border-white/10">
             <div>
-              <p class="eyebrow">Output</p>
-              <h2>Filtered playlist</h2>
+              <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Playlists</p>
+              <h2 class="m-0 text-xl font-bold tracking-tight">Save & manage</h2>
             </div>
-            <div class="chip" id="output-size">0 channels</div>
+            <button id="save-playlist" class="primary px-4 py-2.5 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-sm shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:shadow-[0_8px_32px_rgba(0,255,159,0.3)] hover:scale-105 active:translate-y-px whitespace-nowrap">Save playlist</button>
           </div>
-          <div class="actions">
-            <button id="refresh-output" class="ghost">Refresh</button>
-            <button id="copy-output" class="ghost">Copy</button>
-            <button id="download-output" class="primary">Download .m3u</button>
+          <p class="hint text-[#aab6ce] text-[13px] my-0 leading-snug">Sign in to save and share. Guests can still clean locally but nothing is persisted.</p>
+          <div id="saved-empty" class="hint text-[#aab6ce] text-[13px] my-0">No saved playlists yet.</div>
+          <div id="saved-list" class="saved-list mt-2 flex flex-col gap-2"></div>
+        </section>
+
+        <!-- OUTPUT ZONE (Full width) -->
+        <section class="panel panel-output col-span-1 lg:col-span-3 p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden">
+          <div class="panel-header flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-white/10">
+            <div>
+              <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Output</p>
+              <h2 class="m-0 text-xl font-bold tracking-tight">Filtered playlist</h2>
+            </div>
+            <div class="chip px-3 py-2 rounded-full bg-white/8 border border-white/10 text-[#aab6ce] font-semibold text-[13px] whitespace-nowrap" id="output-size">0 channels</div>
           </div>
-          <div class="serve-row">
-            <button id="serve-output" class="ghost">Generate shareable URL</button>
-            <input id="share-url" type="text" readonly placeholder="Your shareable URL will appear here" />
+          <div class="actions flex flex-col md:flex-row gap-2 flex-wrap items-stretch md:items-center mt-3">
+            <button id="refresh-output" class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px">Refresh</button>
+            <button id="copy-output" class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px">Copy</button>
+            <button id="download-output" class="primary px-4 py-3 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-sm shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:shadow-[0_8px_32px_rgba(0,255,159,0.3)] hover:scale-105 active:translate-y-px">Download .m3u</button>
+          </div>
+          <div class="serve-row flex flex-col md:flex-row gap-2 flex-wrap items-stretch md:items-center mt-3">
+            <button id="serve-output" class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px">Generate shareable URL</button>
+            <input id="share-url" type="text" readonly placeholder="Your shareable URL will appear here" class="flex-1 min-w-[280px] bg-white/[0.04] text-[#e7ecf5] border border-white/10 rounded-xl px-3 py-3 text-sm" />
           </div>
         </section>
       </main>
     </div>
 
-    <footer class="footer">
-      <p>
+    <!-- FOOTER -->
+    <footer class="max-w-[1400px] mx-auto my-8 text-[#aab6ce] text-center text-[13px] leading-relaxed">
+      <p class="my-1">
         strim keeps your playlists lean. Designed to be hosted cheaply as static files on Azure Static
         Web Apps or App Service.
       </p>
-      <p>
+      <p class="my-1">
         Built and maintained by
-        <a href="https://github.com/unejamardiani" target="_blank" rel="noopener noreferrer">unejamardiani</a>
+        <a href="https://github.com/unejamardiani" target="_blank" rel="noopener noreferrer" class="text-zone-filter no-underline font-semibold transition-all hover:text-zone-output hover:underline">unejamardiani</a>
         with AI.
       </p>
-      <p>
+      <p class="my-1">
         Source available at
-        <a href="https://github.com/unejamardiani/strim" target="_blank" rel="noopener noreferrer">github.com/unejamardiani/strim</a>.
+        <a href="https://github.com/unejamardiani/strim" target="_blank" rel="noopener noreferrer" class="text-zone-filter no-underline font-semibold transition-all hover:text-zone-output hover:underline">github.com/unejamardiani/strim</a>.
       </p>
     </footer>
-    <div id="auth-modal" class="auth-modal hidden">
-      <div class="auth-backdrop"></div>
-      <div class="auth-dialog glass">
-        <div class="auth-dialog-header">
+
+    <!-- AUTH MODAL -->
+    <div id="auth-modal" class="auth-modal hidden fixed inset-0 z-[80] animate-[fadeIn_0.2s_ease]">
+      <div class="auth-backdrop absolute inset-0 bg-black/60 backdrop-blur-lg"></div>
+      <div class="auth-dialog glass relative max-w-[720px] mx-4 md:mx-auto mt-[60px] p-6 rounded-2xl border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.4)] bg-[radial-gradient(circle_at_20%_20%,rgba(122,214,255,0.08),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(255,185,122,0.12),transparent_40%),rgba(8,12,22,0.98)] backdrop-blur-xl animate-[slideUp_0.3s_ease]">
+        <div class="auth-dialog-header flex items-start justify-between gap-2 mb-3">
           <div>
-            <p class="eyebrow" id="auth-state">Guest session</p>
-            <h3 id="auth-modal-title">Sign in to save</h3>
-            <p class="hint" id="auth-hint">Saved playlists stay with your account and can be shared.</p>
+            <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold" id="auth-state">Guest session</p>
+            <h3 class="m-0 text-lg font-bold" id="auth-modal-title">Sign in to save</h3>
+            <p class="hint text-[#aab6ce] text-[13px] my-1 leading-snug" id="auth-hint">Saved playlists stay with your account and can be shared.</p>
           </div>
-          <button id="auth-close" class="ghost icon-only" aria-label="Close authentication dialog">✕</button>
+          <button id="auth-close" class="ghost icon-only p-2 w-9 h-9 grid place-items-center rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px" aria-label="Close authentication dialog">✕</button>
         </div>
-        <div class="auth-grid">
-          <div class="auth-fields">
-            <label for="auth-username">Username or email</label>
-            <input id="auth-username" type="text" placeholder="you@example.com" autocomplete="username" spellcheck="false" />
-            <label for="auth-password">Password</label>
-            <input id="auth-password" type="password" placeholder="••••••" autocomplete="current-password" />
-            <div class="auth-actions">
-              <button id="auth-login" class="ghost">Sign in</button>
-              <button id="auth-register" class="primary">Create account</button>
-              <button id="auth-logout" class="ghost" style="display: none">Sign out</button>
+        <div class="auth-grid grid gap-3 grid-cols-1 md:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+          <div class="auth-fields flex flex-col">
+            <label for="auth-username" class="block mt-2 mb-1 font-semibold text-[13px] text-[#e7ecf5] uppercase tracking-wide">Username or email</label>
+            <input id="auth-username" type="text" placeholder="you@example.com" autocomplete="username" spellcheck="false" class="w-full bg-white/[0.04] text-[#e7ecf5] border border-white/10 rounded-xl px-3 py-3 text-sm transition-all focus:outline-none focus:border-zone-filter focus:shadow-[0_0_0_3px_rgba(109,240,194,0.3)] focus:bg-white/8" />
+            <label for="auth-password" class="block mt-2 mb-1 font-semibold text-[13px] text-[#e7ecf5] uppercase tracking-wide">Password</label>
+            <input id="auth-password" type="password" placeholder="••••••" autocomplete="current-password" class="w-full bg-white/[0.04] text-[#e7ecf5] border border-white/10 rounded-xl px-3 py-3 text-sm transition-all focus:outline-none focus:border-zone-filter focus:shadow-[0_0_0_3px_rgba(109,240,194,0.3)] focus:bg-white/8" />
+            <div class="auth-actions flex flex-wrap gap-2 mt-2">
+              <button id="auth-login" class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px">Sign in</button>
+              <button id="auth-register" class="primary px-4 py-3 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-sm shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:shadow-[0_8px_32px_rgba(0,255,159,0.3)] hover:scale-105 active:translate-y-px">Create account</button>
+              <button id="auth-logout" class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px" style="display: none">Sign out</button>
             </div>
           </div>
-          <div class="auth-providers">
-            <p class="eyebrow">Social sign-in</p>
-            <div class="auth-provider-buttons">
-              <button class="ghost" data-auth-provider="google">Continue with Google</button>
-              <button class="ghost" data-auth-provider="microsoft">Continue with Microsoft</button>
+          <div class="auth-providers flex flex-col gap-2 p-3 rounded-xl bg-white/[0.03] border border-dashed border-white/10">
+            <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Social sign-in</p>
+            <div class="auth-provider-buttons flex flex-col gap-2">
+              <button class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px w-full" data-auth-provider="google">Continue with Google</button>
+              <button class="ghost px-4 py-3 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-sm transition-all hover:bg-white/10 active:translate-y-px w-full" data-auth-provider="microsoft">Continue with Microsoft</button>
             </div>
-            <p class="hint">We redirect to the provider and drop you back here.</p>
+            <p class="hint text-[#aab6ce] text-[13px] my-1 leading-snug">We redirect to the provider and drop you back here.</p>
           </div>
         </div>
       </div>
