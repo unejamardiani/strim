@@ -102,36 +102,30 @@ body {
 /* ============================================
    WORKFLOW STEPS - Enhanced Visual Treatment
    ============================================ */
-.workflow {
-  padding: 20px;
-}
-
 .workflow-step {
-  padding: 24px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.01);
 }
 
 .workflow-step:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 /* ============================================
    WORKFLOW ARROWS - Animated Flow
    ============================================ */
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
   .workflow-step:not(:last-child)::after {
     content: '→';
     position: absolute;
-    right: -20px;
+    right: -24px;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.15);
     z-index: 1;
     animation: flowArrow 2s ease-in-out infinite;
   }
@@ -148,17 +142,17 @@ body {
   }
 }
 
-@media (max-width: 1279px) {
+@media (max-width: 1023px) {
   .workflow-step:not(:last-child)::after {
     content: '↓';
     position: absolute;
     right: 50%;
     top: auto;
-    bottom: -16px;
+    bottom: -18px;
     transform: translateX(50%);
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.15);
     z-index: 1;
     animation: flowArrowVertical 2s ease-in-out infinite;
   }
