@@ -1,8 +1,55 @@
 # strim
 
-A lightweight single-page app for cleaning M3U / M3U8 playlists. Point strim at a playlist URL
-or paste the raw text, toggle the channel groups you want to keep, and download a fresh, filtered
-playlist.
+**🚀 Free M3U Playlist Editor & IPTV Cleaner - Filter, Clean & Organize IPTV Playlists in Seconds**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Made with AI](https://img.shields.io/badge/Made%20with-AI-blue.svg)](https://github.com/anthropics/claude)
+
+> **Clean your IPTV playlists from 50,000+ channels down to what you actually watch. Fast, privacy-focused, and 100% free.**
+
+Strim is a lightweight, powerful M3U/M3U8 playlist editor that runs entirely in your browser. Filter unwanted channel groups, remove duplicates, and create shareable playlists for TiviMate, IPTV Smarters, Kodi, VLC, and more.
+
+## ✨ Key Features
+
+- **⚡ Lightning Fast** - Handles playlists with 50,000+ channels using Web Workers
+- **🔒 Privacy-First** - All processing happens in your browser, no data uploads
+- **🎯 Smart Filtering** - Toggle groups on/off, search by name, filter in real-time
+- **🔗 Shareable URLs** - Generate permanent URLs for auto-updating playlists
+- **📱 Works Everywhere** - Compatible with TiviMate, IPTV Smarters, Kodi, VLC, Perfect Player, GSE Smart IPTV
+- **🆓 100% Free** - Open source, no premium tiers, no feature limits
+- **📊 Real-time Stats** - See channel counts update as you filter
+- **🌐 CORS Proxy Built-in** - Automatically fetches blocked playlist URLs
+
+## 🎬 Quick Start
+
+1. **Open Strim** (or run locally - see below)
+2. **Load your playlist** - Paste URL or raw M3U text
+3. **Filter groups** - Toggle unwanted groups off (or Deselect All → enable favorites)
+4. **Export** - Download, copy, or generate shareable URL
+
+**That's it!** Your cleaned playlist is ready to use in your favorite IPTV app.
+
+## 🆚 Why Strim?
+
+| Feature | Strim | M3U4U | Playlist Buddy | Xtream Editor |
+|---------|-------|-------|----------------|---------------|
+| **Price** | ✅ Free | Freemium | Paid | Freemium |
+| **Open Source** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| **Privacy (Client-side)** | ✅ Yes | ❌ Server | ❌ Server | Mixed |
+| **Large Playlists (50k+)** | ✅ Optimized | ⚠️ Slow | ⚠️ Limited | Good |
+| **No Account Required** | ✅ Yes | ❌ Required | ❌ Required | Some features |
+| **CORS Proxy Support** | ✅ Built-in | ❌ No | ⚠️ Limited | ❌ No |
+
+## 📱 Works With Your Favorite Apps
+
+- **TiviMate** (Android TV, Fire TV)
+- **IPTV Smarters Pro** (iOS, Android, Fire TV)
+- **Kodi** (All Platforms)
+- **VLC Media Player** (Windows, Mac, Linux)
+- **Perfect Player** (Android, Fire TV)
+- **GSE Smart IPTV** (iOS, Apple TV)
+- **OTT Navigator** (Android, Fire TV)
+- Any M3U-compatible IPTV player
 
 ## Running locally
 
@@ -133,10 +180,72 @@ Additionally, the Groups list uses a virtualized renderer so only visible group 
 rendered to the DOM. This keeps toggling individual groups extremely fast even when there are
 hundreds of thousands of groups.
 
+## 🎯 Use Cases
+
+### Remove Adult Content
+Filter out inappropriate channels to create family-friendly playlists. Search for "XXX", "Adult", or "18+" groups and toggle them off.
+
+### Language Filtering
+Only watch English channels? Deselect all groups, then enable only "USA", "UK", "Canada", and "English" groups. Reduce 50,000 international channels to 5,000 relevant ones.
+
+### Category-Based Playlists
+Create specialized playlists:
+- **Sports-only** - For game days (ESPN, Fox Sports, etc.)
+- **News-only** - Stay informed (CNN, BBC, etc.)
+- **Movies & Series** - Entertainment channels only
+- **Kids** - Cartoons and educational content
+
+### Speed Up IPTV Apps
+Large playlists slow down TiviMate, IPTV Smarters, and other apps. Trim your playlist from 100,000 to 2,000 channels for instant loading.
+
+## 🤝 Contributing
+
+Contributions are welcome! Here's how you can help:
+
+- **Report bugs** - Open an issue if you find a problem
+- **Suggest features** - Share ideas for improvements
+- **Submit pull requests** - Fix bugs or add features
+- **Improve documentation** - Help others understand how to use Strim
+- **Share with others** - Help more people discover Strim
+
+## 📊 Project Status
+
+- **Status:** ✅ Active Development
+- **License:** MIT (free to use, modify, distribute)
+- **Platform:** Web (runs in any modern browser)
+- **Backend:** Optional .NET 8 API for persistence and sharing
+
+## 🌟 Star History
+
+If you find Strim useful, please give it a star ⭐ on GitHub! It helps others discover the project.
+
+## 🔗 Links
+
+- **Website:** [Coming Soon - Add your domain here]
+- **Documentation:** See this README and inline help
+- **Issues:** [GitHub Issues](https://github.com/unejamardiani/strim/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/unejamardiani/strim/discussions)
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
 ## Maintainer
 
 Strim is maintained by [unejamardiani](https://github.com/unejamardiani). Decisions about releases and roadmap come from the maintainer; contributions via issues and pull requests are welcome.
 
+## ❤️ Support
+
+If Strim saves you time or improves your IPTV experience:
+- ⭐ Star this repository
+- 🐛 Report bugs and suggest features
+- 🔗 Share with others who need playlist cleaning
+- 📝 Write about your experience using Strim
+
 ## Attribution
 
 This project was created entirely with AI assistance.
+
+---
+
+**Keywords:** m3u editor, m3u8 editor, iptv playlist cleaner, m3u filter, iptv organizer, playlist manager, m3u cleaner online, free m3u editor, iptv tools, m3u playlist editor, tivimate playlist, iptv smarters playlist, m3u duplicate remover, iptv channel filter

@@ -79,6 +79,25 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body class="m-0 font-sans bg-[#050912] text-[#e7ecf5] min-h-screen p-6 md:p-[26px] flex flex-col gap-6 md:gap-[26px] leading-relaxed">
+
+    <!-- Navigation -->
+    <nav class="w-full max-w-[1400px] mx-auto flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
+      <div class="flex items-center gap-3">
+        <a href="index.html" class="text-2xl font-extrabold bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent no-underline">strim</a>
+      </div>
+      <div class="hidden md:flex gap-6">
+        <a href="index.html" class="text-zone-filter font-bold no-underline">Home</a>
+        <a href="features.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
+        <a href="how-to-use.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">How to Use</a>
+        <a href="comparison.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
+        <a href="blog/" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Blog</a>
+      </div>
+      <!-- Mobile menu button (optional - for future enhancement) -->
+      <div class="md:hidden">
+        <a href="features.html" class="text-[#aab6ce] hover:text-zone-filter text-sm no-underline">Menu</a>
+      </div>
+    </nav>
+
     <div class="w-full max-w-[1400px] mx-auto flex flex-col gap-6">
 
       <!-- HERO SECTION -->
@@ -304,6 +323,20 @@
         </div>
       </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-[1400px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#aab6ce] text-sm">
+      <p class="mb-4">
+        <a href="index.html" class="text-zone-filter hover:underline">Home</a> •
+        <a href="features.html" class="text-zone-filter hover:underline">Features</a> •
+        <a href="how-to-use.html" class="text-zone-filter hover:underline">How to Use</a> •
+        <a href="comparison.html" class="text-zone-filter hover:underline">Compare</a> •
+        <a href="blog/" class="text-zone-filter hover:underline">Blog</a>
+      </p>
+      <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
+      <p class="mt-2">Made with AI assistance</p>
+    </footer>
+
     <script type="module" src="main.js"></script>
   </body>
 </html>
