@@ -42,7 +42,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
       {
         options.KnownProxies.Add(ipAddress);
       }
-      else if (proxy.Contains('/') && IPNetwork.TryParse(proxy, out var network))
+      else if (proxy.Contains('/') && Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse(proxy, out var network))
       {
         options.KnownNetworks.Add(network);
       }
@@ -60,19 +60,19 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Add(IPAddress.IPv6Loopback); // ::1
 
     // Common Docker bridge network
-    if (IPNetwork.TryParse("172.17.0.0/16", out var dockerBridge))
+    if (Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse("172.17.0.0/16", out var dockerBridge))
       options.KnownNetworks.Add(dockerBridge);
 
     // Docker Compose default network range
-    if (IPNetwork.TryParse("172.18.0.0/16", out var dockerCompose))
+    if (Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse("172.18.0.0/16", out var dockerCompose))
       options.KnownNetworks.Add(dockerCompose);
 
     // Common private network ranges (for Kubernetes, cloud load balancers, etc.)
-    if (IPNetwork.TryParse("10.0.0.0/8", out var privateA))
+    if (Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse("10.0.0.0/8", out var privateA))
       options.KnownNetworks.Add(privateA);
-    if (IPNetwork.TryParse("172.16.0.0/12", out var privateB))
+    if (Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse("172.16.0.0/12", out var privateB))
       options.KnownNetworks.Add(privateB);
-    if (IPNetwork.TryParse("192.168.0.0/16", out var privateC))
+    if (Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse("192.168.0.0/16", out var privateC))
       options.KnownNetworks.Add(privateC);
   }
 
