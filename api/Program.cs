@@ -24,13 +24,60 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configure forwarded headers for proxy/load balancer scenarios
 // This allows the app to correctly identify HTTPS requests when behind a reverse proxy
+// SECURITY: Only trust X-Forwarded-* headers from known proxy IPs to prevent spoofing
+var trustedProxiesConfig = builder.Configuration["TRUSTED_PROXIES"];
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
   options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-  // Clear the known networks/proxies to accept headers from any proxy
-  // In production, you should configure specific proxy IPs for security
-  options.KnownNetworks.Clear();
-  options.KnownProxies.Clear();
+
+  // By default, only trust localhost and common Docker/Kubernetes private networks
+  // Override via TRUSTED_PROXIES environment variable (comma-separated IPs or CIDRs)
+  if (!string.IsNullOrWhiteSpace(trustedProxiesConfig))
+  {
+    // Parse trusted proxy IPs from configuration
+    var proxies = trustedProxiesConfig.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    foreach (var proxy in proxies)
+    {
+      if (IPAddress.TryParse(proxy, out var ipAddress))
+      {
+        options.KnownProxies.Add(ipAddress);
+      }
+      else if (proxy.Contains('/') && IPNetwork.TryParse(proxy, out var network))
+      {
+        options.KnownNetworks.Add(network);
+      }
+      else
+      {
+        Console.WriteLine($"WARNING: Invalid proxy IP or CIDR in TRUSTED_PROXIES: {proxy}");
+      }
+    }
+  }
+  else
+  {
+    // Default: Trust localhost and common container/private network ranges
+    // These are safe defaults for most deployment scenarios
+    options.KnownProxies.Add(IPAddress.Loopback);     // 127.0.0.1
+    options.KnownProxies.Add(IPAddress.IPv6Loopback); // ::1
+
+    // Common Docker bridge network
+    if (IPNetwork.TryParse("172.17.0.0/16", out var dockerBridge))
+      options.KnownNetworks.Add(dockerBridge);
+
+    // Docker Compose default network range
+    if (IPNetwork.TryParse("172.18.0.0/16", out var dockerCompose))
+      options.KnownNetworks.Add(dockerCompose);
+
+    // Common private network ranges (for Kubernetes, cloud load balancers, etc.)
+    if (IPNetwork.TryParse("10.0.0.0/8", out var privateA))
+      options.KnownNetworks.Add(privateA);
+    if (IPNetwork.TryParse("172.16.0.0/12", out var privateB))
+      options.KnownNetworks.Add(privateB);
+    if (IPNetwork.TryParse("192.168.0.0/16", out var privateC))
+      options.KnownNetworks.Add(privateC);
+  }
+
+  // Limit to 1 proxy hop for security (increase if behind multiple proxies)
+  options.ForwardLimit = 1;
 });
 
 // P1 fix: Input validation constants
