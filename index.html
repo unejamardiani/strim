@@ -94,10 +94,10 @@
       </section>
 
       <!-- MAIN WORKSPACE -->
-      <main class="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-4 items-start">
+      <main class="grid grid-cols-1 xl:grid-cols-[1fr_2fr_1fr] gap-4 items-start">
 
-        <!-- INPUT ZONE -->
-        <section class="panel panel-input p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden">
+        <!-- INPUT ZONE (Column 1) -->
+        <section class="panel panel-input p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden xl:order-1">
           <div class="panel-header flex justify-between items-center gap-3 pb-3 border-b border-white/10">
             <div>
               <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Source</p>
@@ -127,8 +127,8 @@
           <div class="stats mt-3 grid gap-2 grid-cols-[repeat(auto-fit,minmax(140px,1fr))]" id="stats"></div>
         </section>
 
-        <!-- FILTER ZONE (CENTER - 2x width) -->
-        <section class="panel panel-filter p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden">
+        <!-- FILTER ZONE (CENTER - 2x width, Column 2) -->
+        <section class="panel panel-filter p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden xl:order-2">
           <div class="panel-header flex justify-between items-center gap-3 pb-3 border-b border-white/10">
             <div>
               <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Groups</p>
@@ -169,8 +169,8 @@
           <div id="groups" class="group-panel-body mt-1"></div>
         </section>
 
-        <!-- SAVED PLAYLISTS (goes in same column as Input on desktop, stacks on mobile) -->
-        <section class="panel panel-output p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden lg:order-3">
+        <!-- SAVED PLAYLISTS (Column 3 - Right side) -->
+        <section class="panel panel-saved p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden xl:order-3">
           <div class="panel-header flex justify-between items-center gap-3 pb-3 border-b border-white/10">
             <div>
               <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Playlists</p>
@@ -183,8 +183,8 @@
           <div id="saved-list" class="saved-list mt-2 flex flex-col gap-2"></div>
         </section>
 
-        <!-- OUTPUT ZONE (Full width) -->
-        <section class="panel panel-output col-span-1 lg:col-span-3 p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden">
+        <!-- OUTPUT ZONE (Full width - spans all 3 columns) -->
+        <section class="panel panel-output col-span-1 xl:col-span-3 p-6 rounded-2xl bg-gradient-to-br from-white/6 to-white/2 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden xl:order-4">
           <div class="panel-header flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-white/10">
             <div>
               <p class="eyebrow uppercase tracking-widest text-[11px] text-[#aab6ce] m-0 mb-1 font-semibold">Output</p>

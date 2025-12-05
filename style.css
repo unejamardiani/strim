@@ -77,7 +77,7 @@ body {
   opacity: 0.8;
 }
 
-.panel-output::before {
+.panel-saved::before {
   content: '';
   position: absolute;
   top: 0;
@@ -88,10 +88,41 @@ body {
   opacity: 0.8;
 }
 
+.panel-output::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #6df0c2, transparent, #6df0c2);
+  opacity: 0.8;
+}
+
+/* ============================================
+   WORKFLOW STEPS - Enhanced Visual Treatment
+   ============================================ */
+.workflow {
+  padding: 20px;
+}
+
+.workflow-step {
+  padding: 24px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workflow-step:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
 /* ============================================
    WORKFLOW ARROWS - Animated Flow
    ============================================ */
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   .workflow-step:not(:last-child)::after {
     content: '→';
     position: absolute;
@@ -117,7 +148,7 @@ body {
   }
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1279px) {
   .workflow-step:not(:last-child)::after {
     content: '↓';
     position: absolute;
