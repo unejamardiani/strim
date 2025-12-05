@@ -167,12 +167,15 @@ builder.Services.AddRateLimiter(options =>
 });
 
 // Antiforgery for CSRF protection
+// Note: SameSite.None is required for cross-origin clients (CORS with credentials).
+// Strict/Lax cookies are not sent with cross-site requests, breaking CSRF validation.
+// Security is maintained via: Secure cookie, HttpOnly, __Host- prefix, and origin validation.
 builder.Services.AddAntiforgery(options =>
 {
   options.HeaderName = "X-CSRF-TOKEN";
   options.Cookie.Name = "__Host-strim.csrf";
   options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-  options.Cookie.SameSite = SameSiteMode.Strict;
+  options.Cookie.SameSite = SameSiteMode.None;
   options.Cookie.HttpOnly = true;
 });
 
