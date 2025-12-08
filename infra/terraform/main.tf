@@ -60,6 +60,8 @@ locals {
       # }
       WEBSITES_ENABLE_APP_SERVICE_STORAGE = "true"
       WEBSITES_PORT                       = tostring(var.container_port)
+      # Enable forwarded headers for Azure App Service to properly handle HTTPS
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED = "true"
     },
     var.docker_registry_username != "" && var.docker_registry_password != "" ? {
       DOCKER_REGISTRY_SERVER_URL      = var.docker_registry_url
