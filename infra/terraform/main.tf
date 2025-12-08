@@ -37,7 +37,16 @@ locals {
       DB_PROVIDER                         = "sqlite"
       SQLITE_PATH                         = local.sqlite_path
       # validation via a local check to fail early if misconfigured
-      # Terraform doesn't support dynamic validations on locals, so add a null_resource with a precondition
+      WEBSITES_PORT                       = tostring(var.container_port)
+      # Example precondition to catch invalid ports (adjust as needed)
+      # resource "null_resource" "validate_container_port" {
+      #   lifecycle {
+      #     precondition {
+      #       condition     = var.container_port > 0 && var.container_port < 65536
+      #       error_message = "container_port must be a valid TCP port (1-65535)."
+      #     }
+      #   }
+      # }
       # to enforce correct sqlite path.
       # (Place this nearby in the same file)
       #
