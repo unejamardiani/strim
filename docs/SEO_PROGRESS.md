@@ -252,7 +252,7 @@
 
 ## 🚧 Known Blockers
 
-1. **Domain Name:** URLs in meta tags still show "yourdomain.com"
+1. **Domain Name:** URLs in meta tags now correctly show "strim.plis.dev"
    - **Action Required:** Update all canonical URLs once domain is finalized
    - **Priority:** HIGH
 

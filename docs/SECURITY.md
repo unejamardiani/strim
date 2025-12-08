@@ -201,7 +201,7 @@ add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
 ### Test External Dependencies
 ```bash
 # Check what external resources are loaded
-curl -s https://yourdomain.com | grep -E '(src=|href=).*https://'
+curl -s https://strim.plis.dev | grep -E '(src=|href=).*https://'
 ```
 
 ### Security Scan
