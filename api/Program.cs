@@ -882,24 +882,33 @@ authGroup.MapPost("/login", async (LoginRequest request, SignInManager<IdentityU
     return Results.BadRequest(new { error = "Username and password are required." });
   }
 
-  var userName = request.UserName.Trim();
-  var user = await userManager.FindByNameAsync(userName);
-  if (user is null)
+  try
   {
-    return Results.Unauthorized();
-  }
+    var userName = request.UserName.Trim();
+    var user = await userManager.FindByNameAsync(userName);
+    if (user is null)
+    {
+      return Results.Unauthorized();
+    }
 
-  var result = await signInManager.PasswordSignInAsync(user, request.Password, isPersistent: false, lockoutOnFailure: true);
-  if (result.IsLockedOut)
-  {
-    return Results.StatusCode(StatusCodes.Status423Locked);
-  }
-  if (!result.Succeeded)
-  {
-    return Results.Unauthorized();
-  }
+    var result = await signInManager.PasswordSignInAsync(user, request.Password, isPersistent: false, lockoutOnFailure: true);
+    if (result.IsLockedOut)
+    {
+      return Results.StatusCode(StatusCodes.Status423Locked);
+    }
+    if (!result.Succeeded)
+    {
+      return Results.Unauthorized();
+    }
 
-  return Results.Ok(new { userName = user.UserName, email = user.Email });
+    return Results.Ok(new { userName = user.UserName, email = user.Email });
+  }
+  catch (Exception ex)
+  {
+    // P1 fix: Don't expose exception details to clients - log internally instead
+    app.Logger.LogError(ex, "Login failed for user attempt");
+    return Results.Problem("Login failed due to an internal error", statusCode: 500);
+  }
 });
 
 authGroup.MapPost("/logout", async (SignInManager<IdentityUser> signInManager) =>
