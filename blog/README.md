@@ -58,6 +58,50 @@ All templates include:
 - ✅ Internal linking structure
 - ✅ Call-to-action sections
 
+## Important: Publication Dates
+
+**CRITICAL:** Always use accurate publication dates in both:
+
+1. **Schema.org structured data** (`datePublished` in JSON-LD)
+2. **Visible article date** (in the article header)
+
+### Why This Matters
+
+- Search engines use `datePublished` to determine content freshness
+- Incorrect dates can trigger duplicate content penalties
+- Future dates may cause search engines to delay indexing
+- Metadata disclosure risks if draft dates are exposed
+
+### How to Set Dates
+
+When creating a new article:
+
+```html
+<!-- Update Schema.org date -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "datePublished": "YYYY-MM-DD",  <!-- Use actual publication date -->
+  "dateModified": "YYYY-MM-DD"    <!-- Update when article is modified -->
+}
+</script>
+
+<!-- Update visible date -->
+<span>📅 Month Day, Year</span>  <!-- Use human-readable format -->
+```
+
+**Best Practice:** Set both dates to the day you actually publish the article.
+
+### Updating Existing Articles
+
+When making significant updates:
+- Update `dateModified` in Schema.org
+- Optionally add "Updated: [Date]" to article header
+- Keep original `datePublished` unchanged
+
+---
+
 ## Writing Guidelines
 
 When writing content for these articles:
