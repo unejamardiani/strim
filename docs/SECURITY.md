@@ -1,8 +1,26 @@
 # Security Considerations
 
+## ⚠️ CRITICAL: Production Deployment Warning
+
+**The current codebase uses Tailwind CSS CDN which is INSECURE for production deployment.**
+
+**See [PRODUCTION_BUILD.md](PRODUCTION_BUILD.md) for step-by-step migration guide (15-30 minutes).**
+
+### Why This Matters
+
+Using Tailwind CDN in production means:
+- ❌ **No Subresource Integrity (SRI)** - Cannot verify script integrity
+- ❌ **Supply Chain Risk** - If CDN is compromised, attackers can inject malicious code
+- ❌ **Requires 'unsafe-inline'** - Weakens Content Security Policy
+- ❌ **Poor Performance** - 300KB+ payload with runtime compilation
+
+**Fix:** Replace CDN with built CSS (see [PRODUCTION_BUILD.md](PRODUCTION_BUILD.md))
+
+---
+
 ## External Dependencies
 
-### Current Setup
+### Current Setup (Development Only)
 
 Strim uses the following external dependencies for performance and ease of development:
 
@@ -52,7 +70,11 @@ All HTML pages include a CSP meta tag that:
 
 ## Recommended Production Improvements
 
-### Priority 1: Remove Tailwind CDN
+### ⚠️ Priority 1: Remove Tailwind CDN (CRITICAL)
+
+**🚨 This is the #1 security issue that must be fixed before production deployment.**
+
+**Quick Fix:** See [PRODUCTION_BUILD.md](PRODUCTION_BUILD.md) for complete step-by-step guide.
 
 **Current (Development):**
 ```html
@@ -205,7 +227,7 @@ If you discover a security vulnerability:
 
 ## Security Checklist for Production
 
-- [ ] Replace Tailwind CDN with build process
+- [ ] **🚨 CRITICAL:** Replace Tailwind CDN with build process (see [PRODUCTION_BUILD.md](PRODUCTION_BUILD.md))
 - [ ] Remove 'unsafe-inline' from CSP
 - [ ] Move CSP to HTTP headers
 - [ ] Add additional security headers (X-Frame-Options, etc.)
