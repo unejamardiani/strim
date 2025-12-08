@@ -36,6 +36,19 @@ locals {
     {
       DB_PROVIDER                         = "sqlite"
       SQLITE_PATH                         = local.sqlite_path
+      # validation via a local check to fail early if misconfigured
+      # Terraform doesn't support dynamic validations on locals, so add a null_resource with a precondition
+      # to enforce correct sqlite path.
+      # (Place this nearby in the same file)
+      #
+      # resource "null_resource" "validate_sqlite_path" {
+      #   lifecycle {
+      #     precondition {
+      #       condition     = length(local.sqlite_path) > 0 && can(regex("^${replace(var.sqlite_mount_path, "/", "\\/")}/", local.sqlite_path))
+      #       error_message = "SQLITE_PATH must be within sqlite_mount_path and non-empty."
+      #     }
+      #   }
+      # }
       WEBSITES_ENABLE_APP_SERVICE_STORAGE = "true"
       WEBSITES_PORT                       = tostring(var.container_port)
     },
