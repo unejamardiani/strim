@@ -32,18 +32,22 @@ locals {
   sqlite_path          = "${local.sqlite_mount_path}/${var.sqlite_filename}"
   image_name           = "${var.container_image}:${var.container_image_tag}"
 
-  app_settings = merge({
-    DB_PROVIDER                        = "sqlite"
-    SQLITE_PATH                        = local.sqlite_path
-    WEBSITES_ENABLE_APP_SERVICE_STORAGE = "true"
-    WEBSITES_PORT                      = tostring(var.container_port)
-  }, var.docker_registry_username != "" && var.docker_registry_password != "" ? {
-    DOCKER_REGISTRY_SERVER_URL      = var.docker_registry_url
-    DOCKER_REGISTRY_SERVER_USERNAME = var.docker_registry_username
-    DOCKER_REGISTRY_SERVER_PASSWORD = var.docker_registry_password
-  } : {}, var.allowed_origins != "" ? {
-    ALLOWED_ORIGINS = var.allowed_origins
-  } : {})
+  app_settings = merge(
+    {
+      DB_PROVIDER                         = "sqlite"
+      SQLITE_PATH                         = local.sqlite_path
+      WEBSITES_ENABLE_APP_SERVICE_STORAGE = "true"
+      WEBSITES_PORT                       = tostring(var.container_port)
+    },
+    var.docker_registry_username != "" && var.docker_registry_password != "" ? {
+      DOCKER_REGISTRY_SERVER_URL      = var.docker_registry_url
+      DOCKER_REGISTRY_SERVER_USERNAME = var.docker_registry_username
+      DOCKER_REGISTRY_SERVER_PASSWORD = var.docker_registry_password
+    } : {},
+    var.allowed_origins != "" ? {
+      ALLOWED_ORIGINS = var.allowed_origins
+    } : {}
+  )
 }
 
 resource "azurerm_resource_group" "strim" {
