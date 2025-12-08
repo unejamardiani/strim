@@ -42,7 +42,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
       {
         options.KnownProxies.Add(ipAddress);
       }
-      else if (proxy.Contains('/') && IPNetwork.TryParse(proxy, out var network))
+      else if (proxy.Contains('/') && Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse(proxy, out var network))
       {
         options.KnownNetworks.Add(network);
       }
