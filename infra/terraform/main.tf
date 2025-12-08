@@ -58,7 +58,7 @@ locals {
       DOCKER_REGISTRY_SERVER_PASSWORD = var.docker_registry_password
     } : {},
     var.allowed_origins != "" ? {
-      ALLOWED_ORIGINS = var.allowed_origins
+      ALLOWED_ORIGINS = replace(trimspace(var.allowed_origins), "/[\\r\\n]+/", "")
     } : {}
   )
 }
