@@ -142,7 +142,8 @@ npx tailwindcss -i ./src/input.css -o ./dist/output.css --minify
 
 **After:**
 ```html
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
+<!-- Tighter CSP example (adjust domains as needed) -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https:;">
 ```
 
 **Note:** We can remove `'unsafe-inline'` and `https://cdn.tailwindcss.com` entirely!
@@ -374,15 +375,28 @@ cat dist/output.css | openssl dgst -sha384 -binary | openssl base64 -A
 # sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC
 ```
 
-**In HTML:**
+**In HTML (same-origin resource):**
 ```html
+<!-- If serving dist/output.css from the same origin, omit crossorigin to prevent CORS issues -->
 <link
   rel="stylesheet"
   href="dist/output.css"
   integrity="sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC"
+/>
+```
+
+**For cross-origin resources (CDN):**
+```html
+<!-- If serving from a different origin with proper CORS headers, include crossorigin -->
+<link
+  rel="stylesheet"
+  href="https://cdn.example.com/dist/output.css"
+  integrity="sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC"
   crossorigin="anonymous"
 />
 ```
+
+**Important:** Only use `crossorigin="anonymous"` when loading resources from a different domain. For same-origin resources (like `dist/output.css`), omit this attribute to avoid CORS errors.
 
 ---
 
