@@ -357,6 +357,19 @@ var app = builder.Build();
 // This reads X-Forwarded-Proto and X-Forwarded-For headers from the proxy
 app.UseForwardedHeaders();
 
+// Azure App Service specific: Handle X-ARR-SSL header for HTTPS detection
+// Azure may not always set X-Forwarded-Proto, but always sets X-ARR-SSL for HTTPS
+app.Use(async (context, next) =>
+{
+  var arrSsl = context.Request.Headers["X-ARR-SSL"].FirstOrDefault();
+  if (!string.IsNullOrEmpty(arrSsl))
+  {
+    // X-ARR-SSL is set by Azure when request comes through HTTPS
+    context.Request.Scheme = "https";
+  }
+  await next();
+});
+
 // Diagnostic logging: Log proxy IP on startup (remove after confirming it works)
 app.Use(async (context, next) =>
 {
@@ -365,9 +378,10 @@ app.Use(async (context, next) =>
     var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     var forwardedFor = context.Request.Headers["X-Forwarded-For"].ToString();
     var forwardedProto = context.Request.Headers["X-Forwarded-Proto"].ToString();
+    var arrSsl = context.Request.Headers["X-ARR-SSL"].ToString();
     app.Logger.LogInformation(
-      "Connection from {RemoteIP} | X-Forwarded-For: {ForwardedFor} | X-Forwarded-Proto: {ForwardedProto}",
-      remoteIp, forwardedFor, forwardedProto);
+      "Connection from {RemoteIP} | X-Forwarded-For: {ForwardedFor} | X-Forwarded-Proto: {ForwardedProto} | X-ARR-SSL: {ArrSsl}",
+      remoteIp, forwardedFor, forwardedProto, arrSsl);
   }
   await next();
 });
