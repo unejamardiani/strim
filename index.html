@@ -11,21 +11,24 @@
     <meta name="keywords" content="m3u editor, m3u8 editor, iptv playlist cleaner, m3u filter, iptv organizer, playlist manager, m3u cleaner online, free m3u editor, iptv tools, m3u playlist editor, tivimate playlist, iptv smarters playlist" />
     <meta name="author" content="Strim" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://yourdomain.com/" />
+    <link rel="canonical" href="https://strim.plis.dev/" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://yourdomain.com/" />
+    <meta property="og:url" content="https://strim.plis.dev/" />
     <meta property="og:title" content="Strim - Free M3U Playlist Editor & IPTV Cleaner Tool" />
     <meta property="og:description" content="Clean and organize your IPTV playlists in seconds. Free online M3U/M3U8 editor with filtering, grouping, and sharing features." />
-    <meta property="og:image" content="https://yourdomain.com/og-image.png" />
+    <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://yourdomain.com/" />
+    <meta property="twitter:url" content="https://strim.plis.dev/" />
     <meta property="twitter:title" content="Strim - Free M3U Playlist Editor & IPTV Cleaner Tool" />
     <meta property="twitter:description" content="Clean and organize your IPTV playlists in seconds. Free online M3U/M3U8 editor." />
-    <meta property="twitter:image" content="https://yourdomain.com/twitter-image.png" />
+    <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
+
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
 
     <!-- Structured Data (Schema.org) -->
     <script type="application/ld+json">
@@ -34,7 +37,7 @@
       "@type": "WebApplication",
       "name": "Strim",
       "alternateName": "M3U Playlist Editor",
-      "url": "https://yourdomain.com",
+      "url": "https://strim.plis.dev",
       "description": "Free online M3U playlist editor and IPTV cleaner tool",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Web Browser",
@@ -54,6 +57,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- ⚠️ DEVELOPMENT ONLY - DO NOT USE IN PRODUCTION
+         Tailwind CDN has security risks (no SRI, requires unsafe-inline CSP)
+         For production: Replace with built CSS - See docs/PRODUCTION_BUILD.md -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -79,27 +86,26 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body class="m-0 font-sans bg-[#050912] text-[#e7ecf5] min-h-screen p-6 md:p-[26px] flex flex-col gap-6 md:gap-[26px] leading-relaxed">
-    <div id="top" class="w-full max-w-[1400px] mx-auto flex flex-col gap-6">
 
-      <!-- NAVIGATION -->
-      <nav class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm text-[#aab6ce]">
-        <a class="flex items-center gap-3 no-underline" href="#top">
-          <div class="brand-mark w-11 h-11 rounded-2xl bg-gradient-to-br from-zone-filter to-zone-input flex items-center justify-center text-xl font-extrabold text-[#041018] shadow-[0_8px_32px_rgba(109,240,194,0.3)] relative">
-            S
-          </div>
-          <div>
-            <p class="m-0 text-2xl font-extrabold tracking-tight bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">strim</p>
-            <p class="m-0 text-[#aab6ce] text-[13px]">Clean playlists in seconds</p>
-          </div>
-        </a>
-        <div class="flex flex-wrap items-center gap-2">
-          <a class="ghost px-3 py-2 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-semibold transition-all hover:bg-white/10" href="#top">Home</a>
-          <a class="ghost px-3 py-2 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-semibold transition-all hover:bg-white/10" href="#features">Features</a>
-          <a class="ghost px-3 py-2 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-semibold transition-all hover:bg-white/10" href="#how-to">How to use</a>
-          <a class="ghost px-3 py-2 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-semibold transition-all hover:bg-white/10" href="#save">Compare</a>
-          <a class="px-3 py-2 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold border border-white/20 shadow-[0_8px_32px_rgba(109,240,194,0.25)]" href="blog/">Blog</a>
-        </div>
-      </nav>
+    <!-- Navigation -->
+    <nav class="w-full max-w-[1400px] mx-auto flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
+      <div class="flex items-center gap-3">
+        <a href="index.html" class="text-2xl font-extrabold bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent no-underline">strim</a>
+      </div>
+      <div class="hidden md:flex gap-6">
+        <a href="index.html" class="text-zone-filter font-bold no-underline">Home</a>
+        <a href="features.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
+        <a href="how-to-use.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">How to Use</a>
+        <a href="comparison.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
+        <a href="blog/" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Blog</a>
+      </div>
+      <!-- Mobile menu button (optional - for future enhancement) -->
+      <div class="md:hidden">
+        <a href="features.html" class="text-[#aab6ce] hover:text-zone-filter text-sm no-underline">Menu</a>
+      </div>
+    </nav>
+
+    <div class="w-full max-w-[1400px] mx-auto flex flex-col gap-6">
 
       <!-- HERO SECTION -->
       <header class="hero-gradient relative flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 md:p-8 rounded-3xl border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.4)] overflow-hidden">
@@ -328,6 +334,20 @@
         </div>
       </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-[1400px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#aab6ce] text-sm">
+      <p class="mb-4">
+        <a href="index.html" class="text-zone-filter hover:underline">Home</a> •
+        <a href="features.html" class="text-zone-filter hover:underline">Features</a> •
+        <a href="how-to-use.html" class="text-zone-filter hover:underline">How to Use</a> •
+        <a href="comparison.html" class="text-zone-filter hover:underline">Compare</a> •
+        <a href="blog/" class="text-zone-filter hover:underline">Blog</a>
+      </p>
+      <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
+      <p class="mt-2">Made with AI assistance</p>
+    </footer>
+
     <script type="module" src="main.js"></script>
   </body>
 </html>

@@ -1019,6 +1019,88 @@ function renderGroups() {
   const filtered = filterTerm ? groupsArray.filter(([name]) => name.toLowerCase().includes(filterTerm)) : groupsArray;
   state.groupEntries = filtered.sort((a, b) => b[1] - a[1]);
 
+  const totalItems = state.groupEntries.length;
+
+  const renderStatic = () => {
+    groupsGrid.classList.remove('group-virtual');
+    groupsGrid.classList.add('group-list');
+    groupsGrid.style.position = 'relative';
+    groupsGrid.style.overflowY = 'auto';
+    groupsGrid.replaceChildren();
+
+    if (totalItems === 0) {
+      const message = document.createElement('div');
+      message.className = 'hint';
+      message.textContent = filterTerm ? 'No groups match your search.' : 'Load a playlist to see groups.';
+      groupsGrid.append(message);
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    state.groupEntries.forEach(([groupTitle, cnt], idx) => {
+      const node = document.createElement('div');
+      node.className = 'group-list-item';
+
+      const info = document.createElement('div');
+      info.className = 'group-info';
+
+      const title = document.createElement('span');
+      title.className = 'group-title';
+      title.textContent = groupTitle;
+
+      const count = document.createElement('span');
+      count.className = 'group-count';
+      count.textContent = `${cnt.toLocaleString()} channel${cnt === 1 ? '' : 's'}`;
+
+      info.append(title, count);
+
+      const switchLabel = document.createElement('label');
+      switchLabel.className = 'switch';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'group-toggle';
+      checkbox.dataset.index = idx;
+      checkbox.checked = !state.disabledGroups.has(groupTitle);
+      const slider = document.createElement('span');
+      slider.className = 'slider';
+      switchLabel.append(checkbox, slider);
+
+      node.append(info, switchLabel);
+      node.classList.toggle('disabled', state.disabledGroups.has(groupTitle));
+      fragment.append(node);
+    });
+
+    groupsGrid.append(fragment);
+
+    // Clear event handlers from virtual list mode
+    groupsGrid.onclick = null;
+    groupsGrid.onscroll = null;
+
+    groupsGrid.onchange = (e) => {
+      const target = e.target;
+      if (!target.classList.contains('group-toggle')) return;
+      const idx = Number(target.dataset.index);
+      const [groupTitle] = state.groupEntries[idx] || [];
+      if (!groupTitle) return;
+      if (target.checked) {
+        state.disabledGroups.delete(groupTitle);
+      } else {
+        state.disabledGroups.add(groupTitle);
+      }
+      renderStats();
+      updateToggleAllLabel();
+      target.closest('.group-list-item')?.classList.toggle('disabled', !target.checked);
+    };
+
+    updateToggleAllLabel();
+  };
+
+  const shouldVirtualize = totalItems > 500;
+  if (!shouldVirtualize) {
+    renderStatic();
+    return;
+  }
+
   const ITEM_HEIGHT = 56;
   const BUFFER = 6;
 
@@ -1028,7 +1110,6 @@ function renderGroups() {
   groupsGrid.style.overflowY = 'auto';
   groupsGrid.replaceChildren();
 
-  const totalItems = state.groupEntries.length;
   if (totalItems === 0) {
     const message = document.createElement('div');
     message.className = 'hint';
@@ -1101,16 +1182,26 @@ function renderGroups() {
   function renderSlice(startIndex) {
     startIndex = Math.max(0, Math.min(startIndex, Math.max(0, totalItems - poolSize)));
     if (startIndex === lastStart) return;
+    const prevStart = lastStart;
     lastStart = startIndex;
     for (let i = 0; i < pool.length; i++) {
       const idx = startIndex + i;
       const poolItem = pool[i];
       if (idx >= totalItems) {
-        poolItem.node.style.display = 'none';
+        if (poolItem.node.style.display !== 'none') {
+          poolItem.node.style.display = 'none';
+        }
+        continue;
+      }
+      // Skip update if this pool item already shows this data index
+      const prevIdx = prevStart + i;
+      if (prevStart !== -1 && prevIdx === idx && prevIdx < totalItems) {
         continue;
       }
       const [groupTitle, cnt] = state.groupEntries[idx];
-      poolItem.node.style.display = 'flex';
+      if (poolItem.node.style.display !== 'flex') {
+        poolItem.node.style.display = 'flex';
+      }
       poolItem.node.style.transform = `translateY(${idx * ITEM_HEIGHT}px)`;
       poolItem.title.textContent = groupTitle;
       poolItem.count.textContent = `${cnt.toLocaleString()} channel${cnt === 1 ? '' : 's'}`;

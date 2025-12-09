@@ -106,3 +106,10 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "allowed_origins" {
+  description = "Comma-separated list of allowed CORS origins for authentication (e.g., 'https://customdomain.com,https://anotherdomain.com')."
+  type        = string
+  default     = ""
+  sensitive   = false
+}

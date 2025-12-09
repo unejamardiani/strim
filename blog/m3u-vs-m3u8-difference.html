@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Primary Meta Tags -->
+    <title>M3U vs M3U8: What's the Difference? | Strim Guide</title>
+    <meta name="title" content="M3U vs M3U8: What's the Difference? | Strim Guide" />
+    <meta name="description" content="Understand the differences between M3U and M3U8 file formats. Learn when to use each format, compatibility considerations, and how they affect your IPTV streaming experience." />
+    <meta name="keywords" content="m3u vs m3u8, m3u8 format, m3u file format, hls playlist, iptv playlist format, m3u encoding, m3u8 streaming" />
+    <meta name="author" content="Strim" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://strim.plis.dev/blog/m3u-vs-m3u8-difference.html" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://strim.plis.dev/blog/m3u-vs-m3u8-difference.html" />
+    <meta property="og:title" content="M3U vs M3U8: What's the Difference?" />
+    <meta property="og:description" content="Understand the differences between M3U and M3U8 playlist formats." />
+    <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://strim.plis.dev/blog/m3u-vs-m3u8-difference.html" />
+    <meta property="twitter:title" content="M3U vs M3U8 Explained" />
+    <meta property="twitter:description" content="The key differences between M3U and M3U8 formats." />
+    <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
+
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
+
+    <!-- Article Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": "M3U vs M3U8: What's the Difference?",
+      "description": "Understand the differences between M3U and M3U8 file formats",
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://strim.plis.dev/blog/m3u-vs-m3u8-difference.html"
+      },
+      "image": [
+        "https://strim.plis.dev/og-image.png"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "Strim",
+        "url": "https://strim.plis.dev/"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Strim",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://strim.plis.dev/icon-512.png"
+        }
+      },
+      "articleSection": "Guides",
+      "wordCount": 1200,
+      "datePublished": "2025-12-08T00:00:00Z",
+      "dateModified": "2025-12-08T00:00:00Z"
+    }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+            },
+            colors: {
+              'zone-input': '#4ac9ff',
+              'zone-filter': '#6df0c2',
+              'zone-output': '#00ff9f',
+            },
+          },
+        },
+      }
+    </script>
+    <link rel="stylesheet" href="../style.css" />
+  </head>
+  <body class="m-0 font-sans bg-[#050912] text-[#e7ecf5] min-h-screen p-6 md:p-[26px] flex flex-col gap-6 md:gap-[26px] leading-relaxed">
+
+    <!-- Navigation -->
+    <nav class="w-full max-w-[1400px] mx-auto flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
+      <div class="flex items-center gap-3">
+        <a href="../index.html" class="text-2xl font-extrabold bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent no-underline">strim</a>
+      </div>
+      <div class="flex gap-4 md:gap-6">
+        <a href="../index.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Home</a>
+        <a href="../features.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
+        <a href="../how-to-use.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">How to Use</a>
+        <a href="../comparison.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
+        <a href="index.html" class="text-zone-filter font-bold no-underline">Blog</a>
+      </div>
+    </nav>
+
+    <div class="w-full max-w-[900px] mx-auto flex flex-col gap-8">
+
+      <!-- Article Header -->
+      <header class="flex flex-col gap-4">
+        <a href="index.html" class="text-zone-filter hover:underline text-sm">← Back to Blog</a>
+        <h1 class="m-0 text-4xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">
+          M3U vs M3U8: What's the Difference?
+        </h1>
+        <div class="flex gap-4 text-sm text-[#aab6ce]">
+          <span>December 8, 2025</span>
+          <span>6 min read</span>
+        </div>
+      </header>
+
+      <!-- Article Content -->
+      <article class="prose prose-invert max-w-none">
+
+        <div class="p-6 rounded-xl bg-zone-filter/10 border border-zone-filter/30 mb-8">
+          <p class="text-lg text-[#e7ecf5] mb-0">
+            <strong>TL;DR:</strong> M3U and M3U8 are essentially the same format. The "8" in M3U8 indicates UTF-8 encoding for international character support. Both work with IPTV apps and Strim handles both seamlessly.
+          </p>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">What is an M3U File?</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          M3U stands for "MP3 URL" or "Moving Picture Experts Group Audio Layer 3 Uniform Resource Locator." Despite the name, M3U files aren't limited to MP3 audio - they're used for any media playlist.
+        </p>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-6">
+          An M3U file is simply a text file containing a list of media file locations (URLs or file paths). It tells your media player where to find and play content.
+        </p>
+
+        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">M3U File Structure</h3>
+
+        <div class="p-4 rounded-xl bg-[#1a1f2e] border border-white/10 mb-6 overflow-x-auto">
+          <pre class="text-sm text-[#aab6ce] whitespace-pre"><code>#EXTM3U
+#EXTINF:-1 tvg-id="CNN" tvg-name="CNN" group-title="News",CNN HD
+http://example.com/stream/cnn.ts
+#EXTINF:-1 tvg-id="ESPN" tvg-name="ESPN" group-title="Sports",ESPN HD
+http://example.com/stream/espn.ts
+#EXTINF:-1 tvg-id="HBO" tvg-name="HBO" group-title="Movies",HBO HD
+http://example.com/stream/hbo.ts</code></pre>
+        </div>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          Key elements:
+        </p>
+
+        <ul class="list-disc list-inside space-y-2 text-[#aab6ce] mb-6">
+          <li><strong>#EXTM3U</strong> - Header that identifies the file as an extended M3U</li>
+          <li><strong>#EXTINF</strong> - Extended information about the following entry</li>
+          <li><strong>tvg-id</strong> - Channel ID for EPG matching</li>
+          <li><strong>tvg-name</strong> - Display name for the channel</li>
+          <li><strong>group-title</strong> - Category/group the channel belongs to</li>
+          <li><strong>URL</strong> - The actual stream location</li>
+        </ul>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">What is M3U8?</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          M3U8 is simply an M3U file encoded in UTF-8. The "8" refers to UTF-8 character encoding.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div class="p-6 rounded-xl bg-white/5 border border-white/10">
+            <h4 class="text-lg font-bold text-zone-input mb-3">M3U (Original)</h4>
+            <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm">
+              <li>Uses Latin-1 (ISO-8859-1) encoding</li>
+              <li>Limited to Western European characters</li>
+              <li>Older, original format</li>
+              <li>File extension: .m3u</li>
+            </ul>
+          </div>
+          <div class="p-6 rounded-xl bg-gradient-to-br from-zone-filter/10 to-zone-filter/5 border-2 border-zone-filter/30">
+            <h4 class="text-lg font-bold text-zone-filter mb-3">M3U8 (UTF-8)</h4>
+            <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm">
+              <li>Uses UTF-8 encoding</li>
+              <li>Supports ALL languages and characters</li>
+              <li>Modern, recommended format</li>
+              <li>File extension: .m3u8</li>
+            </ul>
+          </div>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Why Does Encoding Matter?</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          Character encoding determines how text characters are stored in a file. This matters when your playlist contains:
+        </p>
+
+        <ul class="list-disc list-inside space-y-2 text-[#aab6ce] mb-6">
+          <li>Channel names in non-English languages (Chinese, Arabic, Russian, etc.)</li>
+          <li>Special characters (accents, symbols)</li>
+          <li>Emoji in channel descriptions</li>
+          <li>International group names</li>
+        </ul>
+
+        <div class="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
+          <h4 class="text-lg font-bold text-zone-filter mb-3">Example: Encoding Problems</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p class="text-sm font-bold text-red-400 mb-2">M3U (Latin-1) - Broken</p>
+              <code class="text-xs text-[#aab6ce]">"Deportes EspaÃ±oles"</code>
+            </div>
+            <div>
+              <p class="text-sm font-bold text-zone-filter mb-2">M3U8 (UTF-8) - Correct</p>
+              <code class="text-xs text-[#aab6ce]">"Deportes Espanoles"</code>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">M3U8 and HLS Streaming</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          There's another use for M3U8 that causes confusion: HLS (HTTP Live Streaming). Apple's HLS protocol uses M3U8 files as manifests for adaptive streaming.
+        </p>
+
+        <div class="p-4 rounded-xl bg-zone-input/10 border border-zone-input/30 mb-6">
+          <p class="text-sm text-[#aab6ce]">
+            <strong>Important:</strong> An IPTV M3U8 playlist (list of channels) is different from an HLS M3U8 manifest (streaming segments). Both use .m3u8 extension but serve different purposes.
+          </p>
+        </div>
+
+        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">HLS M3U8 Manifest Example</h3>
+
+        <div class="p-4 rounded-xl bg-[#1a1f2e] border border-white/10 mb-6 overflow-x-auto">
+          <pre class="text-sm text-[#aab6ce] whitespace-pre"><code>#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
+#EXT-X-MEDIA-SEQUENCE:0
+#EXTINF:10.0,
+segment_0000.ts
+#EXTINF:10.0,
+segment_0001.ts
+#EXTINF:10.0,
+segment_0002.ts</code></pre>
+        </div>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-6">
+          This HLS manifest tells a player to download and play video segments in sequence. It's not a list of TV channels - it's the streaming format itself.
+        </p>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Quick Comparison</h2>
+
+        <div class="overflow-x-auto mb-8">
+          <table class="w-full border-collapse text-sm">
+            <thead>
+              <tr class="bg-white/10">
+                <th class="p-3 text-left text-[#aab6ce] font-bold">Aspect</th>
+                <th class="p-3 text-center text-[#aab6ce] font-bold">M3U</th>
+                <th class="p-3 text-center text-[#aab6ce] font-bold">M3U8</th>
+              </tr>
+            </thead>
+            <tbody class="text-[#aab6ce]">
+              <tr class="border-b border-white/10">
+                <td class="p-3 font-bold">Encoding</td>
+                <td class="p-3 text-center">Latin-1</td>
+                <td class="p-3 text-center text-zone-filter">UTF-8</td>
+              </tr>
+              <tr class="border-b border-white/10 bg-white/5">
+                <td class="p-3 font-bold">International Characters</td>
+                <td class="p-3 text-center text-red-400">Limited</td>
+                <td class="p-3 text-center text-zone-filter">Full Support</td>
+              </tr>
+              <tr class="border-b border-white/10">
+                <td class="p-3 font-bold">IPTV App Support</td>
+                <td class="p-3 text-center text-zone-filter">Yes</td>
+                <td class="p-3 text-center text-zone-filter">Yes</td>
+              </tr>
+              <tr class="border-b border-white/10 bg-white/5">
+                <td class="p-3 font-bold">Strim Support</td>
+                <td class="p-3 text-center text-zone-filter">Yes</td>
+                <td class="p-3 text-center text-zone-filter">Yes</td>
+              </tr>
+              <tr class="border-b border-white/10">
+                <td class="p-3 font-bold">Recommended</td>
+                <td class="p-3 text-center">Legacy</td>
+                <td class="p-3 text-center text-zone-filter">Yes</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Which Should You Use?</h2>
+
+        <div class="p-6 rounded-xl bg-gradient-to-br from-zone-filter/10 to-zone-filter/5 border-2 border-zone-filter/30 mb-6">
+          <h4 class="text-lg font-bold text-zone-filter mb-3">Recommendation: Use M3U8</h4>
+          <p class="text-[#aab6ce]">
+            M3U8 (UTF-8) is the modern standard. It handles all languages and special characters correctly. There's no downside to using M3U8 - all apps that support M3U also support M3U8.
+          </p>
+        </div>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          When to use M3U (Latin-1):
+        </p>
+
+        <ul class="list-disc list-inside space-y-2 text-[#aab6ce] mb-6">
+          <li>You're working with very old software that only supports Latin-1</li>
+          <li>Your playlist only contains ASCII characters (A-Z, 0-9)</li>
+          <li>You have specific compatibility requirements</li>
+        </ul>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">How Strim Handles Both</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          Strim automatically handles both M3U and M3U8 formats:
+        </p>
+
+        <ul class="list-disc list-inside space-y-2 text-[#aab6ce] mb-6">
+          <li>Automatically detects file encoding</li>
+          <li>Properly displays international characters</li>
+          <li>Exports as UTF-8 (M3U8) by default</li>
+          <li>Preserves special characters in channel names and groups</li>
+        </ul>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-6">
+          You don't need to worry about the format - just load your playlist and Strim handles the rest.
+        </p>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Conclusion</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-6">
+          M3U and M3U8 are functionally the same playlist format. The only difference is character encoding (Latin-1 vs UTF-8). For IPTV use, prefer M3U8 for better international character support. Both formats work with all modern IPTV apps and Strim.
+        </p>
+
+        <div class="p-8 rounded-2xl bg-gradient-to-br from-zone-filter/10 to-zone-output/10 border border-zone-filter/30 text-center mt-8">
+          <h3 class="text-2xl font-bold mb-4 text-zone-filter">Edit Your M3U/M3U8 Playlist</h3>
+          <p class="text-[#aab6ce] mb-6">
+            Strim handles both formats seamlessly. Load, filter, and export your playlist.
+          </p>
+          <a href="../index.html" class="inline-block primary px-8 py-4 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-lg shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:scale-105 no-underline">
+            Start Using Strim
+          </a>
+        </div>
+
+      </article>
+
+      <!-- Related Articles -->
+      <section class="mt-12 pt-8 border-t border-white/10">
+        <h2 class="text-2xl font-bold mb-6 text-zone-filter">Related Articles</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <a href="fix-iptv-playlist-not-loading.html" class="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-zone-filter/50 transition-all no-underline">
+            <div class="text-2xl mb-2">🔧</div>
+            <h3 class="text-lg font-bold text-zone-filter mb-2">Fix Playlist Loading Issues</h3>
+            <p class="text-[#aab6ce] text-sm">Troubleshoot common M3U/M3U8 problems</p>
+          </a>
+          <a href="best-iptv-apps-m3u-files.html" class="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-zone-filter/50 transition-all no-underline">
+            <div class="text-2xl mb-2">📱</div>
+            <h3 class="text-lg font-bold text-zone-filter mb-2">Best IPTV Apps for M3U Files</h3>
+            <p class="text-[#aab6ce] text-sm">Find the best app for your playlist format</p>
+          </a>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-[1400px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#aab6ce] text-sm">
+      <p class="mb-4">
+        <a href="../index.html" class="text-zone-filter hover:underline">Home</a> •
+        <a href="../features.html" class="text-zone-filter hover:underline">Features</a> •
+        <a href="../how-to-use.html" class="text-zone-filter hover:underline">How to Use</a> •
+        <a href="../comparison.html" class="text-zone-filter hover:underline">Compare</a> •
+        <a href="index.html" class="text-zone-filter hover:underline">Blog</a>
+      </p>
+      <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
+      <p class="mt-2">Made with AI assistance</p>
+    </footer>
+
+  </body>
+</html>

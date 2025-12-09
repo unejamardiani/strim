@@ -119,6 +119,7 @@ jobs:
           TF_VAR_docker_registry_url: https://index.docker.io
           TF_VAR_container_port: 8080
           TF_VAR_sqlite_mount_path: /var/strim/data
+          TF_VAR_allowed_origins: ${{ secrets.ALLOWED_ORIGINS }}
         run: |
           set -euo pipefail
           terraform plan -input=false -out=tfplan -no-color
@@ -139,6 +140,7 @@ jobs:
           TF_VAR_docker_registry_url: https://index.docker.io
           TF_VAR_container_port: 8080
           TF_VAR_sqlite_mount_path: /var/strim/data
+          TF_VAR_allowed_origins: ${{ secrets.ALLOWED_ORIGINS }}
         run: |
           set -euo pipefail
           terraform apply -input=false -auto-approve tfplan -no-color
