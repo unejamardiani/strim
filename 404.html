@@ -3,143 +3,315 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <!-- Primary Meta Tags -->
     <title>404 - Page Not Found | Strim</title>
-    <meta name="title" content="404 - Page Not Found | Strim" />
-    <meta name="description" content="The page you're looking for doesn't exist. Return to Strim to clean your M3U playlists." />
     <meta name="robots" content="noindex, follow" />
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-
-    <!-- ⚠️ DEVELOPMENT ONLY - DO NOT USE IN PRODUCTION
-         Tailwind CDN has security risks (no SRI, requires unsafe-inline CSP)
-         For production: Replace with built CSS - See docs/PRODUCTION_BUILD.md -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
-            },
-            colors: {
-              'zone-input': '#4ac9ff',
-              'zone-filter': '#6df0c2',
-              'zone-output': '#00ff9f',
-            },
-          },
-        },
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
       }
-    </script>
-    <link rel="stylesheet" href="style.css" />
+      body {
+        font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+        background: linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px),
+                    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+                    radial-gradient(circle at 20% 20%, rgba(122, 214, 255, 0.12), transparent 35%),
+                    radial-gradient(circle at 80% 0%, rgba(255, 185, 122, 0.18), transparent 40%),
+                    #050912;
+        background-size: 50px 50px, 50px 50px, 100% 100%, 100% 100%, 100% 100%;
+        background-attachment: fixed;
+        color: #e7ecf5;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        padding: 26px;
+        gap: 26px;
+        line-height: 1.6;
+      }
+      a {
+        color: #6df0c2;
+        text-decoration: none;
+        transition: all 0.2s;
+      }
+      a:hover {
+        color: #00ff9f;
+      }
+      nav {
+        max-width: 1400px;
+        width: 100%;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+      }
+      .logo {
+        font-size: 24px;
+        font-weight: 800;
+        background: linear-gradient(to bottom right, #6df0c2, #00ff9f);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .nav-links {
+        display: flex;
+        gap: 24px;
+      }
+      .nav-links a {
+        color: #aab6ce;
+        font-weight: 500;
+        font-size: 14px;
+      }
+      .container {
+        max-width: 1400px;
+        width: 100%;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        gap: 24px;
+      }
+      .error-box {
+        position: relative;
+        max-width: 800px;
+        width: 100%;
+        padding: 48px 32px;
+        border-radius: 24px;
+        background: linear-gradient(to bottom right, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        text-align: center;
+        overflow: hidden;
+      }
+      .error-box::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(109, 240, 194, 0.2), transparent 60%);
+        pointer-events: none;
+      }
+      .error-icon {
+        font-size: 120px;
+        opacity: 0.5;
+        margin-bottom: 24px;
+      }
+      .error-code {
+        font-size: 96px;
+        font-weight: 800;
+        background: linear-gradient(to bottom right, #4ac9ff, #6df0c2);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-size: 48px;
+        font-weight: 800;
+        background: linear-gradient(to bottom right, #6df0c2, #00ff9f);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 16px;
+      }
+      .description {
+        font-size: 18px;
+        color: #aab6ce;
+        margin-bottom: 32px;
+        line-height: 1.6;
+      }
+      .detail-box {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: 20px;
+        margin: 24px 0;
+        text-align: left;
+      }
+      .detail-box strong {
+        color: #6df0c2;
+        font-size: 14px;
+      }
+      .detail-box p {
+        color: #e7ecf5;
+        font-size: 14px;
+        font-family: monospace;
+        word-break: break-all;
+        margin-top: 8px;
+      }
+      .buttons {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 32px;
+      }
+      .btn {
+        padding: 16px 32px;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 16px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        display: inline-block;
+      }
+      .btn-primary {
+        background: linear-gradient(to bottom right, #6df0c2, #00ff9f);
+        color: #031019;
+        box-shadow: 0 8px 32px rgba(109,240,194,0.3);
+        border: 1px solid rgba(255,255,255,0.2);
+      }
+      .btn-primary:hover {
+        transform: scale(1.05);
+        box-shadow: 0 8px 32px rgba(0,255,159,0.3);
+      }
+      .btn-secondary {
+        background: rgba(255,255,255,0.06);
+        color: #e7ecf5;
+        border: 1px solid rgba(255,255,255,0.1);
+      }
+      .btn-secondary:hover {
+        background: rgba(255,255,255,0.1);
+      }
+      .links-section {
+        margin-top: 32px;
+        padding-top: 24px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+      }
+      .links-section p {
+        font-size: 14px;
+        color: #aab6ce;
+        margin-bottom: 16px;
+      }
+      .helpful-links {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+        font-size: 14px;
+      }
+      .helpful-links span {
+        color: #aab6ce;
+      }
+      footer {
+        max-width: 1400px;
+        width: 100%;
+        margin: 0 auto;
+        padding-top: 32px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        text-align: center;
+        font-size: 14px;
+        color: #aab6ce;
+      }
+      footer p {
+        margin: 8px 0;
+      }
+      footer .footer-links {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-bottom: 16px;
+      }
+      @media (max-width: 768px) {
+        body {
+          padding: 16px;
+        }
+        .error-code {
+          font-size: 64px;
+        }
+        h1 {
+          font-size: 32px;
+        }
+        .description {
+          font-size: 16px;
+        }
+        .nav-links {
+          display: none;
+        }
+        .buttons {
+          flex-direction: column;
+        }
+      }
+    </style>
   </head>
-  <body class="m-0 font-sans bg-[#050912] text-[#e7ecf5] min-h-screen p-6 md:p-[26px] flex flex-col gap-6 md:gap-[26px] leading-relaxed">
-
-    <!-- Navigation -->
-    <nav class="w-full max-w-[1400px] mx-auto flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
-      <div class="flex items-center gap-3">
-        <a href="index.html" class="text-2xl font-extrabold bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent no-underline">strim</a>
+  <body>
+    <nav>
+      <div>
+        <a href="index.html" class="logo">strim</a>
       </div>
-      <div class="hidden md:flex gap-6">
-        <a href="index.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Home</a>
-        <a href="features.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
-        <a href="how-to-use.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">How to Use</a>
-        <a href="comparison.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
-        <a href="blog/" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Blog</a>
-      </div>
-      <!-- Mobile menu button -->
-      <div class="md:hidden">
-        <a href="index.html" class="text-[#aab6ce] hover:text-zone-filter text-sm no-underline">Menu</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="features.html">Features</a>
+        <a href="how-to-use.html">How to Use</a>
+        <a href="comparison.html">Compare</a>
+        <a href="blog/">Blog</a>
       </div>
     </nav>
 
-    <div class="w-full max-w-[1400px] mx-auto flex flex-col gap-6 items-center justify-center flex-1">
-
-      <!-- Error Section -->
-      <section class="hero-gradient relative flex flex-col items-center gap-6 p-8 md:p-12 rounded-3xl border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.4)] overflow-hidden text-center max-w-3xl w-full">
-
-        <!-- Error Icon -->
-        <div class="text-8xl md:text-9xl opacity-50">🔍</div>
-
-        <!-- Error Code -->
-        <div class="flex items-center gap-4">
-          <div class="text-6xl md:text-8xl font-extrabold bg-gradient-to-br from-zone-input to-zone-filter bg-clip-text text-transparent">
-            404
-          </div>
-        </div>
-
-        <!-- Error Title -->
-        <h1 class="m-0 text-3xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">
-          Page Not Found
-        </h1>
-
-        <!-- Error Description -->
-        <p class="text-lg md:text-xl text-[#aab6ce] max-w-2xl">
+    <div class="container">
+      <section class="error-box">
+        <div class="error-icon">🔍</div>
+        <div class="error-code">404</div>
+        <h1>Page Not Found</h1>
+        <p class="description">
           Looks like this playlist channel doesn't exist. The page you're looking for has been removed, renamed, or never existed.
         </p>
 
-        <!-- Error Details -->
-        <div class="w-full p-4 rounded-2xl bg-white/5 border border-white/10">
-          <p class="text-sm text-[#aab6ce] mb-2">
-            <strong class="text-zone-filter">Requested URL:</strong>
-          </p>
-          <p class="text-sm text-[#e7ecf5] font-mono break-all" id="error-url">
-            <!-- URL will be inserted by JavaScript -->
-          </p>
+        <div class="detail-box">
+          <strong>Requested URL:</strong>
+          <p id="error-url"></p>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="flex flex-col md:flex-row gap-4 mt-4">
-          <a href="index.html" class="primary px-8 py-4 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-lg shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:scale-105 no-underline">
-            ← Go to Home
-          </a>
-          <button onclick="history.back()" class="ghost px-8 py-4 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-lg transition-all hover:bg-white/10 no-underline">
-            Go Back
-          </button>
+        <div class="buttons">
+          <a href="index.html" class="btn btn-primary">← Go to Home</a>
+          <button onclick="history.back()" class="btn btn-secondary">Go Back</button>
         </div>
 
-        <!-- Helpful Links -->
-        <div class="mt-8 pt-6 border-t border-white/10 w-full">
-          <p class="text-sm text-[#aab6ce] mb-4">Try these helpful links:</p>
-          <div class="flex flex-wrap gap-3 justify-center">
-            <a href="features.html" class="text-zone-filter hover:underline text-sm font-medium">Features</a>
-            <span class="text-[#aab6ce]">•</span>
-            <a href="how-to-use.html" class="text-zone-filter hover:underline text-sm font-medium">How to Use</a>
-            <span class="text-[#aab6ce]">•</span>
-            <a href="comparison.html" class="text-zone-filter hover:underline text-sm font-medium">Compare</a>
-            <span class="text-[#aab6ce]">•</span>
-            <a href="blog/" class="text-zone-filter hover:underline text-sm font-medium">Blog</a>
+        <div class="links-section">
+          <p>Try these helpful links:</p>
+          <div class="helpful-links">
+            <a href="features.html">Features</a>
+            <span>•</span>
+            <a href="how-to-use.html">How to Use</a>
+            <span>•</span>
+            <a href="comparison.html">Compare</a>
+            <span>•</span>
+            <a href="blog/">Blog</a>
           </div>
         </div>
       </section>
-
     </div>
 
-    <!-- Footer -->
-    <footer class="w-full max-w-[1400px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#aab6ce] text-sm">
-      <p class="mb-4">
-        <a href="index.html" class="text-zone-filter hover:underline">Home</a> •
-        <a href="features.html" class="text-zone-filter hover:underline">Features</a> •
-        <a href="how-to-use.html" class="text-zone-filter hover:underline">How to Use</a> •
-        <a href="comparison.html" class="text-zone-filter hover:underline">Compare</a> •
-        <a href="blog/" class="text-zone-filter hover:underline">Blog</a>
-      </p>
+    <footer>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <span>•</span>
+        <a href="features.html">Features</a>
+        <span>•</span>
+        <a href="how-to-use.html">How to Use</a>
+        <span>•</span>
+        <a href="comparison.html">Compare</a>
+        <span>•</span>
+        <a href="blog/">Blog</a>
+      </div>
       <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
-      <p class="mt-2">Made with AI assistance</p>
+      <p>Made with AI assistance</p>
     </footer>
 
     <script>
-      // Display the requested URL
-      document.addEventListener('DOMContentLoaded', function() {
-        const urlElement = document.getElementById('error-url');
-        if (urlElement) {
-          urlElement.textContent = window.location.href;
-        }
-      });
+      document.getElementById('error-url').textContent = window.location.href;
     </script>
-
   </body>
 </html>
