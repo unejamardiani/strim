@@ -212,9 +212,10 @@ builder.Services.AddRateLimiter(options =>
 
   // Strict rate limit for sensitive operations (regenerate codes, toggle status)
   // Prevents abuse from compromised accounts disrupting legitimate access
+  // Use stable internal user ID (NameIdentifier claim) to prevent bypass via username rotation
   options.AddPolicy("sensitive", context =>
     RateLimitPartition.GetFixedWindowLimiter(
-      partitionKey: context.User.Identity?.Name ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+      partitionKey: context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
       factory: _ => new FixedWindowRateLimiterOptions
       {
         PermitLimit = 10,
