@@ -1019,6 +1019,83 @@ function renderGroups() {
   const filtered = filterTerm ? groupsArray.filter(([name]) => name.toLowerCase().includes(filterTerm)) : groupsArray;
   state.groupEntries = filtered.sort((a, b) => b[1] - a[1]);
 
+  const totalItems = state.groupEntries.length;
+
+  const renderStatic = () => {
+    groupsGrid.classList.remove('group-virtual');
+    groupsGrid.classList.add('group-list');
+    groupsGrid.style.position = 'relative';
+    groupsGrid.style.overflowY = 'auto';
+    groupsGrid.replaceChildren();
+
+    if (totalItems === 0) {
+      const message = document.createElement('div');
+      message.className = 'hint';
+      message.textContent = filterTerm ? 'No groups match your search.' : 'Load a playlist to see groups.';
+      groupsGrid.append(message);
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    state.groupEntries.forEach(([groupTitle, cnt], idx) => {
+      const node = document.createElement('div');
+      node.className = 'group-list-item';
+
+      const info = document.createElement('div');
+      info.className = 'group-info';
+
+      const title = document.createElement('span');
+      title.className = 'group-title';
+      title.textContent = groupTitle;
+
+      const count = document.createElement('span');
+      count.className = 'group-count';
+      count.textContent = `${cnt.toLocaleString()} channel${cnt === 1 ? '' : 's'}`;
+
+      info.append(title, count);
+
+      const switchLabel = document.createElement('label');
+      switchLabel.className = 'switch';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'group-toggle';
+      checkbox.dataset.index = idx;
+      checkbox.checked = !state.disabledGroups.has(groupTitle);
+      const slider = document.createElement('span');
+      slider.className = 'slider';
+      switchLabel.append(checkbox, slider);
+
+      node.append(info, switchLabel);
+      node.classList.toggle('disabled', state.disabledGroups.has(groupTitle));
+      fragment.append(node);
+    });
+
+    groupsGrid.append(fragment);
+    groupsGrid.onchange = (e) => {
+      const target = e.target;
+      if (!target.classList.contains('group-toggle')) return;
+      const idx = Number(target.dataset.index);
+      const [groupTitle] = state.groupEntries[idx] || [];
+      if (!groupTitle) return;
+      if (target.checked) {
+        state.disabledGroups.delete(groupTitle);
+      } else {
+        state.disabledGroups.add(groupTitle);
+      }
+      renderStats();
+      updateToggleAllLabel();
+      target.closest('.group-list-item')?.classList.toggle('disabled', state.disabledGroups.has(groupTitle));
+    };
+
+    updateToggleAllLabel();
+  };
+
+  const shouldVirtualize = totalItems > 500;
+  if (!shouldVirtualize) {
+    renderStatic();
+    return;
+  }
+
   const ITEM_HEIGHT = 56;
   const BUFFER = 6;
 
@@ -1028,7 +1105,6 @@ function renderGroups() {
   groupsGrid.style.overflowY = 'auto';
   groupsGrid.replaceChildren();
 
-  const totalItems = state.groupEntries.length;
   if (totalItems === 0) {
     const message = document.createElement('div');
     message.className = 'hint';

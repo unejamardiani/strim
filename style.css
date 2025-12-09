@@ -241,6 +241,17 @@ body {
    ============================================ */
 
 /* Group List Items */
+.group-list {
+  position: relative;
+  overflow-y: auto;
+  max-height: 60vh;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 6px 0;
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
 .group-virtual {
   position: relative;
   overflow-y: auto;
