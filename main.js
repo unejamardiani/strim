@@ -492,7 +492,9 @@ async function togglePlaylistActive(playlistId) {
   try {
     const result = await apiRequest(`/playlists/${playlistId}/toggle-active`, { method: 'PATCH' });
     setStatus(`Share link ${result.isActive ? 'activated' : 'deactivated'}`, 'success');
-    await loadShareLinks();
+
+    // Update UI locally instead of refetching
+    updatePlaylistItemUI(playlistId, { isActive: result.isActive });
   } catch (err) {
     console.error('Failed to toggle playlist active status:', err);
     setStatus('Failed to update status', 'error');
@@ -512,7 +514,8 @@ async function regenerateShareCode(playlistId) {
       updateShareUrlDisplay();
     }
 
-    await loadShareLinks();
+    // Update UI locally instead of refetching
+    updatePlaylistItemUI(playlistId, { shareCode: result.shareCode });
   } catch (err) {
     console.error('Failed to regenerate share code:', err);
     setStatus('Failed to regenerate link', 'error');
@@ -532,11 +535,63 @@ async function deletePlaylist(playlistId) {
       updateSaveButtonLabel();
     }
 
-    await loadShareLinks();
+    // Remove from UI locally instead of refetching
+    removePlaylistItemFromUI(playlistId);
+
+    // Still need to refresh the saved playlists sidebar
     await loadSavedPlaylists();
   } catch (err) {
     console.error('Failed to delete playlist:', err);
     setStatus('Failed to delete playlist', 'error');
+  }
+}
+
+function updatePlaylistItemUI(playlistId, updates) {
+  const item = shareLinksListContainer?.querySelector(`[data-playlist-id="${playlistId}"]`);
+  if (!item) return;
+
+  // Update isActive status
+  if (updates.hasOwnProperty('isActive')) {
+    const isActive = updates.isActive;
+    const statusBadge = item.querySelector('.chip');
+    const toggleBtn = item.querySelector('.toggle-active-btn');
+
+    if (statusBadge) {
+      statusBadge.textContent = isActive ? 'Active' : 'Inactive';
+      statusBadge.className = `chip px-2 py-1 rounded-full text-[11px] font-semibold ${isActive ? 'text-zone-filter' : 'text-[#ff6b6b]'}`;
+    }
+
+    if (toggleBtn) {
+      toggleBtn.textContent = isActive ? 'Deactivate' : 'Activate';
+    }
+  }
+
+  // Update shareCode
+  if (updates.hasOwnProperty('shareCode')) {
+    const urlInput = item.querySelector('input[type="text"]');
+    const copyBtn = item.querySelector('.copy-url-btn');
+
+    if (urlInput) {
+      const newUrl = buildShareUrlForPlaylist(playlistId, updates.shareCode);
+      urlInput.value = newUrl;
+
+      if (copyBtn) {
+        copyBtn.dataset.url = newUrl;
+      }
+    }
+  }
+}
+
+function removePlaylistItemFromUI(playlistId) {
+  const item = shareLinksListContainer?.querySelector(`[data-playlist-id="${playlistId}"]`);
+  if (item) {
+    item.remove();
+
+    // Show empty state if no items left
+    const remainingItems = shareLinksListContainer?.querySelectorAll('.share-link-item');
+    if (remainingItems && remainingItems.length === 0) {
+      shareLinksEmptyState?.classList.remove('hidden');
+    }
   }
 }
 
