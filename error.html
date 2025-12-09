@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Strim | Signal lost</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="error-body">
+    <main class="error-page">
+      <div class="error-card">
+        <div class="error-card__scan"></div>
+        <div class="error-card__glow error-card__glow--green"></div>
+        <div class="error-card__glow error-card__glow--blue"></div>
+
+        <div class="error-layout">
+          <div class="error-copy">
+            <div class="error-chip">
+              <span class="chip-dot"></span>
+              Live system status
+            </div>
+
+            <div>
+              <p class="eyebrow">Signal lost</p>
+              <h1 class="glitch-title" data-text="We lost the feed.">We lost the feed.</h1>
+              <p class="lede">
+                Your request drifted out of range. The playlist is still safe—try jumping back to the control room or re-run the last action.
+              </p>
+            </div>
+
+            <div class="error-actions">
+              <a class="action-primary" href="/">
+                Go back home
+                <span aria-hidden="true">→</span>
+              </a>
+              <button id="retry" class="action-ghost" type="button">Retry last action</button>
+            </div>
+
+            <div class="error-links">
+              <a class="error-link" href="https://status.strim.dev" target="_blank" rel="noreferrer">
+                <span class="link-dot link-dot--green"></span>
+                View status
+              </a>
+              <a class="error-link" href="mailto:support@strim.dev">
+                <span class="link-dot link-dot--amber"></span>
+                Contact support
+              </a>
+              <a class="error-link" href="index.html">
+                <span class="link-dot link-dot--blue"></span>
+                Open playlist console
+              </a>
+            </div>
+          </div>
+
+          <div class="error-visual">
+            <div class="radar-shell">
+              <div class="radar-grid"></div>
+              <div class="radar-ring radar-ring--outer"></div>
+              <div class="radar-ring radar-ring--mid"></div>
+              <div class="radar-ring radar-ring--inner"></div>
+              <div class="radar-core"></div>
+              <div class="radar-sweep"></div>
+            </div>
+            <div class="diag-card">
+              <div class="diag-header">
+                <span class="link-dot link-dot--green"></span>
+                Diagnostics
+              </div>
+              <ul>
+                <li>Playlist cache remains intact</li>
+                <li>Network retries queued</li>
+                <li>Glitch monitor watching for restores</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const retryButton = document.getElementById('retry');
+      if (retryButton) {
+        retryButton.addEventListener('click', () => {
+          if (document.referrer) {
+            window.location.assign(document.referrer);
+          } else {
+            window.location.reload();
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
