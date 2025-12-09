@@ -315,6 +315,12 @@ If Strim saves you time or improves your IPTV experience:
 
 This project was created entirely with AI assistance.
 
+## ⚠️ Disclaimer
+
+**This is a learning project.** Strim was developed as an educational exercise to explore and learn AI-powered coding tools such as Claude Code, GitHub Copilot, and similar AI development assistants. The primary purpose of this project is to gain hands-on experience with AI-assisted software development, understand the capabilities and limitations of these tools, and experiment with modern development workflows.
+
+While the application is functional and can be used for M3U playlist editing, it should be considered a demonstration and learning project rather than a production-ready enterprise solution. Use at your own discretion.
+
 ---
 
 **Keywords:** m3u editor, m3u8 editor, iptv playlist cleaner, m3u filter, iptv organizer, playlist manager, m3u cleaner online, free m3u editor, iptv tools, m3u playlist editor, tivimate playlist, iptv smarters playlist, m3u duplicate remover, iptv channel filter
