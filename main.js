@@ -1,3 +1,5 @@
+console.log('[Share Links] main.js loading...');
+
 const state = {
   groups: new Map(),
   disabledGroups: new Set(),
@@ -71,6 +73,14 @@ const shareLinksCloseButton = document.getElementById('share-links-close');
 const shareLinksBackdrop = shareLinksModal ? shareLinksModal.querySelector('.share-links-backdrop') : null;
 const shareLinksListContainer = document.getElementById('share-links-list');
 const shareLinksEmptyState = document.getElementById('share-links-empty');
+
+console.log('[Share Links] Elements found:', {
+  manageLinksButton: !!manageLinksButton,
+  shareLinksModal: !!shareLinksModal,
+  shareLinksCloseButton: !!shareLinksCloseButton,
+  shareLinksListContainer: !!shareLinksListContainer,
+  shareLinksEmptyState: !!shareLinksEmptyState
+});
 
 const savedApiBase = (() => {
   try {
