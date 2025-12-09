@@ -1,0 +1,470 @@
+/* ============================================
+   CUSTOM BACKGROUND - Grid Pattern
+   ============================================ */
+body {
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    radial-gradient(circle at 20% 20%, rgba(122, 214, 255, 0.12), transparent 35%),
+    radial-gradient(circle at 80% 0%, rgba(255, 185, 122, 0.18), transparent 40%),
+    #050912;
+  background-size: 50px 50px, 50px 50px, 100% 100%, 100% 100%, 100% 100%;
+  background-attachment: fixed;
+}
+
+/* ============================================
+   HERO SECTION - Animated Background
+   ============================================ */
+.hero-gradient::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(109, 240, 194, 0.3), transparent 60%);
+  animation: heroPulse 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes heroPulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+/* ============================================
+   BRAND MARK - Glow Effect
+   ============================================ */
+.brand-mark::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #6df0c2, #4ac9ff);
+  opacity: 0.3;
+  filter: blur(12px);
+  z-index: -1;
+}
+
+/* ============================================
+   PANEL ZONE ACCENTS - Top Border Gradients
+   ============================================ */
+.panel-input::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #4ac9ff, transparent);
+  opacity: 0.8;
+}
+
+.panel-filter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #6df0c2, transparent);
+  opacity: 0.8;
+}
+
+.panel-saved::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #00ff9f);
+  opacity: 0.8;
+}
+
+.panel-output::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #6df0c2, transparent, #6df0c2);
+  opacity: 0.8;
+}
+
+/* ============================================
+   WORKFLOW STEPS - Enhanced Visual Treatment
+   ============================================ */
+.workflow-step {
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.workflow-step:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================
+   WORKFLOW ARROWS - Animated Flow
+   ============================================ */
+@media (min-width: 1024px) {
+  .workflow-step:not(:last-child)::after {
+    content: '→';
+    position: absolute;
+    right: -24px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 24px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.15);
+    z-index: 1;
+    animation: flowArrow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes flowArrow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: translateY(-50%) translateX(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-50%) translateX(5px);
+  }
+}
+
+@media (max-width: 1023px) {
+  .workflow-step:not(:last-child)::after {
+    content: '↓';
+    position: absolute;
+    right: 50%;
+    top: auto;
+    bottom: -18px;
+    transform: translateX(50%);
+    font-size: 24px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.15);
+    z-index: 1;
+    animation: flowArrowVertical 2s ease-in-out infinite;
+  }
+}
+
+@keyframes flowArrowVertical {
+  0%, 100% {
+    opacity: 0.3;
+    transform: translateX(50%) translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(50%) translateY(3px);
+  }
+}
+
+/* ============================================
+   MODAL ANIMATIONS
+   ============================================ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   TOGGLE SWITCH - Custom Component
+   ============================================ */
+.switch {
+  flex-shrink: 0;
+  width: 50px;
+  height: 26px;
+  position: relative;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.slider:before {
+  position: absolute;
+  content: '';
+  height: 18px;
+  width: 18px;
+  left: 4px;
+  bottom: 3px;
+  background-color: #031019;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50%;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+
+.switch input:checked + .slider {
+  background: linear-gradient(135deg, #6df0c2, #00ff9f);
+  border-color: transparent;
+}
+
+.switch input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+/* ============================================
+   DYNAMICALLY GENERATED ELEMENTS (via JS)
+   ============================================ */
+
+/* Group List Items */
+.group-list {
+  position: relative;
+  overflow-y: auto;
+  max-height: 60vh;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 6px 0;
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.group-virtual {
+  position: relative;
+  overflow-y: auto;
+  max-height: 60vh;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 6px 0;
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  contain: strict;
+  content-visibility: auto;
+}
+
+.group-virtual::-webkit-scrollbar {
+  width: 10px;
+}
+
+.group-virtual::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 5px;
+}
+
+.group-virtual::-webkit-scrollbar-thumb {
+  background: #6df0c2;
+  border-radius: 5px;
+  border: 2px solid rgba(5, 9, 18, 0.5);
+}
+
+.group-virtual::-webkit-scrollbar-thumb:hover {
+  background: #00ff9f;
+}
+
+.group-spacer {
+  width: 100%;
+}
+
+.group-items-layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.group-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  margin: 0 6px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+  min-height: 56px;
+  will-change: transform;
+  contain: layout style;
+}
+
+.group-list-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #6df0c2;
+}
+
+.group-list-item.disabled {
+  opacity: 0.45;
+  border-color: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.group-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.group-title {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-count {
+  font-size: 12px;
+  color: #aab6ce;
+}
+
+/* Saved Playlist Items */
+.saved-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.saved-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #4ac9ff;
+}
+
+.saved-item.active {
+  border-color: #6df0c2;
+  background: rgba(109, 240, 194, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.saved-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.saved-name {
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.saved-sub {
+  color: #aab6ce;
+  font-size: 12px;
+}
+
+.saved-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Stat Cards */
+.stat-card {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aab6ce;
+  font-weight: 600;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #6df0c2, #00ff9f);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Select Menu Options */
+.select-option {
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #e7ecf5;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid transparent;
+}
+
+.select-option small {
+  color: #aab6ce;
+  font-size: 12px;
+}
+
+.select-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.select-option.active {
+  border: 1px solid rgba(109, 240, 194, 0.4);
+  background: rgba(109, 240, 194, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Tone variants for pills */
+.pill.tone-info {
+  color: #4ac9ff;
+  border-color: #4ac9ff;
+  background: rgba(74, 201, 255, 0.2);
+}
+
+.pill.tone-success {
+  color: #6df0c2;
+  border-color: #6df0c2;
+  background: rgba(109, 240, 194, 0.2);
+}
+
+.pill.tone-warn {
+  color: #ff9d7c;
+  border-color: #ff9d7c;
+  background: rgba(255, 157, 124, 0.2);
+}
