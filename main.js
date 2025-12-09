@@ -1,5 +1,3 @@
-console.log('[Share Links] main.js loading...');
-
 const state = {
   groups: new Map(),
   disabledGroups: new Set(),
@@ -73,14 +71,6 @@ const shareLinksCloseButton = document.getElementById('share-links-close');
 const shareLinksBackdrop = shareLinksModal ? shareLinksModal.querySelector('.share-links-backdrop') : null;
 const shareLinksListContainer = document.getElementById('share-links-list');
 const shareLinksEmptyState = document.getElementById('share-links-empty');
-
-console.log('[Share Links] Elements found:', {
-  manageLinksButton: !!manageLinksButton,
-  shareLinksModal: !!shareLinksModal,
-  shareLinksCloseButton: !!shareLinksCloseButton,
-  shareLinksListContainer: !!shareLinksListContainer,
-  shareLinksEmptyState: !!shareLinksEmptyState
-});
 
 const savedApiBase = (() => {
   try {
@@ -269,7 +259,6 @@ if (authBackdrop) {
 
 if (manageLinksButton) {
   manageLinksButton.addEventListener('click', async () => {
-    console.log('Manage Links clicked', { isAuthenticated: state.isAuthenticated });
     if (!state.isAuthenticated) {
       setStatus('Sign in to manage share links', 'warn');
       openAuthModal();
@@ -282,8 +271,6 @@ if (manageLinksButton) {
       setStatus('Failed to open share links', 'error');
     }
   });
-} else {
-  console.warn('Manage Links button not found');
 }
 
 if (shareLinksCloseButton) {
@@ -375,11 +362,7 @@ function updateAuthUi() {
 }
 
 function openShareLinksModal() {
-  console.log('openShareLinksModal called', { modalExists: !!shareLinksModal });
-  if (!shareLinksModal) {
-    console.error('Share links modal element not found');
-    return;
-  }
+  if (!shareLinksModal) return;
   shareLinksModal.classList.remove('hidden');
   loadShareLinks();
 }
