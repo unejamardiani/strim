@@ -209,6 +209,19 @@ builder.Services.AddRateLimiter(options =>
         QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
         QueueLimit = 5
       }));
+
+  // Strict rate limit for sensitive operations (regenerate codes, toggle status)
+  // Prevents abuse from compromised accounts disrupting legitimate access
+  options.AddPolicy("sensitive", context =>
+    RateLimitPartition.GetFixedWindowLimiter(
+      partitionKey: context.User.Identity?.Name ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+      factory: _ => new FixedWindowRateLimiterOptions
+      {
+        PermitLimit = 10,
+        Window = TimeSpan.FromMinutes(1),
+        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        QueueLimit = 0 // No queue - reject immediately if over limit
+      }));
 });
 
 // Antiforgery for CSRF protection
@@ -1231,7 +1244,7 @@ app.MapDelete("/api/playlists/{id:guid}", async (Guid id, ClaimsPrincipal user, 
   return Results.NoContent();
 }).RequireAuthorization();
 
-app.MapPatch("/api/playlists/{id:guid}/toggle-active", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
+app.MapPatch("/api/playlists/{id:guid}/toggle-active", async (Guid id, ClaimsPrincipal user, AppDbContext db, ILogger<Program> logger) =>
 {
   var userId = GetUserId(user);
   if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
@@ -1239,14 +1252,20 @@ app.MapPatch("/api/playlists/{id:guid}/toggle-active", async (Guid id, ClaimsPri
   var entity = await db.Playlists.FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId);
   if (entity is null) return Results.NotFound();
 
+  var previousState = entity.IsActive;
   entity.IsActive = !entity.IsActive;
   entity.UpdatedAt = DateTimeOffset.UtcNow;
   await db.SaveChangesAsync();
 
-  return Results.Ok(new { id = entity.Id, isActive = entity.IsActive });
-}).RequireAuthorization();
+  // Audit log for security monitoring
+  logger.LogInformation(
+    "User {UserId} toggled playlist {PlaylistId} share link from {PreviousState} to {NewState}",
+    userId, id, previousState ? "active" : "inactive", entity.IsActive ? "active" : "inactive");
 
-app.MapPost("/api/playlists/{id:guid}/regenerate-code", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
+  return Results.Ok(new { id = entity.Id, isActive = entity.IsActive });
+}).RequireAuthorization().RequireRateLimiting("sensitive");
+
+app.MapPost("/api/playlists/{id:guid}/regenerate-code", async (Guid id, ClaimsPrincipal user, AppDbContext db, ILogger<Program> logger) =>
 {
   var userId = GetUserId(user);
   if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
@@ -1254,12 +1273,18 @@ app.MapPost("/api/playlists/{id:guid}/regenerate-code", async (Guid id, ClaimsPr
   var entity = await db.Playlists.FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId);
   if (entity is null) return Results.NotFound();
 
+  var oldCode = entity.ShareCode;
   entity.ShareCode = SecurityHelpers.GenerateSecureShareCode();
   entity.UpdatedAt = DateTimeOffset.UtcNow;
   await db.SaveChangesAsync();
 
+  // Audit log for security monitoring - track regenerations to detect abuse
+  logger.LogWarning(
+    "User {UserId} regenerated share code for playlist {PlaylistId}. Old code invalidated: {OldCode}",
+    userId, id, oldCode);
+
   return Results.Ok(new { id = entity.Id, shareCode = entity.ShareCode });
-}).RequireAuthorization();
+}).RequireAuthorization().RequireRateLimiting("sensitive");
 
 app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpClientFactory httpClientFactory, IMemoryCache cache) =>
 {
