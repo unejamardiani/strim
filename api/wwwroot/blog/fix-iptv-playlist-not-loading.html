@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Primary Meta Tags -->
+    <title>How to Fix IPTV Playlist Not Loading | Strim Troubleshooting Guide</title>
+    <meta name="title" content="How to Fix IPTV Playlist Not Loading | Strim Troubleshooting Guide" />
+    <meta name="description" content="Troubleshoot common IPTV playlist loading issues. Fix CORS errors, format problems, URL issues, expired playlists, and more. Complete guide to M3U playlist problems." />
+    <meta name="keywords" content="iptv playlist not loading, m3u not working, cors error m3u, fix iptv playlist, m3u loading failed, playlist url error" />
+    <meta name="author" content="Strim" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://strim.plis.dev/blog/fix-iptv-playlist-not-loading.html" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://strim.plis.dev/blog/fix-iptv-playlist-not-loading.html" />
+    <meta property="og:title" content="How to Fix IPTV Playlist Not Loading" />
+    <meta property="og:description" content="Troubleshoot common IPTV playlist loading issues and errors." />
+    <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://strim.plis.dev/blog/fix-iptv-playlist-not-loading.html" />
+    <meta property="twitter:title" content="Fix IPTV Playlist Loading Issues" />
+    <meta property="twitter:description" content="Solutions to common M3U playlist problems." />
+    <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
+
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
+
+    <!-- Article Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": "How to Fix IPTV Playlist Not Loading",
+      "description": "Troubleshoot common IPTV playlist loading issues",
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://strim.plis.dev/blog/fix-iptv-playlist-not-loading.html"
+      },
+      "image": [
+        "https://strim.plis.dev/og-image.png"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "Strim",
+        "url": "https://strim.plis.dev/"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Strim",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://strim.plis.dev/icon-512.png"
+        }
+      },
+      "articleSection": "Troubleshooting",
+      "wordCount": 1400,
+      "datePublished": "2025-12-08T00:00:00Z",
+      "dateModified": "2025-12-08T00:00:00Z"
+    }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+            },
+            colors: {
+              'zone-input': '#4ac9ff',
+              'zone-filter': '#6df0c2',
+              'zone-output': '#00ff9f',
+            },
+          },
+        },
+      }
+    </script>
+    <link rel="stylesheet" href="../style.css" />
+  </head>
+  <body class="m-0 font-sans bg-[#050912] text-[#e7ecf5] min-h-screen p-6 md:p-[26px] flex flex-col gap-6 md:gap-[26px] leading-relaxed">
+
+    <!-- Navigation -->
+    <nav class="w-full max-w-[1400px] mx-auto flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
+      <div class="flex items-center gap-3">
+        <a href="../index.html" class="text-2xl font-extrabold bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent no-underline">strim</a>
+      </div>
+      <div class="flex gap-4 md:gap-6">
+        <a href="../index.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Home</a>
+        <a href="../features.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
+        <a href="../how-to-use.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">How to Use</a>
+        <a href="../comparison.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
+        <a href="index.html" class="text-zone-filter font-bold no-underline">Blog</a>
+      </div>
+    </nav>
+
+    <div class="w-full max-w-[900px] mx-auto flex flex-col gap-8">
+
+      <!-- Article Header -->
+      <header class="flex flex-col gap-4">
+        <a href="index.html" class="text-zone-filter hover:underline text-sm">← Back to Blog</a>
+        <h1 class="m-0 text-4xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">
+          How to Fix IPTV Playlist Not Loading
+        </h1>
+        <div class="flex gap-4 text-sm text-[#aab6ce]">
+          <span>December 8, 2025</span>
+          <span>8 min read</span>
+        </div>
+      </header>
+
+      <!-- Article Content -->
+      <article class="prose prose-invert max-w-none">
+
+        <div class="p-6 rounded-xl bg-zone-filter/10 border border-zone-filter/30 mb-8">
+          <p class="text-lg text-[#e7ecf5] mb-0">
+            <strong>TL;DR:</strong> Most playlist loading issues are caused by CORS restrictions, expired URLs, or format errors. Strim's built-in CORS proxy and format validation solve most problems automatically.
+          </p>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Common Playlist Loading Issues</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-6">
+          Here are the most frequent reasons why your M3U playlist might not load, along with solutions for each.
+        </p>
+
+        <!-- Issue 1: CORS -->
+        <div class="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
+          <div class="flex items-start gap-4">
+            <div class="text-3xl">1</div>
+            <div class="flex-1">
+              <h3 class="text-xl font-bold text-red-400 mb-3">CORS Error (Cross-Origin Request Blocked)</h3>
+
+              <p class="text-[#aab6ce] mb-4">
+                <strong>What it means:</strong> The server hosting your playlist doesn't allow web browsers to fetch it directly. This is a security feature that prevents unauthorized access.
+              </p>
+
+              <div class="p-4 rounded-lg bg-red-900/20 border border-red-400/30 mb-4">
+                <p class="text-sm text-[#aab6ce] font-mono">
+                  Error: "Access to fetch has been blocked by CORS policy"
+                </p>
+              </div>
+
+              <h4 class="text-lg font-bold text-zone-filter mb-2">Solutions:</h4>
+              <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm">
+                <li><strong>Use Strim</strong> - Strim automatically retries through CORS proxies when direct fetch fails</li>
+                <li><strong>Download manually</strong> - Download the .m3u file and paste its contents directly</li>
+                <li><strong>Use a VPN</strong> - Some providers block requests from certain regions</li>
+                <li><strong>Contact your provider</strong> - Ask if they have a direct download link</li>
+              </ul>
+
+              <div class="mt-4 p-3 rounded-lg bg-zone-filter/10 border border-zone-filter/30">
+                <p class="text-sm text-[#aab6ce]"><strong>Why Strim helps:</strong> Strim has built-in CORS proxy support. When a direct fetch fails, it automatically retries through multiple proxy services.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Issue 2: Invalid URL -->
+        <div class="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
+          <div class="flex items-start gap-4">
+            <div class="text-3xl">2</div>
+            <div class="flex-1">
+              <h3 class="text-xl font-bold text-red-400 mb-3">Invalid or Expired URL</h3>
+
+              <p class="text-[#aab6ce] mb-4">
+                <strong>What it means:</strong> The playlist URL is incorrect, has expired, or the server is down.
+              </p>
+
+              <h4 class="text-lg font-bold text-zone-filter mb-2">Common causes:</h4>
+              <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm mb-4">
+                <li>Typo in the URL</li>
+                <li>Subscription expired (URLs often have expiry dates)</li>
+                <li>Provider changed their URL structure</li>
+                <li>Server temporarily down</li>
+              </ul>
+
+              <h4 class="text-lg font-bold text-zone-filter mb-2">Solutions:</h4>
+              <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm">
+                <li>Double-check the URL for typos</li>
+                <li>Get a fresh URL from your provider's portal</li>
+                <li>Check if your subscription is active</li>
+                <li>Try again later if the server is down</li>
+                <li>Contact your provider for updated credentials</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Issue 3: Format Error -->
+        <div class="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
+          <div class="flex items-start gap-4">
+            <div class="text-3xl">3</div>
+            <div class="flex-1">
+              <h3 class="text-xl font-bold text-red-400 mb-3">Invalid M3U Format</h3>
+
+              <p class="text-[#aab6ce] mb-4">
+                <strong>What it means:</strong> The file isn't a valid M3U playlist. It might be HTML, JSON, or corrupted.
+              </p>
+
+              <div class="p-4 rounded-lg bg-red-900/20 border border-red-400/30 mb-4">
+                <p class="text-sm text-[#aab6ce] font-mono">
+                  Error: "Invalid M3U format" or "No channels found"
+                </p>
+              </div>
+
+              <h4 class="text-lg font-bold text-zone-filter mb-2">What to check:</h4>
+              <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm mb-4">
+                <li>File should start with <code class="bg-white/10 px-1 rounded">#EXTM3U</code></li>
+                <li>Channels defined with <code class="bg-white/10 px-1 rounded">#EXTINF</code></li>
+                <li>Not an HTML login page (check if it contains &lt;html&gt;)</li>
+                <li>Not a JSON response (check if it starts with { or [)</li>
+              </ul>
+
+              <h4 class="text-lg font-bold text-zone-filter mb-2">Solutions:</h4>
+              <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm">
+                <li>Open the URL in a browser to see what's returned</li>
+                <li>Check if you need to log in first</li>
+                <li>Use Xtream Codes credentials instead if available</li>
+                <li>Contact your provider for the correct M3U URL</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Issue 4: Large Playlist -->
+        <div class="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
+          <div class="flex items-start gap-4">
+            <div class="text-3xl">4</div>
+            <div class="flex-1">
+              <h3 class="text-xl font-bold text-red-400 mb-3">Playlist Too Large / Timeout</h3>
+
+              <p class="text-[#aab6ce] mb-4">
+                <strong>What it means:</strong> The playlist is very large (50,000+ channels) and times out during download or parsing.
+              </p>
+
+              <h4 class="text-lg font-bold text-zone-filter mb-2">Solutions:</h4>
+              <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm">
+                <li><strong>Wait longer</strong> - Large playlists can take 30+ seconds to download</li>
+                <li><strong>Download manually</strong> - Save the file locally, then paste contents</li>
+                <li><strong>Use a faster connection</strong> - Large files need good bandwidth</li>
+                <li><strong>Try off-peak hours</strong> - Provider servers may be overloaded</li>
+              </ul>
+
+              <div class="mt-4 p-3 rounded-lg bg-zone-filter/10 border border-zone-filter/30">
+                <p class="text-sm text-[#aab6ce]"><strong>Strim advantage:</strong> Strim uses Web Workers for parsing, so even massive playlists won't freeze your browser.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Issue 5: Encoding -->
+        <div class="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
+          <div class="flex items-start gap-4">
+            <div class="text-3xl">5</div>
+            <div class="flex-1">
+              <h3 class="text-xl font-bold text-red-400 mb-3">Character Encoding Issues</h3>
+
+              <p class="text-[#aab6ce] mb-4">
+                <strong>What it means:</strong> Channel names show garbled characters like "Ã©" or "â€"" instead of proper text.
+              </p>
+
+              <h4 class="text-lg font-bold text-zone-filter mb-2">Cause:</h4>
+              <p class="text-[#aab6ce] text-sm mb-4">
+                The playlist uses a different character encoding (like Latin-1) while being read as UTF-8, or vice versa.
+              </p>
+
+              <h4 class="text-lg font-bold text-zone-filter mb-2">Solutions:</h4>
+              <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm">
+                <li>Strim auto-detects encoding in most cases</li>
+                <li>If pasting text, try saving as UTF-8 first</li>
+                <li>Use the M3U8 version if available (guaranteed UTF-8)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Issue 6: SSL/HTTPS -->
+        <div class="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
+          <div class="flex items-start gap-4">
+            <div class="text-3xl">6</div>
+            <div class="flex-1">
+              <h3 class="text-xl font-bold text-red-400 mb-3">SSL Certificate Error</h3>
+
+              <p class="text-[#aab6ce] mb-4">
+                <strong>What it means:</strong> The playlist URL uses HTTPS but has an invalid or expired SSL certificate.
+              </p>
+
+              <h4 class="text-lg font-bold text-zone-filter mb-2">Solutions:</h4>
+              <ul class="list-disc list-inside space-y-2 text-[#aab6ce] text-sm">
+                <li>Try HTTP instead of HTTPS (if available)</li>
+                <li>Report the issue to your provider</li>
+                <li>Use a CORS proxy (Strim does this automatically)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Quick Troubleshooting Checklist</h2>
+
+        <div class="p-6 rounded-xl bg-gradient-to-br from-zone-filter/10 to-zone-filter/5 border-2 border-zone-filter/30 mb-6">
+          <ol class="list-decimal list-inside space-y-3 text-[#aab6ce]">
+            <li><strong>Check the URL</strong> - No typos? Complete URL with http:// or https://?</li>
+            <li><strong>Test in browser</strong> - Open the URL directly. Does it download a file or show an error page?</li>
+            <li><strong>Check subscription</strong> - Is your IPTV subscription active and paid?</li>
+            <li><strong>Try paste method</strong> - Download .m3u manually and paste contents into Strim</li>
+            <li><strong>Try later</strong> - Server might be temporarily down</li>
+            <li><strong>Contact provider</strong> - They may have updated URLs or be having issues</li>
+          </ol>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Why Strim Solves Most Issues</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          Strim is designed to handle common playlist problems automatically:
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div class="text-2xl mb-2">🔄</div>
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Automatic CORS Proxy</h4>
+            <p class="text-[#aab6ce] text-sm">When direct fetch fails, Strim retries through CORS proxies automatically.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div class="text-2xl mb-2">✅</div>
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Format Validation</h4>
+            <p class="text-[#aab6ce] text-sm">Clear error messages when the file isn't a valid M3U playlist.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div class="text-2xl mb-2">⚡</div>
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Web Worker Processing</h4>
+            <p class="text-[#aab6ce] text-sm">Large playlists parse in the background without freezing the UI.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div class="text-2xl mb-2">🌐</div>
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Encoding Detection</h4>
+            <p class="text-[#aab6ce] text-sm">Automatically handles both M3U and M3U8 encodings.</p>
+          </div>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Still Having Issues?</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          If none of the above solutions work:
+        </p>
+
+        <ul class="list-disc list-inside space-y-2 text-[#aab6ce] mb-6">
+          <li><strong>Try a sample playlist</strong> - Use Strim's built-in sample to verify the tool works</li>
+          <li><strong>Test with a different playlist</strong> - Confirm if the issue is with your specific playlist</li>
+          <li><strong>Check your internet connection</strong> - Try loading other websites</li>
+          <li><strong>Clear browser cache</strong> - Sometimes old data causes issues</li>
+          <li><strong>Try a different browser</strong> - Rule out browser-specific problems</li>
+        </ul>
+
+        <div class="p-8 rounded-2xl bg-gradient-to-br from-zone-filter/10 to-zone-output/10 border border-zone-filter/30 text-center mt-8">
+          <h3 class="text-2xl font-bold mb-4 text-zone-filter">Try Loading Your Playlist</h3>
+          <p class="text-[#aab6ce] mb-6">
+            Strim's automatic CORS proxy and error handling solve most playlist loading issues.
+          </p>
+          <a href="../index.html" class="inline-block primary px-8 py-4 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-lg shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:scale-105 no-underline">
+            Start Using Strim
+          </a>
+        </div>
+
+      </article>
+
+      <!-- Related Articles -->
+      <section class="mt-12 pt-8 border-t border-white/10">
+        <h2 class="text-2xl font-bold mb-6 text-zone-filter">Related Articles</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <a href="m3u-vs-m3u8-difference.html" class="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-zone-filter/50 transition-all no-underline">
+            <div class="text-2xl mb-2">📄</div>
+            <h3 class="text-lg font-bold text-zone-filter mb-2">M3U vs M3U8: What's the Difference?</h3>
+            <p class="text-[#aab6ce] text-sm">Understand playlist format differences</p>
+          </a>
+          <a href="how-to-clean-large-m3u-playlists.html" class="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-zone-filter/50 transition-all no-underline">
+            <div class="text-2xl mb-2">🚀</div>
+            <h3 class="text-lg font-bold text-zone-filter mb-2">How to Clean Large M3U Playlists</h3>
+            <p class="text-[#aab6ce] text-sm">Handle playlists with 50,000+ channels</p>
+          </a>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-[1400px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#aab6ce] text-sm">
+      <p class="mb-4">
+        <a href="../index.html" class="text-zone-filter hover:underline">Home</a> •
+        <a href="../features.html" class="text-zone-filter hover:underline">Features</a> •
+        <a href="../how-to-use.html" class="text-zone-filter hover:underline">How to Use</a> •
+        <a href="../comparison.html" class="text-zone-filter hover:underline">Compare</a> •
+        <a href="index.html" class="text-zone-filter hover:underline">Blog</a>
+      </p>
+      <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
+      <p class="mt-2">Made with AI assistance</p>
+    </footer>
+
+  </body>
+</html>

@@ -12,6 +12,7 @@ COPY . .
 RUN mkdir -p api/wwwroot && \
     cp index.html style.css main.js filter-worker.js api/wwwroot/ && \
     cp features.html how-to-use.html comparison.html api/wwwroot/ && \
+    cp error.html error.css style.css main.js filter-worker.js api/wwwroot/ && \
     cp -r blog api/wwwroot/
 
 # Publish

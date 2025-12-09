@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Primary Meta Tags -->
+    <title>How to Remove Adult Content from IPTV Playlists | Strim Guide</title>
+    <meta name="title" content="How to Remove Adult Content from IPTV Playlists | Strim Guide" />
+    <meta name="description" content="Create family-friendly IPTV playlists by removing adult content. Step-by-step guide to filtering out inappropriate channels from M3U playlists for safe viewing." />
+    <meta name="keywords" content="remove adult content m3u, family friendly iptv, filter xxx channels, safe iptv playlist, parental control m3u, remove 18+ channels" />
+    <meta name="author" content="Strim" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://strim.plis.dev/blog/remove-adult-content-iptv-playlists.html" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://strim.plis.dev/blog/remove-adult-content-iptv-playlists.html" />
+    <meta property="og:title" content="How to Remove Adult Content from IPTV Playlists" />
+    <meta property="og:description" content="Create family-friendly IPTV playlists by filtering out adult content." />
+    <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://strim.plis.dev/blog/remove-adult-content-iptv-playlists.html" />
+    <meta property="twitter:title" content="Remove Adult Content from IPTV Playlists" />
+    <meta property="twitter:description" content="Guide to creating family-friendly IPTV playlists." />
+    <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
+
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
+
+    <!-- Article Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": "How to Remove Adult Content from IPTV Playlists",
+      "description": "Create family-friendly IPTV playlists by filtering out adult content",
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://strim.plis.dev/blog/remove-adult-content-iptv-playlists.html"
+      },
+      "image": [
+        "https://strim.plis.dev/og-image.png"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "Strim",
+        "url": "https://strim.plis.dev/"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Strim",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://strim.plis.dev/icon-512.png"
+        }
+      },
+      "articleSection": "Guides",
+      "wordCount": 1000,
+      "datePublished": "2025-12-08T00:00:00Z",
+      "dateModified": "2025-12-08T00:00:00Z"
+    }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+            },
+            colors: {
+              'zone-input': '#4ac9ff',
+              'zone-filter': '#6df0c2',
+              'zone-output': '#00ff9f',
+            },
+          },
+        },
+      }
+    </script>
+    <link rel="stylesheet" href="../style.css" />
+  </head>
+  <body class="m-0 font-sans bg-[#050912] text-[#e7ecf5] min-h-screen p-6 md:p-[26px] flex flex-col gap-6 md:gap-[26px] leading-relaxed">
+
+    <!-- Navigation -->
+    <nav class="w-full max-w-[1400px] mx-auto flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
+      <div class="flex items-center gap-3">
+        <a href="../index.html" class="text-2xl font-extrabold bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent no-underline">strim</a>
+      </div>
+      <div class="flex gap-4 md:gap-6">
+        <a href="../index.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Home</a>
+        <a href="../features.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
+        <a href="../how-to-use.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">How to Use</a>
+        <a href="../comparison.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
+        <a href="index.html" class="text-zone-filter font-bold no-underline">Blog</a>
+      </div>
+    </nav>
+
+    <div class="w-full max-w-[900px] mx-auto flex flex-col gap-8">
+
+      <!-- Article Header -->
+      <header class="flex flex-col gap-4">
+        <a href="index.html" class="text-zone-filter hover:underline text-sm">← Back to Blog</a>
+        <h1 class="m-0 text-4xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">
+          How to Remove Adult Content from IPTV Playlists
+        </h1>
+        <div class="flex gap-4 text-sm text-[#aab6ce]">
+          <span>December 8, 2025</span>
+          <span>5 min read</span>
+        </div>
+      </header>
+
+      <!-- Article Content -->
+      <article class="prose prose-invert max-w-none">
+
+        <div class="p-6 rounded-xl bg-zone-filter/10 border border-zone-filter/30 mb-8">
+          <p class="text-lg text-[#e7ecf5] mb-0">
+            <strong>TL;DR:</strong> Use Strim to search for and disable groups containing "XXX", "Adult", "18+", and similar terms. Export the filtered playlist for family-friendly viewing.
+          </p>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">The Problem with IPTV Playlists</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          Many IPTV providers include adult content in their playlists, often mixed in with regular programming. This can be problematic if you:
+        </p>
+
+        <ul class="list-disc list-inside space-y-2 text-[#aab6ce] mb-6">
+          <li>Have children who use the same TV or device</li>
+          <li>Share your IPTV subscription with family members</li>
+          <li>Simply don't want that content in your playlist</li>
+          <li>Use IPTV in shared spaces like living rooms</li>
+        </ul>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-6">
+          The good news: You can easily filter this content out using Strim, creating a clean, family-friendly playlist.
+        </p>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Step-by-Step Guide</h2>
+
+        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Step 1: Load Your Playlist</h3>
+
+        <ol class="list-decimal list-inside space-y-2 text-[#aab6ce] mb-6">
+          <li>Open <a href="../index.html" class="text-zone-filter hover:underline">Strim</a></li>
+          <li>Paste your M3U playlist URL or raw text</li>
+          <li>Wait for the playlist to load and parse</li>
+        </ol>
+
+        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Step 2: Identify Adult Content Groups</h3>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          Adult content is typically organized into groups with recognizable names. Use the search box to find groups containing:
+        </p>
+
+        <div class="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
+          <h4 class="text-lg font-bold text-zone-filter mb-3">Common Adult Group Names to Search</h4>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[#aab6ce] text-sm">
+            <span class="px-2 py-1 bg-white/10 rounded">XXX</span>
+            <span class="px-2 py-1 bg-white/10 rounded">Adult</span>
+            <span class="px-2 py-1 bg-white/10 rounded">18+</span>
+            <span class="px-2 py-1 bg-white/10 rounded">Mature</span>
+            <span class="px-2 py-1 bg-white/10 rounded">For Adults</span>
+            <span class="px-2 py-1 bg-white/10 rounded">NSFW</span>
+            <span class="px-2 py-1 bg-white/10 rounded">Playboy</span>
+            <span class="px-2 py-1 bg-white/10 rounded">Hustler</span>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-zone-input/10 border border-zone-input/30 mb-6">
+          <p class="text-sm text-[#aab6ce]">
+            <strong>Note:</strong> Group names vary by provider. Some may use abbreviations, foreign language terms, or euphemisms. Review all groups carefully.
+          </p>
+        </div>
+
+        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Step 3: Disable Adult Groups</h3>
+
+        <ol class="list-decimal list-inside space-y-2 text-[#aab6ce] mb-6">
+          <li>Search for "XXX" in the groups filter</li>
+          <li>Toggle off any matching groups</li>
+          <li>Repeat with "Adult", "18+", and other terms</li>
+          <li>Review remaining groups for any you missed</li>
+        </ol>
+
+        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Step 4: Export Your Clean Playlist</h3>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          Once you've disabled all adult content groups:
+        </p>
+
+        <ul class="list-disc list-inside space-y-2 text-[#aab6ce] mb-6">
+          <li><strong>Download</strong> the filtered playlist as a .m3u file</li>
+          <li>Or <strong>generate a shareable URL</strong> for your IPTV app</li>
+          <li>Use this clean playlist on family devices</li>
+        </ul>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Alternative Approach: Whitelist Only</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          For maximum safety, instead of removing adult content, you can create a whitelist of only approved channels:
+        </p>
+
+        <ol class="list-decimal list-inside space-y-3 text-[#aab6ce] mb-6">
+          <li>Click <strong>"Deselect All"</strong> to disable everything</li>
+          <li>Manually enable only groups you approve:
+            <ul class="list-disc list-inside ml-4 mt-2 space-y-1 text-sm">
+              <li>News channels</li>
+              <li>Sports</li>
+              <li>Kids/Cartoons</li>
+              <li>Family-friendly movies</li>
+              <li>Educational content</li>
+            </ul>
+          </li>
+          <li>Export this curated, safe playlist</li>
+        </ol>
+
+        <div class="p-4 rounded-xl bg-zone-filter/10 border border-zone-filter/30 mb-6">
+          <p class="text-sm text-[#aab6ce]">
+            <strong>Pro Tip:</strong> This whitelist approach is more thorough because it only includes content you've explicitly approved, rather than trying to filter out everything inappropriate.
+          </p>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Creating Multiple Profiles</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-4">
+          Consider creating different playlists for different family members:
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div class="text-2xl mb-2">👶</div>
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Kids Playlist</h4>
+            <p class="text-[#aab6ce] text-sm">Only cartoons, kids shows, and educational channels</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div class="text-2xl mb-2">👨‍👩‍👧</div>
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Family Playlist</h4>
+            <p class="text-[#aab6ce] text-sm">Family-friendly content: news, sports, movies (no adult)</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div class="text-2xl mb-2">👤</div>
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Personal Playlist</h4>
+            <p class="text-[#aab6ce] text-sm">Full access (for adults-only devices)</p>
+          </div>
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Additional Safety Tips</h2>
+
+        <div class="space-y-4 mb-6">
+
+          <div class="p-6 rounded-xl bg-white/5 border border-white/10">
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Use App-Level Parental Controls</h4>
+            <p class="text-[#aab6ce] text-sm">
+              Many IPTV apps (TiviMate, IPTV Smarters) have built-in parental controls. Enable these as an additional layer of protection.
+            </p>
+          </div>
+
+          <div class="p-6 rounded-xl bg-white/5 border border-white/10">
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Device-Level Controls</h4>
+            <p class="text-[#aab6ce] text-sm">
+              Use your device's parental controls (Fire TV, Apple TV, Android TV) to restrict app access or require PIN codes.
+            </p>
+          </div>
+
+          <div class="p-6 rounded-xl bg-white/5 border border-white/10">
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Separate Devices</h4>
+            <p class="text-[#aab6ce] text-sm">
+              Consider having a separate streaming device for kids that only has the filtered kids playlist installed.
+            </p>
+          </div>
+
+          <div class="p-6 rounded-xl bg-white/5 border border-white/10">
+            <h4 class="text-lg font-bold text-zone-filter mb-2">Re-Filter Regularly</h4>
+            <p class="text-[#aab6ce] text-sm">
+              IPTV providers update their channels frequently. Re-filter your playlist monthly to catch any new adult content groups.
+            </p>
+          </div>
+
+        </div>
+
+        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Conclusion</h2>
+
+        <p class="text-[#aab6ce] leading-relaxed mb-6">
+          Creating a family-friendly IPTV playlist is straightforward with Strim. Whether you remove specific adult groups or create a whitelist of approved channels, you can ensure everyone in your household has a safe viewing experience.
+        </p>
+
+        <div class="p-8 rounded-2xl bg-gradient-to-br from-zone-filter/10 to-zone-output/10 border border-zone-filter/30 text-center mt-8">
+          <h3 class="text-2xl font-bold mb-4 text-zone-filter">Create Your Family-Safe Playlist</h3>
+          <p class="text-[#aab6ce] mb-6">
+            Use Strim to filter your IPTV playlist and create a safe viewing experience for everyone.
+          </p>
+          <a href="../index.html" class="inline-block primary px-8 py-4 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-lg shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:scale-105 no-underline">
+            Start Using Strim
+          </a>
+        </div>
+
+      </article>
+
+      <!-- Related Articles -->
+      <section class="mt-12 pt-8 border-t border-white/10">
+        <h2 class="text-2xl font-bold mb-6 text-zone-filter">Related Articles</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <a href="how-to-clean-large-m3u-playlists.html" class="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-zone-filter/50 transition-all no-underline">
+            <div class="text-2xl mb-2">🚀</div>
+            <h3 class="text-lg font-bold text-zone-filter mb-2">How to Clean Large M3U Playlists</h3>
+            <p class="text-[#aab6ce] text-sm">Handle playlists with 50,000+ channels efficiently</p>
+          </a>
+          <a href="best-iptv-apps-m3u-files.html" class="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-zone-filter/50 transition-all no-underline">
+            <div class="text-2xl mb-2">📱</div>
+            <h3 class="text-lg font-bold text-zone-filter mb-2">Best IPTV Apps for M3U Files</h3>
+            <p class="text-[#aab6ce] text-sm">Find the best app for your filtered playlist</p>
+          </a>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-[1400px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#aab6ce] text-sm">
+      <p class="mb-4">
+        <a href="../index.html" class="text-zone-filter hover:underline">Home</a> •
+        <a href="../features.html" class="text-zone-filter hover:underline">Features</a> •
+        <a href="../how-to-use.html" class="text-zone-filter hover:underline">How to Use</a> •
+        <a href="../comparison.html" class="text-zone-filter hover:underline">Compare</a> •
+        <a href="index.html" class="text-zone-filter hover:underline">Blog</a>
+      </p>
+      <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
+      <p class="mt-2">Made with AI assistance</p>
+    </footer>
+
+  </body>
+</html>
