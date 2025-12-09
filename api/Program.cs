@@ -449,6 +449,7 @@ void EnsureSchema(AppDbContext db, ILogger logger)
     TryAddSqliteColumn(db, "expirationutc", "TEXT NULL", logger);
     TryAddSqliteColumn(db, "sharecode", "TEXT NULL", logger);
     TryAddSqliteColumn(db, "ownerid", "TEXT NULL", logger);
+    TryAddSqliteColumn(db, "isactive", "INTEGER NOT NULL DEFAULT 1", logger);
     TryBackfillSqliteShareCodes(db, logger);
   }
 }
@@ -649,6 +650,9 @@ void TryPatchPostgresSchema(AppDbContext db, ILogger logger)
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'ownerid') THEN
           ALTER TABLE playlists ADD COLUMN ownerid varchar(450) NULL;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'isactive') THEN
+          ALTER TABLE playlists ADD COLUMN isactive boolean NOT NULL DEFAULT true;
+        END IF;
       END $$;
     ");
     logger.LogDebug("PostgreSQL schema patched successfully");
@@ -687,7 +691,8 @@ void TryAddSqliteColumn(AppDbContext db, string columnName, string definition, I
     ["groupcount"] = "INTEGER NOT NULL DEFAULT 0",
     ["expirationutc"] = "TEXT NULL",
     ["sharecode"] = "TEXT NULL",
-    ["ownerid"] = "TEXT NULL"
+    ["ownerid"] = "TEXT NULL",
+    ["isactive"] = "INTEGER NOT NULL DEFAULT 1"
   };
 
   if (!allowedColumns.TryGetValue(columnName, out var expectedDefinition))
@@ -1226,6 +1231,36 @@ app.MapDelete("/api/playlists/{id:guid}", async (Guid id, ClaimsPrincipal user, 
   return Results.NoContent();
 }).RequireAuthorization();
 
+app.MapPatch("/api/playlists/{id:guid}/toggle-active", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
+{
+  var userId = GetUserId(user);
+  if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+  var entity = await db.Playlists.FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId);
+  if (entity is null) return Results.NotFound();
+
+  entity.IsActive = !entity.IsActive;
+  entity.UpdatedAt = DateTimeOffset.UtcNow;
+  await db.SaveChangesAsync();
+
+  return Results.Ok(new { id = entity.Id, isActive = entity.IsActive });
+}).RequireAuthorization();
+
+app.MapPost("/api/playlists/{id:guid}/regenerate-code", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
+{
+  var userId = GetUserId(user);
+  if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+  var entity = await db.Playlists.FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId);
+  if (entity is null) return Results.NotFound();
+
+  entity.ShareCode = SecurityHelpers.GenerateSecureShareCode();
+  entity.UpdatedAt = DateTimeOffset.UtcNow;
+  await db.SaveChangesAsync();
+
+  return Results.Ok(new { id = entity.Id, shareCode = entity.ShareCode });
+}).RequireAuthorization();
+
 app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpClientFactory httpClientFactory, IMemoryCache cache) =>
 {
   if (string.IsNullOrWhiteSpace(input.SourceUrl) && string.IsNullOrWhiteSpace(input.RawText))
@@ -1377,6 +1412,10 @@ app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code,
   if (!string.Equals(playlist.ShareCode, code, StringComparison.Ordinal))
   {
     return Results.Unauthorized();
+  }
+  if (!playlist.IsActive)
+  {
+    return Results.Problem("This share link has been deactivated", statusCode: 403);
   }
   if (string.IsNullOrWhiteSpace(playlist.SourceUrl))
   {
