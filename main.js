@@ -387,25 +387,25 @@ async function loadShareLinks() {
     renderShareLinks(playlists);
   } catch (err) {
     console.error('Failed to load share links:', err);
-        return `
-          <div class="share-link-item p-4 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.06] transition-all" data-playlist-id="${escapeHtml(playlist.id)}">
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 mb-1">
-                  <h4 class="text-[#e7ecf5] font-bold text-base m-0 truncate">${escapeHtml(playlist.name)}</h4>
-                  <span class="chip px-2 py-1 rounded-full text-[11px] font-semibold ${statusClass}">${statusText}</span>
-                </div>
-                <p class="text-[#aab6ce] text-xs m-0 mb-2">${playlist.totalChannels || 0} channels • Created ${formatDate(playlist.createdAt)}</p>
-                <div class="flex items-center gap-2">
-                  <input type="text" readonly value="${escapeHtml(shareUrl)}" class="flex-1 bg-white/[0.04] text-[#aab6ce] border border-white/10 rounded-lg px-2 py-1 text-xs font-mono" />
-                </div>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button class="ghost copy-url-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-url="${escapeHtml(shareUrl)}">Copy</button>
-                <button class="ghost toggle-active-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-playlist-id="${escapeHtml(playlist.id)}">${toggleText}</button>
-                <button class="ghost regenerate-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-playlist-id="${escapeHtml(playlist.id)}">Regenerate</button>
-                <button class="ghost delete-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#ff6b6b] font-bold text-xs transition-all hover:bg-[#ff6b6b]/10 active:translate-y-px" data-playlist-id="${escapeHtml(playlist.id)}">Delete</button>
-              </div>
+    setStatus('Failed to load share links', 'error');
+  }
+}
+
+function buildShareUrlForPlaylist(playlistId, shareCode) {
+  if (!API_BASE || !playlistId || !shareCode) return '';
+  const base = API_BASE.startsWith('http')
+    ? API_BASE.replace(/\/$/, '')
+    : new URL(API_BASE.replace(/\/$/, ''), window.location.origin).toString();
+  return `${base}/playlists/${playlistId}/share/${shareCode}`;
+}
+
+function renderShareLinks(playlists) {
+  if (!shareLinksListContainer) return;
+
+  shareLinksListContainer.innerHTML = playlists.map((playlist) => {
+    const shareUrl = buildShareUrlForPlaylist(playlist.id, playlist.shareCode);
+    const isActive = playlist.isActive !== false; // Default to true if undefined
+    const statusClass = isActive ? 'text-zone-filter' : 'text-[#ff6b6b]';
     const statusText = isActive ? 'Active' : 'Inactive';
     const toggleText = isActive ? 'Deactivate' : 'Activate';
 
