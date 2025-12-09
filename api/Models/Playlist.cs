@@ -38,6 +38,9 @@ public class Playlist
   [Column("sharecode")]
   public string? ShareCode { get; set; } = string.Empty;
 
+  [Column("isactive")]
+  public bool IsActive { get; set; } = true;
+
   public DateTimeOffset CreatedAt { get; set; }
 
   public DateTimeOffset UpdatedAt { get; set; }

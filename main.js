@@ -65,6 +65,12 @@ const authTriggerLabel = document.getElementById('auth-trigger-label');
 const authModal = document.getElementById('auth-modal');
 const authCloseButton = document.getElementById('auth-close');
 const authBackdrop = authModal ? authModal.querySelector('.auth-backdrop') : null;
+const manageLinksButton = document.getElementById('manage-links');
+const shareLinksModal = document.getElementById('share-links-modal');
+const shareLinksCloseButton = document.getElementById('share-links-close');
+const shareLinksBackdrop = shareLinksModal ? shareLinksModal.querySelector('.share-links-backdrop') : null;
+const shareLinksListContainer = document.getElementById('share-links-list');
+const shareLinksEmptyState = document.getElementById('share-links-empty');
 
 const savedApiBase = (() => {
   try {
@@ -251,9 +257,29 @@ if (authBackdrop) {
   authBackdrop.addEventListener('click', () => closeAuthModal());
 }
 
+if (manageLinksButton) {
+  manageLinksButton.addEventListener('click', async () => {
+    if (!state.isAuthenticated) {
+      setStatus('Sign in to manage share links', 'warn');
+      openAuthModal();
+      return;
+    }
+    await openShareLinksModal();
+  });
+}
+
+if (shareLinksCloseButton) {
+  shareLinksCloseButton.addEventListener('click', () => closeShareLinksModal());
+}
+
+if (shareLinksBackdrop) {
+  shareLinksBackdrop.addEventListener('click', () => closeShareLinksModal());
+}
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeAuthModal();
+    closeShareLinksModal();
   }
 });
 
@@ -328,6 +354,201 @@ function updateAuthUi() {
       : 'Sign in';
   }
   updateSaveButtonLabel();
+}
+
+function openShareLinksModal() {
+  if (!shareLinksModal) return;
+  shareLinksModal.classList.remove('hidden');
+  loadShareLinks();
+}
+
+function closeShareLinksModal() {
+  if (!shareLinksModal) return;
+  shareLinksModal.classList.add('hidden');
+}
+
+async function loadShareLinks() {
+  if (!state.isAuthenticated) return;
+
+  try {
+    const playlists = await apiRequest('/playlists');
+    if (!Array.isArray(playlists) || playlists.length === 0) {
+      shareLinksListContainer.innerHTML = '';
+      shareLinksEmptyState.classList.remove('hidden');
+      return;
+    }
+
+    shareLinksEmptyState.classList.add('hidden');
+    renderShareLinks(playlists);
+  } catch (err) {
+    console.error('Failed to load share links:', err);
+    setStatus('Failed to load share links', 'error');
+  }
+}
+
+function buildShareUrlForPlaylist(playlistId, shareCode) {
+  if (!API_BASE || !playlistId || !shareCode) return '';
+  const base = API_BASE.startsWith('http')
+    ? API_BASE.replace(/\/$/, '')
+    : new URL(API_BASE.replace(/\/$/, ''), window.location.origin).toString();
+  return `${base}/playlists/${playlistId}/share/${shareCode}`;
+}
+
+function renderShareLinks(playlists) {
+  if (!shareLinksListContainer) return;
+
+  shareLinksListContainer.innerHTML = playlists.map((playlist) => {
+    const shareUrl = buildShareUrlForPlaylist(playlist.id, playlist.shareCode);
+    const isActive = playlist.isActive !== false; // Default to true if undefined
+    const statusClass = isActive ? 'text-zone-filter' : 'text-[#ff6b6b]';
+    const statusText = isActive ? 'Active' : 'Inactive';
+    const toggleText = isActive ? 'Deactivate' : 'Activate';
+
+    return `
+      <div class="share-link-item p-4 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.06] transition-all" data-playlist-id="${playlist.id}">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <h4 class="text-[#e7ecf5] font-bold text-base m-0 truncate">${escapeHtml(playlist.name)}</h4>
+              <span class="chip px-2 py-1 rounded-full text-[11px] font-semibold ${statusClass}">${statusText}</span>
+            </div>
+            <p class="text-[#aab6ce] text-xs m-0 mb-2">${playlist.totalChannels || 0} channels • Created ${formatDate(playlist.createdAt)}</p>
+            <div class="flex items-center gap-2">
+              <input type="text" readonly value="${shareUrl}" class="flex-1 bg-white/[0.04] text-[#aab6ce] border border-white/10 rounded-lg px-2 py-1 text-xs font-mono" />
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button class="ghost copy-url-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-url="${shareUrl}">Copy</button>
+            <button class="ghost toggle-active-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-playlist-id="${playlist.id}">${toggleText}</button>
+            <button class="ghost regenerate-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-playlist-id="${playlist.id}">Regenerate</button>
+            <button class="ghost delete-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#ff6b6b] font-bold text-xs transition-all hover:bg-[#ff6b6b]/10 active:translate-y-px" data-playlist-id="${playlist.id}">Delete</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add event listeners
+  shareLinksListContainer.querySelectorAll('.copy-url-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const url = e.target.dataset.url;
+      try {
+        await navigator.clipboard.writeText(url);
+        setStatus('URL copied to clipboard', 'success');
+      } catch (err) {
+        console.error('Failed to copy URL:', err);
+        setStatus('Failed to copy URL', 'error');
+      }
+    });
+  });
+
+  shareLinksListContainer.querySelectorAll('.toggle-active-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const playlistId = e.target.dataset.playlistId;
+      await togglePlaylistActive(playlistId);
+    });
+  });
+
+  shareLinksListContainer.querySelectorAll('.regenerate-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const playlistId = e.target.dataset.playlistId;
+      await regenerateShareCode(playlistId);
+    });
+  });
+
+  shareLinksListContainer.querySelectorAll('.delete-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const playlistId = e.target.dataset.playlistId;
+      if (confirm('Are you sure you want to delete this playlist and its share link?')) {
+        await deletePlaylist(playlistId);
+      }
+    });
+  });
+}
+
+async function togglePlaylistActive(playlistId) {
+  try {
+    const result = await apiRequest(`/playlists/${playlistId}/toggle-active`, 'PATCH');
+    setStatus(`Share link ${result.isActive ? 'activated' : 'deactivated'}`, 'success');
+    await loadShareLinks();
+  } catch (err) {
+    console.error('Failed to toggle playlist active status:', err);
+    setStatus('Failed to update status', 'error');
+  }
+}
+
+async function regenerateShareCode(playlistId) {
+  if (!confirm('Regenerate share link? The old URL will stop working.')) return;
+
+  try {
+    const result = await apiRequest(`/playlists/${playlistId}/regenerate-code`, 'POST');
+    setStatus('Share link regenerated', 'success');
+
+    // Update state if this is the current playlist
+    if (state.currentPlaylistId === playlistId) {
+      state.shareCode = result.shareCode;
+      updateShareUrlDisplay();
+    }
+
+    await loadShareLinks();
+  } catch (err) {
+    console.error('Failed to regenerate share code:', err);
+    setStatus('Failed to regenerate link', 'error');
+  }
+}
+
+async function deletePlaylist(playlistId) {
+  try {
+    await apiRequest(`/playlists/${playlistId}`, 'DELETE');
+    setStatus('Playlist deleted', 'success');
+
+    // Clear current playlist if it was deleted
+    if (state.currentPlaylistId === playlistId) {
+      state.currentPlaylistId = null;
+      state.shareCode = null;
+      updateShareUrlDisplay();
+      updateSaveButtonLabel();
+    }
+
+    await loadShareLinks();
+    await loadSavedPlaylists();
+  } catch (err) {
+    console.error('Failed to delete playlist:', err);
+    setStatus('Failed to delete playlist', 'error');
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatDate(dateString) {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'today';
+    if (diffDays === 1) return 'yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+
+    return date.toLocaleDateString();
+  } catch {
+    return 'recently';
+  }
+}
+
+function updateShareUrlDisplay() {
+  if (!shareUrlInput) return;
+  if (state.currentPlaylistId && state.shareCode) {
+    shareUrlInput.value = buildShareUrl();
+  } else {
+    shareUrlInput.value = '';
+  }
 }
 
 async function fetchAuthProviders() {
