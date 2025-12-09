@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Primary Meta Tags -->
+    <title>404 - Page Not Found | Strim</title>
+    <meta name="title" content="404 - Page Not Found | Strim" />
+    <meta name="description" content="The page you're looking for doesn't exist. Return to Strim to clean your M3U playlists." />
+    <meta name="robots" content="noindex, follow" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- ⚠️ DEVELOPMENT ONLY - DO NOT USE IN PRODUCTION
+         Tailwind CDN has security risks (no SRI, requires unsafe-inline CSP)
+         For production: Replace with built CSS - See docs/PRODUCTION_BUILD.md -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+            },
+            colors: {
+              'zone-input': '#4ac9ff',
+              'zone-filter': '#6df0c2',
+              'zone-output': '#00ff9f',
+            },
+          },
+        },
+      }
+    </script>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="m-0 font-sans bg-[#050912] text-[#e7ecf5] min-h-screen p-6 md:p-[26px] flex flex-col gap-6 md:gap-[26px] leading-relaxed">
+
+    <!-- Navigation -->
+    <nav class="w-full max-w-[1400px] mx-auto flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
+      <div class="flex items-center gap-3">
+        <a href="index.html" class="text-2xl font-extrabold bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent no-underline">strim</a>
+      </div>
+      <div class="hidden md:flex gap-6">
+        <a href="index.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Home</a>
+        <a href="features.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
+        <a href="how-to-use.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">How to Use</a>
+        <a href="comparison.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
+        <a href="blog/" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Blog</a>
+      </div>
+      <!-- Mobile menu button -->
+      <div class="md:hidden">
+        <a href="index.html" class="text-[#aab6ce] hover:text-zone-filter text-sm no-underline">Menu</a>
+      </div>
+    </nav>
+
+    <div class="w-full max-w-[1400px] mx-auto flex flex-col gap-6 items-center justify-center flex-1">
+
+      <!-- Error Section -->
+      <section class="hero-gradient relative flex flex-col items-center gap-6 p-8 md:p-12 rounded-3xl border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.4)] overflow-hidden text-center max-w-3xl w-full">
+
+        <!-- Error Icon -->
+        <div class="text-8xl md:text-9xl opacity-50">🔍</div>
+
+        <!-- Error Code -->
+        <div class="flex items-center gap-4">
+          <div class="text-6xl md:text-8xl font-extrabold bg-gradient-to-br from-zone-input to-zone-filter bg-clip-text text-transparent">
+            404
+          </div>
+        </div>
+
+        <!-- Error Title -->
+        <h1 class="m-0 text-3xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">
+          Page Not Found
+        </h1>
+
+        <!-- Error Description -->
+        <p class="text-lg md:text-xl text-[#aab6ce] max-w-2xl">
+          Looks like this playlist channel doesn't exist. The page you're looking for has been removed, renamed, or never existed.
+        </p>
+
+        <!-- Error Details -->
+        <div class="w-full p-4 rounded-2xl bg-white/5 border border-white/10">
+          <p class="text-sm text-[#aab6ce] mb-2">
+            <strong class="text-zone-filter">Requested URL:</strong>
+          </p>
+          <p class="text-sm text-[#e7ecf5] font-mono break-all" id="error-url">
+            <!-- URL will be inserted by JavaScript -->
+          </p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col md:flex-row gap-4 mt-4">
+          <a href="index.html" class="primary px-8 py-4 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-lg shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:scale-105 no-underline">
+            ← Go to Home
+          </a>
+          <button onclick="history.back()" class="ghost px-8 py-4 rounded-xl bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-lg transition-all hover:bg-white/10 no-underline">
+            Go Back
+          </button>
+        </div>
+
+        <!-- Helpful Links -->
+        <div class="mt-8 pt-6 border-t border-white/10 w-full">
+          <p class="text-sm text-[#aab6ce] mb-4">Try these helpful links:</p>
+          <div class="flex flex-wrap gap-3 justify-center">
+            <a href="features.html" class="text-zone-filter hover:underline text-sm font-medium">Features</a>
+            <span class="text-[#aab6ce]">•</span>
+            <a href="how-to-use.html" class="text-zone-filter hover:underline text-sm font-medium">How to Use</a>
+            <span class="text-[#aab6ce]">•</span>
+            <a href="comparison.html" class="text-zone-filter hover:underline text-sm font-medium">Compare</a>
+            <span class="text-[#aab6ce]">•</span>
+            <a href="blog/" class="text-zone-filter hover:underline text-sm font-medium">Blog</a>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-[1400px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#aab6ce] text-sm">
+      <p class="mb-4">
+        <a href="index.html" class="text-zone-filter hover:underline">Home</a> •
+        <a href="features.html" class="text-zone-filter hover:underline">Features</a> •
+        <a href="how-to-use.html" class="text-zone-filter hover:underline">How to Use</a> •
+        <a href="comparison.html" class="text-zone-filter hover:underline">Compare</a> •
+        <a href="blog/" class="text-zone-filter hover:underline">Blog</a>
+      </p>
+      <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
+      <p class="mt-2">Made with AI assistance</p>
+    </footer>
+
+    <script>
+      // Display the requested URL
+      document.addEventListener('DOMContentLoaded', function() {
+        const urlElement = document.getElementById('error-url');
+        if (urlElement) {
+          urlElement.textContent = window.location.href;
+        }
+      });
+    </script>
+
+  </body>
+</html>
