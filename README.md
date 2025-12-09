@@ -55,14 +55,42 @@ Strim is a lightweight, powerful M3U/M3U8 playlist editor that runs entirely in 
 
 ## Running locally
 
-No build tools are required – it is a static site:
+### Frontend only (limited functionality)
+
+The frontend can run standalone for **basic playlist cleaning**:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Then open http://localhost:8000 in your browser. You can also open `index.html` directly from the
-filesystem.
+Then open http://localhost:8000 in your browser. You can also open `index.html` directly from the filesystem.
+
+**Works without backend:**
+- ✅ Load sample playlist
+- ✅ Fetch playlists from URLs
+- ✅ Filter and organize groups
+- ✅ Download or copy filtered playlists
+
+**Requires backend (see below):**
+- ❌ Save playlists (persistence)
+- ❌ Shareable URLs
+- ❌ Authentication
+- ❌ Cross-device sync
+
+### Full stack locally (with backend)
+
+For complete functionality including persistence and sharing, run both frontend and backend:
+
+```bash
+# Terminal 1: Start the backend API (requires .NET 8)
+cd api
+dotnet run
+
+# Terminal 2: Serve the frontend
+python3 -m http.server 8000
+```
+
+The frontend will automatically connect to the API at `http://localhost:5000/api`. See [Backend persistence](#backend-persistence-net-8-minimal-api) section for database configuration options.
 
 ### Production Deployment
 
