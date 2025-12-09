@@ -22,7 +22,9 @@ Strim is a lightweight, powerful M3U/M3U8 playlist editor that runs entirely in 
 
 ## 🎬 Quick Start
 
-1. **Open Strim** (or run locally - see below)
+**Try it now:** [https://strim.plis.dev](https://strim.plis.dev) ← No installation required!
+
+1. **Open Strim** - Visit [strim.plis.dev](https://strim.plis.dev) (or run locally - see below)
 2. **Load your playlist** - Paste URL or raw M3U text
 3. **Filter groups** - Toggle unwanted groups off (or Deselect All → enable favorites)
 4. **Export** - Download, copy, or generate shareable URL
@@ -62,10 +64,11 @@ python3 -m http.server 8000
 Then open http://localhost:8000 in your browser. You can also open `index.html` directly from the
 filesystem.
 
-### Hosting cheaply on Azure
+### Production Deployment
 
-Deploy the contents of this directory to Azure Static Web Apps or an App Service configured for
-static files. The app has no server-side dependencies.
+**Azure:** The project includes comprehensive Terraform infrastructure in `infra/terraform/` for deploying to Azure App Service with SQLite persistence. See [Deployment](#deployment-infrastructure) section below for details.
+
+**Other Platforms:** Deploy the static files to any web host (Netlify, Vercel, GitHub Pages, etc.). No server-side dependencies required for the basic app.
 
 ## Backend persistence (.NET 8 minimal API)
 
@@ -210,10 +213,12 @@ Contributions are welcome! Here's how you can help:
 
 ## 📊 Project Status
 
-- **Status:** ✅ Active Development
+- **Status:** ✅ Live & Active Development
+- **Production URL:** [https://strim.plis.dev](https://strim.plis.dev)
 - **License:** MIT (free to use, modify, distribute)
 - **Platform:** Web (runs in any modern browser)
 - **Backend:** Optional .NET 8 API for persistence and sharing
+- **Infrastructure:** Azure App Service with Terraform automation
 
 ## 🌟 Star History
 
@@ -221,10 +226,46 @@ If you find Strim useful, please give it a star ⭐ on GitHub! It helps others d
 
 ## 🔗 Links
 
-- **Website:** [Coming Soon - Add your domain here]
-- **Documentation:** See this README and inline help
+- **Website:** [https://strim.plis.dev](https://strim.plis.dev)
+- **Landing Pages:**
+  - [Features](https://strim.plis.dev/features.html) - Comprehensive feature showcase
+  - [How to Use](https://strim.plis.dev/how-to-use.html) - Step-by-step tutorial
+  - [Comparison](https://strim.plis.dev/comparison.html) - Compare with alternatives
+  - [Blog](https://strim.plis.dev/blog/) - Tips and guides
 - **Issues:** [GitHub Issues](https://github.com/unejamardiani/strim/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/unejamardiani/strim/discussions)
+
+## 📚 Documentation
+
+Comprehensive documentation is available in the `/docs` directory:
+
+- **[PRODUCTION_BUILD.md](docs/PRODUCTION_BUILD.md)** - How to build for production (Tailwind CSS, security, performance)
+- **[SECURITY.md](docs/SECURITY.md)** - Security considerations and best practices
+- **[DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)** - Database schema and migrations
+- **[SEO_PROGRESS.md](docs/SEO_PROGRESS.md)** - SEO strategy and implementation tracking
+
+## 🚀 Deployment Infrastructure
+
+The project includes production-ready Terraform configuration for Azure deployment:
+
+**Location:** `infra/terraform/`
+
+**Features:**
+- Azure App Service with Linux containers
+- SQLite database with Azure Files persistence
+- Automated HTTPS and custom domain support
+- Environment variable configuration
+- Docker registry integration
+- Cost-optimized for single-container deployment
+
+**Quick Deploy:**
+```bash
+cd infra/terraform
+terraform init
+terraform apply
+```
+
+See `infra/terraform/README.md` for detailed deployment instructions and configuration options.
 
 ## 📝 License
 
