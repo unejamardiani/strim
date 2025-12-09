@@ -490,7 +490,7 @@ function renderShareLinks(playlists) {
 
 async function togglePlaylistActive(playlistId) {
   try {
-    const result = await apiRequest(`/playlists/${playlistId}/toggle-active`, 'PATCH');
+    const result = await apiRequest(`/playlists/${playlistId}/toggle-active`, { method: 'PATCH' });
     setStatus(`Share link ${result.isActive ? 'activated' : 'deactivated'}`, 'success');
     await loadShareLinks();
   } catch (err) {
@@ -503,7 +503,7 @@ async function regenerateShareCode(playlistId) {
   if (!confirm('Regenerate share link? The old URL will stop working.')) return;
 
   try {
-    const result = await apiRequest(`/playlists/${playlistId}/regenerate-code`, 'POST');
+    const result = await apiRequest(`/playlists/${playlistId}/regenerate-code`, { method: 'POST' });
     setStatus('Share link regenerated', 'success');
 
     // Update state if this is the current playlist
@@ -521,7 +521,7 @@ async function regenerateShareCode(playlistId) {
 
 async function deletePlaylist(playlistId) {
   try {
-    await apiRequest(`/playlists/${playlistId}`, 'DELETE');
+    await apiRequest(`/playlists/${playlistId}`, { method: 'DELETE' });
     setStatus('Playlist deleted', 'success');
 
     // Clear current playlist if it was deleted
