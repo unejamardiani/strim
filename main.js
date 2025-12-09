@@ -259,13 +259,21 @@ if (authBackdrop) {
 
 if (manageLinksButton) {
   manageLinksButton.addEventListener('click', async () => {
+    console.log('Manage Links clicked', { isAuthenticated: state.isAuthenticated });
     if (!state.isAuthenticated) {
       setStatus('Sign in to manage share links', 'warn');
       openAuthModal();
       return;
     }
-    await openShareLinksModal();
+    try {
+      await openShareLinksModal();
+    } catch (err) {
+      console.error('Error opening share links modal:', err);
+      setStatus('Failed to open share links', 'error');
+    }
   });
+} else {
+  console.warn('Manage Links button not found');
 }
 
 if (shareLinksCloseButton) {
@@ -357,7 +365,11 @@ function updateAuthUi() {
 }
 
 function openShareLinksModal() {
-  if (!shareLinksModal) return;
+  console.log('openShareLinksModal called', { modalExists: !!shareLinksModal });
+  if (!shareLinksModal) {
+    console.error('Share links modal element not found');
+    return;
+  }
   shareLinksModal.classList.remove('hidden');
   loadShareLinks();
 }
