@@ -1071,6 +1071,11 @@ function renderGroups() {
     });
 
     groupsGrid.append(fragment);
+
+    // Clear event handlers from virtual list mode
+    groupsGrid.onclick = null;
+    groupsGrid.onscroll = null;
+
     groupsGrid.onchange = (e) => {
       const target = e.target;
       if (!target.classList.contains('group-toggle')) return;
@@ -1084,7 +1089,7 @@ function renderGroups() {
       }
       renderStats();
       updateToggleAllLabel();
-      target.closest('.group-list-item')?.classList.toggle('disabled', state.disabledGroups.has(groupTitle));
+      target.closest('.group-list-item')?.classList.toggle('disabled', !target.checked);
     };
 
     updateToggleAllLabel();
