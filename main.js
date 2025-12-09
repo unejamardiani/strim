@@ -409,8 +409,14 @@ function renderShareLinks(playlists) {
     const statusText = isActive ? 'Active' : 'Inactive';
     const toggleText = isActive ? 'Deactivate' : 'Activate';
 
+    // Hide URL for inactive links to prevent exposure
+    const displayUrl = isActive ? shareUrl : '(Link deactivated - activate to view)';
+    const urlInputClass = isActive
+      ? 'flex-1 bg-white/[0.04] text-[#aab6ce] border border-white/10 rounded-lg px-2 py-1 text-xs font-mono'
+      : 'flex-1 bg-white/[0.04] text-[#555] border border-white/10 rounded-lg px-2 py-1 text-xs italic';
+
     return `
-      <div class="share-link-item p-4 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.06] transition-all" data-playlist-id="${playlist.id}">
+      <div class="share-link-item p-4 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.06] transition-all" data-playlist-id="${playlist.id}" data-is-active="${isActive}">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-1">
@@ -419,11 +425,11 @@ function renderShareLinks(playlists) {
             </div>
             <p class="text-[#aab6ce] text-xs m-0 mb-2">${playlist.totalChannels || 0} channels • Created ${formatDate(playlist.createdAt)}</p>
             <div class="flex items-center gap-2">
-              <input type="text" readonly value="${shareUrl}" class="flex-1 bg-white/[0.04] text-[#aab6ce] border border-white/10 rounded-lg px-2 py-1 text-xs font-mono" />
+              <input type="text" readonly value="${isActive ? shareUrl : ''}" placeholder="${!isActive ? displayUrl : ''}" class="${urlInputClass}" data-share-url="${shareUrl}" />
             </div>
           </div>
           <div class="flex flex-wrap gap-2">
-            <button class="ghost copy-url-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-url="${shareUrl}">Copy</button>
+            <button class="ghost copy-url-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px ${!isActive ? 'opacity-50 cursor-not-allowed' : ''}" data-url="${shareUrl}" ${!isActive ? 'disabled' : ''}>Copy</button>
             <button class="ghost toggle-active-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-playlist-id="${playlist.id}">${toggleText}</button>
             <button class="ghost regenerate-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-playlist-id="${playlist.id}">Regenerate</button>
             <button class="ghost delete-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#ff6b6b] font-bold text-xs transition-all hover:bg-[#ff6b6b]/10 active:translate-y-px" data-playlist-id="${playlist.id}">Delete</button>
@@ -433,16 +439,45 @@ function renderShareLinks(playlists) {
     `;
   }).join('');
 
-  // Add event listeners
+  // Add event listeners with improved clipboard fallback
   shareLinksListContainer.querySelectorAll('.copy-url-btn').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
-      const url = e.target.dataset.url;
+      const button = e.target;
+      const url = button.dataset.url;
+      const item = button.closest('.share-link-item');
+      const input = item?.querySelector('input[type="text"]');
+
+      // Don't copy if disabled
+      if (button.disabled) return;
+
       try {
+        // Try modern clipboard API first
         await navigator.clipboard.writeText(url);
         setStatus('URL copied to clipboard', 'success');
       } catch (err) {
-        console.error('Failed to copy URL:', err);
-        setStatus('Failed to copy URL', 'error');
+        console.warn('Clipboard API failed, using fallback:', err);
+
+        // Fallback: select the input field for manual copy
+        if (input) {
+          input.value = url; // Ensure URL is visible
+          input.select();
+          input.setSelectionRange(0, 99999); // For mobile
+
+          try {
+            // Try legacy execCommand as fallback
+            const success = document.execCommand('copy');
+            if (success) {
+              setStatus('URL copied to clipboard', 'success');
+            } else {
+              setStatus('Please copy the URL manually (Ctrl+C)', 'warn');
+            }
+          } catch (execErr) {
+            console.error('Fallback copy failed:', execErr);
+            setStatus('Please copy the URL manually (Ctrl+C)', 'warn');
+          }
+        } else {
+          setStatus('Failed to copy URL', 'error');
+        }
       }
     });
   });
@@ -538,25 +573,64 @@ function updatePlaylistItemUI(playlistId, updates) {
     const isActive = updates.isActive;
     const statusBadge = item.querySelector('.chip');
     const toggleBtn = item.querySelector('.toggle-active-btn');
+    const urlInput = item.querySelector('input[type="text"]');
+    const copyBtn = item.querySelector('.copy-url-btn');
 
+    // Update badge
     if (statusBadge) {
       statusBadge.textContent = isActive ? 'Active' : 'Inactive';
       statusBadge.className = `chip px-2 py-1 rounded-full text-[11px] font-semibold ${isActive ? 'text-zone-filter' : 'text-[#ff6b6b]'}`;
     }
 
+    // Update toggle button
     if (toggleBtn) {
       toggleBtn.textContent = isActive ? 'Deactivate' : 'Activate';
     }
+
+    // Show/hide URL based on active status
+    if (urlInput) {
+      const shareUrl = urlInput.dataset.shareUrl || copyBtn?.dataset.url || '';
+
+      if (isActive) {
+        urlInput.value = shareUrl;
+        urlInput.placeholder = '';
+        urlInput.className = 'flex-1 bg-white/[0.04] text-[#aab6ce] border border-white/10 rounded-lg px-2 py-1 text-xs font-mono';
+      } else {
+        urlInput.value = '';
+        urlInput.placeholder = '(Link deactivated - activate to view)';
+        urlInput.className = 'flex-1 bg-white/[0.04] text-[#555] border border-white/10 rounded-lg px-2 py-1 text-xs italic';
+      }
+    }
+
+    // Enable/disable copy button
+    if (copyBtn) {
+      if (isActive) {
+        copyBtn.disabled = false;
+        copyBtn.className = 'ghost copy-url-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px';
+      } else {
+        copyBtn.disabled = true;
+        copyBtn.className = 'ghost copy-url-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px opacity-50 cursor-not-allowed';
+      }
+    }
+
+    // Update data attribute
+    item.dataset.isActive = isActive;
   }
 
   // Update shareCode
   if (updates.hasOwnProperty('shareCode')) {
     const urlInput = item.querySelector('input[type="text"]');
     const copyBtn = item.querySelector('.copy-url-btn');
+    const isActive = item.dataset.isActive !== 'false';
 
     if (urlInput) {
       const newUrl = buildShareUrlForPlaylist(playlistId, updates.shareCode);
-      urlInput.value = newUrl;
+      urlInput.dataset.shareUrl = newUrl;
+
+      // Only show URL if link is active
+      if (isActive) {
+        urlInput.value = newUrl;
+      }
 
       if (copyBtn) {
         copyBtn.dataset.url = newUrl;
