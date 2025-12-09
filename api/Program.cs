@@ -1408,14 +1408,17 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
 app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code, AppDbContext db, IHttpClientFactory httpClientFactory) =>
 {
   var playlist = await db.Playlists.FindAsync(id);
+
+  // Use uniform 404 response for all invalid access attempts to prevent user enumeration
+  // This prevents attackers from probing which playlist IDs exist via differential responses
   if (playlist is null) return Results.NotFound();
   if (!string.Equals(playlist.ShareCode, code, StringComparison.Ordinal))
   {
-    return Results.Unauthorized();
+    return Results.NotFound();
   }
   if (!playlist.IsActive)
   {
-    return Results.Problem("This share link has been deactivated", statusCode: 403);
+    return Results.NotFound();
   }
   if (string.IsNullOrWhiteSpace(playlist.SourceUrl))
   {
