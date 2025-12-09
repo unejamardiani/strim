@@ -1101,16 +1101,26 @@ function renderGroups() {
   function renderSlice(startIndex) {
     startIndex = Math.max(0, Math.min(startIndex, Math.max(0, totalItems - poolSize)));
     if (startIndex === lastStart) return;
+    const prevStart = lastStart;
     lastStart = startIndex;
     for (let i = 0; i < pool.length; i++) {
       const idx = startIndex + i;
       const poolItem = pool[i];
       if (idx >= totalItems) {
-        poolItem.node.style.display = 'none';
+        if (poolItem.node.style.display !== 'none') {
+          poolItem.node.style.display = 'none';
+        }
+        continue;
+      }
+      // Skip update if this pool item already shows this data index
+      const prevIdx = prevStart + i;
+      if (prevStart !== -1 && prevIdx === idx && prevIdx < totalItems) {
         continue;
       }
       const [groupTitle, cnt] = state.groupEntries[idx];
-      poolItem.node.style.display = 'flex';
+      if (poolItem.node.style.display !== 'flex') {
+        poolItem.node.style.display = 'flex';
+      }
       poolItem.node.style.transform = `translateY(${idx * ITEM_HEIGHT}px)`;
       poolItem.title.textContent = groupTitle;
       poolItem.count.textContent = `${cnt.toLocaleString()} channel${cnt === 1 ? '' : 's'}`;
