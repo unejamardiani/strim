@@ -25,17 +25,17 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configure forwarded headers for proxy/load balancer scenarios
 // This allows the app to correctly identify HTTPS requests when behind a reverse proxy
-// SECURITY: Only trust X-Forwarded-* headers from known proxy IPs to prevent spoofing
+// NOTE: We trust all proxies by default since this app is designed to run behind a reverse proxy.
+// Network-level security (firewall/VPC rules) should restrict direct access to the application.
+// Set TRUSTED_PROXIES env var to restrict to specific IPs/CIDRs if needed.
 var trustedProxiesConfig = builder.Configuration["TRUSTED_PROXIES"];
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
   options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
 
-  // By default, only trust localhost and common Docker/Kubernetes private networks
-  // Override via TRUSTED_PROXIES environment variable (comma-separated IPs or CIDRs)
   if (!string.IsNullOrWhiteSpace(trustedProxiesConfig))
   {
-    // Parse trusted proxy IPs from configuration
+    // Explicit trusted proxies configured - use restricted mode
     var proxies = trustedProxiesConfig.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     foreach (var proxy in proxies)
     {
@@ -43,7 +43,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
       {
         options.KnownProxies.Add(ipAddress);
       }
-      else if (proxy.Contains('/') && IPNetwork.TryParse(proxy, out var network))
+      else if (proxy.Contains('/') && Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse(proxy, out var network))
       {
         options.KnownNetworks.Add(network);
       }
@@ -52,33 +52,18 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
         Console.WriteLine($"WARNING: Invalid proxy IP or CIDR in TRUSTED_PROXIES: {proxy}");
       }
     }
+    // Limit to 1 proxy hop when explicit proxies are configured
+    options.ForwardLimit = 1;
   }
   else
   {
-    // Default: Trust localhost and common container/private network ranges
-    // These are safe defaults for most deployment scenarios
-    options.KnownProxies.Add(IPAddress.Loopback);     // 127.0.0.1
-    options.KnownProxies.Add(IPAddress.IPv6Loopback); // ::1
-
-    // Common Docker bridge network
-    if (IPNetwork.TryParse("172.17.0.0/16", out var dockerBridge))
-      options.KnownNetworks.Add(dockerBridge);
-
-    // Docker Compose default network range
-    if (IPNetwork.TryParse("172.18.0.0/16", out var dockerCompose))
-      options.KnownNetworks.Add(dockerCompose);
-
-    // Common private network ranges (for Kubernetes, cloud load balancers, etc.)
-    if (IPNetwork.TryParse("10.0.0.0/8", out var privateA))
-      options.KnownNetworks.Add(privateA);
-    if (IPNetwork.TryParse("172.16.0.0/12", out var privateB))
-      options.KnownNetworks.Add(privateB);
-    if (IPNetwork.TryParse("192.168.0.0/16", out var privateC))
-      options.KnownNetworks.Add(privateC);
+    // Default: Trust all proxies - app is designed to run behind a reverse proxy
+    // Clear the default restrictions to accept X-Forwarded-* from any source
+    options.KnownProxies.Clear();
+    options.KnownNetworks.Clear();
+    // Allow unlimited proxy hops (null = no limit)
+    options.ForwardLimit = null;
   }
-
-  // Limit to 1 proxy hop for security (increase if behind multiple proxies)
-  options.ForwardLimit = 1;
 });
 
 // P1 fix: Input validation constants
@@ -373,6 +358,19 @@ var app = builder.Build();
 // This reads X-Forwarded-Proto and X-Forwarded-For headers from the proxy
 app.UseForwardedHeaders();
 
+// Azure App Service specific: Handle X-ARR-SSL header for HTTPS detection
+// Azure may not always set X-Forwarded-Proto, but always sets X-ARR-SSL for HTTPS
+app.Use(async (context, next) =>
+{
+  var arrSsl = context.Request.Headers["X-ARR-SSL"].FirstOrDefault();
+  if (!string.IsNullOrEmpty(arrSsl))
+  {
+    // X-ARR-SSL is set by Azure when request comes through HTTPS
+    context.Request.Scheme = "https";
+  }
+  await next();
+});
+
 // Diagnostic logging: Log proxy IP on startup (remove after confirming it works)
 app.Use(async (context, next) =>
 {
@@ -381,9 +379,10 @@ app.Use(async (context, next) =>
     var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     var forwardedFor = context.Request.Headers["X-Forwarded-For"].ToString();
     var forwardedProto = context.Request.Headers["X-Forwarded-Proto"].ToString();
+    var arrSsl = context.Request.Headers["X-ARR-SSL"].ToString();
     app.Logger.LogInformation(
-      "Connection from {RemoteIP} | X-Forwarded-For: {ForwardedFor} | X-Forwarded-Proto: {ForwardedProto}",
-      remoteIp, forwardedFor, forwardedProto);
+      "Connection from {RemoteIP} | X-Forwarded-For: {ForwardedFor} | X-Forwarded-Proto: {ForwardedProto} | X-ARR-SSL: {ArrSsl}",
+      remoteIp, forwardedFor, forwardedProto, arrSsl);
   }
   await next();
 });
@@ -883,24 +882,33 @@ authGroup.MapPost("/login", async (LoginRequest request, SignInManager<IdentityU
     return Results.BadRequest(new { error = "Username and password are required." });
   }
 
-  var userName = request.UserName.Trim();
-  var user = await userManager.FindByNameAsync(userName);
-  if (user is null)
+  try
   {
-    return Results.Unauthorized();
-  }
+    var userName = request.UserName.Trim();
+    var user = await userManager.FindByNameAsync(userName);
+    if (user is null)
+    {
+      return Results.Unauthorized();
+    }
 
-  var result = await signInManager.PasswordSignInAsync(user, request.Password, isPersistent: false, lockoutOnFailure: true);
-  if (result.IsLockedOut)
-  {
-    return Results.StatusCode(StatusCodes.Status423Locked);
-  }
-  if (!result.Succeeded)
-  {
-    return Results.Unauthorized();
-  }
+    var result = await signInManager.PasswordSignInAsync(user, request.Password, isPersistent: false, lockoutOnFailure: true);
+    if (result.IsLockedOut)
+    {
+      return Results.StatusCode(StatusCodes.Status423Locked);
+    }
+    if (!result.Succeeded)
+    {
+      return Results.Unauthorized();
+    }
 
-  return Results.Ok(new { userName = user.UserName, email = user.Email });
+    return Results.Ok(new { userName = user.UserName, email = user.Email });
+  }
+  catch (Exception ex)
+  {
+    // P1 fix: Don't expose exception details to clients - log internally instead
+    app.Logger.LogError(ex, "Login failed for user attempt");
+    return Results.Problem("Login failed due to an internal error", statusCode: 500);
+  }
 });
 
 authGroup.MapPost("/logout", async (SignInManager<IdentityUser> signInManager) =>

@@ -32,16 +32,46 @@ locals {
   sqlite_path          = "${local.sqlite_mount_path}/${var.sqlite_filename}"
   image_name           = "${var.container_image}:${var.container_image_tag}"
 
-  app_settings = merge({
-    DB_PROVIDER                        = "sqlite"
-    SQLITE_PATH                        = local.sqlite_path
-    WEBSITES_ENABLE_APP_SERVICE_STORAGE = "true"
-    WEBSITES_PORT                      = tostring(var.container_port)
-  }, var.docker_registry_username != "" && var.docker_registry_password != "" ? {
-    DOCKER_REGISTRY_SERVER_URL      = var.docker_registry_url
-    DOCKER_REGISTRY_SERVER_USERNAME = var.docker_registry_username
-    DOCKER_REGISTRY_SERVER_PASSWORD = var.docker_registry_password
-  } : {})
+  app_settings = merge(
+    {
+      DB_PROVIDER                         = "sqlite"
+      SQLITE_PATH                         = local.sqlite_path
+      # validation via a local check to fail early if misconfigured
+      WEBSITES_PORT                       = tostring(var.container_port)
+      # Example precondition to catch invalid ports (adjust as needed)
+      # resource "null_resource" "validate_container_port" {
+      #   lifecycle {
+      #     precondition {
+      #       condition     = var.container_port > 0 && var.container_port < 65536
+      #       error_message = "container_port must be a valid TCP port (1-65535)."
+      #     }
+      #   }
+      # }
+      # to enforce correct sqlite path.
+      # (Place this nearby in the same file)
+      #
+      # resource "null_resource" "validate_sqlite_path" {
+      #   lifecycle {
+      #     precondition {
+      #       condition     = length(local.sqlite_path) > 0 && can(regex("^${replace(var.sqlite_mount_path, "/", "\\/")}/", local.sqlite_path))
+      #       error_message = "SQLITE_PATH must be within sqlite_mount_path and non-empty."
+      #     }
+      #   }
+      # }
+      WEBSITES_ENABLE_APP_SERVICE_STORAGE = "true"
+      WEBSITES_PORT                       = tostring(var.container_port)
+      # Enable forwarded headers for Azure App Service to properly handle HTTPS
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED = "true"
+    },
+    var.docker_registry_username != "" && var.docker_registry_password != "" ? {
+      DOCKER_REGISTRY_SERVER_URL      = var.docker_registry_url
+      DOCKER_REGISTRY_SERVER_USERNAME = var.docker_registry_username
+      DOCKER_REGISTRY_SERVER_PASSWORD = var.docker_registry_password
+    } : {},
+    var.allowed_origins != "" ? {
+      ALLOWED_ORIGINS = replace(trimspace(var.allowed_origins), "/[\\r\\n]+/", "")
+    } : {}
+  )
 }
 
 resource "azurerm_resource_group" "strim" {

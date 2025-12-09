@@ -10,7 +10,10 @@ COPY . .
 
 # Place static frontend assets into api/wwwroot so they get published with the API
 RUN mkdir -p api/wwwroot && \
-    cp index.html error.html error.css style.css main.js filter-worker.js api/wwwroot/
+    cp index.html style.css main.js filter-worker.js api/wwwroot/ && \
+    cp features.html how-to-use.html comparison.html api/wwwroot/ && \
+    cp error.html error.css style.css main.js filter-worker.js api/wwwroot/ && \
+    cp -r blog api/wwwroot/
 
 # Publish
 RUN dotnet publish api/api.csproj -c Release -o /app/publish /p:UseAppHost=false
