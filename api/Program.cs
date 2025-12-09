@@ -1279,9 +1279,13 @@ app.MapPost("/api/playlists/{id:guid}/regenerate-code", async (Guid id, ClaimsPr
   await db.SaveChangesAsync();
 
   // Audit log for security monitoring - track regenerations to detect abuse
+  // Log only truncated code to prevent exposure in logs (first/last 4 chars for correlation)
+  var oldCodeTruncated = oldCode?.Length > 8
+    ? $"{oldCode.Substring(0, 4)}...{oldCode.Substring(oldCode.Length - 4)}"
+    : "****";
   logger.LogWarning(
-    "User {UserId} regenerated share code for playlist {PlaylistId}. Old code invalidated: {OldCode}",
-    userId, id, oldCode);
+    "User {UserId} regenerated share code for playlist {PlaylistId}. Old code invalidated (truncated): {OldCodeTruncated}",
+    userId, id, oldCodeTruncated);
 
   return Results.Ok(new { id = entity.Id, shareCode = entity.ShareCode });
 }).RequireAuthorization().RequireRateLimiting("sensitive");
