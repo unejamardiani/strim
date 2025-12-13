@@ -242,7 +242,13 @@ builder.Services.AddAntiforgery(options =>
 builder.Services.AddHttpClient("fetcher", client =>
 {
   client.Timeout = TimeSpan.FromSeconds(15);
-  client.DefaultRequestHeaders.UserAgent.ParseAdd("strim-fetch/1.0 (+https://github.com/)");
+
+  // Use a realistic browser user agent to avoid upstream blocks that reject
+  // generic/unknown clients. Some IPTV providers respond with 403 to the
+  // default .NET agent string.
+  client.DefaultRequestHeaders.UserAgent.ParseAdd(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
   client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
   client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-mpegurl"));
   client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*", 0.8));
