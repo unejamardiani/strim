@@ -439,6 +439,10 @@ app.UseCors("default");
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+// Status code pages for error handling
+app.UseStatusCodePagesWithReExecute("/error/{0}");
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
@@ -1613,8 +1617,49 @@ app.MapPost("/api/fetch", async (FetchRequest request, IHttpClientFactory httpCl
   }
 }).RequireRateLimiting("fetch");
 
-// SPA fallback
-app.MapFallbackToFile("/index.html");
+// Error page handling
+app.MapGet("/error/{statusCode:int}", async (int statusCode, HttpContext context) =>
+{
+  var filePath = statusCode switch
+  {
+    404 => "wwwroot/404.html",
+    500 => "wwwroot/500.html",
+    502 or 503 or 504 => "wwwroot/50x.html",
+    _ when statusCode >= 500 && statusCode < 600 => "wwwroot/50x.html",
+    _ => "wwwroot/404.html" // Default to 404 for unknown status codes
+  };
+
+  if (File.Exists(filePath))
+  {
+    context.Response.StatusCode = statusCode;
+    context.Response.ContentType = "text/html; charset=utf-8";
+    await context.Response.SendFileAsync(filePath);
+    return Results.Empty;
+  }
+
+  // Fallback if error page doesn't exist
+  return Results.Problem($"Error {statusCode}", statusCode: statusCode);
+});
+
+// SPA fallback for client-side routing - set 404 status and serve error page
+app.MapFallback(async (HttpContext context) =>
+{
+  // Only fallback for non-API routes
+  if (!context.Request.Path.StartsWithSegments("/api"))
+  {
+    context.Response.StatusCode = 404;
+    context.Response.ContentType = "text/html; charset=utf-8";
+
+    if (File.Exists("wwwroot/404.html"))
+    {
+      await context.Response.SendFileAsync("wwwroot/404.html");
+    }
+    else
+    {
+      await context.Response.WriteAsync("404 - Not Found");
+    }
+  }
+});
 
 app.Run();
 

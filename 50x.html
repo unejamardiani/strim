@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Server Error | Strim</title>
+    <meta name="robots" content="noindex, follow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+        background: linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px),
+                    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+                    radial-gradient(circle at 20% 20%, rgba(122, 214, 255, 0.12), transparent 35%),
+                    radial-gradient(circle at 80% 0%, rgba(255, 185, 122, 0.18), transparent 40%),
+                    #050912;
+        background-size: 50px 50px, 50px 50px, 100% 100%, 100% 100%, 100% 100%;
+        background-attachment: fixed;
+        color: #e7ecf5;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        padding: 26px;
+        gap: 26px;
+        line-height: 1.6;
+      }
+      a {
+        color: #6df0c2;
+        text-decoration: none;
+        transition: all 0.2s;
+      }
+      a:hover {
+        color: #00ff9f;
+      }
+      nav {
+        max-width: 1400px;
+        width: 100%;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+      }
+      .logo {
+        font-size: 24px;
+        font-weight: 800;
+        background: linear-gradient(to bottom right, #6df0c2, #00ff9f);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .nav-links {
+        display: flex;
+        gap: 24px;
+      }
+      .nav-links a {
+        color: #aab6ce;
+        font-weight: 500;
+        font-size: 14px;
+      }
+      .container {
+        max-width: 1400px;
+        width: 100%;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        gap: 24px;
+      }
+      .error-box {
+        position: relative;
+        max-width: 900px;
+        width: 100%;
+        padding: 48px 32px;
+        border-radius: 24px;
+        background: linear-gradient(to bottom right, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        text-align: center;
+        overflow: hidden;
+      }
+      .error-box::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(255, 150, 100, 0.15), transparent 60%);
+        pointer-events: none;
+      }
+      .error-icon {
+        font-size: 120px;
+        opacity: 0.5;
+        margin-bottom: 24px;
+      }
+      .error-code {
+        font-size: 96px;
+        font-weight: 800;
+        background: linear-gradient(to bottom right, #ff9664, #ff6464);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-size: 48px;
+        font-weight: 800;
+        background: linear-gradient(to bottom right, #6df0c2, #00ff9f);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 16px;
+      }
+      .description {
+        font-size: 18px;
+        color: #aab6ce;
+        margin-bottom: 32px;
+        line-height: 1.6;
+      }
+      .info-box {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: 20px;
+        margin: 24px 0;
+        text-align: left;
+      }
+      .info-box strong {
+        color: #6df0c2;
+        font-size: 14px;
+        display: block;
+        margin-bottom: 12px;
+      }
+      .error-types {
+        display: grid;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .error-type {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 8px 0;
+      }
+      .error-type-code {
+        color: #ff9664;
+        font-family: monospace;
+        font-weight: 700;
+        font-size: 14px;
+        min-width: 40px;
+      }
+      .error-type-desc {
+        color: #e7ecf5;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .detail-box {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: 20px;
+        margin: 24px 0;
+        text-align: left;
+      }
+      .detail-box strong {
+        color: #ff9664;
+        font-size: 14px;
+        display: block;
+        margin-bottom: 12px;
+      }
+      .detail-box ul {
+        list-style: none;
+        padding: 0;
+      }
+      .detail-box li {
+        color: #e7ecf5;
+        font-size: 14px;
+        padding: 6px 0;
+      }
+      .tech-box {
+        background: rgba(255, 150, 100, 0.1);
+        border: 1px solid rgba(255, 150, 100, 0.2);
+        border-radius: 16px;
+        padding: 16px;
+        margin: 16px 0;
+      }
+      .tech-box strong {
+        color: #ff9664;
+        font-size: 12px;
+        display: block;
+        margin-bottom: 8px;
+      }
+      .tech-box p {
+        color: #e7ecf5;
+        font-size: 12px;
+        font-family: monospace;
+        line-height: 1.6;
+      }
+      .buttons {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 32px;
+      }
+      .btn {
+        padding: 16px 32px;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 16px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        display: inline-block;
+      }
+      .btn-primary {
+        background: linear-gradient(to bottom right, #6df0c2, #00ff9f);
+        color: #031019;
+        box-shadow: 0 8px 32px rgba(109,240,194,0.3);
+        border: 1px solid rgba(255,255,255,0.2);
+      }
+      .btn-primary:hover {
+        transform: scale(1.05);
+        box-shadow: 0 8px 32px rgba(0,255,159,0.3);
+      }
+      .btn-secondary {
+        background: rgba(255,255,255,0.06);
+        color: #e7ecf5;
+        border: 1px solid rgba(255,255,255,0.1);
+      }
+      .btn-secondary:hover {
+        background: rgba(255,255,255,0.1);
+      }
+      .links-section {
+        margin-top: 32px;
+        padding-top: 24px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+      }
+      .links-section p {
+        font-size: 14px;
+        color: #aab6ce;
+        margin-bottom: 8px;
+      }
+      footer {
+        max-width: 1400px;
+        width: 100%;
+        margin: 0 auto;
+        padding-top: 32px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        text-align: center;
+        font-size: 14px;
+        color: #aab6ce;
+      }
+      footer p {
+        margin: 8px 0;
+      }
+      footer .footer-links {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-bottom: 16px;
+      }
+      @media (max-width: 768px) {
+        body {
+          padding: 16px;
+        }
+        .error-code {
+          font-size: 64px;
+        }
+        h1 {
+          font-size: 32px;
+        }
+        .description {
+          font-size: 16px;
+        }
+        .nav-links {
+          display: none;
+        }
+        .buttons {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div>
+        <a href="index.html" class="logo">strim</a>
+      </div>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="features.html">Features</a>
+        <a href="how-to-use.html">How to Use</a>
+        <a href="comparison.html">Compare</a>
+        <a href="blog/">Blog</a>
+      </div>
+    </nav>
+
+    <div class="container">
+      <section class="error-box">
+        <div class="error-icon">🛠️</div>
+        <div class="error-code">50x</div>
+        <h1>Server Error</h1>
+        <p class="description">
+          The server encountered an unexpected condition. Our backend is temporarily unavailable or experiencing issues.
+        </p>
+
+        <div class="info-box">
+          <strong>Common server errors:</strong>
+          <div class="error-types">
+            <div class="error-type">
+              <span class="error-type-code">502</span>
+              <span class="error-type-desc">Bad Gateway - Upstream server error</span>
+            </div>
+            <div class="error-type">
+              <span class="error-type-code">503</span>
+              <span class="error-type-desc">Service Unavailable - Server is down for maintenance</span>
+            </div>
+            <div class="error-type">
+              <span class="error-type-code">504</span>
+              <span class="error-type-desc">Gateway Timeout - Server took too long to respond</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-box">
+          <strong>What you can do:</strong>
+          <ul>
+            <li>⏳ Wait a few minutes and try again</li>
+            <li>🔄 Refresh the page</li>
+            <li>🌐 Check if the service status page has updates</li>
+            <li>💾 Try using the offline features if available</li>
+          </ul>
+        </div>
+
+        <div class="tech-box">
+          <strong>Technical Details:</strong>
+          <p>Server Error | Status Code: 50x<br/>Timestamp: <span id="error-timestamp"></span></p>
+        </div>
+
+        <div class="buttons">
+          <a href="index.html" class="btn btn-primary">← Go to Home</a>
+          <button onclick="window.location.reload()" class="btn btn-secondary">Try Again</button>
+        </div>
+
+        <div class="links-section">
+          <p>If the problem continues:</p>
+          <p>
+            Report this issue on <a href="https://github.com/unejamardiani/strim/issues" target="_blank" rel="noopener noreferrer">GitHub</a>
+            or check our <a href="https://github.com/unejamardiani/strim" target="_blank" rel="noopener noreferrer">documentation</a>
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <footer>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <span>•</span>
+        <a href="features.html">Features</a>
+        <span>•</span>
+        <a href="how-to-use.html">How to Use</a>
+        <span>•</span>
+        <a href="comparison.html">Compare</a>
+        <span>•</span>
+        <a href="blog/">Blog</a>
+      </div>
+      <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
+      <p>Made with AI assistance</p>
+    </footer>
+
+    <script>
+      document.getElementById('error-timestamp').textContent = new Date().toISOString();
+    </script>
+  </body>
+</html>
