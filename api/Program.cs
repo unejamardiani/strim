@@ -1086,7 +1086,7 @@ async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFa
     catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException socketEx)
     {
       // DNS resolution or connection failures
-      app.Logger.LogWarning(ex, "Connection failed while fetching playlist from {Url}: {SocketError}", currentUri, socketEx.SocketError);
+      app.Logger.LogWarning(ex, "Connection failed while fetching playlist from {Url}: {SocketError}", currentUri, socketEx.SocketErrorCode);
       throw new HttpRequestException($"Unable to connect to the playlist source. Please check the URL and try again.", ex);
     }
     catch (HttpRequestException ex) when (ex.StatusCode == null)
