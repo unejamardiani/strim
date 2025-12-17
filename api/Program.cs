@@ -1044,42 +1044,57 @@ async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFa
   var currentUri = uri;
   for (int redirectCount = 0; redirectCount <= maxRedirects; redirectCount++)
   {
-    using var res = await client.GetAsync(currentUri, HttpCompletionOption.ResponseHeadersRead);
-
-    // Handle redirects manually with SSRF validation
-    if ((int)res.StatusCode >= 300 && (int)res.StatusCode < 400 && res.Headers.Location != null)
+    try
     {
-      if (redirectCount >= maxRedirects)
+      using var res = await client.GetAsync(currentUri, HttpCompletionOption.ResponseHeadersRead);
+
+      // Handle redirects manually with SSRF validation
+      if ((int)res.StatusCode >= 300 && (int)res.StatusCode < 400 && res.Headers.Location != null)
       {
-        throw new InvalidOperationException("Too many redirects");
+        if (redirectCount >= maxRedirects)
+        {
+          throw new InvalidOperationException("Too many redirects");
+        }
+
+        var redirectUri = res.Headers.Location.IsAbsoluteUri
+          ? res.Headers.Location
+          : new Uri(currentUri, res.Headers.Location);
+
+        // Validate redirect target for SSRF
+        if (redirectUri.Scheme != Uri.UriSchemeHttp && redirectUri.Scheme != Uri.UriSchemeHttps)
+        {
+          throw new InvalidOperationException("Redirect to non-HTTP(S) URL is not allowed");
+        }
+
+        if (SecurityHelpers.IsBlockedUrl(redirectUri))
+        {
+          throw new InvalidOperationException("Redirect to internal or private network addresses is not allowed");
+        }
+
+        currentUri = redirectUri;
+        continue;
       }
 
-      var redirectUri = res.Headers.Location.IsAbsoluteUri
-        ? res.Headers.Location
-        : new Uri(currentUri, res.Headers.Location);
-
-      // Validate redirect target for SSRF
-      if (redirectUri.Scheme != Uri.UriSchemeHttp && redirectUri.Scheme != Uri.UriSchemeHttps)
+      if (!res.IsSuccessStatusCode)
       {
-        throw new InvalidOperationException("Redirect to non-HTTP(S) URL is not allowed");
+        throw new HttpRequestException($"Upstream returned {(int)res.StatusCode}", null, res.StatusCode);
       }
 
-      if (SecurityHelpers.IsBlockedUrl(redirectUri))
-      {
-        throw new InvalidOperationException("Redirect to internal or private network addresses is not allowed");
-      }
-
-      currentUri = redirectUri;
-      continue;
+      var bytes = await res.Content.ReadAsByteArrayAsync();
+      return Encoding.UTF8.GetString(bytes);
     }
-
-    if (!res.IsSuccessStatusCode)
+    catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException socketEx)
     {
-      throw new HttpRequestException($"Upstream returned {(int)res.StatusCode}", null, res.StatusCode);
+      // DNS resolution or connection failures
+      app.Logger.LogWarning(ex, "Connection failed while fetching playlist from {Url}: {SocketError}", currentUri, socketEx.SocketError);
+      throw new HttpRequestException($"Unable to connect to the playlist source. Please check the URL and try again.", ex);
     }
-
-    var bytes = await res.Content.ReadAsByteArrayAsync();
-    return Encoding.UTF8.GetString(bytes);
+    catch (HttpRequestException ex) when (ex.StatusCode == null)
+    {
+      // Network-level errors (DNS, connection refused, etc.) without a status code
+      app.Logger.LogWarning(ex, "Network error while fetching playlist from {Url}", currentUri);
+      throw new HttpRequestException("Unable to connect to the playlist source. The server may be unreachable or the URL may be incorrect.", ex);
+    }
   }
 
   throw new InvalidOperationException("Too many redirects");
@@ -1359,10 +1374,13 @@ app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpC
   }
   catch (HttpRequestException ex)
   {
-    // P1 fix: Don't expose raw HTTP error details
+    // P1 fix: Don't expose raw HTTP error details, but provide helpful user-facing messages
     app.Logger.LogWarning(ex, "HTTP request failed during playlist analyze");
     var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    return Results.Problem("Failed to fetch the playlist from the source", statusCode: status);
+    var userMessage = ex.Message.Contains("Unable to connect")
+      ? ex.Message
+      : "Failed to fetch the playlist from the source";
+    return Results.Problem(userMessage, statusCode: status);
   }
   catch (Exception ex)
   {
@@ -1419,10 +1437,13 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
   }
   catch (HttpRequestException ex)
   {
-    // P1 fix: Don't expose raw HTTP error details
+    // P1 fix: Don't expose raw HTTP error details, but provide helpful user-facing messages
     app.Logger.LogWarning(ex, "HTTP request failed during playlist generate");
     var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    return Results.Problem("Failed to fetch the playlist from the source", statusCode: status);
+    var userMessage = ex.Message.Contains("Unable to connect")
+      ? ex.Message
+      : "Failed to fetch the playlist from the source";
+    return Results.Problem(userMessage, statusCode: status);
   }
   catch (Exception ex)
   {
@@ -1475,10 +1496,13 @@ app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code,
   }
   catch (HttpRequestException ex)
   {
-    // P1 fix: Don't expose raw HTTP error details
+    // P1 fix: Don't expose raw HTTP error details, but provide helpful user-facing messages
     app.Logger.LogWarning(ex, "HTTP request failed during share download for playlist {PlaylistId}", id);
     var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    return Results.Problem("Failed to fetch the playlist from the source", statusCode: status);
+    var userMessage = ex.Message.Contains("Unable to connect")
+      ? ex.Message
+      : "Failed to fetch the playlist from the source";
+    return Results.Problem(userMessage, statusCode: status);
   }
   catch (Exception ex)
   {
@@ -1521,8 +1545,19 @@ app.MapGet("/api/fetch", async (string url, IHttpClientFactory httpClientFactory
   {
     return Results.Problem("Fetch timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
   }
+  catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException)
+  {
+    app.Logger.LogWarning(ex, "Connection failed while fetching from {Url}", url);
+    return Results.Problem("Unable to connect to the source. Please check the URL and try again.", statusCode: (int)HttpStatusCode.BadGateway);
+  }
+  catch (HttpRequestException ex) when (ex.StatusCode == null)
+  {
+    app.Logger.LogWarning(ex, "Network error while fetching from {Url}", url);
+    return Results.Problem("Unable to connect to the source. The server may be unreachable or the URL may be incorrect.", statusCode: (int)HttpStatusCode.BadGateway);
+  }
   catch (Exception ex)
   {
+    app.Logger.LogError(ex, "Unexpected error during fetch from {Url}", url);
     return Results.Problem("Fetch failed", statusCode: (int)HttpStatusCode.BadGateway);
   }
 }).RequireRateLimiting("fetch");
@@ -1561,8 +1596,19 @@ app.MapPost("/api/fetch", async (FetchRequest request, IHttpClientFactory httpCl
   {
     return Results.Problem("Fetch timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
   }
+  catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException)
+  {
+    app.Logger.LogWarning(ex, "Connection failed while fetching from {Url}", url);
+    return Results.Problem("Unable to connect to the source. Please check the URL and try again.", statusCode: (int)HttpStatusCode.BadGateway);
+  }
+  catch (HttpRequestException ex) when (ex.StatusCode == null)
+  {
+    app.Logger.LogWarning(ex, "Network error while fetching from {Url}", url);
+    return Results.Problem("Unable to connect to the source. The server may be unreachable or the URL may be incorrect.", statusCode: (int)HttpStatusCode.BadGateway);
+  }
   catch (Exception ex)
   {
+    app.Logger.LogError(ex, "Unexpected error during fetch from {Url}", url);
     return Results.Problem("Fetch failed", statusCode: (int)HttpStatusCode.BadGateway);
   }
 }).RequireRateLimiting("fetch");
