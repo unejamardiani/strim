@@ -21,7 +21,6 @@ permissions:
 env:
   AZURE_LOCATION: switzerlandnorth
   ENVIRONMENT: ${{ inputs.environment || 'dev' }}
-  IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'main' }}
 
 jobs:
   deploy:
@@ -53,61 +52,25 @@ jobs:
             *) echo "Unsupported environment '$ENVIRONMENT'. Use dev or prod." >&2; exit 1 ;;
           esac
 
-      - name: Configure remote state backend
-        env:
-          ENVIRONMENT: ${{ env.ENVIRONMENT }}
-          AZURE_LOCATION: ${{ env.AZURE_LOCATION }}
-        run: |
-          set -euo pipefail
-          RG="strim-${ENVIRONMENT}-tfstate"
-          STORAGE="strim${ENVIRONMENT}tfstate"
-          CONTAINER="tfstate"
-          KEY="strim-${ENVIRONMENT}.tfstate"
-
-          az group create --name "$RG" --location "$AZURE_LOCATION"
-          az storage account create \
-            --name "$STORAGE" \
-            --resource-group "$RG" \
-            --location "$AZURE_LOCATION" \
-            --sku Standard_LRS \
-            --kind StorageV2 \
-            --allow-blob-public-access false
-
-          az storage container create \
-            --name "$CONTAINER" \
-            --account-name "$STORAGE" \
-            --auth-mode login
-
-          {
-            echo "TF_BACKEND_RG=$RG"
-            echo "TF_BACKEND_STORAGE=$STORAGE"
-            echo "TF_BACKEND_CONTAINER=$CONTAINER"
-            echo "TF_BACKEND_KEY=$KEY"
-          } >> "$GITHUB_ENV"
-
-      - name: Terraform init
-        working-directory: infra/terraform
-        run: |
-          set -euo pipefail
-          terraform init \
-            -backend-config="resource_group_name=${TF_BACKEND_RG}" \
-            -backend-config="storage_account_name=${TF_BACKEND_STORAGE}" \
-            -backend-config="container_name=${TF_BACKEND_CONTAINER}" \
-            -backend-config="key=${TF_BACKEND_KEY}"
-
-      - name: Select workspace
-        working-directory: infra/terraform
+      - name: Derive image tag
+        id: tag
         env:
           ENVIRONMENT: ${{ env.ENVIRONMENT }}
         run: |
           set -euo pipefail
-          terraform workspace select "$ENVIRONMENT" || terraform workspace new "$ENVIRONMENT"
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="sha-${GITHUB_SHA:0:7}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Using image tag: $TAG (env=$ENVIRONMENT)"
 
       - name: Terraform plan
         working-directory: infra/terraform
         env:
           TF_VAR_container_image: ${{ secrets.DOCKERHUB_USERNAME }}/strim
-          TF_VAR_container_image_tag: ${{ env.IMAGE_TAG }}
+          TF_VAR_container_image_tag: ${{ steps.tag.outputs.tag }}
           TF_VAR_docker_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
           TF_VAR_docker_registry_password: ${{ secrets.DOCKERHUB_TOKEN }}
           TF_VAR_project_name: strim-${{ env.ENVIRONMENT }}
@@ -128,7 +91,7 @@ jobs:
         working-directory: infra/terraform
         env:
           TF_VAR_container_image: ${{ secrets.DOCKERHUB_USERNAME }}/strim
-          TF_VAR_container_image_tag: ${{ env.IMAGE_TAG }}
+          TF_VAR_container_image_tag: ${{ steps.tag.outputs.tag }}
           TF_VAR_docker_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
           TF_VAR_docker_registry_password: ${{ secrets.DOCKERHUB_TOKEN }}
           TF_VAR_project_name: strim-${{ env.ENVIRONMENT }}
@@ -175,7 +138,7 @@ jobs:
       - name: Emit audit metadata
         env:
           ENVIRONMENT: ${{ env.ENVIRONMENT }}
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
           jq -n \
