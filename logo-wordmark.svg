@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 100" fill="none" stroke="#e8e8ec" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!--
+    Concept: Custom uppercase S whose top bow extends rightward as a horizontal
+    line over "trim". At the end, a diagonal cut (incision) severs the line;
+    the severed tip drops 2px — alluding to trimming/cutting.
+
+    Color: #e8e8ec on #0c0c0e bg (use currentColor in production).
+  -->
+
+  <!-- Custom S — bottom bowl curves normally, top arc opens into horizontal bar -->
+  <path d="M 22,72 C 22,90 56,88 58,74 C 60,60 36,52 26,48 C 18,44 18,32 36,30 L 286,30" />
+
+  <!-- Cut incision — clean diagonal slash -->
+  <line x1="282" y1="22" x2="290" y2="38" stroke-width="3" />
+
+  <!-- Post-cut tip — end piece offset 2px down -->
+  <line x1="293" y1="32" x2="310" y2="32" />
+
+  <!-- "trim" in Inter Bold -->
+  <text x="72" y="72" font-family="Inter, system-ui, sans-serif" font-size="46" font-weight="700" fill="#e8e8ec" stroke="none">trim</text>
+</svg>

@@ -341,6 +341,21 @@ if (microsoftEnabled)
   });
 }
 
+var githubClientId = builder.Configuration["Authentication:GitHub:ClientId"] ?? builder.Configuration["GITHUB_CLIENT_ID"];
+var githubClientSecret = builder.Configuration["Authentication:GitHub:ClientSecret"] ?? builder.Configuration["GITHUB_CLIENT_SECRET"];
+var githubEnabled = !string.IsNullOrWhiteSpace(githubClientId) && !string.IsNullOrWhiteSpace(githubClientSecret);
+if (githubEnabled)
+{
+  builder.Services.AddAuthentication().AddGitHub(options =>
+  {
+    options.ClientId = githubClientId!;
+    options.ClientSecret = githubClientSecret!;
+    options.SignInScheme = IdentityConstants.ExternalScheme;
+    options.Scope.Add("user:email");
+    options.SaveTokens = true;
+  });
+}
+
 builder.Services.AddAuthorization();
 
 // P4: Health checks for monitoring and container orchestration
@@ -950,6 +965,7 @@ authGroup.MapGet("/providers", () =>
   var providers = new List<object>();
   if (googleEnabled) providers.Add(new { name = "google", displayName = "Google" });
   if (microsoftEnabled) providers.Add(new { name = "microsoft", displayName = "Microsoft" });
+  if (githubEnabled) providers.Add(new { name = "github", displayName = "GitHub" });
   return Results.Ok(providers);
 });
 

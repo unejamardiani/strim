@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="#e8e8ec" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Icon version — just the custom S + line + cut, for favicon/avatar -->
+  <path d="M 16,76 C 16,92 50,92 52,78 C 54,64 32,56 24,52 C 18,48 18,38 32,36 L 76,36" />
+  <line x1="73" y1="28" x2="79" y2="44" stroke-width="3" />
+  <line x1="82" y1="38" x2="88" y2="38" />
+</svg>
