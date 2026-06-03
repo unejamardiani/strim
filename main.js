@@ -114,8 +114,8 @@ loadSampleButton.addEventListener('click', async () => {
     const res = await apiRequest('/playlists/sample');
     if (res && res.text) {
       hydrateLocalPlaylist(res.text, 'sample.m3u', '', {
-        name: 'Sample playlist (IPTV)',
-        sourceUrl: 'https://iptv-org.github.io/iptv/index.m3u',
+        name: 'Demo playlist (80 channels)',
+        sourceUrl: null,
       });
       await updateOutput({ useWorker: false });
     }
