@@ -47,6 +47,12 @@ public class Playlist
   [Column("lastviewedutc")]
   public DateTimeOffset? LastViewedUtc { get; set; }
 
+  [Column("autorefreshenabled")]
+  public bool AutoRefreshEnabled { get; set; }
+
+  [Column("lastrefreshedutc")]
+  public DateTimeOffset? LastRefreshedUtc { get; set; }
+
   public DateTimeOffset CreatedAt { get; set; }
 
   public DateTimeOffset UpdatedAt { get; set; }

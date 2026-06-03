@@ -199,6 +199,8 @@ if (savedListContainer) {
       loadSavedPlaylist(id);
     } else if (action === 'delete') {
       deleteSavedPlaylist(id);
+    } else if (action === 'auto-refresh') {
+      toggleAutoRefresh(id, target);
     }
   });
 }
@@ -697,6 +699,21 @@ function formatDate(dateString) {
   }
 }
 
+function timeAgo(dateString) {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffSec = Math.floor((now - date) / 1000);
+    if (diffSec < 60) return 'just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}min ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+    return formatDate(dateString);
+  } catch {
+    return 'recently';
+  }
+}
+
 function updateShareUrlDisplay() {
   if (!shareUrlInput) return;
   if (state.currentPlaylistId && state.shareCode) {
@@ -966,6 +983,8 @@ function sanitizePlaylistRecord(pl) {
     shareCode: pl.shareCode || null,
     viewCount: Number.isFinite(Number(pl.viewCount)) ? Number(pl.viewCount) : 0,
     lastViewedUtc: pl.lastViewedUtc || null,
+    autoRefreshEnabled: pl.autoRefreshEnabled === true,
+    lastRefreshedUtc: pl.lastRefreshedUtc || null,
     createdAt: pl.createdAt,
     updatedAt: pl.updatedAt,
   };
@@ -1208,6 +1227,30 @@ async function deleteSavedPlaylist(id) {
   setStatus('Playlist deleted', 'success');
 }
 
+async function toggleAutoRefresh(id, button) {
+  if (!state.isAuthenticated) {
+    setStatus('Sign in to manage auto-refresh', 'warn');
+    return;
+  }
+
+  const playlist = state.savedPlaylists.find((p) => p.id === id);
+  if (!playlist) return;
+
+  const newState = !playlist.autoRefreshEnabled;
+
+  try {
+    await apiRequest(`/playlists/${id}/auto-refresh`, {
+      method: 'PATCH',
+      body: { enabled: newState },
+    });
+    playlist.autoRefreshEnabled = newState;
+    button.textContent = newState ? 'Auto: on' : 'Auto: off';
+    setStatus(newState ? 'Auto-refresh enabled' : 'Auto-refresh disabled', 'success');
+  } catch (err) {
+    setStatus('Failed to update auto-refresh setting', 'warn');
+  }
+}
+
 function renderSavedPlaylists() {
   if (!savedListContainer || !savedEmptyState) return;
   savedListContainer.replaceChildren();
@@ -1248,6 +1291,7 @@ function renderSavedPlaylists() {
     parts.push(`${groups.toLocaleString()} group${groups === 1 ? '' : 's'}`);
     parts.push(`${filters} filter${filters === 1 ? '' : 's'}`);
     if (pl.viewCount > 0) parts.push(`${pl.viewCount.toLocaleString()} view${pl.viewCount === 1 ? '' : 's'}`);
+    if (pl.lastRefreshedUtc) parts.push(`Refreshed ${timeAgo(pl.lastRefreshedUtc)}`);
     sub.textContent = parts.join(' • ');
 
     meta.append(name, sub);
@@ -1268,7 +1312,13 @@ function renderSavedPlaylists() {
     deleteBtn.dataset.action = 'delete';
     deleteBtn.dataset.id = pl.id;
 
-    actions.append(loadBtn, deleteBtn);
+    const refreshToggle = document.createElement('button');
+    refreshToggle.className = 'ghost';
+    refreshToggle.textContent = pl.autoRefreshEnabled ? 'Auto: on' : 'Auto: off';
+    refreshToggle.dataset.action = 'auto-refresh';
+    refreshToggle.dataset.id = pl.id;
+
+    actions.append(loadBtn, refreshToggle, deleteBtn);
     row.append(meta, actions);
     savedListContainer.append(row);
   });

@@ -362,6 +362,8 @@ builder.Services.AddAuthorization();
 builder.Services.AddHealthChecks()
   .AddDbContextCheck<AppDbContext>("database");
 
+builder.Services.AddHostedService<PlaylistRefreshService>();
+
 // P4: OpenAPI documentation
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -491,6 +493,8 @@ void EnsureSchema(AppDbContext db, ILogger logger)
     TryAddSqliteColumn(db, "isactive", "INTEGER NOT NULL DEFAULT 1", logger);
     TryAddSqliteColumn(db, "viewcount", "INTEGER NOT NULL DEFAULT 0", logger);
     TryAddSqliteColumn(db, "lastviewedutc", "TEXT NULL", logger);
+    TryAddSqliteColumn(db, "autorefreshenabled", "INTEGER NOT NULL DEFAULT 0", logger);
+    TryAddSqliteColumn(db, "lastrefreshedutc", "TEXT NULL", logger);
     TryBackfillSqliteShareCodes(db, logger);
   }
 }
@@ -700,6 +704,12 @@ void TryPatchPostgresSchema(AppDbContext db, ILogger logger)
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'lastviewedutc') THEN
           ALTER TABLE playlists ADD COLUMN lastviewedutc timestamptz NULL;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'autorefreshenabled') THEN
+          ALTER TABLE playlists ADD COLUMN autorefreshenabled boolean NOT NULL DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'lastrefreshedutc') THEN
+          ALTER TABLE playlists ADD COLUMN lastrefreshedutc timestamptz NULL;
+        END IF;
       END $$;
     ");
     logger.LogDebug("PostgreSQL schema patched successfully");
@@ -741,7 +751,9 @@ void TryAddSqliteColumn(AppDbContext db, string columnName, string definition, I
     ["ownerid"] = "TEXT NULL",
     ["isactive"] = "INTEGER NOT NULL DEFAULT 1",
     ["viewcount"] = "INTEGER NOT NULL DEFAULT 0",
-    ["lastviewedutc"] = "TEXT NULL"
+    ["lastviewedutc"] = "TEXT NULL",
+    ["autorefreshenabled"] = "INTEGER NOT NULL DEFAULT 0",
+    ["lastrefreshedutc"] = "TEXT NULL"
   };
 
   if (!allowedColumns.TryGetValue(columnName, out var expectedDefinition))
@@ -1342,6 +1354,21 @@ app.MapPost("/api/playlists/{id:guid}/regenerate-code", async (Guid id, ClaimsPr
   return Results.Ok(new { id = entity.Id, shareCode = entity.ShareCode });
 }).RequireAuthorization().RequireRateLimiting("sensitive");
 
+app.MapPatch("/api/playlists/{id:guid}/auto-refresh", async (Guid id, AutoRefreshRequest input, ClaimsPrincipal user, AppDbContext db) =>
+{
+  var userId = GetUserId(user);
+  if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+  var entity = await db.Playlists.FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId);
+  if (entity is null) return Results.NotFound();
+
+  entity.AutoRefreshEnabled = input.Enabled;
+  entity.UpdatedAt = DateTimeOffset.UtcNow;
+  await db.SaveChangesAsync();
+
+  return Results.Ok(new { id = entity.Id, autoRefreshEnabled = entity.AutoRefreshEnabled, lastRefreshedUtc = entity.LastRefreshedUtc });
+}).RequireAuthorization().RequireRateLimiting("general");
+
 app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpClientFactory httpClientFactory, IMemoryCache cache) =>
 {
   if (string.IsNullOrWhiteSpace(input.SourceUrl) && string.IsNullOrWhiteSpace(input.RawText))
@@ -1756,3 +1783,5 @@ public record FetchRequest(string Url);
 public record RegisterRequest(string UserName, string Password, string? Email);
 
 public record LoginRequest(string UserName, string Password);
+
+public record AutoRefreshRequest(bool Enabled);
