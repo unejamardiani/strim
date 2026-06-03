@@ -3,52 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <!-- Primary Meta Tags -->
-    <title>How to Use Strim M3U Playlist Editor - Step by Step Guide | Tutorial</title>
-    <meta name="title" content="How to Use Strim M3U Playlist Editor - Step by Step Guide | Tutorial" />
-    <meta name="description" content="Learn how to clean M3U playlists with Strim in 3 easy steps. Complete tutorial for filtering IPTV channels, removing unwanted groups, and creating shareable playlists for TiviMate, Kodi, and more." />
-    <meta name="keywords" content="how to clean m3u playlist, m3u editor tutorial, how to filter iptv channels, remove channels from m3u, organize iptv playlist, tivimate playlist tutorial, m3u playlist guide" />
+    <title>How to Use M3U Editor - Filter & Clean IPTV Playlists Guide | Strim</title>
+    <meta name="title" content="How to Use M3U Editor - Filter & Clean IPTV Playlists Guide | Strim" />
+    <meta name="description" content="Step-by-step guide to filtering and cleaning M3U playlists. Remove unwanted channels, organize groups, and create clean IPTV playlists for TiviMate, IPTV Smarters, and VLC." />
+    <meta name="keywords" content="how to use m3u editor, iptv playlist guide, clean m3u playlist, filter channels tutorial, m3u organizer, tivimate playlist guide" />
     <meta name="author" content="Strim" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://strim.plis.dev/how-to-use.html" />
-
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="article" />
+    <meta property="og:type" content="website" />
     <meta property="og:url" content="https://strim.plis.dev/how-to-use.html" />
-    <meta property="og:title" content="How to Use Strim M3U Playlist Editor - Step by Step Tutorial" />
-    <meta property="og:description" content="Learn how to clean M3U playlists in 3 easy steps. Complete guide for filtering IPTV channels." />
+    <meta property="og:title" content="How to Use Strim - M3U Playlist Editor Guide" />
+    <meta property="og:description" content="Step-by-step guide to filtering and cleaning M3U playlists with Strim." />
     <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
-
-    <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:url" content="https://strim.plis.dev/how-to-use.html" />
-    <meta property="twitter:title" content="How to Use Strim M3U Editor - Tutorial" />
-    <meta property="twitter:description" content="Learn how to clean M3U playlists in 3 easy steps." />
+    <meta property="twitter:title" content="How to Use Strim - M3U Playlist Editor Guide" />
+    <meta property="twitter:description" content="Step-by-step guide to filtering and cleaning M3U playlists with Strim." />
     <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
-
-    <!-- Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-
-    <!-- ⚠️ DEVELOPMENT ONLY - DO NOT USE IN PRODUCTION
-         Tailwind CDN has security risks (no SRI, requires unsafe-inline CSP)
-         For production: Replace with built CSS - See docs/PRODUCTION_BUILD.md -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+              sans: ['Inter', 'system-ui', 'sans-serif'],
             },
             colors: {
-              'zone-input': '#a78bfa',
-              'zone-filter': '#a78bfa',
-              'zone-output': '#a78bfa',
+              'zone-input': '#e8e8ec',
+              'zone-filter': '#e8e8ec',
+              'zone-output': '#e8e8ec',
             },
           },
         },
@@ -56,391 +43,115 @@
     </script>
     <link rel="stylesheet" href="style.css" />
   </head>
-  <body class="m-0 font-sans bg-[#0a0a0b] text-[#f0f0f0] min-h-dvh p-4 md:p-6 flex flex-col gap-4 md:gap-6 leading-relaxed">
+  <body class="m-0 font-sans bg-[#0c0c0e] text-[#e8e8ec] min-h-dvh flex flex-col antialiased">
 
-    <!-- Navigation -->
-    <nav class="w-full max-w-[1280px] mx-auto flex items-center justify-between gap-4 px-4 py-2.5 rounded-lg bg-[#121213] border border-white/[0.05]">
-      <div class="flex items-center gap-3">
-        <a href="index.html" class="text-2xl font-extrabold text-accent no-underline">strim</a>
-      </div>
-      <div class="flex gap-4 md:gap-6">
-        <a href="index.html" class="text-[#8a8a8a] hover:text-zone-filter transition-colors no-underline font-medium">Home</a>
-        <a href="features.html" class="text-[#8a8a8a] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
-        <a href="how-to-use.html" class="text-zone-filter font-bold no-underline">How to Use</a>
-        <a href="comparison.html" class="text-[#8a8a8a] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
-        <a href="blog/" class="text-[#8a8a8a] hover:text-zone-filter transition-colors no-underline font-medium">Blog</a>
+    <!-- Top bar -->
+    <nav class="flex items-center gap-3 px-4 h-11 border-b border-[#1a1a1d] shrink-0 bg-[#0c0c0e]">
+      <a href="index.html" class="flex items-center gap-2 no-underline shrink-0">
+        <span class="w-7 h-7 inline-flex items-center justify-center rounded-[6px] border border-[#252529] text-sm font-bold text-[#e8e8ec] bg-[#141416]">S</span>
+        <span class="text-sm font-semibold text-[#e8e8ec] tracking-tight">strim</span>
+      </a>
+      <span class="w-px h-4 bg-[#1a1a1d]"></span>
+      <div class="hidden md:flex items-center gap-0">
+        <a href="index.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Home</a>
+        <a href="features.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Features</a>
+        <a href="how-to-use.html" class="px-2.5 py-1 text-xs text-[#e8e8ec] no-underline font-medium">How to Use</a>
+        <a href="comparison.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Compare</a>
+        <a href="blog/" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Blog</a>
       </div>
     </nav>
 
-    <div class="w-full max-w-[1280px] mx-auto flex flex-col gap-6">
+    <!-- Page content -->
+    <div class="flex-1 px-4 py-4 max-w-[1000px] mx-auto w-full">
+      <div class="flex flex-col gap-6">
 
-      <!-- Hero Section -->
-      <header class="relative flex flex-col items-center gap-4 p-6 md:p-8 bg-[#121213] rounded-lg border border-white/[0.06] overflow-hidden text-center">
-        <h1 class="m-0 text-3xl md:text-4xl font-bold tracking-tight text-[#f0f0f0]">
-          How to Use Strim
-        </h1>
-        <p class="text-lg md:text-xl text-[#8a8a8a] max-w-3xl">
-          Clean your M3U/M3U8 playlists in 3 simple steps. No technical knowledge required.
-        </p>
-      </header>
+        <!-- Header -->
+        <header>
+          <h1 class="m-0 text-lg font-bold tracking-tight">How to Use Strim</h1>
+          <p class="m-0 mt-1 text-xs text-[#7a7a80] max-w-[65ch]">Filter, organize, and clean your IPTV playlist in a few simple steps. Works with any M3U source.</p>
+        </header>
 
-      <!-- Quick Start Guide -->
-      <section class="flex flex-col gap-6">
-        <h2 class="text-2xl font-bold text-[#f0f0f0]">Quick Start Guide</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-          <!-- Step 1 -->
-          <div class="p-8 rounded-2xl bg-[#121213] border border-white/[0.06]">
-            <div class="text-4xl font-bold text-white mb-3">1</div>
-            <h3 class="text-lg font-bold mb-2 text-white">Load Playlist</h3>
-            <p class="text-[#8a8a8a]">
-              Enter your M3U playlist URL or paste the raw text. Strim will automatically fetch and parse your playlist.
-            </p>
+        <!-- Step 1 -->
+        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">01</span>
+            <h2 class="m-0 text-sm font-semibold">Load Your Playlist</h2>
           </div>
+          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Open Strim in your browser. No installation or sign-up required. You can either paste your M3U URL into the input box and click <strong class="text-[#e8e8ec] font-medium">Fetch</strong>, or paste the raw M3U content directly into the text area.</p>
+        </section>
 
-          <!-- Step 2 -->
-          <div class="p-8 rounded-2xl bg-[#121213] border-2 border-white/[0.05]">
-            <div class="text-4xl font-bold text-white mb-3">2</div>
-            <h3 class="text-lg font-bold mb-2 text-white">Filter Groups</h3>
-            <p class="text-[#8a8a8a]">
-              Toggle channel groups on/off. Keep only what you watch. See real-time updates of how many channels remain.
-            </p>
+        <!-- Step 2 -->
+        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">02</span>
+            <h2 class="m-0 text-sm font-semibold">Review Groups</h2>
           </div>
+          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">After loading, your playlist is automatically parsed and displayed in the sidebar grouped by category. Each group shows a count of channels it contains. The input tab displays the total channel count and group list.</p>
+        </section>
 
-          <!-- Step 3 -->
-          <div class="p-8 rounded-2xl bg-[#121213] border border-white/[0.06]">
-            <div class="text-4xl font-bold text-white mb-3">3</div>
-            <h3 class="text-lg font-bold mb-2 text-white">Export & Use</h3>
-            <p class="text-[#8a8a8a]">
-              Download your cleaned playlist, copy to clipboard, or generate a shareable URL for your IPTV app.
-            </p>
+        <!-- Step 3 -->
+        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">03</span>
+            <h2 class="m-0 text-sm font-semibold">Select Channels to Keep</h2>
           </div>
+          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Check the groups you want to keep. Use the select/deselect all toggle to quickly manage your selection. The filter tab updates in real-time as you make changes. You can also use the search bar to find specific groups.</p>
+        </section>
 
-        </div>
-      </section>
-
-      <!-- Detailed Step-by-Step -->
-      <section class="flex flex-col gap-8 mt-8">
-        <h2 class="text-2xl font-bold text-white">Detailed Tutorial</h2>
-
-        <!-- Step 1 Detailed -->
-        <div class="p-8 rounded-3xl bg-white/5 border border-white/10">
-          <h3 class="text-2xl font-bold mb-6 text-zone-input">📥 Step 1: Load Your Playlist</h3>
-
-          <div class="space-y-6">
-            <div>
-              <h4 class="text-sm font-bold mb-2 text-white">Option A: Load from URL</h4>
-              <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] ml-4">
-                <li>Get your M3U playlist URL from your IPTV provider</li>
-                <li>Paste the URL into the "Playlist URL" field on the home page</li>
-                <li>Click "Fetch Playlist" button</li>
-                <li>Strim will automatically download and parse your playlist</li>
-              </ol>
-              <div class="mt-4 p-4 rounded-xl bg-zone-input/10 border border-zone-input/30">
-                <p class="text-sm text-[#8a8a8a]">
-                  <strong>💡 Tip:</strong> If your provider blocks direct access, Strim will automatically retry through CORS proxies. No extra steps needed!
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <h4 class="text-sm font-bold mb-2 text-white">Option B: Paste Raw M3U Text</h4>
-              <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] ml-4">
-                <li>Download your M3U file from your provider</li>
-                <li>Open it in a text editor (Notepad, TextEdit, etc.)</li>
-                <li>Copy all the content</li>
-                <li>Paste into the "Paste raw M3U text" textarea</li>
-                <li>The playlist will be parsed automatically</li>
-              </ol>
-            </div>
-
-            <div>
-              <h4 class="text-sm font-bold mb-2 text-white">Option C: Try Sample Playlist</h4>
-              <p class="text-[#8a8a8a] ml-4">
-                Click the "Use sample playlist" button to test Strim with a demo playlist. Perfect for learning!
-              </p>
-            </div>
+        <!-- Step 4 -->
+        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">04</span>
+            <h2 class="m-0 text-sm font-semibold">Generate Cleaned Playlist</h2>
           </div>
-        </div>
+          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Click <strong class="text-[#e8e8ec] font-medium">Generate</strong> in the output tab to create your new filtered playlist. Strim processes everything client-side and generates a clean M3U file with only your selected groups.</p>
+        </section>
 
-        <!-- Step 2 Detailed -->
-        <div class="p-8 rounded-3xl bg-white/5 border border-white/10">
-          <h3 class="text-2xl font-bold mb-6 text-zone-filter">🎯 Step 2: Filter Your Channels</h3>
-
-          <div class="space-y-6">
-            <div>
-              <h4 class="text-sm font-bold mb-2 text-white">Understanding the Groups Panel</h4>
-              <p class="text-[#8a8a8a] mb-4">
-                Once your playlist loads, you'll see a list of all channel groups. Each group shows:
-              </p>
-              <ul class="list-disc list-inside space-y-2 text-[#8a8a8a] ml-4">
-                <li><strong>Group name</strong> (e.g., "Sports", "Movies", "News")</li>
-                <li><strong>Channel count</strong> (how many channels in this group)</li>
-                <li><strong>Toggle switch</strong> (green = included, gray = excluded)</li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 class="text-sm font-bold mb-2 text-white">Filtering Techniques</h4>
-              <ul class="list-disc list-inside space-y-3 text-[#8a8a8a] ml-4">
-                <li>
-                  <strong>Toggle individual groups:</strong> Click any group to enable/disable it
-                </li>
-                <li>
-                  <strong>Select All / Deselect All:</strong> Use the buttons to quickly toggle all groups
-                </li>
-                <li>
-                  <strong>Search groups:</strong> Use the search box to find specific groups by name
-                </li>
-                <li>
-                  <strong>Filter by keyword:</strong> Type keywords to show only matching groups
-                </li>
-              </ul>
-            </div>
-
-            <div class="p-4 rounded-xl bg-white/10 border border-white/[0.05]">
-              <p class="text-sm text-[#8a8a8a]">
-                <strong>💡 Pro Tip:</strong> Start by clicking "Deselect All", then only enable the groups you actually watch. This is faster than disabling hundreds of unwanted groups!
-              </p>
-            </div>
-
-            <div>
-              <h4 class="text-sm font-bold mb-2 text-white">Real-Time Statistics</h4>
-              <p class="text-[#8a8a8a] ml-4">
-                Watch the statistics update as you toggle groups:
-              </p>
-              <ul class="list-disc list-inside space-y-2 text-[#8a8a8a] ml-8 mt-2">
-                <li>Total channels in original playlist</li>
-                <li>Number of channels after filtering</li>
-                <li>Number of groups included/excluded</li>
-              </ul>
-            </div>
+        <!-- Step 5 -->
+        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">05</span>
+            <h2 class="m-0 text-sm font-semibold">Save or Share</h2>
           </div>
-        </div>
+          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Download the cleaned playlist as an .m3u file, copy it to your clipboard, or generate a shareable URL for your IPTV app. The share URL can be refreshed automatically to pick up changes.</p>
+        </section>
 
-        <!-- Step 3 Detailed -->
-        <div class="p-8 rounded-3xl bg-white/5 border border-white/10">
-          <h3 class="text-2xl font-bold mb-6 text-zone-output">💾 Step 3: Export Your Cleaned Playlist</h3>
+        <!-- Tips -->
+        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
+          <h2 class="m-0 text-sm font-semibold mb-3">Tips for Best Results</h2>
+          <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-2">
+            <li><strong class="text-[#e8e8ec] font-medium">Use URL playlists if possible</strong> &mdash; they allow automatic refresh support via shareable links.</li>
+            <li><strong class="text-[#e8e8ec] font-medium">Start with select all, then deselect</strong> the groups you do not want.</li>
+            <li><strong class="text-[#e8e8ec] font-medium">Check the channel count</strong> per group to focus on the largest groups first.</li>
+            <li><strong class="text-[#e8e8ec] font-medium">CORS issues?</strong> Start the included CORS proxy or use the raw paste option.</li>
+            <li><strong class="text-[#e8e8ec] font-medium">Bookmark the share URL</strong> for one-click access to your filtered playlist.</li>
+          </ul>
+        </section>
 
-          <div class="space-y-6">
-            <div>
-              <h4 class="text-sm font-bold mb-2 text-white">Export Options</h4>
-              <p class="text-[#8a8a8a] mb-4">Choose the export method that works best for you:</p>
-            </div>
+        <!-- CTA -->
+        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
+          <p class="m-0 text-sm font-semibold mb-1">Ready to clean your playlist?</p>
+          <p class="m-0 text-xs text-[#7a7a80] mb-3">Open Strim and try it yourself. No sign-up required.</p>
+          <a href="index.html" class="inline-flex items-center gap-1 h-8 px-4 rounded-[4px] bg-[#e8e8ec] text-[#0c0c0e] text-xs font-semibold no-underline hover:brightness-110 transition-all">Open Strim</a>
+        </section>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-              <div class="p-6 rounded-xl bg-white/5 border border-white/10">
-                <h5 class="text-lg font-bold mb-3 text-zone-output">📥 Download File</h5>
-                <p class="text-[#8a8a8a] mb-4">
-                  Click "Download" to save a .m3u file to your device. Then:
-                </p>
-                <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] text-sm">
-                  <li>Transfer to your device via USB/cloud storage</li>
-                  <li>Open in your IPTV app</li>
-                  <li>Import as local playlist</li>
-                </ol>
-                <p class="text-xs text-[#8a8a8a] mt-4">
-                  <strong>Best for:</strong> VLC, Kodi, local players
-                </p>
-              </div>
-
-              <div class="p-6 rounded-xl bg-white/5 border border-white/10">
-                <h5 class="text-lg font-bold mb-3 text-zone-output">📋 Copy to Clipboard</h5>
-                <p class="text-[#8a8a8a] mb-4">
-                  Click "Copy" to copy the playlist content. Then:
-                </p>
-                <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] text-sm">
-                  <li>Paste into a text editor</li>
-                  <li>Save as .m3u file</li>
-                  <li>Or paste directly into apps that support it</li>
-                </ol>
-                <p class="text-xs text-[#8a8a8a] mt-4">
-                  <strong>Best for:</strong> Quick editing, text-based workflows
-                </p>
-              </div>
-
-              <div class="p-6 rounded-xl bg-white/5 border border-white/10">
-                <h5 class="text-lg font-bold mb-3 text-zone-output">🔗 Generate Shareable URL</h5>
-                <p class="text-[#8a8a8a] mb-4">
-                  Click "Generate shareable URL" to create a permanent link:
-                </p>
-                <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] text-sm">
-                  <li>Copy the generated URL</li>
-                  <li>Paste it in your IPTV app as playlist source</li>
-                  <li>Your app will auto-update when you change filters</li>
-                </ol>
-                <p class="text-xs text-[#8a8a8a] mt-4">
-                  <strong>Best for:</strong> TiviMate, IPTV Smarters, any URL-based app
-                </p>
-              </div>
-
-              <div class="p-6 rounded-xl bg-white/5 border border-white/10">
-                <h5 class="text-lg font-bold mb-3 text-zone-output">🔄 Auto-Refresh</h5>
-                <p class="text-[#8a8a8a] mb-4">
-                  Set up automatic playlist updates:
-                </p>
-                <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] text-sm">
-                  <li>Use the shareable URL in your app</li>
-                  <li>Update filters in Strim anytime</li>
-                  <li>Your app fetches the updated playlist automatically</li>
-                </ol>
-                <p class="text-xs text-[#8a8a8a] mt-4">
-                  <strong>Best for:</strong> Frequently changing preferences
-                </p>
-              </div>
-
-            </div>
-          </div>
-        </div>
-
-      </section>
-
-      <!-- Common Use Cases -->
-      <section class="flex flex-col gap-6 mt-8">
-        <h2 class="text-2xl font-bold text-white">Common Use Cases</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-base font-bold mb-2 text-white">🎬 Remove Adult Content</h3>
-            <p class="text-[#8a8a8a] mb-4">
-              Many providers include adult channels. To remove them:
-            </p>
-            <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] text-sm ml-4">
-              <li>Load your playlist</li>
-              <li>Look for groups named "XXX", "Adult", "18+"</li>
-              <li>Toggle these groups off</li>
-              <li>Export your family-friendly playlist</li>
-            </ol>
-          </div>
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-base font-bold mb-2 text-white">🌍 Keep Only Your Language</h3>
-            <p class="text-[#8a8a8a] mb-4">
-              Filter out foreign language channels:
-            </p>
-            <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] text-sm ml-4">
-              <li>Click "Deselect All" to disable all groups</li>
-              <li>Use search to find your language (e.g., "English", "Spanish")</li>
-              <li>Enable only those groups</li>
-              <li>Download your language-specific playlist</li>
-            </ol>
-          </div>
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-base font-bold mb-2 text-white">⚡ Speed Up Large Playlists</h3>
-            <p class="text-[#8a8a8a] mb-4">
-              Reduce 50,000 channels to what you actually watch:
-            </p>
-            <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] text-sm ml-4">
-              <li>Load your massive playlist (may take a few seconds)</li>
-              <li>Disable categories you never watch (International, Radio, etc.)</li>
-              <li>Keep only Sports, Movies, News (or your preferences)</li>
-              <li>Enjoy a faster, cleaner IPTV experience</li>
-            </ol>
-          </div>
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-base font-bold mb-2 text-white">👨‍👩‍👧‍👦 Create Family Profiles</h3>
-            <p class="text-[#8a8a8a] mb-4">
-              Make different playlists for different family members:
-            </p>
-            <ol class="list-decimal list-inside space-y-2 text-[#8a8a8a] text-sm ml-4">
-              <li>Create a "Kids" playlist (cartoons, education)</li>
-              <li>Create a "Sports" playlist for game days</li>
-              <li>Create a "Movies" playlist for movie nights</li>
-              <li>Share different URLs with different devices</li>
-            </ol>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- FAQ Section -->
-      <section class="flex flex-col gap-6 mt-8">
-        <h2 class="text-2xl font-bold text-white">Frequently Asked Questions</h2>
-
-        <div class="space-y-4">
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-lg font-bold mb-2 text-zone-filter">❓ Will Strim work with my IPTV provider?</h3>
-            <p class="text-[#8a8a8a]">
-              Yes! Strim works with any standard M3U or M3U8 playlist from any provider. It doesn't matter who your IPTV provider is.
-            </p>
-          </div>
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-lg font-bold mb-2 text-zone-filter">❓ Is my playlist data safe?</h3>
-            <p class="text-[#8a8a8a]">
-              Absolutely! All processing happens in your browser. Your playlist never leaves your device unless you explicitly save it to the optional cloud backend or generate a shareable URL.
-            </p>
-          </div>
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-lg font-bold mb-2 text-zone-filter">❓ What if my playlist URL doesn't work?</h3>
-            <p class="text-[#8a8a8a]">
-              If the direct URL fails, Strim automatically retries through CORS proxies. If that still fails, download the M3U file manually and paste the content directly into Strim.
-            </p>
-          </div>
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-lg font-bold mb-2 text-zone-filter">❓ How do I use the shareable URL in TiviMate?</h3>
-            <p class="text-[#8a8a8a] mb-2">
-              In TiviMate:
-            </p>
-            <ol class="list-decimal list-inside space-y-1 text-[#8a8a8a] text-sm ml-4">
-              <li>Go to Settings → Playlists → Add Playlist</li>
-              <li>Choose "M3U Playlist"</li>
-              <li>Paste your Strim shareable URL</li>
-              <li>Click "Next" and follow the setup</li>
-            </ol>
-          </div>
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-lg font-bold mb-2 text-zone-filter">❓ Can I edit the same playlist on multiple devices?</h3>
-            <p class="text-[#8a8a8a]">
-              Yes! If you use the optional backend (sign in), your playlists sync across all devices. Or simply use the same shareable URL on all your devices.
-            </p>
-          </div>
-
-          <div class="p-6 rounded-lg bg-[#121213] border border-white/[0.05]">
-            <h3 class="text-lg font-bold mb-2 text-zone-filter">❓ Why is my large playlist slow to load?</h3>
-            <p class="text-[#8a8a8a]">
-              Playlists with 50,000+ channels take a few seconds to parse. Once loaded, filtering is instant thanks to background processing and virtualized lists. This is normal and much faster than manual editing!
-            </p>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- CTA Section -->
-      <section class="mt-8 p-12 rounded-3xl bg-gradient-to-br from-zone-input/20 via-zone-filter/20 to-zone-output/20 border border-white/[0.05] text-center">
-        <h2 class="text-3xl md:text-4xl font-bold mb-4 bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">
-          Ready to Get Started?
-        </h2>
-        <p class="text-lg text-[#8a8a8a] mb-8 max-w-2xl mx-auto">
-          Clean your first playlist in less than 60 seconds. It's free and requires no sign-up.
-        </p>
-        <a href="index.html" class="inline-block px-6 py-3 rounded-md bg-accent text-[#0a0a0b] font-bold transition-all hover:brightness-110 no-underline">
-          Start Using Strim Now
-        </a>
-      </section>
-
+      </div>
     </div>
 
     <!-- Footer -->
-    <footer class="w-full max-w-[1280px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#8a8a8a] text-sm">
-      <p class="mb-4">
-        <a href="index.html" class="text-accent hover:underline">Home</a> •
-        <a href="features.html" class="text-accent hover:underline">Features</a> •
-        <a href="how-to-use.html" class="text-accent hover:underline">How to Use</a> •
-        <a href="comparison.html" class="text-accent hover:underline">Compare</a> •
-        <a href="blog/" class="text-accent hover:underline">Blog</a>
+    <footer class="border-t border-[#1a1a1d] px-4 py-3 text-center text-[10px] text-[#55555a]">
+      <p class="m-0">
+        <a href="index.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Home</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="features.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Features</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="how-to-use.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">How to Use</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="comparison.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Compare</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="blog/" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Blog</a>
       </p>
-      <p class="mt-2 m-0">Strim &#8212; Free M3U Playlist Editor. Open source and privacy-first.</p>
-      
+      <p class="m-0 mt-1">Strim &#8212; Free M3U Playlist Editor. Open source and privacy-first.</p>
     </footer>
 
   </body>

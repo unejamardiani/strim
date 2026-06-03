@@ -3,8 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <!-- Primary Meta Tags -->
     <title>Strim Blog - M3U Playlist Tips, IPTV Guides & Tutorials</title>
     <meta name="title" content="Strim Blog - M3U Playlist Tips, IPTV Guides & Tutorials" />
     <meta name="description" content="Learn how to clean M3U playlists, fix IPTV issues, and optimize your streaming experience. Guides for TiviMate, Kodi, IPTV Smarters, and more." />
@@ -12,43 +10,32 @@
     <meta name="author" content="Strim" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://strim.plis.dev/blog/" />
-
-    <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://strim.plis.dev/blog/" />
     <meta property="og:title" content="Strim Blog - M3U Playlist Tips & IPTV Guides" />
     <meta property="og:description" content="Learn how to clean M3U playlists and optimize your IPTV experience." />
     <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
-
-    <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:url" content="https://strim.plis.dev/blog/" />
     <meta property="twitter:title" content="Strim Blog - M3U & IPTV Guides" />
     <meta property="twitter:description" content="Learn how to clean M3U playlists and optimize IPTV." />
     <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
-
-    <!-- Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-
-    <!-- ⚠️ DEVELOPMENT ONLY - DO NOT USE IN PRODUCTION
-         Tailwind CDN has security risks (no SRI, requires unsafe-inline CSP)
-         For production: Replace with built CSS - See ../docs/PRODUCTION_BUILD.md -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+              sans: ['Inter', 'system-ui', 'sans-serif'],
             },
             colors: {
-              'zone-input': '#a78bfa',
-              'zone-filter': '#a78bfa',
-              'zone-output': '#a78bfa',
+              'zone-input': '#e8e8ec',
+              'zone-filter': '#e8e8ec',
+              'zone-output': '#e8e8ec',
             },
           },
         },
@@ -56,129 +43,116 @@
     </script>
     <link rel="stylesheet" href="../style.css" />
   </head>
-  <body class="m-0 font-sans bg-[#0a0a0b] text-[#f0f0f0] min-h-dvh p-4 md:p-6 flex flex-col gap-4 md:gap-6 leading-relaxed">
+  <body class="m-0 font-sans bg-[#0c0c0e] text-[#e8e8ec] min-h-dvh flex flex-col antialiased">
 
-    <!-- Navigation -->
-    <nav class="w-full max-w-[1280px] mx-auto flex items-center justify-between gap-4 px-4 py-2.5 rounded-lg bg-[#121213] border border-white/[0.05]">
-      <div class="flex items-center gap-3">
-        <a href="../index.html" class="text-2xl font-extrabold text-accent no-underline">strim</a>
-      </div>
-      <div class="flex gap-4 md:gap-6">
-        <a href="../index.html" class="text-[#8a8a8a] hover:text-zone-filter transition-colors no-underline font-medium">Home</a>
-        <a href="../features.html" class="text-[#8a8a8a] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
-        <a href="../how-to-use.html" class="text-[#8a8a8a] hover:text-zone-filter transition-colors no-underline font-medium">How to Use</a>
-        <a href="../comparison.html" class="text-[#8a8a8a] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
-        <a href="index.html" class="text-zone-filter font-bold no-underline">Blog</a>
+    <!-- Top bar -->
+    <nav class="flex items-center gap-3 px-4 h-11 border-b border-[#1a1a1d] shrink-0 bg-[#0c0c0e]">
+      <a href="../index.html" class="flex items-center gap-2 no-underline shrink-0">
+        <span class="w-7 h-7 inline-flex items-center justify-center rounded-[6px] border border-[#252529] text-sm font-bold text-[#e8e8ec] bg-[#141416]">S</span>
+        <span class="text-sm font-semibold text-[#e8e8ec] tracking-tight">strim</span>
+      </a>
+      <span class="w-px h-4 bg-[#1a1a1d]"></span>
+      <div class="hidden md:flex items-center gap-0">
+        <a href="../index.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Home</a>
+        <a href="../features.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Features</a>
+        <a href="../how-to-use.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">How to Use</a>
+        <a href="../comparison.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Compare</a>
+        <a href="index.html" class="px-2.5 py-1 text-xs text-[#e8e8ec] no-underline font-medium">Blog</a>
       </div>
     </nav>
 
-    <div class="w-full max-w-[1280px] mx-auto flex flex-col gap-6">
+    <!-- Page content -->
+    <div class="flex-1 px-4 py-4 max-w-[1000px] mx-auto w-full">
+      <div class="flex flex-col gap-6">
 
-      <!-- Hero Section -->
-      <header class="relative flex flex-col items-center gap-4 p-6 md:p-8 bg-[#121213] rounded-lg border border-white/[0.06] overflow-hidden text-center">
-        <h1 class="m-0 text-3xl md:text-4xl font-bold tracking-tight text-[#f0f0f0]">
-          Strim Blog
-        </h1>
-        <p class="text-lg md:text-xl text-[#8a8a8a] max-w-3xl">
-          Tips, guides, and tutorials for M3U playlists and IPTV streaming
-        </p>
-      </header>
+        <!-- Header -->
+        <header>
+          <h1 class="m-0 text-lg font-bold tracking-tight">Strim Blog</h1>
+          <p class="m-0 mt-1 text-xs text-[#7a7a80] max-w-[65ch]">Tips, guides, and tutorials for M3U playlists and IPTV streaming.</p>
+        </header>
 
-      <!-- Featured Articles -->
-      <section class="flex flex-col gap-6">
-        <h2 class="text-2xl font-bold text-[#f0f0f0]">Latest Articles</h2>
+        <!-- Articles -->
+        <section>
+          <h2 class="m-0 text-sm font-semibold text-[#e8e8ec] mb-3">Latest Articles</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <a href="how-to-clean-large-m3u-playlists.html" class="p-4 rounded-[4px] bg-[#121213] border border-[#252529] no-underline group hover:border-[#35353a] transition-all">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs">&#9889;</span>
+                <span class="text-[10px] text-[#55555a] font-medium uppercase tracking-wider">Guide</span>
+              </div>
+              <h3 class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1 group-hover:text-white transition-colors">How to Clean Large M3U Playlists (50,000+ Channels)</h3>
+              <p class="m-0 text-[10px] text-[#7a7a80] leading-relaxed">Learn how to efficiently clean and organize massive IPTV playlists with tens of thousands of channels. Step-by-step guide with performance tips.</p>
+              <div class="mt-2 text-[10px] text-[#7a7a80] font-medium">Read more &rarr;</div>
+            </a>
 
-          <!-- Article 1 -->
-          <a href="how-to-clean-large-m3u-playlists.html" class="p-6 rounded-lg bg-[#121213] border border-white/[0.05] hover:border-white/[0.12] transition-all no-underline group">
-            <div class="text-4xl mb-4">🚀</div>
-            <h3 class="text-xl font-bold mb-3 text-zone-filter group-hover:text-zone-output transition-colors">
-              How to Clean Large M3U Playlists (50,000+ Channels)
-            </h3>
-            <p class="text-[#8a8a8a] mb-4">
-              Learn how to efficiently clean and organize massive IPTV playlists with tens of thousands of channels. Step-by-step guide with performance tips.
-            </p>
-            <div class="text-sm text-zone-filter font-bold">Read more →</div>
-          </a>
+            <a href="best-iptv-apps-m3u-files.html" class="p-4 rounded-[4px] bg-[#121213] border border-[#252529] no-underline group hover:border-[#35353a] transition-all">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs">&#9670;</span>
+                <span class="text-[10px] text-[#55555a] font-medium uppercase tracking-wider">Comparison</span>
+              </div>
+              <h3 class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1 group-hover:text-white transition-colors">Best IPTV Apps That Work with M3U Files</h3>
+              <p class="m-0 text-[10px] text-[#7a7a80] leading-relaxed">Comprehensive guide to the best IPTV players for M3U playlists: TiviMate, IPTV Smarters, Kodi, VLC, and more.</p>
+              <div class="mt-2 text-[10px] text-[#7a7a80] font-medium">Read more &rarr;</div>
+            </a>
 
-          <!-- Article 2 -->
-          <a href="best-iptv-apps-m3u-files.html" class="p-6 rounded-lg bg-[#121213] border border-white/[0.05] hover:border-white/[0.12] transition-all no-underline group">
-            <div class="text-4xl mb-4">📱</div>
-            <h3 class="text-xl font-bold mb-3 text-zone-filter group-hover:text-zone-output transition-colors">
-              Best IPTV Apps That Work with M3U Files
-            </h3>
-            <p class="text-[#8a8a8a] mb-4">
-              Comprehensive guide to the best IPTV players for M3U playlists: TiviMate, IPTV Smarters, Kodi, VLC, and more. Comparison and recommendations.
-            </p>
-            <div class="text-sm text-zone-filter font-bold">Read more →</div>
-          </a>
+            <a href="remove-adult-content-iptv-playlists.html" class="p-4 rounded-[4px] bg-[#121213] border border-[#252529] no-underline group hover:border-[#35353a] transition-all">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs">&#9898;</span>
+                <span class="text-[10px] text-[#55555a] font-medium uppercase tracking-wider">Tutorial</span>
+              </div>
+              <h3 class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1 group-hover:text-white transition-colors">How to Remove Adult Content from IPTV Playlists</h3>
+              <p class="m-0 text-[10px] text-[#7a7a80] leading-relaxed">Create family-friendly IPTV playlists by filtering out adult content. Simple guide to identifying and removing inappropriate channels.</p>
+              <div class="mt-2 text-[10px] text-[#7a7a80] font-medium">Read more &rarr;</div>
+            </a>
 
-          <!-- Article 3 -->
-          <a href="remove-adult-content-iptv-playlists.html" class="p-6 rounded-lg bg-[#121213] border border-white/[0.05] hover:border-white/[0.12] transition-all no-underline group">
-            <div class="text-4xl mb-4">🔒</div>
-            <h3 class="text-xl font-bold mb-3 text-zone-filter group-hover:text-zone-output transition-colors">
-              How to Remove Adult Content from IPTV Playlists
-            </h3>
-            <p class="text-[#8a8a8a] mb-4">
-              Create family-friendly IPTV playlists by filtering out adult content. Simple guide to identifying and removing inappropriate channels.
-            </p>
-            <div class="text-sm text-zone-filter font-bold">Read more →</div>
-          </a>
+            <a href="m3u-vs-m3u8-difference.html" class="p-4 rounded-[4px] bg-[#121213] border border-[#252529] no-underline group hover:border-[#35353a] transition-all">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs">&#9632;</span>
+                <span class="text-[10px] text-[#55555a] font-medium uppercase tracking-wider">Explain</span>
+              </div>
+              <h3 class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1 group-hover:text-white transition-colors">M3U vs M3U8: What's the Difference?</h3>
+              <p class="m-0 text-[10px] text-[#7a7a80] leading-relaxed">Understand the differences between M3U and M3U8 file formats. When to use each format and how they affect your IPTV experience.</p>
+              <div class="mt-2 text-[10px] text-[#7a7a80] font-medium">Read more &rarr;</div>
+            </a>
 
-          <!-- Article 4 -->
-          <a href="m3u-vs-m3u8-difference.html" class="p-6 rounded-lg bg-[#121213] border border-white/[0.05] hover:border-white/[0.12] transition-all no-underline group">
-            <div class="text-4xl mb-4">📄</div>
-            <h3 class="text-xl font-bold mb-3 text-zone-filter group-hover:text-zone-output transition-colors">
-              M3U vs M3U8: What's the Difference?
-            </h3>
-            <p class="text-[#8a8a8a] mb-4">
-              Understand the differences between M3U and M3U8 file formats. When to use each format and how they affect your IPTV experience.
-            </p>
-            <div class="text-sm text-zone-filter font-bold">Read more →</div>
-          </a>
+            <a href="fix-iptv-playlist-not-loading.html" class="p-4 rounded-[4px] bg-[#121213] border border-[#252529] no-underline group hover:border-[#35353a] transition-all">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs">&#9881;</span>
+                <span class="text-[10px] text-[#55555a] font-medium uppercase tracking-wider">Troubleshoot</span>
+              </div>
+              <h3 class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1 group-hover:text-white transition-colors">How to Fix IPTV Playlist Not Loading</h3>
+              <p class="m-0 text-[10px] text-[#7a7a80] leading-relaxed">Troubleshoot common IPTV playlist loading issues. Solutions for CORS errors, format problems, URL issues, and more.</p>
+              <div class="mt-2 text-[10px] text-[#7a7a80] font-medium">Read more &rarr;</div>
+            </a>
 
-          <!-- Article 5 -->
-          <a href="fix-iptv-playlist-not-loading.html" class="p-6 rounded-lg bg-[#121213] border border-white/[0.05] hover:border-white/[0.12] transition-all no-underline group">
-            <div class="text-4xl mb-4">🔧</div>
-            <h3 class="text-xl font-bold mb-3 text-zone-filter group-hover:text-zone-output transition-colors">
-              How to Fix IPTV Playlist Not Loading
-            </h3>
-            <p class="text-[#8a8a8a] mb-4">
-              Troubleshoot common IPTV playlist loading issues. Solutions for CORS errors, format problems, URL issues, and more.
-            </p>
-            <div class="text-sm text-zone-filter font-bold">Read more →</div>
-          </a>
+          </div>
+        </section>
 
-        </div>
-      </section>
+        <!-- CTA -->
+        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
+          <p class="m-0 text-sm font-semibold mb-1">Ready to Clean Your Playlist?</p>
+          <p class="m-0 text-xs text-[#7a7a80] mb-3">Apply what you've learned with Strim's free M3U playlist editor.</p>
+          <a href="../index.html" class="inline-flex items-center gap-1 h-8 px-4 rounded-[4px] bg-[#e8e8ec] text-[#0c0c0e] text-xs font-semibold no-underline hover:brightness-110 transition-all">Try Strim Now - It's Free</a>
+        </section>
 
-      <!-- CTA Section -->
-      <section class="mt-8 p-12 rounded-3xl bg-gradient-to-br from-zone-input/20 via-zone-filter/20 to-zone-output/20 border border-white/[0.05] text-center">
-        <h2 class="text-3xl md:text-4xl font-bold mb-4 bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">
-          Ready to Clean Your Playlist?
-        </h2>
-        <p class="text-lg text-[#8a8a8a] mb-8 max-w-2xl mx-auto">
-          Apply what you've learned with Strim's free M3U playlist editor
-        </p>
-        <a href="../index.html" class="inline-block px-6 py-3 rounded-md bg-accent text-[#0a0a0b] font-bold transition-all hover:brightness-110 no-underline">
-          Try Strim Now - It's Free
-        </a>
-      </section>
-
+      </div>
     </div>
 
     <!-- Footer -->
-    <footer class="w-full max-w-[1280px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#8a8a8a] text-sm">
-      <p class="mb-4">
-        <a href="../index.html" class="text-accent hover:underline">Home</a> •
-        <a href="../features.html" class="text-accent hover:underline">Features</a> •
-        <a href="../how-to-use.html" class="text-accent hover:underline">How to Use</a> •
-        <a href="../comparison.html" class="text-accent hover:underline">Compare</a> •
-        <a href="index.html" class="text-accent hover:underline">Blog</a>
+    <footer class="border-t border-[#1a1a1d] px-4 py-3 text-center text-[10px] text-[#55555a]">
+      <p class="m-0">
+        <a href="../index.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Home</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="../features.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Features</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="../how-to-use.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">How to Use</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="../comparison.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Compare</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="index.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Blog</a>
       </p>
-      <p class="mt-2 m-0">Strim &#8212; Free M3U Playlist Editor. Open source and privacy-first.</p>
-      
+      <p class="m-0 mt-1">Strim &#8212; Free M3U Playlist Editor. Open source and privacy-first.</p>
     </footer>
 
   </body>
