@@ -1521,11 +1521,6 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
 
 app.MapGet("/api/playlists/sample", () =>
 {
-  return Results.Ok(new { text = SamplePlaylistText() });
-}).RequireRateLimiting("general");
-
-static string SamplePlaylistText()
-{
   var groups = new[] { "News", "Sports", "Entertainment", "Documentary", "Kids", "Music", "Regional", "Premium", "4K Ultra HD", "Radio" };
   var channels = new (string Name, string Group, string Logo)[]
   {
@@ -1616,7 +1611,6 @@ static string SamplePlaylistText()
   sb.AppendLine("#EXTM3U");
   sb.AppendLine("# Created with Strim (https://strim.plis.dev)");
 
-  var rng = new Random(42);
   var id = 1001;
   foreach (var (name, group, logo) in channels)
   {
@@ -1627,8 +1621,8 @@ static string SamplePlaylistText()
     id++;
   }
 
-  return sb.ToString();
-}
+  return Results.Ok(new { text = sb.ToString() });
+}).RequireRateLimiting("general");
 
 app.MapGet("/api/playlists/{id:guid}/stats", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
 {
