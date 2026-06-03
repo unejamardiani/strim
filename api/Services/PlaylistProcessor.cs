@@ -38,6 +38,7 @@ public static class PlaylistProcessor
     var lines = NormalizeLines(text);
     var sb = new StringBuilder();
     sb.AppendLine("#EXTM3U");
+    sb.AppendLine("# Created with Strim (https://strim.plis.dev)");
 
     var total = 0;
     var kept = 0;

@@ -8,7 +8,7 @@ self.addEventListener('message', (ev) => {
     const lines = text.replace(/\r\n?/g, '\n').split('\n');
     const totalLines = lines.length;
 
-    const outputParts = ['#EXTM3U'];
+    const outputParts = ['#EXTM3U', '# Created with Strim (https://strim.plis.dev)'];
     let processed = 0;
 
     // Iterate through lines looking for #EXTINF entries.

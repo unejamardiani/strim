@@ -1646,7 +1646,7 @@ function renderStats() {
 function generateFilteredM3U() {
   if (!state.localPlaylist) return '';
   const disabled = state.disabledGroups;
-  const outputLines = ['#EXTM3U'];
+  const outputLines = ['#EXTM3U', '# Created with Strim (https://strim.plis.dev)'];
 
   let kept = 0;
   for (let i = 0; i < state.localPlaylist.channels.length; i++) {
