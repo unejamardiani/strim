@@ -7,311 +7,162 @@
     <meta name="robots" content="noindex, follow" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+            },
+          },
+        },
       }
+    </script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
-        font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
-        background: linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px),
-                    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-                    radial-gradient(circle at 20% 20%, rgba(122, 214, 255, 0.12), transparent 35%),
-                    radial-gradient(circle at 80% 0%, rgba(255, 185, 122, 0.18), transparent 40%),
-                    #050912;
-        background-size: 50px 50px, 50px 50px, 100% 100%, 100% 100%, 100% 100%;
-        background-attachment: fixed;
-        color: #e7ecf5;
+        font-family: 'Inter', system-ui, sans-serif;
+        background: #0c0c0e;
+        color: #e8e8ec;
         min-height: 100vh;
         display: flex;
         flex-direction: column;
-        padding: 26px;
-        gap: 26px;
-        line-height: 1.6;
+        line-height: 1.5;
       }
-      a {
-        color: #6df0c2;
-        text-decoration: none;
-        transition: all 0.2s;
-      }
-      a:hover {
-        color: #00ff9f;
-      }
-      nav {
-        max-width: 1400px;
-        width: 100%;
-        margin: 0 auto;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px;
-        border-radius: 12px;
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.1);
-      }
-      .logo {
-        font-size: 24px;
-        font-weight: 800;
-        background: linear-gradient(to bottom right, #6df0c2, #00ff9f);
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-      }
-      .nav-links {
-        display: flex;
-        gap: 24px;
-      }
-      .nav-links a {
-        color: #aab6ce;
-        font-weight: 500;
-        font-size: 14px;
-      }
-      .container {
-        max-width: 1400px;
-        width: 100%;
-        margin: 0 auto;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        flex: 1;
-        gap: 24px;
-      }
-      .error-box {
-        position: relative;
-        max-width: 800px;
-        width: 100%;
-        padding: 48px 32px;
-        border-radius: 24px;
-        background: linear-gradient(to bottom right, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-        border: 1px solid rgba(255,255,255,0.1);
-        box-shadow: 0 20px 60px rgba(0,0,0,0.4);
-        text-align: center;
-        overflow: hidden;
-      }
-      .error-box::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        right: -10%;
-        width: 300px;
-        height: 300px;
-        background: radial-gradient(circle, rgba(109, 240, 194, 0.2), transparent 60%);
+      a { text-decoration: none; }
+      .scanline {
+        position: fixed;
+        inset: 0;
         pointer-events: none;
+        z-index: 10;
+        background: repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 2px,
+          rgba(255,255,255,0.008) 2px,
+          rgba(255,255,255,0.008) 4px
+        );
       }
-      .error-icon {
-        font-size: 120px;
-        opacity: 0.5;
-        margin-bottom: 24px;
+      @keyframes flicker {
+        0%, 100% { opacity: 1; }
+        92% { opacity: 1; }
+        93% { opacity: 0.3; }
+        94% { opacity: 0.8; }
+        95% { opacity: 0.2; }
+        96% { opacity: 1; }
       }
-      .error-code {
-        font-size: 96px;
-        font-weight: 800;
-        background: linear-gradient(to bottom right, #4ac9ff, #6df0c2);
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 16px;
+      .flicker { animation: flicker 4s infinite; }
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
       }
-      h1 {
-        font-size: 48px;
-        font-weight: 800;
-        background: linear-gradient(to bottom right, #6df0c2, #00ff9f);
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 16px;
-      }
-      .description {
-        font-size: 18px;
-        color: #aab6ce;
-        margin-bottom: 32px;
-        line-height: 1.6;
-      }
-      .detail-box {
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 16px;
-        padding: 20px;
-        margin: 24px 0;
-        text-align: left;
-      }
-      .detail-box strong {
-        color: #6df0c2;
-        font-size: 14px;
-      }
-      .detail-box p {
-        color: #e7ecf5;
-        font-size: 14px;
-        font-family: monospace;
-        word-break: break-all;
-        margin-top: 8px;
-      }
-      .buttons {
-        display: flex;
-        gap: 16px;
-        justify-content: center;
-        flex-wrap: wrap;
-        margin-top: 32px;
-      }
-      .btn {
-        padding: 16px 32px;
-        border-radius: 12px;
-        font-weight: 700;
-        font-size: 16px;
-        border: none;
-        cursor: pointer;
-        transition: all 0.2s;
-        text-decoration: none;
-        display: inline-block;
-      }
-      .btn-primary {
-        background: linear-gradient(to bottom right, #6df0c2, #00ff9f);
-        color: #031019;
-        box-shadow: 0 8px 32px rgba(109,240,194,0.3);
-        border: 1px solid rgba(255,255,255,0.2);
-      }
-      .btn-primary:hover {
-        transform: scale(1.05);
-        box-shadow: 0 8px 32px rgba(0,255,159,0.3);
-      }
-      .btn-secondary {
-        background: rgba(255,255,255,0.06);
-        color: #e7ecf5;
-        border: 1px solid rgba(255,255,255,0.1);
-      }
-      .btn-secondary:hover {
-        background: rgba(255,255,255,0.1);
-      }
-      .links-section {
-        margin-top: 32px;
-        padding-top: 24px;
-        border-top: 1px solid rgba(255,255,255,0.1);
-      }
-      .links-section p {
-        font-size: 14px;
-        color: #aab6ce;
-        margin-bottom: 16px;
-      }
-      .helpful-links {
-        display: flex;
-        gap: 12px;
-        justify-content: center;
-        flex-wrap: wrap;
-        font-size: 14px;
-      }
-      .helpful-links span {
-        color: #aab6ce;
-      }
-      footer {
-        max-width: 1400px;
-        width: 100%;
-        margin: 0 auto;
-        padding-top: 32px;
-        border-top: 1px solid rgba(255,255,255,0.1);
-        text-align: center;
-        font-size: 14px;
-        color: #aab6ce;
-      }
-      footer p {
-        margin: 8px 0;
-      }
-      footer .footer-links {
-        display: flex;
-        gap: 8px;
-        justify-content: center;
-        margin-bottom: 16px;
-      }
-      @media (max-width: 768px) {
-        body {
-          padding: 16px;
-        }
-        .error-code {
-          font-size: 64px;
-        }
-        h1 {
-          font-size: 32px;
-        }
-        .description {
-          font-size: 16px;
-        }
-        .nav-links {
-          display: none;
-        }
-        .buttons {
-          flex-direction: column;
-        }
-      }
+      .blink { animation: blink 1.2s step-end infinite; }
     </style>
   </head>
   <body>
-    <nav>
-      <div>
-        <a href="index.html" class="logo">strim</a>
-      </div>
-      <div class="nav-links">
-        <a href="index.html">Home</a>
-        <a href="features.html">Features</a>
-        <a href="how-to-use.html">How to Use</a>
-        <a href="comparison.html">Compare</a>
-        <a href="blog/">Blog</a>
+
+    <div class="scanline"></div>
+
+    <!-- Top bar -->
+    <nav class="flex items-center gap-3 px-4 h-11 border-b border-[#1a1a1d] shrink-0 bg-[#0c0c0e] relative z-20">
+      <a href="index.html" class="flex items-center gap-2 no-underline shrink-0">
+        <span class="w-7 h-7 inline-flex items-center justify-center rounded-[6px] border border-[#252529] text-sm font-bold text-[#e8e8ec] bg-[#141416]">S</span>
+        <span class="text-sm font-semibold text-[#e8e8ec] tracking-tight">strim</span>
+      </a>
+      <span class="w-px h-4 bg-[#1a1a1d]"></span>
+      <div class="hidden md:flex items-center gap-0">
+        <a href="index.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Home</a>
+        <a href="features.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Features</a>
+        <a href="how-to-use.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">How to Use</a>
+        <a href="comparison.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Compare</a>
+        <a href="blog/" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Blog</a>
       </div>
     </nav>
 
-    <div class="container">
-      <section class="error-box">
-        <div class="error-icon">🔍</div>
-        <div class="error-code">404</div>
-        <h1>Page Not Found</h1>
-        <p class="description">
-          Looks like this playlist channel doesn't exist. The page you're looking for has been removed, renamed, or never existed.
-        </p>
+    <div class="flex-1 flex items-center justify-center px-4 py-8 relative z-20">
+      <div class="max-w-[520px] w-full flex flex-col items-center gap-5">
 
-        <div class="detail-box">
-          <strong>Requested URL:</strong>
-          <p id="error-url"></p>
-        </div>
-
-        <div class="buttons">
-          <a href="index.html" class="btn btn-primary">← Go to Home</a>
-          <button onclick="history.back()" class="btn btn-secondary">Go Back</button>
-        </div>
-
-        <div class="links-section">
-          <p>Try these helpful links:</p>
-          <div class="helpful-links">
-            <a href="features.html">Features</a>
-            <span>•</span>
-            <a href="how-to-use.html">How to Use</a>
-            <span>•</span>
-            <a href="comparison.html">Compare</a>
-            <span>•</span>
-            <a href="blog/">Blog</a>
+        <!-- Glitchy TV display -->
+        <div class="w-28 h-24 rounded-[4px] border border-[#252529] bg-[#121213] flex items-center justify-center flicker">
+          <div class="text-center">
+            <div class="text-4xl font-bold text-[#55555a] tracking-tighter">404</div>
+            <div class="text-[8px] text-[#55555a] mt-0.5 font-mono uppercase tracking-widest">Signal Lost</div>
           </div>
         </div>
-      </section>
+
+        <div class="text-center">
+          <h1 class="text-base font-bold tracking-tight">This page is buffering...</h1>
+          <p class="text-xs text-[#7a7a80] mt-1 leading-relaxed">
+            Actually no, it's just gone. Either someone changed the URL, the page was<br class="hidden sm:inline" />
+            abducted by the content police, or you typed faster than your internet.
+          </p>
+        </div>
+
+        <!-- Dead channel stats -->
+        <div class="w-full rounded-[4px] border border-[#252529] bg-[#121213]">
+          <div class="px-4 py-2 border-b border-[#1a1a1d] flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-[#55555a]"></span>
+            <span class="text-[10px] text-[#55555a] font-medium uppercase tracking-wider">System Info</span>
+          </div>
+          <div class="p-4 font-mono text-[10px] leading-relaxed text-[#7a7a80]">
+            <div><span class="text-[#55555a]">$</span> ping plis.dev</div>
+            <div class="text-[#ff6b6b]">Request timeout — destination not found</div>
+            <div><br /></div>
+            <div><span class="text-[#55555a]">$</span> curl -I <span id="error-path" class="text-[#55555a]"></span></div>
+            <div class="text-[#ff6b6b]">HTTP/1.1 <span class="text-[#ff6b6b]">404</span> <span class="text-[#7a7a80]">Whoops</span></div>
+            <div><br /></div>
+            <div><span class="text-[#55555a]">$</span> whatis <span id="error-path2" class="text-[#55555a]"></span></div>
+            <div class="text-[#55555a]">no manual entry for this page</div>
+            <div><br /></div>
+            <div><span class="text-[#55555a]">$</span> <span class="blink">&#9610;</span></div>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="w-full flex flex-col sm:flex-row gap-2">
+          <a href="index.html" class="flex-1 h-8 inline-flex items-center justify-center gap-1 px-4 rounded-[4px] bg-[#e8e8ec] text-[#0c0c0e] text-xs font-semibold no-underline hover:brightness-110 transition-all">Go to Home</a>
+          <button onclick="history.back()" class="flex-1 h-8 inline-flex items-center justify-center gap-1 px-3 rounded-[4px] border border-[#252529] text-[#e8e8ec] text-xs font-medium no-underline hover:bg-[#252529] transition-all cursor-pointer bg-transparent">Go Back</button>
+        </div>
+
+        <!-- Helpful links -->
+        <div class="text-center">
+          <p class="text-[10px] text-[#55555a] mb-2">or try one of these channels:</p>
+          <div class="flex items-center justify-center gap-2 text-[10px]">
+            <a href="features.html" class="text-[#7a7a80] hover:text-[#e8e8ec] transition-colors">Features</a>
+            <span class="text-[#252529]">/</span>
+            <a href="how-to-use.html" class="text-[#7a7a80] hover:text-[#e8e8ec] transition-colors">How to Use</a>
+            <span class="text-[#252529]">/</span>
+            <a href="comparison.html" class="text-[#7a7a80] hover:text-[#e8e8ec] transition-colors">Compare</a>
+            <span class="text-[#252529]">/</span>
+            <a href="blog/" class="text-[#7a7a80] hover:text-[#e8e8ec] transition-colors">Blog</a>
+          </div>
+        </div>
+
+      </div>
     </div>
 
-    <footer>
-      <div class="footer-links">
-        <a href="index.html">Home</a>
-        <span>•</span>
-        <a href="features.html">Features</a>
-        <span>•</span>
-        <a href="how-to-use.html">How to Use</a>
-        <span>•</span>
-        <a href="comparison.html">Compare</a>
-        <span>•</span>
-        <a href="blog/">Blog</a>
-      </div>
-      <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
-      <p>Made with AI assistance</p>
+    <!-- Footer -->
+    <footer class="border-t border-[#1a1a1d] px-4 py-3 text-center text-[10px] text-[#55555a] relative z-20">
+      <p class="m-0">
+        <a href="index.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Home</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="features.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Features</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="how-to-use.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">How to Use</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="comparison.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Compare</a>
+        <span class="mx-1 opacity-40">/</span>
+        <a href="blog/" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Blog</a>
+      </p>
+      <p class="m-0 mt-1">Strim &#8212; Free M3U Playlist Editor. Open source and privacy-first.</p>
     </footer>
 
     <script>
-      document.getElementById('error-url').textContent = window.location.href;
+      var path = window.location.pathname;
+      document.getElementById('error-path').textContent = path;
+      document.getElementById('error-path2').textContent = path;
     </script>
   </body>
 </html>
