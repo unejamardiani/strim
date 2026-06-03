@@ -1466,6 +1466,40 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
   return Results.Ok(response);
 }).RequireRateLimiting("fetch");
 
+app.MapGet("/api/playlists/sample", async (IMemoryCache cache, IHttpClientFactory httpClientFactory) =>
+{
+  const string cacheKey = "sample-playlist-text";
+
+  if (cache.TryGetValue(cacheKey, out string? cachedText) && cachedText is not null)
+    return Results.Ok(new { text = cachedText });
+
+  const string publicSampleUrl = "https://iptv-org.github.io/iptv/index.m3u";
+  try
+  {
+    var text = await FetchPlaylistText(publicSampleUrl, httpClientFactory);
+    var cacheOptions = new MemoryCacheEntryOptions()
+      .SetAbsoluteExpiration(TimeSpan.FromMinutes(15))
+      .SetSize(text.Length * 2);
+    cache.Set(cacheKey, text, cacheOptions);
+    return Results.Ok(new { text });
+  }
+  catch (Exception ex)
+  {
+    app.Logger.LogWarning(ex, "Failed to fetch sample playlist from {Url}", publicSampleUrl);
+    return Results.Ok(new { text = @"#EXTM3U
+#EXTINF:-1 tvg-name=""News HD"" group-title=""News"",Global News HD
+http://example.com/streams/global-news.m3u8
+#EXTINF:-1 tvg-name=""Sports 1"" group-title=""Sports"",Sports One
+http://example.com/streams/sports1.m3u8
+#EXTINF:-1 tvg-name=""Sports 2"" group-title=""Sports"",Sports Two
+http://example.com/streams/sports2.m3u8
+#EXTINF:-1 tvg-name=""Kids"" group-title=""Family"",Kids Central
+http://example.com/streams/kids.m3u8
+#EXTINF:-1 tvg-name=""Drama"" group-title=""Entertainment"",Drama Now
+http://example.com/streams/drama.m3u8" });
+  }
+}).RequireRateLimiting("general");
+
 app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code, AppDbContext db, IHttpClientFactory httpClientFactory) =>
 {
   var playlist = await db.Playlists.FindAsync(id);

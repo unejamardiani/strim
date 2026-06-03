@@ -100,11 +100,32 @@ fetchButton.addEventListener('click', () => {
   loadPlaylistFromSource(url);
 });
 
-loadSampleButton.addEventListener('click', () => {
-  hydrateLocalPlaylist(samplePlaylist, 'sample.m3u', '', {
-    name: 'Sample playlist',
-    sourceUrl: 'https://example.com/sample.m3u',
-  });
+loadSampleButton.addEventListener('click', async () => {
+  if (!API_BASE) {
+    hydrateLocalPlaylist(samplePlaylist, 'sample.m3u', '', {
+      name: 'Sample playlist',
+      sourceUrl: 'https://example.com/sample.m3u',
+    });
+    await updateOutput({ useWorker: false });
+    return;
+  }
+  try {
+    setStatus('Loading sample playlist…', 'info');
+    const res = await apiRequest('/playlists/sample');
+    if (res && res.text) {
+      hydrateLocalPlaylist(res.text, 'sample.m3u', '', {
+        name: 'Sample playlist (IPTV)',
+        sourceUrl: 'https://iptv-org.github.io/iptv/index.m3u',
+      });
+      await updateOutput({ useWorker: false });
+    }
+  } catch {
+    hydrateLocalPlaylist(samplePlaylist, 'sample.m3u', '', {
+      name: 'Sample playlist',
+      sourceUrl: 'https://example.com/sample.m3u',
+    });
+    await updateOutput({ useWorker: false });
+  }
 });
 
 refreshButton.addEventListener('click', async () => {
@@ -1384,10 +1405,14 @@ function renderGroups() {
     groupsGrid.replaceChildren();
 
     if (totalItems === 0) {
-      const message = document.createElement('div');
-      message.className = 'hint';
-      message.textContent = filterTerm ? 'No groups match your search.' : 'Load a playlist to see groups.';
-      groupsGrid.append(message);
+      const el = document.createElement('div');
+      el.className = 'hint';
+      if (filterTerm) {
+        el.textContent = 'No groups match your search.';
+      } else {
+        el.innerHTML = 'Paste an M3U URL above or click <strong>Sample</strong> to try a demo with thousands of channels.';
+      }
+      groupsGrid.append(el);
       return;
     }
 
@@ -1745,13 +1770,14 @@ async function init() {
   await fetchAuthProviders();
   await fetchAuthState();
   await loadSavedPlaylists();
-  hydrateLocalPlaylist(samplePlaylist, 'sample.m3u');
-  await updateOutput({ useWorker: false });
+  renderGroups();
+  renderStats();
+  updateSaveButtonLabel();
 }
 
 init().catch((err) => {
   console.error('Failed to initialize app', err);
   setStatus('Failed to load saved playlists', 'warn');
-  hydrateLocalPlaylist(samplePlaylist, 'sample.m3u');
-  updateOutput({ useWorker: false });
+  renderGroups();
+  renderStats();
 });
