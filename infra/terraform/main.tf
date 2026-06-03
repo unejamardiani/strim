@@ -60,6 +60,8 @@ locals {
       # }
       WEBSITES_ENABLE_APP_SERVICE_STORAGE = "true"
       WEBSITES_PORT                       = tostring(var.container_port)
+      # Force pull fresh image on deploy even when tag is unchanged
+      WEBSITE_PULL_IMAGE_ON_DEPLOY        = "1"
       # Enable forwarded headers for Azure App Service to properly handle HTTPS
       ASPNETCORE_FORWARDEDHEADERS_ENABLED = "true"
     },
