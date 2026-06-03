@@ -444,7 +444,7 @@ function renderShareLinks(playlists) {
               <h4 class="text-[#e7ecf5] font-bold text-base m-0 truncate">${escapeHtml(playlist.name)}</h4>
               <span class="chip px-2 py-1 rounded-full text-[11px] font-semibold ${statusClass}">${statusText}</span>
             </div>
-            <p class="text-[#aab6ce] text-xs m-0 mb-2">${playlist.totalChannels || 0} channels • Created ${formatDate(playlist.createdAt)}</p>
+            <p class="text-[#aab6ce] text-xs m-0 mb-2">${playlist.totalChannels || 0} channels • Created ${formatDate(playlist.createdAt)}${playlist.viewCount > 0 ? ` • ${playlist.viewCount.toLocaleString()} view${playlist.viewCount === 1 ? '' : 's'}` : ''}</p>
             <div class="flex items-center gap-2">
               <input type="text" readonly value="${isActive ? shareUrl : ''}" placeholder="${!isActive ? displayUrl : ''}" class="${urlInputClass}" data-share-url="${shareUrl}" />
             </div>
@@ -964,6 +964,8 @@ function sanitizePlaylistRecord(pl) {
     groupCount: pl.groupCount || 0,
     expirationUtc: pl.expirationUtc || null,
     shareCode: pl.shareCode || null,
+    viewCount: Number.isFinite(Number(pl.viewCount)) ? Number(pl.viewCount) : 0,
+    lastViewedUtc: pl.lastViewedUtc || null,
     createdAt: pl.createdAt,
     updatedAt: pl.updatedAt,
   };
@@ -1245,6 +1247,7 @@ function renderSavedPlaylists() {
     parts.push(`${channels.toLocaleString()} channel${channels === 1 ? '' : 's'}`);
     parts.push(`${groups.toLocaleString()} group${groups === 1 ? '' : 's'}`);
     parts.push(`${filters} filter${filters === 1 ? '' : 's'}`);
+    if (pl.viewCount > 0) parts.push(`${pl.viewCount.toLocaleString()} view${pl.viewCount === 1 ? '' : 's'}`);
     sub.textContent = parts.join(' • ');
 
     meta.append(name, sub);

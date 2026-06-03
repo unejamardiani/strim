@@ -41,6 +41,12 @@ public class Playlist
   [Column("isactive")]
   public bool IsActive { get; set; } = true;
 
+  [Column("viewcount")]
+  public long ViewCount { get; set; }
+
+  [Column("lastviewedutc")]
+  public DateTimeOffset? LastViewedUtc { get; set; }
+
   public DateTimeOffset CreatedAt { get; set; }
 
   public DateTimeOffset UpdatedAt { get; set; }

@@ -489,6 +489,8 @@ void EnsureSchema(AppDbContext db, ILogger logger)
     TryAddSqliteColumn(db, "sharecode", "TEXT NULL", logger);
     TryAddSqliteColumn(db, "ownerid", "TEXT NULL", logger);
     TryAddSqliteColumn(db, "isactive", "INTEGER NOT NULL DEFAULT 1", logger);
+    TryAddSqliteColumn(db, "viewcount", "INTEGER NOT NULL DEFAULT 0", logger);
+    TryAddSqliteColumn(db, "lastviewedutc", "TEXT NULL", logger);
     TryBackfillSqliteShareCodes(db, logger);
   }
 }
@@ -692,6 +694,12 @@ void TryPatchPostgresSchema(AppDbContext db, ILogger logger)
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'isactive') THEN
           ALTER TABLE playlists ADD COLUMN isactive boolean NOT NULL DEFAULT true;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'viewcount') THEN
+          ALTER TABLE playlists ADD COLUMN viewcount bigint NOT NULL DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'lastviewedutc') THEN
+          ALTER TABLE playlists ADD COLUMN lastviewedutc timestamptz NULL;
+        END IF;
       END $$;
     ");
     logger.LogDebug("PostgreSQL schema patched successfully");
@@ -731,7 +739,9 @@ void TryAddSqliteColumn(AppDbContext db, string columnName, string definition, I
     ["expirationutc"] = "TEXT NULL",
     ["sharecode"] = "TEXT NULL",
     ["ownerid"] = "TEXT NULL",
-    ["isactive"] = "INTEGER NOT NULL DEFAULT 1"
+    ["isactive"] = "INTEGER NOT NULL DEFAULT 1",
+    ["viewcount"] = "INTEGER NOT NULL DEFAULT 0",
+    ["lastviewedutc"] = "TEXT NULL"
   };
 
   if (!allowedColumns.TryGetValue(columnName, out var expectedDefinition))
@@ -1516,6 +1526,19 @@ http://example.com/streams/drama.m3u8" });
   }
 }).RequireRateLimiting("general");
 
+app.MapGet("/api/playlists/{id:guid}/stats", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
+{
+  var userId = GetUserId(user);
+  if (string.IsNullOrWhiteSpace(userId))
+    return Results.Unauthorized();
+
+  var playlist = await db.Playlists.FindAsync(id);
+  if (playlist is null || playlist.OwnerId != userId)
+    return Results.NotFound();
+
+  return Results.Ok(new { viewCount = playlist.ViewCount, lastViewedUtc = playlist.LastViewedUtc });
+}).RequireAuthorization().RequireRateLimiting("general");
+
 app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code, AppDbContext db, IHttpClientFactory httpClientFactory) =>
 {
   var playlist = await db.Playlists.FindAsync(id);
@@ -1542,6 +1565,11 @@ app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code,
     var disabled = new HashSet<string>(playlist.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
     var filtered = PlaylistProcessor.GenerateFiltered(text, disabled);
     var fileName = $"{(playlist.SourceName ?? playlist.Name ?? "playlist")}-filtered.m3u";
+
+    playlist.ViewCount++;
+    playlist.LastViewedUtc = DateTimeOffset.UtcNow;
+    await db.SaveChangesAsync();
+
     return Results.File(Encoding.UTF8.GetBytes(filtered.Text), "application/x-mpegurl", fileDownloadName: fileName);
   }
   catch (TaskCanceledException)
