@@ -145,6 +145,33 @@ jobs:
           set -euo pipefail
           terraform apply -input=false -auto-approve tfplan -no-color
 
+      - name: Restart App Service
+        env:
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          az webapp restart \
+            --name "strim-${ENVIRONMENT}-app" \
+            --resource-group "strim-${ENVIRONMENT}-rg"
+
+      - name: Wait for healthy
+        env:
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          URL="https://strim-${ENVIRONMENT}-app.azurewebsites.net/health"
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$URL" --max-time 10 2>/dev/null || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "App is healthy on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i: status=$STATUS, waiting…"
+            sleep 10
+          done
+          echo "App failed to become healthy after 12 attempts"
+          exit 1
+
       - name: Emit audit metadata
         env:
           ENVIRONMENT: ${{ env.ENVIRONMENT }}
