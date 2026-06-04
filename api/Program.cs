@@ -454,6 +454,18 @@ app.Use(async (context, next) =>
 
 app.UseCors("default");
 
+// Rewrite root path to index.html. UseDefaultFiles() should handle this,
+// but a known issue with implicit routing in .NET 8 Minimal API
+// can prevent the default-document lookup from matching "/".
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path == "/")
+    {
+        context.Request.Path = "/index.html";
+    }
+    await next();
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
