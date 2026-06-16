@@ -1067,24 +1067,37 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
     cachedCsrfToken = null;
   }
 
-  if (res.status === 401) {
-    const err = new Error('Unauthorized');
-    err.code = 'unauthorized';
-    throw err;
-  }
-  if (res.status === 403) {
-    const err = new Error('Forbidden');
-    err.code = 'forbidden';
-    throw err;
-  }
   if (res.status === 204) return null;
   if (!res.ok) {
-    const text = await res.text();
-    const err = new Error(text || res.statusText);
-    err.code = res.status;
+    const message = await readApiErrorMessage(res);
+    const err = new Error(message || defaultApiErrorMessage(res));
+    err.code = res.status === 401 ? 'unauthorized' : res.status === 403 ? 'forbidden' : res.status;
     throw err;
   }
   return res.json();
+}
+
+async function readApiErrorMessage(res) {
+  const text = await res.text();
+  if (!text) return '';
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('json')) {
+    try {
+      const data = JSON.parse(text);
+      return data.detail || data.error || data.message || data.title || text;
+    } catch {
+      return text;
+    }
+  }
+
+  return text;
+}
+
+function defaultApiErrorMessage(res) {
+  if (res.status === 401) return 'Unauthorized';
+  if (res.status === 403) return 'Forbidden';
+  return res.statusText || `Request failed with status ${res.status}`;
 }
 
 async function loadSavedPlaylists() {

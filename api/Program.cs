@@ -470,7 +470,9 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 // Status code pages for error handling
-app.UseStatusCodePagesWithReExecute("/error/{0}");
+app.UseWhen(
+  context => !context.Request.Path.StartsWithSegments("/api"),
+  nonApi => nonApi.UseStatusCodePagesWithReExecute("/error/{0}"));
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -1154,6 +1156,26 @@ async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFa
   throw new InvalidOperationException("Too many redirects");
 }
 
+static string GetPlaylistFetchErrorMessage(HttpRequestException ex)
+{
+  if (ex.Message.Contains("Unable to connect", StringComparison.OrdinalIgnoreCase))
+  {
+    return ex.Message;
+  }
+
+  if (ex.StatusCode == HttpStatusCode.Forbidden)
+  {
+    return "The playlist source rejected Strim's backend request (HTTP 403). The provider may block cloud/proxy servers or require access from your own network.";
+  }
+
+  if (ex.StatusCode.HasValue)
+  {
+    return $"The playlist source returned HTTP {(int)ex.StatusCode.Value}.";
+  }
+
+  return "Failed to fetch the playlist from the source";
+}
+
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapGet("/api/playlists", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -1446,10 +1468,7 @@ app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpC
     // P1 fix: Don't expose raw HTTP error details, but provide helpful user-facing messages
     app.Logger.LogWarning(ex, "HTTP request failed during playlist analyze");
     var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    var userMessage = ex.Message.Contains("Unable to connect")
-      ? ex.Message
-      : "Failed to fetch the playlist from the source";
-    return Results.Problem(userMessage, statusCode: status);
+    return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
   }
   catch (Exception ex)
   {
@@ -1509,10 +1528,7 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
     // P1 fix: Don't expose raw HTTP error details, but provide helpful user-facing messages
     app.Logger.LogWarning(ex, "HTTP request failed during playlist generate");
     var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    var userMessage = ex.Message.Contains("Unable to connect")
-      ? ex.Message
-      : "Failed to fetch the playlist from the source";
-    return Results.Problem(userMessage, statusCode: status);
+    return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
   }
   catch (Exception ex)
   {
@@ -1691,10 +1707,7 @@ app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code,
     // P1 fix: Don't expose raw HTTP error details, but provide helpful user-facing messages
     app.Logger.LogWarning(ex, "HTTP request failed during share download for playlist {PlaylistId}", id);
     var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    var userMessage = ex.Message.Contains("Unable to connect")
-      ? ex.Message
-      : "Failed to fetch the playlist from the source";
-    return Results.Problem(userMessage, statusCode: status);
+    return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
   }
   catch (Exception ex)
   {
