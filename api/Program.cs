@@ -1852,6 +1852,14 @@ app.MapGet("/error/{statusCode:int}", async (int statusCode, HttpContext context
   return Results.Problem($"Error {statusCode}", statusCode: statusCode);
 });
 
+// Endpoint routing runs before the static-file middleware in this Minimal API
+// pipeline, so handle the default document explicitly instead of relying only
+// on the earlier path rewrite.
+var indexFilePath = Path.Combine(
+  app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"),
+  "index.html");
+app.MapGet("/", () => Results.File(indexFilePath, "text/html; charset=utf-8"));
+
 // SPA fallback for client-side routing - set 404 status and serve error page
 app.MapFallback(async (HttpContext context) =>
 {
