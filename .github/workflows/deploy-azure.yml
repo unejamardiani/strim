@@ -1,8 +1,6 @@
-name: Deploy to Azure
+name: Deploy to Azure (manual rollback only)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
