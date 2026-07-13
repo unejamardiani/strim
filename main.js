@@ -414,12 +414,19 @@ async function loadShareLinks() {
   }
 }
 
+let publicShareBaseUrl = '';
+
 function buildShareUrlForPlaylist(playlistId, shareCode) {
   if (!API_BASE || !playlistId || !shareCode) return '';
-  const base = API_BASE.startsWith('http')
-    ? API_BASE.replace(/\/$/, '')
-    : new URL(API_BASE.replace(/\/$/, ''), window.location.origin).toString();
+  const base = getShareBaseUrl();
   return `${base}/playlists/${playlistId}/share/${shareCode}`;
+}
+
+function getShareBaseUrl() {
+  if (publicShareBaseUrl) return publicShareBaseUrl;
+  return API_BASE.startsWith('http')
+    ? API_BASE.replace(/\/$/, '')
+    : new URL(API_BASE.replace(/\/$/, ''), window.location.origin).toString().replace(/\/$/, '');
 }
 
 function renderShareLinks(playlists) {
@@ -996,11 +1003,18 @@ function hasLoadedPlaylist() {
 
 function buildShareUrl() {
   if (!state.isAuthenticated || !API_BASE || !state.currentPlaylistId || !state.shareCode) return '';
-  // Ensure absolute URL even if API_BASE is a relative /api path.
-  const base = API_BASE.startsWith('http')
-    ? API_BASE.replace(/\/$/, '')
-    : new URL(API_BASE.replace(/\/$/, ''), window.location.origin).toString();
+  const base = getShareBaseUrl();
   return `${base}/playlists/${state.currentPlaylistId}/share/${state.shareCode}`;
+}
+
+async function loadRuntimeConfig() {
+  try {
+    const config = await apiRequest('/config');
+    const configuredShareBaseUrl = config?.publicShareBaseUrl || '';
+    publicShareBaseUrl = String(configuredShareBaseUrl).replace(/\/+$/, '');
+  } catch (err) {
+    console.warn('Failed to load runtime configuration; using the application URL for share links.', err);
+  }
 }
 
 function formatExpiration(expiration) {
@@ -1833,6 +1847,7 @@ function setControlsDisabled(disabled) {
 }
 
 async function init() {
+  await loadRuntimeConfig();
   await fetchAuthProviders();
   await fetchAuthState();
   await loadSavedPlaylists();

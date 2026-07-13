@@ -77,6 +77,14 @@ var postgresConnectionString = builder.Configuration.GetConnectionString("Postgr
 var sqliteConnectionString = builder.Configuration.GetConnectionString("Sqlite") ??
   builder.Configuration["SQLITE_CONNECTION"];
 var sqlitePathOverride = builder.Configuration["SQLITE_PATH"];
+var publicShareBaseUrl = builder.Configuration["PUBLIC_SHARE_BASE_URL"]?.Trim().TrimEnd('/');
+
+if (!string.IsNullOrWhiteSpace(publicShareBaseUrl) &&
+    (!Uri.TryCreate(publicShareBaseUrl, UriKind.Absolute, out var shareBaseUri) ||
+     (shareBaseUri.Scheme != Uri.UriSchemeHttps && shareBaseUri.Scheme != Uri.UriSchemeHttp)))
+{
+  throw new InvalidOperationException("PUBLIC_SHARE_BASE_URL must be an absolute HTTP or HTTPS URL.");
+}
 
 // Default to SQLite when no Postgres connection string is provided unless explicitly overridden.
 var useSqlite = string.Equals(configuredProvider, "sqlite", StringComparison.OrdinalIgnoreCase) ||
@@ -943,6 +951,8 @@ authGroup.MapPost("/register", async (RegisterRequest request, UserManager<Ident
     return Results.Problem("Registration failed due to an internal error", statusCode: 500);
   }
 });
+
+app.MapGet("/api/config", () => Results.Ok(new { publicShareBaseUrl }));
 
 authGroup.MapPost("/login", async (LoginRequest request, SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager, IAntiforgery antiforgery, HttpContext context) =>
 {
