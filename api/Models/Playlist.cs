@@ -53,6 +53,23 @@ public class Playlist
   [Column("lastrefreshedutc")]
   public DateTimeOffset? LastRefreshedUtc { get; set; }
 
+  [MaxLength(64)]
+  [Column("sourcehash")]
+  public string? SourceHash { get; set; }
+
+  [MaxLength(512)]
+  [Column("sourceetag")]
+  public string? SourceETag { get; set; }
+
+  [Column("sourcelastmodifiedutc")]
+  public DateTimeOffset? SourceLastModifiedUtc { get; set; }
+
+  [Column("sourcelengthbytes")]
+  public long? SourceLengthBytes { get; set; }
+
+  [Column("sourcecheckedutc")]
+  public DateTimeOffset? SourceCheckedUtc { get; set; }
+
   public DateTimeOffset CreatedAt { get; set; }
 
   public DateTimeOffset UpdatedAt { get; set; }

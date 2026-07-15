@@ -6,11 +6,22 @@ namespace Api.Services;
 public class PlaylistRefreshService : BackgroundService
 {
   private readonly IServiceScopeFactory _scopeFactory;
+  private readonly PlaylistFileCache _cache;
+  private readonly PlaylistSourceFetcher _fetcher;
+  private readonly PlaylistJobGate _jobGate;
   private readonly ILogger<PlaylistRefreshService> _logger;
 
-  public PlaylistRefreshService(IServiceScopeFactory scopeFactory, ILogger<PlaylistRefreshService> logger)
+  public PlaylistRefreshService(
+    IServiceScopeFactory scopeFactory,
+    PlaylistFileCache cache,
+    PlaylistSourceFetcher fetcher,
+    PlaylistJobGate jobGate,
+    ILogger<PlaylistRefreshService> logger)
   {
     _scopeFactory = scopeFactory;
+    _cache = cache;
+    _fetcher = fetcher;
+    _jobGate = jobGate;
     _logger = logger;
   }
 
@@ -33,53 +44,94 @@ public class PlaylistRefreshService : BackgroundService
     }
   }
 
-  private async Task RefreshPlaylists(CancellationToken ct)
+  private async Task RefreshPlaylists(CancellationToken cancellationToken)
   {
     using var scope = _scopeFactory.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
 
     var playlists = await db.Playlists
       .Where(p => p.AutoRefreshEnabled && p.SourceUrl != null && p.SourceUrl != "")
-      .ToListAsync(ct);
+      .ToListAsync(cancellationToken);
 
     _logger.LogInformation("Refreshing {Count} playlists", playlists.Count);
 
     foreach (var playlist in playlists)
     {
-      try
+      var job = await _jobGate.TryEnterAsync(cancellationToken);
+      if (job is null)
       {
-        var client = httpClientFactory.CreateClient("fetcher");
-        using var res = await client.GetAsync(playlist.SourceUrl, HttpCompletionOption.ResponseHeadersRead, ct);
-        res.EnsureSuccessStatusCode();
-        var text = await res.Content.ReadAsStringAsync(ct);
-
-        var channelCount = CountChannels(text);
-        var changed = channelCount != playlist.TotalChannels;
-
-        playlist.LastRefreshedUtc = DateTimeOffset.UtcNow;
-        playlist.TotalChannels = channelCount;
-        await db.SaveChangesAsync(ct);
-
-        if (changed)
-          _logger.LogInformation("Playlist {Id} ({Name}) changed: {Old} → {New} channels",
-            playlist.Id, playlist.Name, playlist.TotalChannels, channelCount);
+        _logger.LogInformation("Skipping automatic refresh for playlist {PlaylistId}; playlist processor is busy", playlist.Id);
+        continue;
       }
-      catch (Exception ex)
+
+      await using (job)
       {
-        _logger.LogWarning(ex, "Failed to refresh playlist {Id} ({Name})", playlist.Id, playlist.Name);
+        try
+        {
+          var source = await FetchAndCacheSourceAsync(playlist.SourceUrl!, cancellationToken);
+          var analysis = _cache.TryGetAnalysis(source)
+            ?? await PlaylistProcessor.AnalyzeFileAsync(
+              source.FilePath,
+              cancellationToken,
+              _cache.MaxLineLengthChars,
+              _cache.MaxGroupCount,
+              _cache.MaxGroupTitleLengthChars,
+              _cache.MaxGroupMetadataBytes);
+          _cache.StoreAnalysis(source, analysis);
+
+          var oldCount = playlist.TotalChannels;
+          var oldHash = playlist.SourceHash;
+          playlist.LastRefreshedUtc = DateTimeOffset.UtcNow;
+          playlist.TotalChannels = analysis.TotalChannels;
+          playlist.GroupCount = analysis.Groups.Count;
+          playlist.SourceHash = source.ContentHash;
+          playlist.SourceETag = ClampDatabaseString(source.ETag, 512);
+          playlist.SourceLastModifiedUtc = source.LastModifiedUtc;
+          playlist.SourceLengthBytes = source.LengthBytes;
+          playlist.SourceCheckedUtc = DateTimeOffset.UtcNow;
+          await db.SaveChangesAsync(cancellationToken);
+
+          if (!string.Equals(oldHash, source.ContentHash, StringComparison.OrdinalIgnoreCase) || oldCount != analysis.TotalChannels)
+          {
+            _logger.LogInformation(
+              "Playlist {PlaylistId} refreshed: {OldChannels} -> {NewChannels} channels, sha256 {HashPrefix}",
+              playlist.Id,
+              oldCount,
+              analysis.TotalChannels,
+              source.ContentHash[..12]);
+          }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+          throw;
+        }
+        catch (Exception ex)
+        {
+          _logger.LogWarning(ex, "Failed to refresh playlist {PlaylistId} ({Name})", playlist.Id, playlist.Name);
+        }
       }
     }
   }
 
-  private static int CountChannels(string m3uText)
+  private async Task<PlaylistSourceFile> FetchAndCacheSourceAsync(string sourceUrl, CancellationToken cancellationToken)
   {
-    var count = 0;
-    foreach (var line in m3uText.Split('\n'))
+    var existing = _cache.TryGetSource(sourceUrl);
+    var fetched = await _fetcher.FetchAsync(sourceUrl, existing, cancellationToken);
+    if (fetched.NotModified)
     {
-      if (line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase))
-        count++;
+      if (existing is null)
+      {
+        throw new HttpRequestException("The playlist source returned an unusable cache validation response.");
+      }
+
+      _cache.TouchNotModified(existing, fetched.ETag, fetched.LastModifiedUtc);
+      return existing;
     }
-    return count;
+
+    return _cache.StoreDownloaded(sourceUrl, fetched.DownloadedFile
+      ?? throw new InvalidOperationException("Playlist source did not return a body."));
   }
+
+  private static string? ClampDatabaseString(string? value, int maxLength) =>
+    string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
 }

@@ -7,6 +7,7 @@ on:
     paths:
       # Core image build inputs
       - 'Dockerfile'
+      - '.dockerignore'
       - 'docker-compose*.yml'
       # App source and assets
       - 'api/**'
