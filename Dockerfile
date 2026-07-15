@@ -5,9 +5,6 @@ WORKDIR /src
 COPY api/api.csproj api/
 RUN dotnet restore api/api.csproj
 
-COPY tools/Strim.DbMigrator/Strim.DbMigrator.csproj tools/Strim.DbMigrator/
-RUN dotnet restore tools/Strim.DbMigrator/Strim.DbMigrator.csproj
-
 # Copy the full source
 COPY . .
 
@@ -19,8 +16,7 @@ RUN mkdir -p api/wwwroot && \
     cp -r blog api/wwwroot/
 
 # Publish
-RUN dotnet publish api/api.csproj -c Release -o /app/publish /p:UseAppHost=false
-RUN dotnet publish tools/Strim.DbMigrator/Strim.DbMigrator.csproj -c Release -o /app/migrator /p:UseAppHost=false
+RUN dotnet publish api/api.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
@@ -28,7 +24,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
-COPY --from=build /app/migrator ./migrator
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl --fail --silent --show-error http://127.0.0.1:8080/health/live || exit 1
 ENTRYPOINT ["dotnet", "api.dll"]

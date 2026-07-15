@@ -1,9 +1,30 @@
-bin/
-obj/
-node_modules/
-**/.git
+# Build output and dependency caches
+**/bin/
+**/obj/
+**/node_modules/
+**/.terraform/
+
+# Local tooling, source control metadata, and environment-specific files
+.git/
+.github/
+.vscode/
+.idea/
 **/.DS_Store
 **/Thumbs.db
 *.log
-api/bin/
-api/obj/
+.env
+.env.*
+
+# The runtime image only needs the API and static site assets.
+api.Tests/
+tools/
+docs/
+infra/
+AGENTS.md
+DESIGN.md
+design-mockup.html
+spec.md
+README.md
+LICENSE
+cors-proxy.js
+docker-compose*.yml

@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
@@ -19,6 +18,7 @@ using System.Data.Common;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,6 +69,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 const int MaxUrlLength = 2048;
 const int MaxPlaylistNameLength = 200;
 const int MaxPlaylistTextSize = 50 * 1024 * 1024; // 50 MB max for playlist text
+const long MaxAnalyzeRequestBodySize = MaxPlaylistTextSize + (1L * 1024 * 1024); // JSON envelope/headroom
 const int MaxDisabledGroupsCount = 1000;
 
 var configuredProvider = (builder.Configuration["DB_PROVIDER"] ?? builder.Configuration["DATABASE_PROVIDER"])?.ToLowerInvariant();
@@ -169,12 +170,12 @@ builder.Services.AddCors(options =>
     }
   });
 });
-builder.Services.AddMemoryCache(options =>
-{
-  // Limit cache to 500MB to prevent memory exhaustion
-  // Each cached playlist can be up to 50MB, so this allows ~10 concurrent cached playlists
-  options.SizeLimit = 500 * 1024 * 1024;
-});
+// Large playlists are deliberately spooled to private disk files. Metadata stays small in memory.
+builder.Services.Configure<PlaylistCacheOptions>(builder.Configuration.GetSection(PlaylistCacheOptions.SectionName));
+builder.Services.AddSingleton<PlaylistFileCache>();
+builder.Services.AddSingleton<PlaylistSourceFetcher>();
+builder.Services.AddSingleton<PlaylistJobGate>();
+builder.Services.AddHostedService<PlaylistCacheCleanupService>();
 
 // Rate limiting configuration to prevent abuse
 builder.Services.AddRateLimiter(options =>
@@ -204,6 +205,18 @@ builder.Services.AddRateLimiter(options =>
         Window = TimeSpan.FromMinutes(1),
         QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
         QueueLimit = 2
+      }));
+
+  // Public share URLs can otherwise trigger an expensive upstream fetch and filter on every hit.
+  options.AddPolicy("share", context =>
+    RateLimitPartition.GetFixedWindowLimiter(
+      partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+      factory: _ => new FixedWindowRateLimiterOptions
+      {
+        PermitLimit = 30,
+        Window = TimeSpan.FromMinutes(1),
+        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        QueueLimit = 1
       }));
 
   // General rate limit for other API endpoints
@@ -247,9 +260,14 @@ builder.Services.AddAntiforgery(options =>
   options.Cookie.HttpOnly = true;
 });
 
+var playlistHeaderTimeout = TimeSpan.FromSeconds(Math.Max(
+  1,
+  builder.Configuration.GetValue<int?>($"{PlaylistCacheOptions.SectionName}:HeaderTimeoutSeconds") ?? 15));
 builder.Services.AddHttpClient("fetcher", client =>
 {
-  client.Timeout = TimeSpan.FromSeconds(15);
+  // With ResponseHeadersRead, this bounds DNS/connect/header stalls; PlaylistSourceFetcher owns
+  // the longer, cancellable body-read timeout for legitimately large downloads.
+  client.Timeout = playlistHeaderTimeout;
 
   // Use a realistic browser user agent to avoid upstream blocks that reject
   // generic/unknown clients. Some IPTV providers respond with 403 to the
@@ -384,23 +402,68 @@ builder.Services.AddSwaggerGen(options =>
   });
 });
 
-// P4: Response compression for better performance
+// Keep JSON/text responses compressed. Large M3U output is streamed as-is: compression is CPU
+// intensive and is better handled by an edge proxy when a deployment explicitly needs it.
 builder.Services.AddResponseCompression(options =>
 {
   options.EnableForHttps = true;
   options.MimeTypes = new[] {
     "application/json",
-    "text/plain",
-    "application/x-mpegurl",
-    "audio/x-mpegurl"
+    "text/plain"
   };
 });
 
 var app = builder.Build();
+var analyzeRequestBodyGate = new SemaphoreSlim(1, 1);
 
 // Use forwarded headers middleware (must be before other middleware)
 // This reads X-Forwarded-Proto and X-Forwarded-For headers from the proxy
 app.UseForwardedHeaders();
+
+// Model binding turns RawText JSON into a managed string before the endpoint handler and its
+// job gate run. Bound the body before binding and admit only one analyze request at a time, so a
+// burst of raw uploads cannot allocate several 50 MiB UTF-16 strings concurrently. Remote URL
+// sources remain streamed to disk in the handler.
+app.Use(async (context, next) =>
+{
+  var isPlaylistAnalyze = HttpMethods.IsPost(context.Request.Method) &&
+    string.Equals(context.Request.Path.Value, "/api/playlist/analyze", StringComparison.OrdinalIgnoreCase);
+  if (!isPlaylistAnalyze)
+  {
+    await next();
+    return;
+  }
+
+  if (context.Request.ContentLength is > MaxAnalyzeRequestBodySize)
+  {
+    context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+    await context.Response.WriteAsJsonAsync(new { error = $"Analyze request exceeds the {MaxAnalyzeRequestBodySize / (1024 * 1024)} MiB body limit." });
+    return;
+  }
+
+  var maxBodySize = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+  if (maxBodySize is { IsReadOnly: false })
+  {
+    maxBodySize.MaxRequestBodySize = MaxAnalyzeRequestBodySize;
+  }
+
+  if (!analyzeRequestBodyGate.Wait(0))
+  {
+    context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+    context.Response.Headers["Retry-After"] = "30";
+    await context.Response.WriteAsJsonAsync(new { error = "Playlist analysis is already in progress. Please retry shortly." });
+    return;
+  }
+
+  try
+  {
+    await next();
+  }
+  finally
+  {
+    analyzeRequestBodyGate.Release();
+  }
+});
 
 // Azure App Service specific: Handle X-ARR-SSL header for HTTPS detection
 // Azure may not always set X-Forwarded-Proto, but always sets X-ARR-SSL for HTTPS
@@ -517,6 +580,11 @@ void EnsureSchema(AppDbContext db, ILogger logger)
     TryAddSqliteColumn(db, "lastviewedutc", "TEXT NULL", logger);
     TryAddSqliteColumn(db, "autorefreshenabled", "INTEGER NOT NULL DEFAULT 0", logger);
     TryAddSqliteColumn(db, "lastrefreshedutc", "TEXT NULL", logger);
+    TryAddSqliteColumn(db, "sourcehash", "TEXT NULL", logger);
+    TryAddSqliteColumn(db, "sourceetag", "TEXT NULL", logger);
+    TryAddSqliteColumn(db, "sourcelastmodifiedutc", "TEXT NULL", logger);
+    TryAddSqliteColumn(db, "sourcelengthbytes", "INTEGER NULL", logger);
+    TryAddSqliteColumn(db, "sourcecheckedutc", "TEXT NULL", logger);
     TryBackfillSqliteShareCodes(db, logger);
   }
 }
@@ -732,6 +800,21 @@ void TryPatchPostgresSchema(AppDbContext db, ILogger logger)
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'lastrefreshedutc') THEN
           ALTER TABLE playlists ADD COLUMN lastrefreshedutc timestamptz NULL;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'sourcehash') THEN
+          ALTER TABLE playlists ADD COLUMN sourcehash varchar(64) NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'sourceetag') THEN
+          ALTER TABLE playlists ADD COLUMN sourceetag varchar(512) NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'sourcelastmodifiedutc') THEN
+          ALTER TABLE playlists ADD COLUMN sourcelastmodifiedutc timestamptz NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'sourcelengthbytes') THEN
+          ALTER TABLE playlists ADD COLUMN sourcelengthbytes bigint NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'sourcecheckedutc') THEN
+          ALTER TABLE playlists ADD COLUMN sourcecheckedutc timestamptz NULL;
+        END IF;
       END $$;
     ");
     logger.LogDebug("PostgreSQL schema patched successfully");
@@ -775,7 +858,12 @@ void TryAddSqliteColumn(AppDbContext db, string columnName, string definition, I
     ["viewcount"] = "INTEGER NOT NULL DEFAULT 0",
     ["lastviewedutc"] = "TEXT NULL",
     ["autorefreshenabled"] = "INTEGER NOT NULL DEFAULT 0",
-    ["lastrefreshedutc"] = "TEXT NULL"
+    ["lastrefreshedutc"] = "TEXT NULL",
+    ["sourcehash"] = "TEXT NULL",
+    ["sourceetag"] = "TEXT NULL",
+    ["sourcelastmodifiedutc"] = "TEXT NULL",
+    ["sourcelengthbytes"] = "INTEGER NULL",
+    ["sourcecheckedutc"] = "TEXT NULL"
   };
 
   if (!allowedColumns.TryGetValue(columnName, out var expectedDefinition))
@@ -1084,86 +1172,114 @@ authGroup.MapGet("/external-callback", async (string provider, string? returnUrl
   return Results.Redirect(safeReturn);
 });
 
-async Task<string> FetchPlaylistText(string url, IHttpClientFactory httpClientFactory)
+async Task<PlaylistSourceFile> FetchAndCacheSourceAsync(
+  string url,
+  PlaylistFileCache cache,
+  PlaylistSourceFetcher fetcher,
+  CancellationToken cancellationToken)
 {
-  const int maxRedirects = 5;
+  // A hash can skip parsing/filtering, but it cannot skip a network download. Reuse a recent
+  // source first; after the configurable interval, validators (when supported) cheaply confirm
+  // freshness and providers without validators are re-read at most once per interval.
+  var fresh = cache.TryGetFreshSource(url);
+  if (fresh is not null)
+  {
+    return fresh;
+  }
 
+  var existing = cache.TryGetSource(url);
+  var fetched = await fetcher.FetchAsync(url, existing, cancellationToken);
+  if (fetched.NotModified)
+  {
+    if (existing is null)
+    {
+      throw new HttpRequestException("The playlist source returned an unusable cache validation response.");
+    }
+
+    cache.TouchNotModified(existing, fetched.ETag, fetched.LastModifiedUtc);
+    return existing;
+  }
+
+  return cache.StoreDownloaded(url, fetched.DownloadedFile
+    ?? throw new InvalidOperationException("Playlist source did not return a body."));
+}
+
+static void CopySourceMetadata(Playlist playlist, PlaylistSourceFile source)
+{
+  playlist.SourceHash = source.ContentHash;
+  // Keep the full validator in the ephemeral cache, but do not let a nonconforming upstream
+  // ETag exceed the database column and turn an otherwise valid download into a 5xx response.
+  playlist.SourceETag = ClampDatabaseString(source.ETag, 512);
+  playlist.SourceLastModifiedUtc = source.LastModifiedUtc;
+  playlist.SourceLengthBytes = source.LengthBytes;
+  playlist.SourceCheckedUtc = DateTimeOffset.UtcNow;
+}
+
+static string? ClampDatabaseString(string? value, int maxLength) =>
+  string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
+
+async Task<IResult> FetchPlaylistFileAsync(
+  string? url,
+  HttpContext context,
+  PlaylistFileCache cache,
+  PlaylistSourceFetcher fetcher,
+  PlaylistJobGate jobGate)
+{
   if (string.IsNullOrWhiteSpace(url))
   {
-    throw new ArgumentException("url is required", nameof(url));
+    return Results.BadRequest(new { error = "url is required" });
   }
-
-  if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+  if (url.Length > MaxUrlLength)
   {
-    throw new InvalidOperationException("Only http/https URLs are allowed");
+    return Results.BadRequest(new { error = $"Source URL must be {MaxUrlLength} characters or less." });
   }
 
-  // SSRF protection: block requests to internal/private IPs (P0 security fix)
-  if (SecurityHelpers.IsBlockedUrl(uri))
+  var job = await jobGate.TryEnterAsync(context.RequestAborted);
+  if (job is null)
   {
-    throw new InvalidOperationException("Access to internal or private network addresses is not allowed");
+    return Results.Problem("Playlist processing is busy. Please retry shortly.", statusCode: StatusCodes.Status429TooManyRequests);
   }
 
-  var client = httpClientFactory.CreateClient("fetcher");
-
-  // Manually handle redirects to validate each target for SSRF protection
-  var currentUri = uri;
-  for (int redirectCount = 0; redirectCount <= maxRedirects; redirectCount++)
+  await using (job)
   {
     try
     {
-      using var res = await client.GetAsync(currentUri, HttpCompletionOption.ResponseHeadersRead);
-
-      // Handle redirects manually with SSRF validation
-      if ((int)res.StatusCode >= 300 && (int)res.StatusCode < 400 && res.Headers.Location != null)
-      {
-        if (redirectCount >= maxRedirects)
-        {
-          throw new InvalidOperationException("Too many redirects");
-        }
-
-        var redirectUri = res.Headers.Location.IsAbsoluteUri
-          ? res.Headers.Location
-          : new Uri(currentUri, res.Headers.Location);
-
-        // Validate redirect target for SSRF
-        if (redirectUri.Scheme != Uri.UriSchemeHttp && redirectUri.Scheme != Uri.UriSchemeHttps)
-        {
-          throw new InvalidOperationException("Redirect to non-HTTP(S) URL is not allowed");
-        }
-
-        if (SecurityHelpers.IsBlockedUrl(redirectUri))
-        {
-          throw new InvalidOperationException("Redirect to internal or private network addresses is not allowed");
-        }
-
-        currentUri = redirectUri;
-        continue;
-      }
-
-      if (!res.IsSuccessStatusCode)
-      {
-        throw new HttpRequestException($"Upstream returned {(int)res.StatusCode}", null, res.StatusCode);
-      }
-
-      var bytes = await res.Content.ReadAsByteArrayAsync();
-      return Encoding.UTF8.GetString(bytes);
+      var fetched = await fetcher.FetchAsync(url, null, context.RequestAborted);
+      var downloaded = fetched.DownloadedFile
+        ?? throw new InvalidOperationException("Playlist source did not return a body.");
+      return new PlaylistFileResult(
+        cache.LeaseTransientFile(downloaded.TemporaryPath, associatedResource: downloaded),
+        "application/x-mpegurl; charset=utf-8",
+        download: false);
     }
-    catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException socketEx)
+    catch (PlaylistSizeExceededException ex)
     {
-      // DNS resolution or connection failures
-      app.Logger.LogWarning(ex, "Connection failed while fetching playlist from {Url}: {SocketError}", currentUri, socketEx.SocketErrorCode);
-      throw new HttpRequestException($"Unable to connect to the playlist source. Please check the URL and try again.", ex);
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status413PayloadTooLarge);
     }
-    catch (HttpRequestException ex) when (ex.StatusCode == null)
+    catch (PlaylistDiskCapacityExceededException ex)
     {
-      // Network-level errors (DNS, connection refused, etc.) without a status code
-      app.Logger.LogWarning(ex, "Network error while fetching playlist from {Url}", currentUri);
-      throw new HttpRequestException("Unable to connect to the playlist source. The server may be unreachable or the URL may be incorrect.", ex);
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status507InsufficientStorage);
+    }
+    catch (OperationCanceledException)
+    {
+      return Results.Problem("Fetch timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
+    }
+    catch (InvalidOperationException ex)
+    {
+      return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (HttpRequestException ex)
+    {
+      app.Logger.LogWarning(ex, "HTTP request failed during playlist fetch");
+      var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
+      return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
+    }
+    catch (Exception ex)
+    {
+      app.Logger.LogError(ex, "Unexpected error during playlist fetch");
+      return Results.Problem("Fetch failed", statusCode: (int)HttpStatusCode.BadGateway);
     }
   }
-
-  throw new InvalidOperationException("Too many redirects");
 }
 
 static string GetPlaylistFetchErrorMessage(HttpRequestException ex)
@@ -1413,7 +1529,12 @@ app.MapPatch("/api/playlists/{id:guid}/auto-refresh", async (Guid id, AutoRefres
   return Results.Ok(new { id = entity.Id, autoRefreshEnabled = entity.AutoRefreshEnabled, lastRefreshedUtc = entity.LastRefreshedUtc });
 }).RequireAuthorization().RequireRateLimiting("general");
 
-app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpClientFactory httpClientFactory, IMemoryCache cache) =>
+app.MapPost("/api/playlist/analyze", async (
+  AnalyzePlaylistRequest input,
+  HttpContext context,
+  PlaylistFileCache cache,
+  PlaylistSourceFetcher fetcher,
+  PlaylistJobGate jobGate) =>
 {
   if (string.IsNullOrWhiteSpace(input.SourceUrl) && string.IsNullOrWhiteSpace(input.RawText))
   {
@@ -1430,64 +1551,96 @@ app.MapPost("/api/playlist/analyze", async (AnalyzePlaylistRequest input, IHttpC
     return Results.BadRequest(new { error = $"Playlist text exceeds maximum size of {MaxPlaylistTextSize / (1024 * 1024)} MB." });
   }
 
-  try
+  var job = await jobGate.TryEnterAsync(context.RequestAborted);
+  if (job is null)
   {
-    var playlistText = string.IsNullOrWhiteSpace(input.RawText)
-      ? await FetchPlaylistText(input.SourceUrl!, httpClientFactory)
-      : input.RawText!;
+    return Results.Problem("Playlist processing is busy. Please retry shortly.", statusCode: StatusCodes.Status429TooManyRequests);
+  }
 
-    var (groupsMap, total) = PlaylistProcessor.CountGroups(playlistText);
-    var cacheKey = $"pl-{Guid.NewGuid():N}";
-    var cacheOptions = new MemoryCacheEntryOptions()
-      .SetAbsoluteExpiration(TimeSpan.FromMinutes(15))
-      .SetSize(playlistText.Length * 2); // Approximate memory size (UTF-16)
-    cache.Set(cacheKey, playlistText, cacheOptions);
-
-    DateTimeOffset? expiration = null;
-    if (!string.IsNullOrWhiteSpace(input.SourceUrl) && Uri.TryCreate(input.SourceUrl, UriKind.Absolute, out var parsedUri))
+  await using (job)
+  {
+    try
     {
-      expiration = PlaylistProcessor.TryExtractExpiration(parsedUri);
+      PlaylistSourceFile source;
+      if (string.IsNullOrWhiteSpace(input.RawText))
+      {
+        source = await FetchAndCacheSourceAsync(input.SourceUrl!, cache, fetcher, context.RequestAborted);
+      }
+      else
+      {
+        var raw = await cache.WriteRawTextAsync(input.RawText!, context.RequestAborted);
+        source = cache.StoreRawText(Guid.NewGuid().ToString("N"), raw);
+      }
+
+      var analysis = cache.TryGetAnalysis(source)
+        ?? await PlaylistProcessor.AnalyzeFileAsync(
+          source.FilePath,
+          context.RequestAborted,
+          cache.MaxLineLengthChars,
+          cache.MaxGroupCount,
+          cache.MaxGroupTitleLengthChars,
+          cache.MaxGroupMetadataBytes);
+      cache.StoreAnalysis(source, analysis);
+      var cacheKey = cache.CreateSession(source);
+
+      DateTimeOffset? expiration = null;
+      if (!string.IsNullOrWhiteSpace(input.SourceUrl) && Uri.TryCreate(input.SourceUrl, UriKind.Absolute, out var parsedUri))
+      {
+        expiration = PlaylistProcessor.TryExtractExpiration(parsedUri);
+      }
+
+      var friendlyName = string.IsNullOrWhiteSpace(input.SourceName)
+        ? PlaylistProcessor.DeriveNameFromUrl(input.SourceUrl)
+        : input.SourceName!.Trim();
+
+      var response = new AnalyzePlaylistResponse(
+        cacheKey,
+        input.SourceUrl,
+        friendlyName,
+        analysis.TotalChannels,
+        analysis.Groups.Count,
+        expiration,
+        PlaylistProcessor.ToGroupResults(analysis.Groups));
+
+      return Results.Ok(response);
     }
-
-    var friendlyName = string.IsNullOrWhiteSpace(input.SourceName)
-      ? PlaylistProcessor.DeriveNameFromUrl(input.SourceUrl)
-      : input.SourceName!.Trim();
-
-    var response = new AnalyzePlaylistResponse(
-      cacheKey,
-      input.SourceUrl,
-      friendlyName,
-      total,
-      groupsMap.Count,
-      expiration,
-      PlaylistProcessor.ToGroupResults(groupsMap));
-
-    return Results.Ok(response);
-  }
-  catch (TaskCanceledException)
-  {
-    return Results.Problem("Fetch timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
-  }
-  catch (InvalidOperationException ex)
-  {
-    // InvalidOperationException contains controlled messages (SSRF, URL validation) - safe to expose
-    return Results.BadRequest(new { error = ex.Message });
-  }
-  catch (HttpRequestException ex)
-  {
-    // P1 fix: Don't expose raw HTTP error details, but provide helpful user-facing messages
-    app.Logger.LogWarning(ex, "HTTP request failed during playlist analyze");
-    var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
-  }
-  catch (Exception ex)
-  {
-    app.Logger.LogError(ex, "Unexpected error during playlist analyze");
-    return Results.Problem("Failed to analyze playlist", statusCode: (int)HttpStatusCode.BadGateway);
+    catch (PlaylistSizeExceededException ex)
+    {
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status413PayloadTooLarge);
+    }
+    catch (PlaylistDiskCapacityExceededException ex)
+    {
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status507InsufficientStorage);
+    }
+    catch (OperationCanceledException)
+    {
+      return Results.Problem("Fetch or processing timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
+    }
+    catch (InvalidOperationException ex)
+    {
+      // InvalidOperationException contains controlled messages (SSRF, URL validation) - safe to expose
+      return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (HttpRequestException ex)
+    {
+      app.Logger.LogWarning(ex, "HTTP request failed during playlist analyze");
+      var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
+      return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
+    }
+    catch (Exception ex)
+    {
+      app.Logger.LogError(ex, "Unexpected error during playlist analyze");
+      return Results.Problem("Failed to analyze playlist", statusCode: (int)HttpStatusCode.BadGateway);
+    }
   }
 }).RequireRateLimiting("fetch");
 
-app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHttpClientFactory httpClientFactory, IMemoryCache cache) =>
+app.MapPost("/api/playlist/generate", async (
+  GeneratePlaylistRequest input,
+  HttpContext context,
+  PlaylistFileCache cache,
+  PlaylistSourceFetcher fetcher,
+  PlaylistJobGate jobGate) =>
 {
   if (string.IsNullOrWhiteSpace(input.CacheKey) && string.IsNullOrWhiteSpace(input.SourceUrl))
   {
@@ -1503,58 +1656,101 @@ app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, IHtt
   {
     return Results.BadRequest(new { error = $"Disabled groups list cannot exceed {MaxDisabledGroupsCount} items." });
   }
-
-  string? playlistText = null;
-  if (!string.IsNullOrWhiteSpace(input.CacheKey))
+  if (input.DisabledGroups?.Any(group => string.IsNullOrWhiteSpace(group) || group.Length > cache.MaxGroupTitleLengthChars) == true)
   {
-    cache.TryGetValue(input.CacheKey!, out playlistText);
+    return Results.BadRequest(new { error = $"Each disabled group name must be between 1 and {cache.MaxGroupTitleLengthChars} characters." });
   }
 
-  try
+  var job = await jobGate.TryEnterAsync(context.RequestAborted);
+  if (job is null)
   {
-    if (playlistText is null && !string.IsNullOrWhiteSpace(input.SourceUrl))
+    return Results.Problem("Playlist processing is busy. Please retry shortly.", statusCode: StatusCodes.Status429TooManyRequests);
+  }
+
+  await using (job)
+  {
+    try
     {
-      playlistText = await FetchPlaylistText(input.SourceUrl!, httpClientFactory);
-      if (!string.IsNullOrWhiteSpace(input.CacheKey))
+      PlaylistSourceFile? source = !string.IsNullOrWhiteSpace(input.CacheKey)
+        ? cache.TryGetSessionSource(input.CacheKey!)
+        : null;
+      if (source is null && !string.IsNullOrWhiteSpace(input.SourceUrl))
       {
-        var cacheOptions = new MemoryCacheEntryOptions()
-          .SetAbsoluteExpiration(TimeSpan.FromMinutes(15))
-          .SetSize(playlistText.Length * 2); // Approximate memory size (UTF-16)
-        cache.Set(input.CacheKey!, playlistText, cacheOptions);
+        source = await FetchAndCacheSourceAsync(input.SourceUrl, cache, fetcher, context.RequestAborted);
       }
+      if (source is null)
+      {
+        return Results.BadRequest(new { error = "The playlist session expired. Analyze the source again." });
+      }
+
+      var disabled = new HashSet<string>(input.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+      var output = cache.TryGetOutput(source.ContentHash, disabled);
+      if (output is null)
+      {
+        var temporaryOutputPath = cache.CreateOutputTemporaryPath();
+        using var outputReservation = cache.ReserveOutputCapacity(source);
+        try
+        {
+          var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+            source.FilePath,
+            temporaryOutputPath,
+            disabled,
+            context.RequestAborted,
+            cache.MaxLineLengthChars,
+            cache.MaxGeneratedBytes);
+          output = cache.StoreOutput(source, disabled, temporaryOutputPath, result);
+        }
+        catch
+        {
+          PlaylistFileCache.TryDelete(temporaryOutputPath);
+          throw;
+        }
+      }
+
+      return Results.Ok(new GeneratePlaylistResponse(output.OutputKey, output.TotalChannels, output.KeptChannels));
+    }
+    catch (PlaylistSizeExceededException ex)
+    {
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status413PayloadTooLarge);
+    }
+    catch (PlaylistGeneratedSizeExceededException ex)
+    {
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status413PayloadTooLarge);
+    }
+    catch (PlaylistDiskCapacityExceededException ex)
+    {
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status507InsufficientStorage);
+    }
+    catch (OperationCanceledException)
+    {
+      return Results.Problem("Fetch or processing timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
+    }
+    catch (InvalidOperationException ex)
+    {
+      return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (HttpRequestException ex)
+    {
+      app.Logger.LogWarning(ex, "HTTP request failed during playlist generate");
+      var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
+      return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
+    }
+    catch (Exception ex)
+    {
+      app.Logger.LogError(ex, "Unexpected error during playlist generate");
+      return Results.Problem("Failed to generate playlist", statusCode: (int)HttpStatusCode.BadGateway);
     }
   }
-  catch (TaskCanceledException)
-  {
-    return Results.Problem("Fetch timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
-  }
-  catch (InvalidOperationException ex)
-  {
-    // InvalidOperationException contains controlled messages (SSRF, URL validation) - safe to expose
-    return Results.BadRequest(new { error = ex.Message });
-  }
-  catch (HttpRequestException ex)
-  {
-    // P1 fix: Don't expose raw HTTP error details, but provide helpful user-facing messages
-    app.Logger.LogWarning(ex, "HTTP request failed during playlist generate");
-    var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
-  }
-  catch (Exception ex)
-  {
-    app.Logger.LogError(ex, "Unexpected error during playlist generate");
-    return Results.Problem("Failed to generate playlist", statusCode: (int)HttpStatusCode.BadGateway);
-  }
+}).RequireRateLimiting("fetch");
 
-  if (playlistText is null)
-  {
-    return Results.BadRequest(new { error = "Unable to load playlist from cache or sourceUrl." });
-  }
-
-  var disabled = new HashSet<string>(input.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-  var filtered = PlaylistProcessor.GenerateFiltered(playlistText, disabled);
-  var response = new GeneratePlaylistResponse(filtered.Text, filtered.TotalChannels, filtered.KeptChannels);
-  return Results.Ok(response);
+app.MapGet("/api/playlist/output/{outputKey}", IResult (string outputKey, PlaylistFileCache cache) =>
+{
+  // The random, short-lived output key is a capability generated only after an analyzed source
+  // has been processed. Keep this unauthenticated so anonymous source loads can download too.
+  var lease = cache.TryLeaseOutput(outputKey);
+  return lease is null
+    ? Results.NotFound()
+    : new PlaylistFileResult(lease, "application/x-mpegurl; charset=utf-8");
 }).RequireRateLimiting("fetch");
 
 app.MapGet("/api/playlists/sample", () =>
@@ -1675,7 +1871,14 @@ app.MapGet("/api/playlists/{id:guid}/stats", async (Guid id, ClaimsPrincipal use
   return Results.Ok(new { viewCount = playlist.ViewCount, lastViewedUtc = playlist.LastViewedUtc });
 }).RequireAuthorization().RequireRateLimiting("general");
 
-app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code, AppDbContext db, IHttpClientFactory httpClientFactory) =>
+app.MapGet("/api/playlists/{id:guid}/share/{code}", async Task<IResult> (
+  Guid id,
+  string code,
+  HttpContext context,
+  AppDbContext db,
+  PlaylistFileCache cache,
+  PlaylistSourceFetcher fetcher,
+  PlaylistJobGate jobGate) =>
 {
   var playlist = await db.Playlists.FindAsync(id);
 
@@ -1695,137 +1898,105 @@ app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code,
     return Results.BadRequest(new { error = "Playlist is missing sourceUrl." });
   }
 
-  try
+  var job = await jobGate.TryEnterAsync(context.RequestAborted);
+  if (job is null)
   {
-    var text = await FetchPlaylistText(playlist.SourceUrl, httpClientFactory);
-    var disabled = new HashSet<string>(playlist.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-    var filtered = PlaylistProcessor.GenerateFiltered(text, disabled);
-    var fileName = $"{(playlist.SourceName ?? playlist.Name ?? "playlist")}-filtered.m3u";
-
-    playlist.ViewCount++;
-    playlist.LastViewedUtc = DateTimeOffset.UtcNow;
-    await db.SaveChangesAsync();
-
-    return Results.File(Encoding.UTF8.GetBytes(filtered.Text), "application/x-mpegurl", fileDownloadName: fileName);
-  }
-  catch (TaskCanceledException)
-  {
-    return Results.Problem("Fetch timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
-  }
-  catch (HttpRequestException ex)
-  {
-    // P1 fix: Don't expose raw HTTP error details, but provide helpful user-facing messages
-    app.Logger.LogWarning(ex, "HTTP request failed during share download for playlist {PlaylistId}", id);
-    var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
-    return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
-  }
-  catch (Exception ex)
-  {
-    app.Logger.LogError(ex, "Unexpected error during share download for playlist {PlaylistId}", id);
-    return Results.Problem("Failed to process shared playlist", statusCode: (int)HttpStatusCode.BadGateway);
-  }
-});
-
-app.MapGet("/api/fetch", async (string url, IHttpClientFactory httpClientFactory) =>
-{
-  if (string.IsNullOrWhiteSpace(url))
-  {
-    return Results.BadRequest(new { error = "url is required" });
+    return Results.Problem("Playlist processing is busy. Please retry shortly.", statusCode: StatusCodes.Status429TooManyRequests);
   }
 
-  if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+  await using (job)
   {
-    return Results.BadRequest(new { error = "Only http/https URLs are allowed" });
-  }
-
-  // SSRF protection: block requests to internal/private IPs (P0 security fix)
-  if (SecurityHelpers.IsBlockedUrl(uri))
-  {
-    return Results.BadRequest(new { error = "Access to internal or private network addresses is not allowed" });
-  }
-
-  try
-  {
-    var client = httpClientFactory.CreateClient("fetcher");
-    using var res = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
-    if (!res.IsSuccessStatusCode)
+    try
     {
-      return Results.StatusCode((int)res.StatusCode);
+      // Conditional GET reuses an unchanged source and hash-keyed generated variant.
+      var source = await FetchAndCacheSourceAsync(playlist.SourceUrl, cache, fetcher, context.RequestAborted);
+      var disabled = new HashSet<string>(playlist.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+      var output = cache.TryGetOutput(source.ContentHash, disabled);
+      var fileName = $"{(playlist.SourceName ?? playlist.Name ?? "playlist")}-filtered.m3u";
+      if (output is null)
+      {
+        var temporaryOutputPath = cache.CreateOutputTemporaryPath();
+        using var outputReservation = cache.ReserveOutputCapacity(source);
+        try
+        {
+          var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+            source.FilePath,
+            temporaryOutputPath,
+            disabled,
+            context.RequestAborted,
+            cache.MaxLineLengthChars,
+            cache.MaxGeneratedBytes);
+          output = cache.StoreOutput(source, disabled, temporaryOutputPath, result);
+        }
+        catch
+        {
+          PlaylistFileCache.TryDelete(temporaryOutputPath);
+          throw;
+        }
+      }
+
+      CopySourceMetadata(playlist, source);
+      playlist.ViewCount++;
+      playlist.LastViewedUtc = DateTimeOffset.UtcNow;
+      await db.SaveChangesAsync(context.RequestAborted);
+
+      var lease = cache.TryLeaseOutput(output.OutputKey, fileName);
+      return lease is null
+        ? Results.Problem("The generated playlist expired before it could be downloaded.", statusCode: StatusCodes.Status503ServiceUnavailable)
+        : new PlaylistFileResult(lease, "application/x-mpegurl; charset=utf-8");
     }
-    var bytes = await res.Content.ReadAsByteArrayAsync();
-    // Return with a content-length to avoid proxy/protocol quirks.
-    return Results.File(bytes, "application/x-mpegurl; charset=utf-8");
+    catch (PlaylistSizeExceededException ex)
+    {
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status413PayloadTooLarge);
+    }
+    catch (PlaylistGeneratedSizeExceededException ex)
+    {
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status413PayloadTooLarge);
+    }
+    catch (PlaylistDiskCapacityExceededException ex)
+    {
+      return Results.Problem(ex.Message, statusCode: StatusCodes.Status507InsufficientStorage);
+    }
+    catch (OperationCanceledException)
+    {
+      return Results.Problem("Fetch or processing timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
+    }
+    catch (HttpRequestException ex)
+    {
+      app.Logger.LogWarning(ex, "HTTP request failed during share download for playlist {PlaylistId}", id);
+      var status = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : (int)HttpStatusCode.BadGateway;
+      return Results.Problem(GetPlaylistFetchErrorMessage(ex), statusCode: status);
+    }
+    catch (InvalidOperationException ex)
+    {
+      return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+      app.Logger.LogError(ex, "Unexpected error during share download for playlist {PlaylistId}", id);
+      return Results.Problem("Failed to process shared playlist", statusCode: (int)HttpStatusCode.BadGateway);
+    }
   }
-  catch (TaskCanceledException)
-  {
-    return Results.Problem("Fetch timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
-  }
-  catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException)
-  {
-    app.Logger.LogWarning(ex, "Connection failed while fetching from {Url}", url);
-    return Results.Problem("Unable to connect to the source. Please check the URL and try again.", statusCode: (int)HttpStatusCode.BadGateway);
-  }
-  catch (HttpRequestException ex) when (ex.StatusCode == null)
-  {
-    app.Logger.LogWarning(ex, "Network error while fetching from {Url}", url);
-    return Results.Problem("Unable to connect to the source. The server may be unreachable or the URL may be incorrect.", statusCode: (int)HttpStatusCode.BadGateway);
-  }
-  catch (Exception ex)
-  {
-    app.Logger.LogError(ex, "Unexpected error during fetch from {Url}", url);
-    return Results.Problem("Fetch failed", statusCode: (int)HttpStatusCode.BadGateway);
-  }
+}).RequireRateLimiting("share");
+
+app.MapGet("/api/fetch", async Task<IResult> (
+  string url,
+  HttpContext context,
+  PlaylistFileCache cache,
+  PlaylistSourceFetcher fetcher,
+  PlaylistJobGate jobGate) =>
+{
+  return await FetchPlaylistFileAsync(url, context, cache, fetcher, jobGate);
 }).RequireRateLimiting("fetch");
 
-app.MapPost("/api/fetch", async (FetchRequest request, IHttpClientFactory httpClientFactory) =>
+app.MapPost("/api/fetch", async Task<IResult> (
+  FetchRequest request,
+  HttpContext context,
+  PlaylistFileCache cache,
+  PlaylistSourceFetcher fetcher,
+  PlaylistJobGate jobGate) =>
 {
-  var url = request.Url;
-  if (string.IsNullOrWhiteSpace(url))
-  {
-    return Results.BadRequest(new { error = "url is required" });
-  }
-
-  if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-  {
-    return Results.BadRequest(new { error = "Only http/https URLs are allowed" });
-  }
-
-  // SSRF protection: block requests to internal/private IPs (P0 security fix)
-  if (SecurityHelpers.IsBlockedUrl(uri))
-  {
-    return Results.BadRequest(new { error = "Access to internal or private network addresses is not allowed" });
-  }
-
-  try
-  {
-    var client = httpClientFactory.CreateClient("fetcher");
-    using var res = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
-    if (!res.IsSuccessStatusCode)
-    {
-      return Results.StatusCode((int)res.StatusCode);
-    }
-    var bytes = await res.Content.ReadAsByteArrayAsync();
-    return Results.File(bytes, "application/x-mpegurl; charset=utf-8");
-  }
-  catch (TaskCanceledException)
-  {
-    return Results.Problem("Fetch timed out", statusCode: (int)HttpStatusCode.GatewayTimeout);
-  }
-  catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException)
-  {
-    app.Logger.LogWarning(ex, "Connection failed while fetching from {Url}", url);
-    return Results.Problem("Unable to connect to the source. Please check the URL and try again.", statusCode: (int)HttpStatusCode.BadGateway);
-  }
-  catch (HttpRequestException ex) when (ex.StatusCode == null)
-  {
-    app.Logger.LogWarning(ex, "Network error while fetching from {Url}", url);
-    return Results.Problem("Unable to connect to the source. The server may be unreachable or the URL may be incorrect.", statusCode: (int)HttpStatusCode.BadGateway);
-  }
-  catch (Exception ex)
-  {
-    app.Logger.LogError(ex, "Unexpected error during fetch from {Url}", url);
-    return Results.Problem("Fetch failed", statusCode: (int)HttpStatusCode.BadGateway);
-  }
+  return await FetchPlaylistFileAsync(request.Url, context, cache, fetcher, jobGate);
 }).RequireRateLimiting("fetch");
 
 // Error page handling

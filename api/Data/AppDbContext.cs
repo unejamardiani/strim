@@ -42,6 +42,11 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
       entity.Property(p => p.ExpirationUtc);
       entity.Property(p => p.ShareCode).HasMaxLength(64);
       entity.Property(p => p.OwnerId).HasMaxLength(450).HasColumnName("ownerid");
+      entity.Property(p => p.SourceHash).HasMaxLength(64).HasColumnName("sourcehash");
+      entity.Property(p => p.SourceETag).HasMaxLength(512).HasColumnName("sourceetag");
+      entity.Property(p => p.SourceLastModifiedUtc).HasColumnName("sourcelastmodifiedutc");
+      entity.Property(p => p.SourceLengthBytes).HasColumnName("sourcelengthbytes");
+      entity.Property(p => p.SourceCheckedUtc).HasColumnName("sourcecheckedutc");
       entity.HasIndex(p => new { p.OwnerId, p.UpdatedAt });
       entity.HasIndex(p => p.ShareCode).HasFilter("\"sharecode\" IS NOT NULL");
     });

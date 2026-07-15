@@ -156,6 +156,45 @@ docker run -p 8080:8080 \
 Mount `/app/data` (or your `SQLITE_PATH`) to Azure Files/Blob storage to persist the `.db` file
 across restarts.
 
+### Production container health and limits
+
+The image has a Docker health check that calls `GET /health/live`; use that endpoint for a
+platform liveness probe. The bundled Compose files intentionally do not impose CPU or memory
+limits because they are development configurations and large playlist tests need their true
+resource usage to be visible.
+
+Set a hard memory limit and alert threshold in the production platform (such as Coolify) after
+measuring the largest supported playlist at the configured concurrency. A Docker equivalent is
+`--memory=<limit> --memory-reservation=<reservation>`. Do not reuse the development Compose files
+as a production resource policy; an arbitrary low cap can turn a large playlist request into an
+OOM restart.
+
+### Large-playlist processing
+
+Backend source downloads are spooled to an ephemeral private directory and parsed/generated
+line-by-line. Strim hashes each source while downloading and uses upstream `ETag`/
+`Last-Modified` validation when available; unchanged sources reuse their parsed metadata and
+filtered output. A source is reused without an upstream request for the configured revalidation
+interval (15 minutes by default), so validator-less providers do not cause a full download on
+every share hit. The default is one expensive playlist job at a time, which deliberately trades
+some queueing for predictable RAM and CPU use.
+
+The default 2 GiB source and 8 GiB cache-disk budgets are safety limits, not a 25 MiB product
+limit. Configure Coolify environment variables when a provider needs more space:
+
+```text
+PlaylistCache__MaxSourceBytes=2147483648
+PlaylistCache__MaxDiskBytes=8589934592
+PlaylistCache__RevalidationIntervalMinutes=15
+PlaylistCache__MaxConcurrentJobs=1
+```
+
+Increase the source and disk budgets together only after confirming available ephemeral disk;
+these settings do not cause the server to buffer the whole source in managed memory. For a source
+ceiling of `S`, use at least roughly `2S` cache disk so the source and a generated output can be
+present safely; the cache reserves scratch capacity before writing. The output/session cache is
+process-local, so run one Strim replica unless you add shared cache storage or sticky routing.
+
 ## Playlist fetching and CORS
 
 Some playlist hosts do not send CORS headers, which blocks direct browser fetches. strim will

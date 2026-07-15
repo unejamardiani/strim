@@ -5,6 +5,7 @@ const state = {
   savedPlaylists: [],
   currentPlaylistId: null,
   backendSession: null,
+  backendOutputKey: null,
   localPlaylist: null,
   totalChannels: 0,
   groupCount: 0,
@@ -72,6 +73,10 @@ const shareLinksBackdrop = shareLinksModal ? shareLinksModal.querySelector('.sha
 const shareLinksListContainer = document.getElementById('share-links-list');
 const shareLinksEmptyState = document.getElementById('share-links-empty');
 
+// A source analysis can be expensive. Keep only the newest user-requested load active.
+let activeSourceLoadController = null;
+let activeGenerationController = null;
+
 const savedApiBase = (() => {
   try {
     return localStorage.getItem('strim.apiBase') || '';
@@ -134,8 +139,11 @@ refreshButton.addEventListener('click', async () => {
 
 copyButton.addEventListener('click', async () => {
   try {
-    // Ensure we copy the up-to-date filtered output.
-    const text = await updateOutput();
+    // Copy is the only server-backed action that needs the complete M3U in browser memory.
+    const generated = await updateOutput();
+    const text = state.backendOutputKey
+      ? await fetchBackendOutputText(state.backendOutputKey)
+      : generated || '';
     await navigator.clipboard.writeText(text || '');
     setStatus('Copied filtered playlist to clipboard', 'success');
   } catch (err) {
@@ -156,8 +164,16 @@ downloadButton.addEventListener('click', async () => {
     setStatus('Download started', 'success');
     return;
   }
-  // Fallback to client-side generation.
-  const text = await updateOutput();
+
+  const generated = await updateOutput();
+  if (state.backendOutputKey) {
+    startBackendOutputDownload(state.backendOutputKey);
+    setStatus('Download started', 'success');
+    return;
+  }
+
+  // Local-only playlists still need client-side generation and a Blob download.
+  const text = generated || '';
   const blob = new Blob([text || ''], { type: 'application/x-mpegURL' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
@@ -836,6 +852,8 @@ async function loadPlaylistFromSource(url, hydrateOptions = {}) {
     return;
   }
 
+  const controller = beginSourceLoad();
+
   try {
     setStatus('Fetching and analyzing playlist via backend…', 'info');
     const payload = { sourceUrl: url };
@@ -843,17 +861,71 @@ async function loadPlaylistFromSource(url, hydrateOptions = {}) {
     if (providedName) {
       payload.sourceName = providedName;
     }
-    const analysis = await apiRequest('/playlist/analyze', { method: 'POST', body: payload });
+    const analysis = await apiRequest('/playlist/analyze', {
+      method: 'POST',
+      body: payload,
+      signal: controller.signal,
+    });
+    if (!isCurrentSourceLoad(controller)) return false;
+
     const friendlyName = analysis.sourceName || deriveNameFromUrl(url);
     hydrateFromAnalysis(analysis, { ...hydrateOptions, sourceUrl: url, name: friendlyName });
-    await updateOutput({ useWorker: false });
+    return true;
   } catch (err) {
+    if (controller.signal.aborted || isAbortError(err) || !isCurrentSourceLoad(controller)) {
+      return false;
+    }
     console.error('Backend fetch failed', err);
     setStatus(`Unable to fetch playlist from backend: ${err.message || err}`, 'warn');
+    return false;
+  } finally {
+    completeSourceLoad(controller);
   }
 }
 
+function beginSourceLoad() {
+  activeSourceLoadController?.abort();
+  cancelActiveGeneration();
+  setControlsDisabled(false);
+  const controller = new AbortController();
+  activeSourceLoadController = controller;
+  return controller;
+}
+
+function isCurrentSourceLoad(controller) {
+  return activeSourceLoadController === controller && !controller.signal.aborted;
+}
+
+function completeSourceLoad(controller) {
+  if (activeSourceLoadController === controller) {
+    activeSourceLoadController = null;
+  }
+}
+
+function isAbortError(err) {
+  return err?.name === 'AbortError' || err?.code === 'ABORT_ERR';
+}
+
+function cancelActiveGeneration() {
+  activeGenerationController?.abort();
+  activeGenerationController = null;
+}
+
+function beginGeneration(session) {
+  cancelActiveGeneration();
+  const controller = new AbortController();
+  activeGenerationController = controller;
+  return { controller, cacheKey: session.cacheKey };
+}
+
+function isCurrentGeneration(controller, cacheKey) {
+  return activeGenerationController === controller
+    && !controller.signal.aborted
+    && state.backendSession?.cacheKey === cacheKey;
+}
+
 function hydrateFromAnalysis(analysis, options = {}) {
+  cancelActiveGeneration();
   const groups = new Map();
   (analysis.groups || []).forEach((g) => groups.set(g.name, g.count));
   state.groups = groups;
@@ -870,7 +942,9 @@ function hydrateFromAnalysis(analysis, options = {}) {
     expirationUtc: analysis.expirationUtc ? new Date(analysis.expirationUtc).toISOString() : null,
   };
   state.localPlaylist = null;
+  state.backendOutputKey = null;
   state.lastOutput = '';
+  outputSize.textContent = 'Not generated';
   state.shareCode = null;
 
   const nameChoice = options.name || analysis.sourceName || (playlistNameInput && playlistNameInput.value.trim()) || 'playlist';
@@ -888,6 +962,7 @@ function hydrateFromAnalysis(analysis, options = {}) {
 }
 
 function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options = {}) {
+  cancelActiveGeneration();
   const parsed = parseM3U(text);
   state.groups = parsed.groups;
   state.totalChannels = parsed.channels.length;
@@ -896,6 +971,7 @@ function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options 
   state.disabledGroups = new Set(restoredDisabled);
   state.currentPlaylistId = options.id || null;
   state.backendSession = null;
+  state.backendOutputKey = null;
   state.localPlaylist = {
     text,
     channels: parsed.channels,
@@ -1007,6 +1083,24 @@ function buildShareUrl() {
   return `${base}/playlists/${state.currentPlaylistId}/share/${state.shareCode}`;
 }
 
+function buildBackendOutputUrl(outputKey) {
+  if (!API_BASE || !outputKey) return '';
+  return `${API_BASE}/playlist/output/${encodeURIComponent(outputKey)}`;
+}
+
+function startBackendOutputDownload(outputKey) {
+  const url = buildBackendOutputUrl(outputKey);
+  if (!url) {
+    throw new Error('Generated playlist is unavailable. Refresh it and try again.');
+  }
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${state.sourceName || 'playlist'}-filtered.m3u`;
+  link.rel = 'noopener';
+  link.click();
+}
+
 async function loadRuntimeConfig() {
   try {
     const config = await apiRequest('/config');
@@ -1052,7 +1146,7 @@ async function getCsrfToken() {
   return null;
 }
 
-async function apiRequest(path, { method = 'GET', body } = {}) {
+async function apiRequest(path, { method = 'GET', body, signal } = {}) {
   if (!API_BASE) {
     throw new Error('Backend API not configured.');
   }
@@ -1074,6 +1168,7 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
     headers,
     credentials: 'include',
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   // Clear cached CSRF token on 400/403 as it might be invalid/expired
@@ -1084,11 +1179,30 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
   if (res.status === 204) return null;
   if (!res.ok) {
     const message = await readApiErrorMessage(res);
-    const err = new Error(message || defaultApiErrorMessage(res));
-    err.code = res.status === 401 ? 'unauthorized' : res.status === 403 ? 'forbidden' : res.status;
-    throw err;
+    throw createApiError(res, message);
   }
   return res.json();
+}
+
+async function fetchBackendOutputText(outputKey) {
+  const url = buildBackendOutputUrl(outputKey);
+  if (!url) {
+    throw new Error('Generated playlist is unavailable. Refresh it and try again.');
+  }
+
+  setStatus('Fetching filtered playlist for clipboard…', 'info');
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) {
+    const message = await readApiErrorMessage(res);
+    throw createApiError(res, message);
+  }
+  return res.text();
+}
+
+function createApiError(res, message) {
+  const err = new Error(message || defaultApiErrorMessage(res));
+  err.code = res.status === 401 ? 'unauthorized' : res.status === 403 ? 'forbidden' : res.status;
+  return err;
 }
 
 async function readApiErrorMessage(res) {
@@ -1220,7 +1334,9 @@ async function loadSavedPlaylist(id) {
   }
 
   if (playlist.sourceUrl) {
-    await loadPlaylistFromSource(playlist.sourceUrl, hydrateOpts);
+    const loaded = await loadPlaylistFromSource(playlist.sourceUrl, hydrateOpts);
+    if (!loaded) return;
+
     renderSavedPlaylists();
     updateSaveButtonLabel();
     state.shareCode = playlist.shareCode || state.shareCode;
@@ -1767,29 +1883,44 @@ function generateFilteredM3U() {
 
 async function updateOutput({ useWorker = true } = {}) {
   if (state.backendSession && API_BASE) {
+    const session = state.backendSession;
+    const { controller, cacheKey } = beginGeneration(session);
     try {
       setStatus('Generating filtered playlist on server…', 'info');
       setControlsDisabled(true);
+      state.backendOutputKey = null;
+      state.lastOutput = '';
       const body = {
-        cacheKey: state.backendSession.cacheKey,
-        sourceUrl: state.backendSession.sourceUrl,
+        cacheKey,
+        sourceUrl: session.sourceUrl,
         disabledGroups: Array.from(state.disabledGroups),
       };
-      const res = await apiRequest('/playlist/generate', { method: 'POST', body });
-      state.lastOutput = res.filteredText || '';
-      const channelCount = res.keptChannels ?? (res.filteredText ? (res.filteredText.match(/\nhttps?:\/\//g) || []).length : 0);
+      const res = await apiRequest('/playlist/generate', { method: 'POST', body, signal: controller.signal });
+      if (!isCurrentGeneration(controller, cacheKey)) return null;
+      const outputKey = String(res?.outputKey || '');
+      if (!outputKey) {
+        throw new Error('The server did not return a generated playlist key.');
+      }
+
+      state.backendOutputKey = outputKey;
+      const channelCount = res.keptChannels ?? 0;
       outputSize.textContent = `${channelCount} channel${channelCount === 1 ? '' : 's'}`;
-      state.totalChannels = res.totalChannels || state.totalChannels;
+      state.totalChannels = res.totalChannels ?? state.totalChannels;
+      session.totalChannels = state.totalChannels;
       renderStats();
-      setStatus('Filtered playlist ready', 'success');
+      setStatus('Filtered playlist ready to download', 'success');
       setControlsDisabled(false);
-      return state.lastOutput;
+      return outputKey;
     } catch (err) {
+      if (controller.signal.aborted || !isCurrentGeneration(controller, cacheKey)) {
+        return null;
+      }
       console.error('Backend generation failed; attempting local fallback', err);
       setStatus('Backend generation failed; falling back to local processing.', 'warn');
       setControlsDisabled(false);
-      if (state.lastOutput) {
-        return state.lastOutput;
+    } finally {
+      if (activeGenerationController === controller) {
+        activeGenerationController = null;
       }
     }
   }

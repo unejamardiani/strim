@@ -15,6 +15,6 @@ public record GroupResult(string Name, int Count);
 
 public record GeneratePlaylistRequest(string? SourceUrl, string? CacheKey, List<string>? DisabledGroups);
 
-public record GeneratePlaylistResponse(string FilteredText, int TotalChannels, int KeptChannels);
+public record GeneratePlaylistResponse(string OutputKey, int TotalChannels, int KeptChannels);
 
 public record PlaylistFilterResult(string Text, int TotalChannels, int KeptChannels, DateTimeOffset? ExpirationUtc = null);
