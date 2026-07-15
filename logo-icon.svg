@@ -1,6 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="#e8e8ec" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Icon version — just the custom S + line + cut, for favicon/avatar -->
-  <path d="M 16,76 C 16,92 50,92 52,78 C 54,64 32,56 24,52 C 18,48 18,38 32,36 L 76,36" />
-  <line x1="73" y1="28" x2="79" y2="44" stroke-width="3" />
-  <line x1="82" y1="38" x2="88" y2="38" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!--
+    strim icon: the "st" logomark.
+    The s flattens at cap-height into a short bar; the bar is severed by a
+    diagonal incision that doubles as the ascender of t, falling to a vertical
+    stem at x-height. A clean, self-contained ligature for favicon / avatar.
+  -->
+  <rect width="256" height="256" fill="#0c0c0e"/>
+
+  <g transform="translate(13, 18)">
+    <path d="M 46 140
+             A 29 29 0 0 0 104 140
+             C 104 110, 46 110, 46 80
+             A 29 29 0 0 1 75 51"
+          fill="none" stroke="#e8e8ec" stroke-width="22" stroke-linecap="butt" stroke-linejoin="miter"/>
+
+    <polygon points="75,40 211,40 186,92 186,180 164,180 164,92 178.42,62 75,62"
+             fill="#e8e8ec"/>
+
+    <line x1="146" y1="92" x2="202" y2="92" stroke="#e8e8ec" stroke-width="22"/>
+  </g>
 </svg>

@@ -73,25 +73,54 @@ const shareLinksBackdrop = shareLinksModal ? shareLinksModal.querySelector('.sha
 const shareLinksListContainer = document.getElementById('share-links-list');
 const shareLinksEmptyState = document.getElementById('share-links-empty');
 
+const API_BASE_STORAGE_KEY = 'strim.apiBase';
+const STATUS_PILL_CLASS = 'hidden sm:inline-block max-w-[36vw] truncate text-[10px] font-medium pill';
+const MAX_STATUS_MESSAGE_LENGTH = 180;
+const MAX_API_ERROR_MESSAGE_LENGTH = 240;
+
 // A source analysis can be expensive. Keep only the newest user-requested load active.
 let activeSourceLoadController = null;
 let activeGenerationController = null;
 
 const savedApiBase = (() => {
   try {
-    return localStorage.getItem('strim.apiBase') || '';
+    return localStorage.getItem(API_BASE_STORAGE_KEY) || '';
   } catch {
     return '';
   }
 })();
 const queryApiBase = new URLSearchParams(window.location.search).get('api') || '';
-const API_BASE = queryApiBase || window.STRIM_API_BASE || savedApiBase || '/api';
+const configuredApiBase = queryApiBase || window.STRIM_API_BASE || savedApiBase;
+const API_BASE = normalizeApiBase(configuredApiBase || getDefaultApiBase());
 if (queryApiBase) {
   try {
-    localStorage.setItem('strim.apiBase', queryApiBase);
+    localStorage.setItem(API_BASE_STORAGE_KEY, normalizeApiBase(queryApiBase));
   } catch {
     // ignore
   }
+}
+
+function getDefaultApiBase() {
+  if (window.location.protocol === 'file:') return '';
+
+  const { hostname, port } = window.location;
+  if (isLoopbackHost(hostname) && port && !['5000', '5161', '7142', '8080'].includes(port)) {
+    return `http://${formatLoopbackHost(hostname)}:5000/api`;
+  }
+
+  return '/api';
+}
+
+function normalizeApiBase(value) {
+  return value ? String(value).replace(/\/+$/, '') : '';
+}
+
+function isLoopbackHost(hostname) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+}
+
+function formatLoopbackHost(hostname) {
+  return hostname === '::1' || hostname === '[::1]' ? '[::1]' : hostname;
 }
 
 fetchButton.addEventListener('click', () => {
@@ -350,9 +379,10 @@ if (groupSearchInput) {
 }
 
 function setStatus(text, tone = 'info') {
-  statusPill.textContent = text;
-  statusPill.className = 'pill';
-  statusPill.classList.add(`tone-${tone}`);
+  const message = normalizeStatusMessage(text);
+  statusPill.textContent = message;
+  statusPill.title = message;
+  statusPill.className = `${STATUS_PILL_CLASS} tone-${tone}`;
 }
 
 function openAuthModal() {
@@ -849,7 +879,7 @@ function startExternalProvider(provider) {
 async function loadPlaylistFromSource(url, hydrateOptions = {}) {
   if (!API_BASE) {
     setStatus('Backend URL not configured; cannot fetch playlist.', 'warn');
-    return;
+    return false;
   }
 
   const controller = beginSourceLoad();
@@ -1213,18 +1243,44 @@ async function readApiErrorMessage(res) {
   if (contentType.includes('json')) {
     try {
       const data = JSON.parse(text);
-      return data.detail || data.error || data.message || data.title || text;
+      return normalizeApiErrorMessage(data.detail || data.error || data.message || data.title || '');
     } catch {
-      return text;
+      return '';
     }
   }
 
-  return text;
+  return normalizeApiErrorMessage(text, contentType);
+}
+
+function normalizeApiErrorMessage(message, contentType = '') {
+  const text = String(message || '').replace(/\s+/g, ' ').trim();
+  if (!text || looksLikeHtmlResponse(text, contentType)) return '';
+  return text.length > MAX_API_ERROR_MESSAGE_LENGTH
+    ? `${text.slice(0, MAX_API_ERROR_MESSAGE_LENGTH - 3)}...`
+    : text;
+}
+
+function normalizeStatusMessage(message) {
+  const text = String(message || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  if (looksLikeHtmlResponse(text)) return 'Unexpected HTML response from backend';
+  return text.length > MAX_STATUS_MESSAGE_LENGTH
+    ? `${text.slice(0, MAX_STATUS_MESSAGE_LENGTH - 3)}...`
+    : text;
+}
+
+function looksLikeHtmlResponse(text, contentType = '') {
+  return contentType.toLowerCase().includes('html') ||
+    /^<!doctype html/i.test(text) ||
+    /^<html[\s>]/i.test(text);
 }
 
 function defaultApiErrorMessage(res) {
   if (res.status === 401) return 'Unauthorized';
   if (res.status === 403) return 'Forbidden';
+  if (res.status === 404) {
+    return 'Backend API endpoint not found. Start the API or set the page URL api parameter.';
+  }
   return res.statusText || `Request failed with status ${res.status}`;
 }
 

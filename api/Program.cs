@@ -18,7 +18,11 @@ using System.Data.Common;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
+<<<<<<< ours
 using Microsoft.AspNetCore.Http.Features;
+=======
+using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
+>>>>>>> theirs
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -156,9 +160,9 @@ builder.Services.AddCors(options =>
     }
     else if (isDevelopment)
     {
-      // Only allow permissive CORS in development mode
-      policy.AllowAnyOrigin();
-      Console.WriteLine("WARNING: CORS is configured to allow any origin. This is only acceptable in development.");
+      // Development static servers run on separate localhost ports, and auth uses cookies.
+      policy.SetIsOriginAllowed(IsLocalDevelopmentOrigin).AllowCredentials();
+      Console.WriteLine("WARNING: CORS allows localhost origins with credentials. This is only acceptable in development.");
     }
     else
     {
@@ -247,8 +251,8 @@ builder.Services.AddRateLimiter(options =>
 });
 
 // Antiforgery for CSRF protection
-// Note: SameSite.None is required for cross-origin clients (CORS with credentials).
-// Strict/Lax cookies are not sent with cross-site requests, breaking CSRF validation.
+// Note: SameSite.None is required in production for cross-origin clients (CORS with credentials).
+// Local HTTP development uses Lax because browsers reject SameSite=None cookies without Secure.
 // Security is maintained via: Secure cookie, HttpOnly, __Host- prefix, and origin validation.
 builder.Services.AddAntiforgery(options =>
 {
@@ -256,7 +260,7 @@ builder.Services.AddAntiforgery(options =>
   options.Cookie.Name = isDevelopment ? "strim.csrf" : "__Host-strim.csrf";
   // Always require HTTPS in production; allow HTTP in development for local testing
   options.Cookie.SecurePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
-  options.Cookie.SameSite = SameSiteMode.None;
+  options.Cookie.SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None;
   options.Cookie.HttpOnly = true;
 });
 
@@ -310,7 +314,7 @@ builder.Services.AddAuthentication(options =>
     {
       o.SlidingExpiration = true;
       o.Cookie.Name = isDevelopment ? "strim.auth" : "__Host-strim.auth";
-      o.Cookie.SameSite = SameSiteMode.None;
+      o.Cookie.SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None;
       o.Cookie.SecurePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
       o.Cookie.HttpOnly = true;
       o.Events.OnRedirectToLogin = ctx =>
@@ -328,7 +332,7 @@ builder.Services.AddAuthentication(options =>
     {
       o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
       o.Cookie.Name = isDevelopment ? "strim.external" : "__Host-strim.external";
-      o.Cookie.SameSite = SameSiteMode.None;
+      o.Cookie.SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None;
       o.Cookie.SecurePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
       o.Cookie.HttpOnly = true;
     });
@@ -474,22 +478,6 @@ app.Use(async (context, next) =>
   {
     // X-ARR-SSL is set by Azure when request comes through HTTPS
     context.Request.Scheme = "https";
-  }
-  await next();
-});
-
-// Diagnostic logging: Log proxy IP on startup (remove after confirming it works)
-app.Use(async (context, next) =>
-{
-  if (context.Request.Path.StartsWithSegments("/health/live"))
-  {
-    var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-    var forwardedFor = context.Request.Headers["X-Forwarded-For"].ToString();
-    var forwardedProto = context.Request.Headers["X-Forwarded-Proto"].ToString();
-    var arrSsl = context.Request.Headers["X-ARR-SSL"].ToString();
-    app.Logger.LogInformation(
-      "Connection from {RemoteIP} | X-Forwarded-For: {ForwardedFor} | X-Forwarded-Proto: {ForwardedProto} | X-ARR-SSL: {ArrSsl}",
-      remoteIp, forwardedFor, forwardedProto, arrSsl);
   }
   await next();
 });
@@ -1303,6 +1291,21 @@ static string GetPlaylistFetchErrorMessage(HttpRequestException ex)
   }
 
   return "Failed to fetch the playlist from the source";
+}
+
+static bool IsLocalDevelopmentOrigin(string origin)
+{
+  if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+  {
+    return false;
+  }
+
+  if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+  {
+    return true;
+  }
+
+  return IPAddress.TryParse(uri.Host, out var address) && IPAddress.IsLoopback(address);
 }
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));

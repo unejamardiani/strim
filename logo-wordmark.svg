@@ -1,21 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 100" fill="none" stroke="#e8e8ec" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 240" width="560" height="240">
   <!--
-    Concept: Custom uppercase S whose top bow extends rightward as a horizontal
-    line over "trim". At the end, a diagonal cut (incision) severs the line;
-    the severed tip drops 2px — alluding to trimming/cutting.
-
-    Color: #e8e8ec on #0c0c0e bg (use currentColor in production).
+    strim wordmark.
+    The "s" upper bow flattens at cap-height and runs right as a thin bar.
+    The bar is severed by a diagonal incision — that same diagonal IS the
+    ascender of "t", which then drops to a vertical stem at x-height.
+    The severed tip drops 2px and ends just short of "r".
+    The "st" pair is self-contained → reusable as a favicon mark.
+    Palette: #e8e8ec on #0c0c0e. Stroke weight 22 across all letterforms.
   -->
 
-  <!-- Custom S — bottom bowl curves normally, top arc opens into horizontal bar -->
-  <path d="M 22,72 C 22,90 56,88 58,74 C 60,60 36,52 26,48 C 18,44 18,32 36,30 L 286,30" />
+  <rect width="560" height="240" fill="#0c0c0e"/>
 
-  <!-- Cut incision — clean diagonal slash -->
-  <line x1="282" y1="22" x2="290" y2="38" stroke-width="3" />
+  <!-- s: clean arc construction. Lower semicircle → S-curve middle → quarter arc flattening to horizontal at apex -->
+  <path d="M 46 140
+           A 29 29 0 0 0 104 140
+           C 104 110, 46 110, 46 80
+           A 29 29 0 0 1 75 51"
+        fill="none" stroke="#e8e8ec" stroke-width="22" stroke-linecap="butt" stroke-linejoin="miter"/>
 
-  <!-- Post-cut tip — end piece offset 2px down -->
-  <line x1="293" y1="32" x2="310" y2="32" />
+  <!-- Bar + t as one continuous form. Top edge runs from s-apex to t's diagonal peak.
+       The bar's right edge IS the upper half of t's diagonal ascender; the lower half drops to the stem at x-height. -->
+  <polygon points="75,40 211,40 186,92 186,180 164,180 164,92 178.42,62 75,62"
+           fill="#e8e8ec"/>
 
-  <!-- "trim" in Inter Bold -->
-  <text x="72" y="72" font-family="Inter, system-ui, sans-serif" font-size="46" font-weight="700" fill="#e8e8ec" stroke="none">trim</text>
+  <!-- t crossbar at x-height -->
+  <line x1="146" y1="92" x2="202" y2="92" stroke="#e8e8ec" stroke-width="22"/>
+
+  <!-- Severed tip: shifted +2px on y, left edge parallel to the cut -->
+  <polygon points="222,42 268,42 268,64 211,64" fill="#e8e8ec"/>
+
+  <g fill="none" stroke="#e8e8ec" stroke-width="22" stroke-linecap="butt" stroke-linejoin="miter">
+    <!-- r: stem with small top hook -->
+    <path d="M 300 180 L 300 110 C 300 92, 326 86, 348 100"/>
+
+    <!-- i: stem -->
+    <path d="M 380 92 L 380 180"/>
+
+    <!-- m: three stems joined by two short arches -->
+    <path d="M 420 180 L 420 103"/>
+    <path d="M 465 180 L 465 103"/>
+    <path d="M 510 180 L 510 103"/>
+    <path d="M 420 103 C 420 96, 465 96, 465 103"/>
+    <path d="M 465 103 C 465 96, 510 96, 510 103"/>
+  </g>
+
+  <!-- i tittle -->
+  <circle cx="380" cy="62" r="11" fill="#e8e8ec"/>
 </svg>

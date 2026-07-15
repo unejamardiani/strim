@@ -40,6 +40,14 @@ ScaffoldingReadMe.txt
 ~$*
 *~
 CodeCoverage/
+local-data/
+
+# Terraform local state and secrets
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
 
 # MSBuild Binary and Structured Log
 *.binlog

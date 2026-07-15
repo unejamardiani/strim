@@ -1,0 +1,101 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+
+write_files:
+  - path: /opt/strim/docker-compose.yml
+    owner: root:root
+    permissions: "0644"
+    content: |
+      services:
+        strim:
+          image: ${strim_image}
+          restart: unless-stopped
+          environment:
+            ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+            ASPNETCORE_URLS: "http://+:8080"
+            DB_PROVIDER: "sqlite"
+            SQLITE_PATH: "/app/data/strim.db"
+            ALLOWED_ORIGINS: "${allowed_origins}"
+          volumes:
+            - /opt/strim/data:/app/data
+          expose:
+            - "8080"
+          networks:
+            - strim
+
+        caddy:
+          image: caddy:2-alpine
+          restart: unless-stopped
+          depends_on:
+            - strim
+          ports:
+            - "80:80"
+            - "443:443"
+          volumes:
+            - /opt/strim/Caddyfile:/etc/caddy/Caddyfile:ro
+            - /opt/strim/caddy_data:/data
+            - /opt/strim/caddy_config:/config
+          networks:
+            - strim
+
+      networks:
+        strim:
+
+  - path: /opt/strim/Caddyfile
+    owner: root:root
+    permissions: "0644"
+    content: |
+      {
+        email ${admin_email}
+      }
+
+      ${domain_name} {
+        encode zstd gzip
+
+        reverse_proxy strim:8080 {
+          header_up X-Forwarded-Proto {scheme}
+          header_up X-Forwarded-Host {host}
+          header_up X-Real-IP {remote_host}
+        }
+      }
+
+  - path: /usr/local/bin/strim-bootstrap.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      install -d -m 0755 /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      chmod a+r /etc/apt/keyrings/docker.gpg
+
+      . /etc/os-release
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable" \
+        > /etc/apt/sources.list.d/docker.list
+
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        ca-certificates \
+        curl \
+        docker-buildx-plugin \
+        docker-ce \
+        docker-ce-cli \
+        docker-compose-plugin \
+        gnupg
+
+      install -d -m 0750 /opt/strim/data /opt/strim/caddy_data /opt/strim/caddy_config
+      systemctl enable --now docker
+
+      cd /opt/strim
+      docker compose pull
+      docker compose up -d
+
+runcmd:
+  - /usr/local/bin/strim-bootstrap.sh

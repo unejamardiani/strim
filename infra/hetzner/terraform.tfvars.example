@@ -1,0 +1,10 @@
+hcloud_token   = "paste-hcloud-token-here"
+ssh_public_key = "ssh-ed25519 AAAA... your-key"
+domain_name    = "strim.example.com"
+admin_email    = "you@example.com"
+
+# Optional hardening:
+# ssh_allowed_ips = ["203.0.113.10/32"]
+
+# Optional image override:
+# strim_image = "index.docker.io/unejamardiani/strim:main"
