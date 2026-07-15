@@ -1248,7 +1248,10 @@ async Task<IResult> FetchPlaylistFileAsync(
       var downloaded = fetched.DownloadedFile
         ?? throw new InvalidOperationException("Playlist source did not return a body.");
       return new PlaylistFileResult(
-        cache.LeaseTransientFile(downloaded.TemporaryPath, associatedResource: downloaded),
+        cache.LeaseTransientFile(
+          downloaded.TemporaryPath,
+          associatedResource: downloaded,
+          knownLengthBytes: downloaded.LengthBytes),
         "application/x-mpegurl; charset=utf-8",
         download: false);
     }
@@ -1702,7 +1705,7 @@ app.MapPost("/api/playlist/generate", async (
         }
         catch
         {
-          PlaylistFileCache.TryDelete(temporaryOutputPath);
+          cache.DeleteTemporaryFile(temporaryOutputPath, outputReservation.ReservedBytes);
           throw;
         }
       }
@@ -1930,7 +1933,7 @@ app.MapGet("/api/playlists/{id:guid}/share/{code}", async Task<IResult> (
         }
         catch
         {
-          PlaylistFileCache.TryDelete(temporaryOutputPath);
+          cache.DeleteTemporaryFile(temporaryOutputPath, outputReservation.ReservedBytes);
           throw;
         }
       }

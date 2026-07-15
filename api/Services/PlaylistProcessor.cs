@@ -124,7 +124,7 @@ public static class PlaylistProcessor
     }
 
     await writer.FlushAsync(cancellationToken);
-    return new PlaylistGenerationResult(total, kept);
+    return new PlaylistGenerationResult(total, kept, outputBytes.WrittenBytes);
   }
 
   public static PlaylistFilterResult GenerateFiltered(string text, HashSet<string> disabledGroups)
@@ -423,6 +423,8 @@ public static class PlaylistProcessor
     private long _writtenBytes;
 
     public OutputByteCounter(long maxBytes) => _maxBytes = maxBytes;
+
+    public long WrittenBytes => _writtenBytes;
 
     public void AddLine(string value)
     {

@@ -16,8 +16,12 @@ public sealed class PlaylistFileCache
   private readonly Dictionary<string, PlaylistSession> _sessions = new(StringComparer.Ordinal);
   private readonly Dictionary<string, PlaylistOutputFile> _outputs = new(StringComparer.Ordinal);
   private readonly Dictionary<string, string> _outputVariantKeys = new(StringComparer.Ordinal);
+  // Failed deletes must remain part of capacity accounting. Otherwise a transient filesystem
+  // failure turns the configured disk budget into a soft limit for the life of the process.
+  private readonly Dictionary<string, PendingDeleteFile> _pendingDeletes = new(StringComparer.Ordinal);
   private readonly PlaylistCacheOptions _options;
   private readonly ILogger<PlaylistFileCache> _logger;
+  private readonly Func<string, bool> _deleteFile;
   private readonly string _directory;
   private readonly TimeSpan _entryTtl;
   private readonly TimeSpan _sourceTtl;
@@ -25,9 +29,18 @@ public sealed class PlaylistFileCache
   private long _reservedBytes;
 
   public PlaylistFileCache(IOptions<PlaylistCacheOptions> options, ILogger<PlaylistFileCache> logger)
+    : this(options, logger, TryDelete)
+  {
+  }
+
+  internal PlaylistFileCache(
+    IOptions<PlaylistCacheOptions> options,
+    ILogger<PlaylistFileCache> logger,
+    Func<string, bool> deleteFile)
   {
     _options = options.Value;
     _logger = logger;
+    _deleteFile = deleteFile ?? throw new ArgumentNullException(nameof(deleteFile));
     _entryTtl = TimeSpan.FromMinutes(Math.Max(1, _options.EntryTtlMinutes));
     _sourceTtl = TimeSpan.FromMinutes(Math.Max(1, _options.SourceTtlMinutes));
     _revalidationInterval = TimeSpan.FromMinutes(Math.Max(0, _options.RevalidationIntervalMinutes));
@@ -137,7 +150,7 @@ public sealed class PlaylistFileCache
     }
     catch
     {
-      TryDelete(path);
+      DeleteTemporaryFile(path, reservation.ReservedBytes);
       reservation.Dispose();
       throw;
     }
@@ -160,7 +173,7 @@ public sealed class PlaylistFileCache
             string.Equals(existing.ContentHash, downloaded.ContentHash, StringComparison.OrdinalIgnoreCase) &&
             File.Exists(existing.FilePath))
         {
-          TryDelete(downloaded.TemporaryPath);
+          DeleteOrTrackNoLock(downloaded.TemporaryPath, downloaded.LengthBytes);
           existing.ETag = downloaded.ETag ?? existing.ETag;
           existing.LastModifiedUtc = downloaded.LastModifiedUtc ?? existing.LastModifiedUtc;
           existing.LengthBytes = downloaded.LengthBytes;
@@ -178,7 +191,7 @@ public sealed class PlaylistFileCache
         }
         catch
         {
-          TryDelete(downloaded.TemporaryPath);
+          DeleteOrTrackNoLock(downloaded.TemporaryPath, downloaded.LengthBytes);
           throw;
         }
 
@@ -194,10 +207,11 @@ public sealed class PlaylistFileCache
           now.Add(_revalidationInterval),
           now);
         _sources[sourceKey] = source;
+        _pendingDeletes.Remove(finalPath);
 
         if (existing is not null && !string.Equals(existing.FilePath, finalPath, StringComparison.Ordinal))
         {
-          TryDelete(existing.FilePath);
+          DeleteOrTrackNoLock(existing.FilePath, existing.LengthBytes);
         }
 
         return source;
@@ -348,7 +362,7 @@ public sealed class PlaylistFileCache
       }
       catch
       {
-        TryDelete(temporaryPath);
+        DeleteOrTrackNoLock(temporaryPath, result.OutputBytes);
         throw;
       }
 
@@ -361,12 +375,14 @@ public sealed class PlaylistFileCache
         outputKey,
         variantKey,
         finalPath,
+        result.OutputBytes,
         result.TotalChannels,
         result.KeptChannels,
         now.Add(_entryTtl),
         now);
       _outputs[outputKey] = output;
       _outputVariantKeys[variantKey] = outputKey;
+      _pendingDeletes.Remove(finalPath);
       return output;
     }
   }
@@ -390,12 +406,28 @@ public sealed class PlaylistFileCache
     }
   }
 
-  public PlaylistFileLease LeaseTransientFile(string path, string? fileName = null, IDisposable? associatedResource = null) =>
+  public PlaylistFileLease LeaseTransientFile(
+    string path,
+    string? fileName = null,
+    IDisposable? associatedResource = null,
+    long knownLengthBytes = 0) =>
     new(path, fileName, () =>
     {
-      TryDelete(path);
+      DeleteTemporaryFile(path, knownLengthBytes);
       associatedResource?.Dispose();
     });
+
+  /// <summary>
+  /// Deletes a cache-owned temporary file. If the filesystem rejects the delete, retain a
+  /// conservative capacity debt and retry it from later cleanup passes.
+  /// </summary>
+  public void DeleteTemporaryFile(string path, long knownLengthBytes = 0)
+  {
+    lock (_sync)
+    {
+      DeleteOrTrackNoLock(path, knownLengthBytes);
+    }
+  }
 
   public void Cleanup()
   {
@@ -467,7 +499,7 @@ public sealed class PlaylistFileCache
       }
 
       _reservedBytes += requestedBytes;
-      return new PlaylistDiskReservation(() => ReleaseReservation(requestedBytes));
+      return new PlaylistDiskReservation(requestedBytes, () => ReleaseReservation(requestedBytes));
     }
   }
 
@@ -508,9 +540,11 @@ public sealed class PlaylistFileCache
       .OrderBy(x => x.LastAccessedUtc)
       .ToList())
     {
-      var length = TryGetLength(output.FilePath);
-      RemoveOutputNoLock(output.OutputKey);
-      usedBytes -= length;
+      var length = GetTrackedLength(output.FilePath, output.LengthBytes);
+      if (RemoveOutputNoLock(output.OutputKey))
+      {
+        usedBytes -= length;
+      }
       if (usedBytes <= maxTrackedBytes) return usedBytes;
     }
 
@@ -519,15 +553,16 @@ public sealed class PlaylistFileCache
       .OrderBy(x => x.LastAccessedUtc)
       .ToList())
     {
-      var length = TryGetLength(source.FilePath);
-      _sources.Remove(source.SourceKey);
-      TryDelete(source.FilePath);
-      usedBytes -= length;
+      var length = GetTrackedLength(source.FilePath, source.LengthBytes);
+      if (RemoveSourceNoLock(source.SourceKey))
+      {
+        usedBytes -= length;
+      }
       if (usedBytes <= maxTrackedBytes) return usedBytes;
     }
 
     _logger.LogWarning(
-      "Playlist cache cannot free enough disk capacity ({UsedBytes} tracked bytes; target {TargetBytes}) because files are active or protected",
+      "Playlist cache cannot free enough disk capacity ({UsedBytes} tracked bytes; target {TargetBytes}) because files are active, protected, or awaiting a successful delete",
       usedBytes,
       maxTrackedBytes);
     return usedBytes;
@@ -535,6 +570,7 @@ public sealed class PlaylistFileCache
 
   private void RemoveExpiredEntriesNoLock(ISet<string> protectedPaths)
   {
+    RetryPendingDeletesNoLock();
     var now = DateTimeOffset.UtcNow;
     foreach (var session in _sessions.Where(x => x.Value.ExpiresAtUtc <= now).Select(x => x.Key).ToList())
     {
@@ -554,10 +590,8 @@ public sealed class PlaylistFileCache
       .OrderBy(x => x.LastAccessedUtc)
       .ToList())
     {
-      _sources.Remove(source.SourceKey);
-      TryDelete(source.FilePath);
+      RemoveSourceNoLock(source.SourceKey);
     }
-
   }
 
   private static ISet<string> ToPathSet(IEnumerable<string>? paths) =>
@@ -566,13 +600,25 @@ public sealed class PlaylistFileCache
       : new HashSet<string>(paths, StringComparer.Ordinal);
 
   private long GetTrackedBytesNoLock() =>
-    _sources.Values.Sum(x => TryGetLength(x.FilePath)) + _outputs.Values.Sum(x => TryGetLength(x.FilePath));
+    _sources.Values.Sum(x => GetTrackedLength(x.FilePath, x.LengthBytes)) +
+    _outputs.Values.Sum(x => GetTrackedLength(x.FilePath, x.LengthBytes)) +
+    _pendingDeletes.Values.Sum(x => GetTrackedLength(x.FilePath, x.LengthBytes));
 
-  private void RemoveOutputNoLock(string outputKey)
+  private bool RemoveSourceNoLock(string sourceKey)
+  {
+    if (!_sources.Remove(sourceKey, out var source))
+    {
+      return false;
+    }
+
+    return DeleteOrTrackNoLock(source.FilePath, source.LengthBytes);
+  }
+
+  private bool RemoveOutputNoLock(string outputKey)
   {
     if (!_outputs.TryGetValue(outputKey, out var output) || output.ActiveLeases > 0)
     {
-      return;
+      return false;
     }
 
     _outputs.Remove(outputKey);
@@ -582,7 +628,32 @@ public sealed class PlaylistFileCache
       _outputVariantKeys.Remove(output.VariantKey);
     }
 
-    TryDelete(output.FilePath);
+    return DeleteOrTrackNoLock(output.FilePath, output.LengthBytes);
+  }
+
+  private bool DeleteOrTrackNoLock(string path, long knownLengthBytes)
+  {
+    if (_deleteFile(path))
+    {
+      _pendingDeletes.Remove(path);
+      return true;
+    }
+
+    var isNewFailure = !_pendingDeletes.ContainsKey(path);
+    _pendingDeletes[path] = new PendingDeleteFile(path, GetTrackedLength(path, knownLengthBytes));
+    if (isNewFailure)
+    {
+      _logger.LogWarning("Unable to delete playlist cache file {CacheFile}; retaining its disk capacity until cleanup succeeds", path);
+    }
+    return false;
+  }
+
+  private void RetryPendingDeletesNoLock()
+  {
+    foreach (var pending in _pendingDeletes.Values.ToList())
+    {
+      DeleteOrTrackNoLock(pending.FilePath, pending.LengthBytes);
+    }
   }
 
   private void CleanupStaleCacheFiles()
@@ -591,15 +662,20 @@ public sealed class PlaylistFileCache
     {
       // Cache metadata is process-local, so source/output files from a previous process cannot
       // be safely reused. Restrict deletion to names this service itself generates.
-      foreach (var file in Directory.EnumerateFiles(_directory))
+      lock (_sync)
       {
-        var name = Path.GetFileName(file);
-        if (name.EndsWith(".partial", StringComparison.Ordinal) ||
-            name.StartsWith("source-", StringComparison.Ordinal) ||
-            name.StartsWith("output-", StringComparison.Ordinal) ||
-            name.StartsWith("raw-", StringComparison.Ordinal))
+        foreach (var file in Directory.EnumerateFiles(_directory))
         {
-          TryDelete(file);
+          var name = Path.GetFileName(file);
+          if (name.EndsWith(".partial", StringComparison.Ordinal) ||
+              name.StartsWith("source-", StringComparison.Ordinal) ||
+              name.StartsWith("output-", StringComparison.Ordinal) ||
+              name.StartsWith("raw-", StringComparison.Ordinal))
+          {
+            // A stat failure at startup must not make a left-over cache file invisible to the
+            // new process. The whole cache budget is the safe fallback until retry succeeds.
+            DeleteOrTrackNoLock(file, _options.MaxDiskBytes);
+          }
         }
       }
     }
@@ -651,19 +727,29 @@ public sealed class PlaylistFileCache
     return value.Length <= maxLength ? value : value[..maxLength];
   }
 
-  private static long TryGetLength(string path)
+  private static long GetTrackedLength(string path, long knownLengthBytes)
   {
     try { return new FileInfo(path).Length; }
-    catch { return 0; }
+    catch (FileNotFoundException) { return 0; }
+    catch (DirectoryNotFoundException) { return 0; }
+    catch (UnauthorizedAccessException) { return Math.Max(0, knownLengthBytes); }
+    catch (IOException) { return Math.Max(0, knownLengthBytes); }
+    catch { return Math.Max(0, knownLengthBytes); }
   }
 
-  internal static void TryDelete(string path)
+  internal static bool TryDelete(string path)
   {
     try
     {
-      if (File.Exists(path)) File.Delete(path);
+      // File.Delete already treats a missing file as success. Do not pre-check File.Exists:
+      // it reports false for some access failures and would hide an existing orphan.
+      File.Delete(path);
+      return true;
     }
-    catch { }
+    catch
+    {
+      return false;
+    }
   }
 
   private static void TrySetPrivateDirectory(string path)
@@ -728,6 +814,7 @@ public sealed class PlaylistOutputFile
     string outputKey,
     string variantKey,
     string filePath,
+    long lengthBytes,
     int totalChannels,
     int keptChannels,
     DateTimeOffset expiresAtUtc,
@@ -736,6 +823,7 @@ public sealed class PlaylistOutputFile
     OutputKey = outputKey;
     VariantKey = variantKey;
     FilePath = filePath;
+    LengthBytes = lengthBytes;
     TotalChannels = totalChannels;
     KeptChannels = keptChannels;
     ExpiresAtUtc = expiresAtUtc;
@@ -745,6 +833,7 @@ public sealed class PlaylistOutputFile
   public string OutputKey { get; }
   internal string VariantKey { get; }
   internal string FilePath { get; }
+  internal long LengthBytes { get; }
   public int TotalChannels { get; }
   public int KeptChannels { get; }
   internal DateTimeOffset ExpiresAtUtc { get; }
@@ -763,7 +852,7 @@ public sealed record DownloadedPlaylistFile(
   public void Dispose() => DiskReservation?.Dispose();
 }
 
-public sealed record PlaylistGenerationResult(int TotalChannels, int KeptChannels);
+public sealed record PlaylistGenerationResult(int TotalChannels, int KeptChannels, long OutputBytes);
 
 public sealed class PlaylistFileLease : IDisposable, IAsyncDisposable
 {
@@ -812,11 +901,19 @@ public sealed class PlaylistDiskReservation : IDisposable
 {
   private Action? _release;
 
-  internal PlaylistDiskReservation(Action release) => _release = release;
+  internal PlaylistDiskReservation(long reservedBytes, Action release)
+  {
+    ReservedBytes = reservedBytes;
+    _release = release;
+  }
 
-  internal static PlaylistDiskReservation Empty { get; } = new(() => { });
+  internal static PlaylistDiskReservation Empty { get; } = new(0, () => { });
+
+  internal long ReservedBytes { get; }
 
   public void Dispose() => Interlocked.Exchange(ref _release, null)?.Invoke();
 }
 
 internal sealed record PlaylistSession(string SourceKey, DateTimeOffset ExpiresAtUtc);
+
+internal sealed record PendingDeleteFile(string FilePath, long LengthBytes);
