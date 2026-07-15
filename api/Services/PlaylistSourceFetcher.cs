@@ -93,7 +93,7 @@ public sealed class PlaylistSourceFetcher
         }
         catch
         {
-          PlaylistFileCache.TryDelete(temporaryPath);
+          _cache.DeleteTemporaryFile(temporaryPath, reservation.ReservedBytes);
           reservation.Dispose();
           throw;
         }

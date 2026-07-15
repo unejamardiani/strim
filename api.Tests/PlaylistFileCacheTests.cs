@@ -90,4 +90,80 @@ public class PlaylistFileCacheTests
       if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
     }
   }
+
+  [Fact]
+  public void FailedStartupCleanup_RemainsAccountedUntilARetrySucceeds()
+  {
+    var directory = Path.Combine(Path.GetTempPath(), $"strim-cache-test-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(directory);
+    var staleFile = Path.Combine(directory, "source-stale.m3u");
+    File.WriteAllText(staleFile, "0123456789");
+    var allowDelete = false;
+    var options = Options.Create(new PlaylistCacheOptions
+    {
+      Directory = directory,
+      MaxSourceBytes = 10,
+      MaxDiskBytes = 10,
+    });
+    var cache = new PlaylistFileCache(
+      options,
+      NullLogger<PlaylistFileCache>.Instance,
+      path => allowDelete && PlaylistFileCache.TryDelete(path));
+
+    try
+    {
+      Assert.Throws<PlaylistDiskCapacityExceededException>(() => cache.ReserveSourceCapacity(null));
+      Assert.True(File.Exists(staleFile));
+
+      allowDelete = true;
+      cache.Cleanup();
+
+      Assert.False(File.Exists(staleFile));
+      using var reservation = cache.ReserveSourceCapacity(null);
+    }
+    finally
+    {
+      allowDelete = true;
+      if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+    }
+  }
+
+  [Fact]
+  public async Task FailedEviction_DoesNotReleaseDiskCapacityUntilDeletionSucceeds()
+  {
+    var directory = Path.Combine(Path.GetTempPath(), $"strim-cache-test-{Guid.NewGuid():N}");
+    var allowDelete = true;
+    var options = Options.Create(new PlaylistCacheOptions
+    {
+      Directory = directory,
+      MaxSourceBytes = 10,
+      MaxDiskBytes = 10,
+    });
+    var cache = new PlaylistFileCache(
+      options,
+      NullLogger<PlaylistFileCache>.Instance,
+      path => allowDelete && PlaylistFileCache.TryDelete(path));
+
+    try
+    {
+      var downloaded = await cache.WriteRawTextAsync("0123456789", CancellationToken.None);
+      var source = cache.StoreRawText("failed-eviction", downloaded);
+      Assert.True(File.Exists(source.FilePath));
+
+      allowDelete = false;
+      Assert.Throws<PlaylistDiskCapacityExceededException>(() => cache.ReserveSourceCapacity(null));
+      Assert.True(File.Exists(source.FilePath));
+
+      allowDelete = true;
+      cache.Cleanup();
+
+      Assert.False(File.Exists(source.FilePath));
+      using var reservation = cache.ReserveSourceCapacity(null);
+    }
+    finally
+    {
+      allowDelete = true;
+      if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+    }
+  }
 }
