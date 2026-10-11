@@ -72,6 +72,7 @@ const ICONS = {
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 };
 
 function icon(name) {
@@ -263,7 +264,15 @@ async function loadPlaylists() {
 
 function updateAccountButton() {
   accountButton.hidden = false;
-  accountButton.textContent = state.user ? state.user.userName || 'Account' : 'Sign in';
+  accountButton.classList.toggle('guest', !state.user);
+  if (state.user) {
+    const name = state.user.userName || state.user.email || 'Account';
+    accountButton.replaceChildren(h('span', { class: 'avatar', text: name.trim().charAt(0) || '?' }), h('span', { class: 'name', text: name }));
+    accountButton.setAttribute('aria-label', `Account: ${name}`);
+  } else {
+    accountButton.replaceChildren('Sign in');
+    accountButton.removeAttribute('aria-label');
+  }
 }
 
 function openAccount(hint) {
@@ -457,7 +466,7 @@ for (const dialog of [accountDialog, menuDialog]) {
 }
 
 function setActionBar(visible) {
-  document.body.classList.toggle('has-actionbar', visible);
+  document.body.classList.toggle('has-dock', visible);
 }
 
 // ---------- Home ----------
@@ -473,16 +482,16 @@ function showHome() {
   );
 
   const head = h('div', { class: 'page-head' },
-    h('h1', { text: 'Playlists' }),
-    playlists.length ? h('a', { class: 'btn btn-primary btn-sm', href: '#/new' }, icon('plus'), 'New playlist') : null
+    h('h1', null, 'Playlists', playlists.length > 1 ? h('span', { class: 'count num', text: fmt(playlists.length) }) : null),
+    playlists.length ? h('a', { class: 'btn btn-primary btn-sm', href: '#/new' }, icon('plus'), 'New') : null
   );
 
   if (!playlists.length) {
     app.replaceChildren(
       head,
       h('div', { class: 'card empty' },
-        h('strong', { text: 'No playlists yet' }),
-        h('p', { text: 'Add your provider’s M3U link, pick the groups you want and get a link for your player.' }),
+        h('h2', { text: 'Start with your provider’s link' }),
+        h('p', { text: 'Paste the M3U link, switch off the groups you never watch and get a link your player can use.' }),
         h('a', { class: 'btn btn-primary', href: '#/new' }, icon('plus'), 'New playlist'))
     );
     return;
@@ -496,8 +505,11 @@ function playlistMeta(playlist) {
   const total = playlist.groupCount || 0;
   const kept = Math.max(0, total - (playlist.disabledGroups?.length || 0));
   parts.push(h('span', { text: `${fmt(kept)} of ${plural(total, 'group')} kept` }));
-  if (playlist.viewCount > 0) {
-    const last = playlist.lastViewedUtc ? `, last ${relativeTime(playlist.lastViewedUtc)}` : '';
+  const lastViewed = playlist.lastViewedUtc ? new Date(playlist.lastViewedUtc) : null;
+  if (lastViewed && Date.now() - lastViewed.getTime() < 86400000) {
+    parts.push(h('span', { class: 'on-air', text: `In use, ${relativeTime(lastViewed)}` }));
+  } else if (playlist.viewCount > 0) {
+    const last = lastViewed ? `, last ${relativeTime(lastViewed)}` : '';
     parts.push(h('span', { text: `Fetched ${fmt(playlist.viewCount)}×${last}` }));
   } else {
     parts.push(h('span', { text: 'Not fetched by a player yet' }));
@@ -521,8 +533,8 @@ function linkBox(playlist) {
       h('button', { class: 'btn btn-sm', type: 'button', onclick: () => toggleLink(playlist) }, 'Turn on'));
   }
   return h('div', { class: 'link-box' },
-    h('div', { class: 'link-url', title: url }, h('span', { text: url })),
-    h('button', { class: 'btn btn-sm', type: 'button', onclick: () => copyText(url) }, icon('copy'), 'Copy'));
+    h('div', { class: 'link-url', title: url, text: url }),
+    h('button', { class: 'btn btn-primary', type: 'button', onclick: () => copyText(url) }, icon('copy'), 'Copy'));
 }
 
 function playlistCard(playlist) {
@@ -537,13 +549,17 @@ function playlistCard(playlist) {
       h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}` }, icon('list'), 'Edit groups')));
 }
 
+function menuIcon(name) {
+  return h('span', { class: 'mi-icon' }, icon(name));
+}
+
 function openPlaylistMenu(id) {
   const playlist = state.playlists.find((p) => p.id === id);
   if (!playlist) return;
   const active = playlist.isActive !== false;
   const item = (iconName, label, onclick, { danger = false, sub = '', trailing = null } = {}) =>
     h('button', { class: `menu-item${danger ? ' danger' : ''}`, type: 'button', onclick },
-      icon(iconName),
+      menuIcon(iconName),
       h('span', { class: 'grow' }, label, sub ? h('small', { text: sub }) : null),
       trailing);
 
@@ -554,7 +570,7 @@ function openPlaylistMenu(id) {
     inEditor ? null : item('list', 'Edit groups', () => navigate(`#/p/${playlist.id}`)),
     active ? item('copy', 'Copy player link', () => { menuDialog.close(); copyText(shareUrl(playlist)); }) : null,
     active ? h('a', { class: 'menu-item', href: shareUrl(playlist), download: fileName(playlist.name), onclick: () => menuDialog.close() },
-      icon('download'), h('span', { class: 'grow', text: 'Download .m3u' })) : null,
+      menuIcon('download'), h('span', { class: 'grow', text: 'Download .m3u' })) : null,
     h('div', { class: 'menu-sep' }),
     item('clock', 'Refresh every 6 hours', () => toggleAutoRefresh(playlist), {
       sub: playlist.lastRefreshedUtc ? `Last refresh ${relativeTime(playlist.lastRefreshedUtc)}` : 'Keeps the provider list cached for players',
@@ -783,10 +799,14 @@ function renderEditor() {
 
   const nodes = [];
 
-  if (!state.user && !ed.id) {
-    nodes.push(h('section', { class: 'intro' },
-      h('h1', { text: 'Trim your IPTV playlist' }),
-      h('p', { class: 'lead', text: 'Paste your M3U link, untick the groups you never watch and download a clean playlist. Sign in to get a permanent link for your player that always serves your selection.' })));
+  if (!state.user && !ed.id && ed.phase !== 'ready') {
+    nodes.push(h('section', { class: 'hero' },
+      h('h1', null, 'Your playlist, ', h('em', { text: 'minus the noise.' })),
+      h('p', { class: 'lead', text: 'Paste your IPTV link, switch off the groups you never watch and download a clean playlist. Sign in to get a permanent link your player can use.' }),
+      h('ol', { class: 'steps' },
+        h('li', null, h('b', { text: '1' }), 'Paste your link'),
+        h('li', null, h('b', { text: '2' }), 'Pick your groups'),
+        h('li', null, h('b', { text: '3' }), 'Play it anywhere'))));
   } else {
     nodes.push(editorHead(ed, playlist));
   }
@@ -797,7 +817,7 @@ function renderEditor() {
     nodes.push(sourceForm(ed));
   } else if (!ed.isSample) {
     nodes.push(h('div', { class: 'source-line' },
-      h('span', { class: 'host' }, 'Source: ', sourceHost(ed.sourceUrl) || 'unknown'),
+      h('span', { class: 'host' }, 'From ', h('b', { text: sourceHost(ed.sourceUrl) || 'unknown source' })),
       h('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => { ed.editingSource = true; renderEditor(); } }, 'Change')));
   }
 
@@ -853,7 +873,7 @@ function editorHead(ed, playlist) {
 }
 
 function linkCard(playlist) {
-  return h('section', { class: 'card stack' },
+  return h('section', { class: 'card link-card' },
     h('div', { class: 'field-label', text: 'Player link' }),
     linkBox(playlist),
     h('p', { class: 'field-hint', text: 'Add this link to your IPTV player. It always serves the groups you saved here.' }));
@@ -999,7 +1019,7 @@ function pickerNodes(ed) {
   });
 
   const segmented = (options, current, onPick) => {
-    const wrap = h('div', { class: 'segmented', role: 'group' });
+    const wrap = h('div', { class: 'pills', role: 'group' });
     for (const option of options) {
       wrap.append(h('button', {
         type: 'button',
@@ -1009,7 +1029,10 @@ function pickerNodes(ed) {
           for (const b of wrap.children) b.setAttribute('aria-pressed', String(b.dataset.value === option.value));
           onPick(option.value);
         },
-      }, option.label, option.count != null ? h('span', { class: 'count', text: fmt(option.count) }) : null));
+      },
+      option.dot ? h('span', { class: 'dot', dataset: { type: option.value } }) : null,
+      option.label,
+      option.count != null ? h('span', { class: 'count', text: fmt(option.count) }) : null));
     }
     return wrap;
   };
@@ -1017,36 +1040,36 @@ function pickerNodes(ed) {
   const rows = [search];
 
   const types = CONTENT_TYPES.filter((t) => ed.typeCounts[t]);
-  const filters = h('div', { class: 'toolbar-row' });
   if (types.length > 1) {
-    filters.append(segmented(
-      [{ value: 'all', label: 'All' }, ...types.map((t) => ({ value: t, label: t, count: ed.typeCounts[t] }))],
+    rows.push(h('div', { class: 'toolbar-row' }, segmented(
+      [{ value: 'all', label: 'All' }, ...types.map((t) => ({ value: t, label: t, count: ed.typeCounts[t], dot: true }))],
       ed.filter.type,
       (value) => {
         ed.filter.type = value;
         updateView(true);
-      }));
+      })));
   }
+  const filters = h('div', { class: 'toolbar-row' });
   filters.append(segmented(
-    [{ value: 'all', label: 'All' }, { value: 'kept', label: 'Kept' }, { value: 'hidden', label: 'Hidden' }],
+    [{ value: 'all', label: 'All' }, { value: 'kept', label: 'On' }, { value: 'hidden', label: 'Off' }],
     ed.filter.show,
     (value) => {
       ed.filter.show = value;
       updateView(true);
     }));
-  filters.append(h('div', { class: 'grow' }), sort);
+  filters.append(h('div', { class: 'spacer' }), sort);
   rows.push(filters);
 
   picker.shownLabel = h('span', { class: 'num' });
   rows.push(h('div', { class: 'summary' },
     picker.shownLabel,
     h('div', { class: 'bulk' },
-      h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(false) }, 'Keep all'),
-      h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(true) }, 'Hide all'))));
+      h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(false) }, 'All on'),
+      h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(true) }, 'All off'))));
 
   return [
     h('section', { class: 'picker-toolbar', 'aria-label': 'Group filters' }, rows),
-    h('div', { class: 'group-list', id: 'group-list', role: 'list', 'aria-label': 'Groups' }),
+    h('div', { class: 'card group-list', id: 'group-list', role: 'list', 'aria-label': 'Groups' }),
   ];
 }
 
@@ -1128,11 +1151,12 @@ function updateView(scrollToTop) {
 }
 
 function createRow() {
-  const check = h('input', { class: 'check', type: 'checkbox' });
+  const check = h('input', { class: 'toggle', type: 'checkbox', role: 'switch' });
+  const dot = h('span', { class: 'dot', 'aria-hidden': 'true' });
   const name = h('span', { class: 'group-name' });
-  const badge = h('span', { class: 'badge' });
+  const badge = h('span', { class: 'tag' });
   const count = h('span', { class: 'group-count' });
-  const row = h('label', { class: 'group-row', role: 'listitem' }, check, name, badge, count);
+  const row = h('label', { class: 'group-row', role: 'listitem' }, dot, name, badge, count, check);
   row._parts = { check, name, badge, count };
   picker.list.append(row);
   return row;
@@ -1162,6 +1186,7 @@ function paintRows() {
     if (row.dataset.index !== String(index)) {
       row.dataset.index = String(index);
       row.style.transform = `translateY(${index * rowHeight}px)`;
+      row.dataset.type = g.type;
       const { name, badge, count } = row._parts;
       name.textContent = g.title;
       name.title = g.title;
@@ -1179,7 +1204,7 @@ function paintRows() {
 
 function onRowToggle(e) {
   const check = e.target;
-  if (!check.classList.contains('check')) return;
+  if (!check.classList.contains('toggle')) return;
   const ed = picker.ed;
   const row = check.closest('.group-row');
   const g = ed?.view[Number(row?.dataset.index)];
@@ -1203,12 +1228,13 @@ function bulkSet(hide) {
     if (hide) ed.disabled.add(g.key);
     else ed.disabled.delete(g.key);
   }
-  toast(`${hide ? 'Hid' : 'Kept'} ${plural(ed.view.length, 'group')}`);
+  toast(`Switched ${hide ? 'off' : 'on'} ${plural(ed.view.length, 'group')}`);
   paintRows();
   updateActionBar();
 }
 
 window.addEventListener('scroll', () => {
+  document.body.classList.toggle('scrolled', window.scrollY > 4);
   if (!picker.ed) return;
   cancelAnimationFrame(picker.frame);
   picker.frame = requestAnimationFrame(paintRows);
@@ -1235,8 +1261,9 @@ document.addEventListener('keydown', (e) => {
 const bar = { info: null, save: null, download: null };
 
 function actionBar(ed) {
-  bar.info = h('div', { class: 'actionbar-info' });
-  bar.download = h('button', { class: 'btn', type: 'button', onclick: () => downloadSelection(ed) }, icon('download'), h('span', { text: 'Download' }));
+  bar.info = h('div', { class: 'dock-info', 'aria-live': 'polite' });
+  bar.download = h('button', { class: 'btn', type: 'button', 'aria-label': 'Download .m3u', onclick: () => downloadSelection(ed) },
+    icon('download'), h('span', { class: 'label-long', text: 'Download' }));
   const buttons = [bar.download];
 
   bar.save = null;
@@ -1246,7 +1273,7 @@ function actionBar(ed) {
   } else {
     bar.download.classList.add('btn-primary');
   }
-  return h('div', { class: 'actionbar' }, h('div', { class: 'actionbar-inner' }, bar.info, ...buttons));
+  return h('div', { class: 'dock' }, bar.info, ...buttons);
 }
 
 function selectionStats(ed) {
@@ -1265,14 +1292,19 @@ function updateActionBar() {
   if (!ed || ed.phase !== 'ready' || !bar.info) return;
   const { channels, groups } = selectionStats(ed);
   bar.info.replaceChildren(
-    h('strong', { text: plural(channels, 'channel') }),
-    h('span', { class: 'detail', text: `${fmt(groups)} of ${plural(ed.groups.length, 'group')} kept` }));
+    h('div', { class: 'dock-value' }, fmt(channels), h('small', { text: channels === 1 ? 'channel' : 'channels' })),
+    h('div', { class: 'dock-label', text: `${fmt(groups)} of ${plural(ed.groups.length, 'group')} on` }));
   bar.download.disabled = ed.busy || channels === 0;
 
   if (bar.save) {
     const dirty = isDirty(ed);
-    bar.save.disabled = ed.busy || (ed.id && !dirty) || channels === 0;
-    bar.save.textContent = ed.busy === 'save' ? 'Saving…' : ed.id && !dirty ? 'Saved' : state.user ? 'Save' : 'Save…';
+    const saved = Boolean(ed.id) && !dirty && ed.busy !== 'save';
+    bar.save.disabled = Boolean(ed.busy) || saved || channels === 0;
+    bar.save.classList.toggle('btn-primary', !saved);
+    bar.save.classList.toggle('is-saved', saved);
+    bar.save.replaceChildren(...(saved
+      ? [icon('check'), 'Saved']
+      : [ed.busy === 'save' ? 'Saving…' : state.user ? 'Save' : 'Save…']));
   }
 }
 
