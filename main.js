@@ -1,5 +1,7 @@
 const state = {
   groups: new Map(),
+  // Group key -> { groupTitle, contentType }; used to map saved filters onto the loaded groups.
+  groupMeta: new Map(),
   disabledGroups: new Set(),
   sourceName: 'untitled',
   savedPlaylists: [],
@@ -927,12 +929,16 @@ function isCurrentGeneration(controller, cacheKey) {
 function hydrateFromAnalysis(analysis, options = {}) {
   cancelActiveGeneration();
   const groups = new Map();
-  (analysis.groups || []).forEach((g) => groups.set(g.name, g.count));
+  const groupMeta = new Map();
+  (analysis.groups || []).forEach((g) => {
+    groups.set(g.name, g.count);
+    groupMeta.set(g.name, { groupTitle: g.groupTitle || g.name, contentType: g.contentType || 'Live' });
+  });
   state.groups = groups;
+  state.groupMeta = groupMeta;
   state.totalChannels = analysis.totalChannels || Array.from(groups.values()).reduce((acc, val) => acc + val, 0);
   state.groupCount = analysis.groupCount || groups.size || 0;
-  const restoredDisabled = (options.disabledGroups || []).filter((g) => groups.has(g));
-  state.disabledGroups = new Set(restoredDisabled);
+  state.disabledGroups = restoreDisabledGroups(options.disabledGroups, groupMeta);
   state.currentPlaylistId = options.id || null;
   state.backendSession = {
     cacheKey: analysis.cacheKey,
@@ -965,10 +971,10 @@ function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options 
   cancelActiveGeneration();
   const parsed = parseM3U(text);
   state.groups = parsed.groups;
+  state.groupMeta = parsed.groupMeta;
   state.totalChannels = parsed.channels.length;
   state.groupCount = parsed.groups.size;
-  const restoredDisabled = (options.disabledGroups || []).filter((g) => parsed.groups.has(g));
-  state.disabledGroups = new Set(restoredDisabled);
+  state.disabledGroups = restoreDisabledGroups(options.disabledGroups, parsed.groupMeta);
   state.currentPlaylistId = options.id || null;
   state.backendSession = null;
   state.backendOutputKey = null;
@@ -1002,8 +1008,9 @@ function parseM3U(text) {
     .filter(Boolean);
 
   const channels = [];
-  const groups = new Map();
   const channelLines = [];
+  // groupTitle -> Map(contentType -> count)
+  const titleCounts = new Map();
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -1021,6 +1028,7 @@ function parseM3U(text) {
 
     const name = extinf.split(',').slice(1).join(',').trim() || attributes['tvg-name'] || 'Unknown';
     const groupTitle = attributes['group-title'] || 'Ungrouped';
+    const contentType = detectContentType(url);
 
     const hasGroup = /group-title="[^"]*"/i.test(extinf);
     const normalizedExtinf = hasGroup ? extinf : `${extinf} group-title="${groupTitle}"`;
@@ -1031,15 +1039,59 @@ function parseM3U(text) {
       url,
       name,
       groupTitle,
+      contentType,
       attributes,
     };
 
     channels.push(channel);
-    groups.set(groupTitle, (groups.get(groupTitle) || 0) + 1);
+    if (!titleCounts.has(groupTitle)) titleCounts.set(groupTitle, new Map());
+    const typeCounts = titleCounts.get(groupTitle);
+    typeCounts.set(contentType, (typeCounts.get(contentType) || 0) + 1);
     channelLines.push(`${normalizedExtinf}\n${url}`);
   }
 
-  return { channels, groups, channelLines };
+  // Same rule as PlaylistProcessor.BuildGroups: only titles that mix content types are split.
+  const groups = new Map();
+  const groupMeta = new Map();
+  titleCounts.forEach((typeCounts, groupTitle) => {
+    const split = typeCounts.size > 1;
+    typeCounts.forEach((count, contentType) => {
+      const key = split ? groupKey(groupTitle, contentType) : groupTitle;
+      groups.set(key, (groups.get(key) || 0) + count);
+      groupMeta.set(key, { groupTitle, contentType });
+    });
+  });
+
+  return { channels, groups, groupMeta, channelLines };
+}
+
+// Xtream Codes providers reuse one group-title for live channels, movies and series.
+// Keep in sync with PlaylistProcessor.DetectContentType/GroupKey and filter-worker.js.
+function detectContentType(url) {
+  const match = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\/(movie|series)\//i.exec(url || '');
+  if (!match) return 'Live';
+  return match[1].toLowerCase() === 'movie' ? 'Movies' : 'Series';
+}
+
+function groupKey(groupTitle, contentType) {
+  return `${groupTitle} \u00B7 ${contentType}`;
+}
+
+function isGroupDisabled(disabled, groupTitle, contentType) {
+  return disabled.has(groupTitle) || disabled.has(groupKey(groupTitle, contentType));
+}
+
+// A saved filter can be a plain group-title (older saves, or a title that is not split) or a
+// content-type key; map either onto the group keys of the playlist that was just loaded.
+function restoreDisabledGroups(savedDisabled, groupMeta) {
+  const saved = new Set(savedDisabled || []);
+  const restored = new Set();
+  groupMeta.forEach((meta, key) => {
+    if (isGroupDisabled(saved, meta.groupTitle, meta.contentType)) {
+      restored.add(key);
+    }
+  });
+  return restored;
 }
 
 function deriveNameFromUrl(url) {
@@ -1571,7 +1623,7 @@ function applyFiltersFromPlaylist() {
     setStatus('Could not find the selected playlist.', 'warn');
     return;
   }
-  const disabled = new Set((source.disabledGroups || []).filter((g) => state.groups.has(g)));
+  const disabled = restoreDisabledGroups(source.disabledGroups, state.groupMeta);
   state.disabledGroups = disabled;
   renderGroups();
   renderStats();
@@ -1872,7 +1924,7 @@ function generateFilteredM3U() {
   let kept = 0;
   for (let i = 0; i < state.localPlaylist.channels.length; i++) {
     const channel = state.localPlaylist.channels[i];
-    if (disabled.has(channel.groupTitle)) continue;
+    if (isGroupDisabled(disabled, channel.groupTitle, channel.contentType)) continue;
     outputLines.push(state.localPlaylist.channelLines[i]);
     kept++;
   }

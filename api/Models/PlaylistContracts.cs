@@ -11,7 +11,10 @@ public record AnalyzePlaylistResponse(
   DateTimeOffset? ExpirationUtc,
   List<GroupResult> Groups);
 
-public record GroupResult(string Name, int Count);
+/// <param name="Name">Filter key sent back in disabledGroups.</param>
+/// <param name="GroupTitle">The provider's group-title; differs from Name when one title is split by content type.</param>
+/// <param name="ContentType">Live, Movies or Series.</param>
+public record GroupResult(string Name, int Count, string GroupTitle, string ContentType);
 
 public record GeneratePlaylistRequest(string? SourceUrl, string? CacheKey, List<string>? DisabledGroups);
 

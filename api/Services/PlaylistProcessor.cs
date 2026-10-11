@@ -13,7 +13,21 @@ public static class PlaylistProcessor
   // Approximate dictionary + string overhead for one distinct group. This is intentionally
   // conservative: the cap protects the JSON response and process heap, not just raw text.
   private const int EstimatedGroupEntryOverheadBytes = 128;
+  private const string GroupKeySeparator = " \u00B7 ";
+  private static readonly int ContentTypeCount = Enum.GetValues<PlaylistContentType>().Length;
+  private static readonly int MaxGroupKeySuffixLength =
+    GroupKeySeparator.Length + Enum.GetNames<PlaylistContentType>().Max(name => name.Length);
   private static readonly string[] ExpirationKeys = new[] { "exp", "expires", "expire", "expiration" };
+
+  /// <summary>
+  /// Key for one content type of a group-title that the provider reuses across live channels,
+  /// movies and series (e.g. "Germany · Series"). Must match groupKey() in main.js and filter-worker.js.
+  /// </summary>
+  public static string GroupKey(string groupTitle, PlaylistContentType contentType) =>
+    $"{groupTitle}{GroupKeySeparator}{contentType}";
+
+  public static int MaxGroupKeyLength(int maxGroupTitleLengthChars) =>
+    Math.Max(1, maxGroupTitleLengthChars) + MaxGroupKeySuffixLength;
 
   /// <summary>
   /// Legacy in-memory helper kept for small callers/tests. HTTP endpoints use the file-backed
@@ -46,8 +60,10 @@ public static class PlaylistProcessor
     int maxGroupTitleLengthChars = DefaultMaxGroupTitleLengthChars,
     long maxGroupMetadataBytes = DefaultMaxGroupMetadataBytes)
   {
-    var groups = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    // Counts per group-title, indexed by PlaylistContentType.
+    var groups = new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase);
     var total = 0;
+    var groupVariantCount = 0;
     long groupMetadataBytes = 0;
 
     await using var stream = new FileStream(
@@ -67,11 +83,18 @@ public static class PlaylistProcessor
       total++;
       var groupTitle = ExtractGroupTitle(line);
       EnsureGroupTitleWithinLimit(groupTitle, maxGroupTitleLengthChars);
-      IncrementGroup(groups, groupTitle, maxGroupCount, ref groupMetadataBytes, maxGroupMetadataBytes);
-      _ = await lines.ReadNextContentLineAsync(cancellationToken);
+      var url = await lines.ReadNextContentLineAsync(cancellationToken);
+      IncrementGroup(
+        groups,
+        groupTitle,
+        DetectContentType(url),
+        maxGroupCount,
+        ref groupVariantCount,
+        ref groupMetadataBytes,
+        maxGroupMetadataBytes);
     }
 
-    return new PlaylistAnalysisResult(groups, total);
+    return new PlaylistAnalysisResult(BuildGroups(groups), total);
   }
 
   /// <summary>Writes a filtered M3U file while reading the source one line at a time.</summary>
@@ -116,7 +139,7 @@ public static class PlaylistProcessor
       total++;
       var url = await lines.ReadNextContentLineAsync(cancellationToken) ?? string.Empty;
       var groupTitle = ExtractGroupTitle(line);
-      if (disabledGroups.Contains(groupTitle)) continue;
+      if (IsDisabled(disabledGroups, groupTitle, url)) continue;
 
       kept++;
       await WriteLineAsync(writer, EnsureGroupInExtinf(line, groupTitle), cancellationToken, outputBytes);
@@ -143,7 +166,7 @@ public static class PlaylistProcessor
       total++;
       var url = ReadNextContentLine(reader) ?? string.Empty;
       var groupTitle = ExtractGroupTitle(line);
-      if (disabledGroups.Contains(groupTitle)) continue;
+      if (IsDisabled(disabledGroups, groupTitle, url)) continue;
 
       kept++;
       writer.WriteLine(EnsureGroupInExtinf(line, groupTitle));
@@ -169,8 +192,37 @@ public static class PlaylistProcessor
     return url;
   }
 
-  public static List<GroupResult> ToGroupResults(Dictionary<string, int> groups) =>
-    groups.Select(kvp => new GroupResult(kvp.Key, kvp.Value)).ToList();
+  public static List<GroupResult> ToGroupResults(IEnumerable<PlaylistGroup> groups) =>
+    groups.Select(g => new GroupResult(g.Key, g.Count, g.GroupTitle, g.ContentType.ToString())).ToList();
+
+  /// <summary>
+  /// Xtream Codes panels serve VOD as /movie/&lt;user&gt;/&lt;pass&gt;/&lt;id&gt;.&lt;ext&gt; and episodes as
+  /// /series/...; everything else is treated as live so plain M3U sources keep one group per title.
+  /// </summary>
+  public static PlaylistContentType DetectContentType(string? url)
+  {
+    if (string.IsNullOrEmpty(url)) return PlaylistContentType.Live;
+
+    var schemeEnd = url.IndexOf("://", StringComparison.Ordinal);
+    if (schemeEnd < 0) return PlaylistContentType.Live;
+
+    var pathStart = url.IndexOf('/', schemeEnd + 3);
+    if (pathStart < 0) return PlaylistContentType.Live;
+
+    var path = url.AsSpan(pathStart);
+    if (path.StartsWith("/movie/", StringComparison.OrdinalIgnoreCase)) return PlaylistContentType.Movies;
+    if (path.StartsWith("/series/", StringComparison.OrdinalIgnoreCase)) return PlaylistContentType.Series;
+    return PlaylistContentType.Live;
+  }
+
+  /// <summary>
+  /// A plain group-title disables every entry of that title (unsplit groups and filters saved
+  /// before groups were split); a <see cref="GroupKey"/> disables only that content type.
+  /// </summary>
+  private static bool IsDisabled(ISet<string> disabledGroups, string groupTitle, string url) =>
+    disabledGroups.Count > 0 &&
+    (disabledGroups.Contains(groupTitle) ||
+     disabledGroups.Contains(GroupKey(groupTitle, DetectContentType(url))));
 
   public static DateTimeOffset? TryExtractExpiration(Uri? uri)
   {
@@ -230,19 +282,23 @@ public static class PlaylistProcessor
   }
 
   private static void IncrementGroup(
-    Dictionary<string, int> groups,
+    Dictionary<string, int[]> groups,
     string groupTitle,
+    PlaylistContentType contentType,
     int maxGroupCount,
+    ref int groupVariantCount,
     ref long groupMetadataBytes,
     long maxGroupMetadataBytes)
   {
-    if (groups.TryGetValue(groupTitle, out var existing))
+    var typeIndex = (int)contentType;
+    if (groups.TryGetValue(groupTitle, out var counts) && counts[typeIndex] > 0)
     {
-      groups[groupTitle] = checked(existing + 1);
+      counts[typeIndex] = checked(counts[typeIndex] + 1);
       return;
     }
 
-    if (groups.Count >= Math.Max(1, maxGroupCount))
+    // Every title/content-type pair can become its own row in the analysis response.
+    if (groupVariantCount >= Math.Max(1, maxGroupCount))
     {
       throw new PlaylistGroupLimitExceededException(Math.Max(1, maxGroupCount));
     }
@@ -254,7 +310,33 @@ public static class PlaylistProcessor
     }
 
     groupMetadataBytes += estimatedBytes;
-    groups[groupTitle] = 1;
+    groupVariantCount++;
+    if (counts is null)
+    {
+      counts = new int[ContentTypeCount];
+      groups[groupTitle] = counts;
+    }
+    counts[typeIndex] = 1;
+  }
+
+  private static List<PlaylistGroup> BuildGroups(Dictionary<string, int[]> groups)
+  {
+    var result = new List<PlaylistGroup>(groups.Count);
+    foreach (var (groupTitle, counts) in groups)
+    {
+      // Only split titles that really mix content types so existing filters keep their names.
+      var split = counts.Count(count => count > 0) > 1;
+      for (var i = 0; i < counts.Length; i++)
+      {
+        if (counts[i] == 0) continue;
+
+        var contentType = (PlaylistContentType)i;
+        var key = split ? GroupKey(groupTitle, contentType) : groupTitle;
+        result.Add(new PlaylistGroup(key, groupTitle, contentType, counts[i]));
+      }
+    }
+
+    return result;
   }
 
   private static void EnsureGroupTitleWithinLimit(string groupTitle, int maxGroupTitleLengthChars)
@@ -439,7 +521,20 @@ public static class PlaylistProcessor
   }
 }
 
-public sealed record PlaylistAnalysisResult(Dictionary<string, int> Groups, int TotalChannels);
+public sealed record PlaylistAnalysisResult(IReadOnlyList<PlaylistGroup> Groups, int TotalChannels);
+
+public enum PlaylistContentType
+{
+  Live,
+  Movies,
+  Series,
+}
+
+/// <summary>
+/// One selectable group. <see cref="Key"/> is the group-title, or a
+/// <see cref="PlaylistProcessor.GroupKey"/> when the provider reuses the title across content types.
+/// </summary>
+public sealed record PlaylistGroup(string Key, string GroupTitle, PlaylistContentType ContentType, int Count);
 
 public sealed class PlaylistLineTooLongException : InvalidOperationException
 {

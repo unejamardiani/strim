@@ -27,9 +27,9 @@ public class PlaylistProcessorTests
 
       var analysis = await PlaylistProcessor.AnalyzeFileAsync(sourcePath, CancellationToken.None);
       Assert.Equal(3, analysis.TotalChannels);
-      Assert.Equal(1, analysis.Groups["News"]);
-      Assert.Equal(1, analysis.Groups["Sports"]);
-      Assert.Equal(1, analysis.Groups["Ungrouped"]);
+      Assert.Equal(1, CountOf(analysis, "News"));
+      Assert.Equal(1, CountOf(analysis, "Sports"));
+      Assert.Equal(1, CountOf(analysis, "Ungrouped"));
 
       var result = await PlaylistProcessor.GenerateFilteredFileAsync(
         sourcePath,
@@ -117,4 +117,101 @@ public class PlaylistProcessorTests
       File.Delete(sourcePath);
     }
   }
+
+  // Xtream Codes providers reuse one group-title for a live category and a VOD/series category.
+  private const string MixedGroupSource = """
+    #EXTM3U
+    #EXTINF:-1 tvg-name="Das Erste HD" group-title="Germany",Das Erste HD
+    http://provider.example/user/pass/1001
+    #EXTINF:-1 tvg-name="ZDF HD" group-title="Germany",ZDF HD
+    http://provider.example/live/user/pass/1002.ts
+    #EXTINF:-1 tvg-name="The Witcher S01E01" group-title="Germany",The Witcher S01E01
+    http://provider.example/series/user/pass/2001.mkv
+    #EXTINF:-1 tvg-name="Some Film" group-title="German Movies",Some Film
+    http://provider.example/movie/user/pass/3001.mp4
+    #EXTINF:-1 tvg-name="Netflix Show" group-title="Netflix Series",Netflix Show
+    http://provider.example/series/user/pass/4001.mkv
+    """;
+
+  [Fact]
+  public async Task FileAnalysis_SplitsAGroupTitleReusedAcrossContentTypes()
+  {
+    var sourcePath = Path.GetTempFileName();
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, MixedGroupSource);
+
+      var analysis = await PlaylistProcessor.AnalyzeFileAsync(sourcePath, CancellationToken.None);
+
+      Assert.Equal(5, analysis.TotalChannels);
+      Assert.Equal(4, analysis.Groups.Count);
+      Assert.Equal(2, CountOf(analysis, "Germany · Live"));
+      Assert.Equal(1, CountOf(analysis, "Germany · Series"));
+      Assert.DoesNotContain(analysis.Groups, g => g.Key == "Germany");
+      Assert.All(
+        analysis.Groups.Where(g => g.Key.StartsWith("Germany ·", StringComparison.Ordinal)),
+        g => Assert.Equal("Germany", g.GroupTitle));
+
+      // Titles with a single content type keep their plain name so saved filters still match.
+      var movies = Assert.Single(analysis.Groups, g => g.Key == "German Movies");
+      Assert.Equal(PlaylistContentType.Movies, movies.ContentType);
+      var series = Assert.Single(analysis.Groups, g => g.Key == "Netflix Series");
+      Assert.Equal(PlaylistContentType.Series, series.ContentType);
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+    }
+  }
+
+  [Theory]
+  [InlineData("germany · series", new[] { "Das Erste HD", "ZDF HD", "Some Film" }, new[] { "The Witcher" })]
+  [InlineData("Germany · Live", new[] { "The Witcher", "Some Film" }, new[] { "Das Erste HD", "ZDF HD" })]
+  [InlineData("Germany", new[] { "Some Film" }, new[] { "Das Erste HD", "ZDF HD", "The Witcher" })]
+  public async Task FileFiltering_DisablesOneContentTypeOrTheWholeGroupTitle(
+    string disabledGroup,
+    string[] expectedKept,
+    string[] expectedRemoved)
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, MixedGroupSource);
+
+      await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath,
+        outputPath,
+        new HashSet<string>(new[] { disabledGroup, "Netflix Series" }, StringComparer.OrdinalIgnoreCase),
+        CancellationToken.None);
+      var output = await File.ReadAllTextAsync(outputPath);
+
+      Assert.All(expectedKept, name => Assert.Contains(name, output));
+      Assert.All(expectedRemoved, name => Assert.DoesNotContain(name, output));
+      Assert.DoesNotContain("Netflix Show", output);
+      // The provider's group-title is written unchanged; the split only affects filtering.
+      Assert.DoesNotContain("·", output);
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  [Theory]
+  [InlineData("http://provider.example/user/pass/1001", PlaylistContentType.Live)]
+  [InlineData("http://provider.example/live/user/pass/1001.ts", PlaylistContentType.Live)]
+  [InlineData("https://provider.example:8080/MOVIE/user/pass/3001.mp4", PlaylistContentType.Movies)]
+  [InlineData("http://provider.example/series/user/pass/2001.mkv", PlaylistContentType.Series)]
+  [InlineData("http://cdn.example/hls/movie/channel.m3u8", PlaylistContentType.Live)]
+  [InlineData("not a url", PlaylistContentType.Live)]
+  [InlineData(null, PlaylistContentType.Live)]
+  public void DetectContentType_UsesTheXtreamCodesPathPrefix(string? url, PlaylistContentType expected)
+  {
+    Assert.Equal(expected, PlaylistProcessor.DetectContentType(url));
+  }
+
+  private static int CountOf(PlaylistAnalysisResult analysis, string key) =>
+    Assert.Single(analysis.Groups, g => g.Key == key).Count;
 }

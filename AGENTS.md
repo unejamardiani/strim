@@ -40,6 +40,7 @@ dotnet test --filter "FullyQualifiedName~SecurityHelpersTests"  # single test cl
 - Auth: ASP.NET Core Identity with cookie auth. Google/Microsoft OAuth optional. CSRF via antiforgery tokens.
 - SSRF protection in `api/Services/SecurityHelpers.cs` (blocks private IPs, validates redirects).
 - Playlist processing uses a background Web Worker on the frontend (`filter-worker.js`).
+- Groups are keyed by `group-title`. When a provider reuses one title across content types (Xtream Codes `/movie/` and `/series/` URL paths vs live), analysis splits it into `Title · Live` / `Title · Movies` / `Title · Series`. A disabled entry matches either the plain title (whole group, older saved filters) or one split key. Output keeps the original `group-title`. Logic is mirrored in `PlaylistProcessor.cs`, `main.js` and `filter-worker.js`.
 - Cached for 15 min in `IMemoryCache` per analyze/generate request (500MB limit).
 - Share URLs are unauthenticated: `GET /api/playlists/{id}/share/{code}` returns filtered M3U file.
 - `HealthChecks` at `/health`, `/health/live`, `/health/ready`.

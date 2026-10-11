@@ -1659,9 +1659,10 @@ app.MapPost("/api/playlist/generate", async (
   {
     return Results.BadRequest(new { error = $"Disabled groups list cannot exceed {MaxDisabledGroupsCount} items." });
   }
-  if (input.DisabledGroups?.Any(group => string.IsNullOrWhiteSpace(group) || group.Length > cache.MaxGroupTitleLengthChars) == true)
+  var maxGroupKeyLength = PlaylistProcessor.MaxGroupKeyLength(cache.MaxGroupTitleLengthChars);
+  if (input.DisabledGroups?.Any(group => string.IsNullOrWhiteSpace(group) || group.Length > maxGroupKeyLength) == true)
   {
-    return Results.BadRequest(new { error = $"Each disabled group name must be between 1 and {cache.MaxGroupTitleLengthChars} characters." });
+    return Results.BadRequest(new { error = $"Each disabled group name must be between 1 and {maxGroupKeyLength} characters." });
   }
 
   var job = await jobGate.TryEnterAsync(context.RequestAborted);

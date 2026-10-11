@@ -1,4 +1,16 @@
 // Worker to parse and generate filtered M3U without blocking the main thread.
+
+// Keep in sync with detectContentType/groupKey in main.js and PlaylistProcessor on the API.
+function detectContentType(url) {
+  const match = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\/(movie|series)\//i.exec(url || '');
+  if (!match) return 'Live';
+  return match[1].toLowerCase() === 'movie' ? 'Movies' : 'Series';
+}
+
+function groupKey(groupTitle, contentType) {
+  return `${groupTitle} \u00B7 ${contentType}`;
+}
+
 self.addEventListener('message', (ev) => {
   const msg = ev.data || {};
   if (msg.cmd === 'generate') {
@@ -31,7 +43,8 @@ self.addEventListener('message', (ev) => {
         }
       }
 
-      if (disabled.has(groupTitle)) {
+      // A plain title disables the whole group; a groupKey only one content type of it.
+      if (disabled.has(groupTitle) || disabled.has(groupKey(groupTitle, detectContentType(url)))) {
         // skip
       } else {
         // Ensure group-title present in extinf
