@@ -1,9 +1,8 @@
-# Strim Design System
+# Strim Design System: Signal Paper
 
-## App design system: Signal Paper
-
-The app (`index.html`, `app.css`, `main.js`) uses this system. The monochrome rules further down
-still describe the marketing pages until they are migrated.
+Every page uses this system: the editor (`app.html`, `app.css`, `main.js`) and the site (landing
+`index.html`, guides, comparison, blog and error pages, styled by `site.css`). Shared fonts, tokens,
+buttons and cards live in `theme.css`.
 
 Idea: a calm, warm reading surface (paper) with one loud signal colour. Strim is used on the sofa
 and on the phone, so it should feel like a friendly consumer app, not a developer tool.
@@ -69,96 +68,9 @@ Short, plain, second person. "Switch off the groups you never watch", "All on / 
 
 ---
 
-## Philosophy (marketing pages, legacy)
-
-Strim is an M3U playlist editor — a utility, not a media site. The design treats it like a professional desktop application: compact, monochrome, no distractions. Every pixel serves a purpose. There is no hero section, no gradient, no accent color, no ornament.
-
-The goal is to feel instantly familiar to anyone who has used a developer tool, a DAW, or a code editor. Dark, dense, informational.
-
----
-
-## Palette (marketing pages)
-
-```
-Background      #0c0c0e
-Surface         #141416
-Panel           #121213
-Border          #252529
-Border light    #1a1a1d
-Text primary    #e8e8ec
-Text secondary  #7a7a80
-Text muted      #55555a
-```
-
-There is exactly one accent in the entire system: white (`#e8e8ec`) used for primary buttons and interactive states. No colors. No gradients. No glow.
-
-### Why no accent color
-
-The app processes IPTV playlists. Users stare at group lists, checkboxes, and stats. Any color would compete with the content. Monochrome keeps the hierarchy flat and the information density high. The only place white appears is on actionable controls (primary buttons, toggle active state).
-
----
-
-## Typography (marketing pages)
-
-| Context | Family | Size | Weight |
-|---------|--------|------|--------|
-| Body / UI | Inter | 11–13px | 400–500 |
-| Section titles | Inter | 12–14px | 600 |
-| Page headings | Inter | 16–18px | 700 |
-| Stat values | Inter | 16px tabular | 700 |
-| Labels / badges | Inter | 8–10px | 600 uppercase |
-
-Inter was chosen over Space Grotesk because it renders more compactly at small sizes (10–13px range), which is critical in a dense desktop-app layout. Space Grotesk has wider glyphs that create unnecessary horizontal space in tight UI components.
-
-All font sizes are in `px`, not `rem`, because the app is not a reading surface — it's a tool interface where precise control over text size matters.
-
----
-
-## Spacing & Sizing (marketing pages)
-
-The base unit is `4px`.
-
-| Element | Height | Padding | Radius |
-|---------|--------|---------|--------|
-| Top bar / nav | 32px (h-8) | px-3 | — |
-| Input rows | 32px (h-8) | px-3 | 4px |
-| Buttons (primary) | 32px (h-8) | px-4 | 4px |
-| Buttons (secondary) | 32px (h-8) | px-3 | 4px |
-| Group list items | 38px (min-height) | px-3 | — |
-| Stat cards | auto | 6px 4px | 4px |
-| Modals | slide-in from right | — | 4px |
-
-### Standard gaps
-
-| Context | Gap |
-|---------|-----|
-| Panel sections | 3px (stacked bars) |
-| Cards in a grid | 3px |
-| Nav links | 0px (tight row) |
-| Modal from edge | 8px right margin |
-
-### Button variants
-
-```
-Primary:
-  bg-[#e8e8ec] text-[#0c0c0e] h-8 px-4 rounded-[4px] font-semibold text-xs
-  hover:brightness-110
-
-Ghost / Secondary:
-  border border-[#252529] text-[#e8e8ec] h-8 px-3 rounded-[4px] font-medium text-xs
-  hover:bg-[#252529]
-
-Danger:
-  (same as ghost but hover:bg-red-900/20 hover:border-red-800)
-```
-
----
-
 ## Layout
 
-### App page (index.html + app.css)
-
-See **App design system: Signal Paper** at the top of this file for tokens and components.
+### Editor (`/app`: app.html + app.css)
 
 ```
 ┌──────────────────────────────┐
@@ -176,101 +88,55 @@ See **App design system: Signal Paper** at the top of this file for tokens and c
 └──────────────────────────────┘
 ```
 
-### Marketing pages (features, how-to, comparison, blog)
-
-Simple linear layout:
-```
-┌─────────────────────────────────────┐
-│  Top bar (32px nav)                 │
-├─────────────────────────────────────┤
-│                                     │
-│  Page content (max-w-[1000px])      │
-│  Panels: 4px radius, bg-[#121213]   │
-│  border-[#252529]                   │
-│                                     │
-├─────────────────────────────────────┤
-│  Footer (text-[10px])               │
-└─────────────────────────────────────┘
-```
-
----
-
-## Component Patterns
-
-### Cards / Panels
-
-Marketing pages: `p-4 rounded-[4px] bg-[#121213] border border-[#252529]`
-
-No shadow. No gradient. No hover elevation. The border is the only separation.
-
-### Lists
+### Site (`/`, guides, blog: site.css)
 
 ```
-group-list-item:
-  h-[38px] px-3 border-b border-[#1a1a1d]
-  hover:bg-white/[0.02]
-  disabled:opacity-30
+┌─────────────────────────────────────────┐
+│ Site bar (sticky, blurred)              │  wordmark · nav pills · Open app
+├─────────────────────────────────────────┤
+│ Main (max-w 1080px, 20px gutter)        │
+│  .page-head   eyebrow · h1 · lead       │
+│  .section     .section-head + .grid     │  cards, features, steps, FAQ
+│  .cta-band    inverted dock colours     │  closes most pages
+│ Articles: .prose-page (700px column)    │
+├─────────────────────────────────────────┤
+│ Footer                                  │  wordmark · line · links
+└─────────────────────────────────────────┘
 ```
 
-### Toggle switch
+Below 720px the nav moves to a horizontally scrollable row under the bar.
 
-Custom CSS slider. Knob slides 14px on checked state. Track is `20px` tall, same border radius. Active: white track + dark knob.
+### Site components
 
-### Modals
-
-Slide in from right edge with `8px` gap. Background fades in with `0.12s`. Dialog slides `20px` over `0.15s` with elastic easing.
-
-### Scrollbars
-
-Custom thin (`6px`) scrollbar. Track transparent, thumb `#1a1a1d` → `#252529` on hover.
-
-### Stat cards
-
-```
-stat-card:
-  p-[6px_4px] rounded-[4px] bg-[#141416] border border-[#1a1a1d]
-  stat-label: text-[8px] uppercase tracking-[0.06em] text-[#55555a] font-semibold
-  stat-value: text-[16px] font-bold text-[#e8e8ec] tabular-nums
-```
-
----
-
-## Animations
-
-- Modal backdrop: `fadeIn` 0.12s ease
-- Modal dialog: `slideIn` 0.15s ease (translateX 20px → 0)
-- Toggle switch knob: 0.15s cubic-bezier(0.34, 1.56, 0.64, 1)
-- Button active: `scale(0.97)` on click
-- No hover animations on cards. No page transitions. No loading spinners (skeleton or nothing).
-
----
-
-## Marketing pages vs App page
-
-Marketing pages (features, how-to-use, comparison, blog, 404) share the same top nav and footer as the app page but have a simpler content layout. They use the same palette and panel style but with wider max-width (1000px) and larger text sizes (13–14px body vs 11–12px app).
-
-The 404 page is the only page with any "personality" — a flickering CRT effect and fake terminal output. It still follows the monochrome palette.
+- **Hero demo** (`.demo`): a still of the group picker drawn in HTML (rows, switches, dock), so it
+  follows the theme. Use made-up group names and counts, never real provider data.
+- **Feature card** (`.feature`): icon tile tinted live/movies/series, h3, one short paragraph.
+- **Steps** (`.steps`): numbered ink circles. **Guide** (`.guide`): long-form numbered steps with a
+  connecting line, tangerine numbers.
+- **FAQ**: `<details class="card">` with a rotating plus.
+- **Error pages**: big tangerine status code, one sentence, Open Strim / Home. All asset paths are
+  absolute because these pages are served at any URL.
 
 ---
 
 ## File structure
 
 ```
-index.html          — App shell (SEO meta, top bar, dialogs)
-app.css             — App styles (Signal Paper tokens, components; plain CSS)
-fonts/              — Self-hosted Bricolage Grotesque and Figtree (woff2, OFL)
-main.js             — App logic (router, playlists, group picker, sheets)
-style.css           — Marketing-page styles
-features.html       — Features marketing page
-how-to-use.html     — Usage guide marketing page
-comparison.html     — Competitor comparison marketing page
-blog/index.html     — Blog index with article cards
-404.html            — Custom 404 error page
+index.html          Landing page (public)
+app.html            Editor shell, served at /app
+theme.css           Fonts, tokens, base, wordmark, buttons, cards (shared)
+app.css             Editor components
+site.css            Landing, guides, blog and error pages
+main.js             Editor logic (router, playlists, group picker, sheets)
+features.html, how-to-use.html, comparison.html, blog/
+404.html, 500.html, 50x.html
+fonts/              Self-hosted Bricolage Grotesque and Figtree (woff2, OFL)
+logo-icon.svg, logo-wordmark.svg
 ```
-
----
 
 ## Dev notes
 
-- The app page uses no CDN and its CSP has no `unsafe-inline`: never add inline `<script>`, `<style>` or `style=""` attributes; set dynamic styles through the CSSOM (`el.style.x = …`).
-- The marketing pages still use the Tailwind CDN (requires `unsafe-inline` in their CSP); for production, replace it with built CSS (see docs/PRODUCTION_BUILD.md).
+- No CDN and no `unsafe-inline` in any page's CSP: never add inline `<script>`, `<style>` or
+  `style=""` attributes; set dynamic styles through the CSSOM (`el.style.x = …`).
+- Reference CSS/JS with plain relative paths (`theme.css`, `../site.css`). The Dockerfile appends
+  a content hash (`?v=…`) at build time, which makes them cacheable for a year.

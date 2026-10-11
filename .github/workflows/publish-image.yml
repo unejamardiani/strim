@@ -5,32 +5,42 @@ on:
     branches: [main]
     tags: ['v*']
     paths:
-      # Core image build inputs
       - 'Dockerfile'
       - '.dockerignore'
-      - 'docker-compose*.yml'
-      # App source and assets
       - 'api/**'
-      - 'tools/**'
-      - '**/*.js'
-      - '**/*.ts'
-      - '**/*.tsx'
-      - '**/*.jsx'
-      - '**/*.json'
-      - '**/*.html'
-      - '**/*.css'
-      - 'main.js'
-      - 'filter-worker.js'
-      - 'cors-proxy.js'
-      - 'index.html'
-      - 'style.css'
+      - 'api.Tests/**'
+      - 'fonts/**'
+      - 'blog/**'
+      - '*.html'
+      - '*.css'
+      - '*.js'
+      - '*.svg'
+      - 'robots.txt'
+      - 'sitemap.xml'
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Test
+        run: dotnet test strim.sln
+
   build-and-push:
+    needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
