@@ -63,5 +63,12 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
     Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
   }
 
+  [Fact]
+  public async Task UnknownPage_IsNotFound()
+  {
+    var response = await factory.CreateClient().GetAsync("/no-such-page");
+    Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+  }
+
   private sealed record StatsDto(long ViewCount);
 }

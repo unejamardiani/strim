@@ -57,5 +57,18 @@ public class AuthEndpointTests(StrimAppFactory factory) : IClassFixture<StrimApp
     Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
   }
 
+  [Theory]
+  [InlineData(null, "/app")]
+  [InlineData("", "/app")]
+  [InlineData("/app?tab=saved", "/app?tab=saved")]
+  [InlineData("//evil.example/phish", "/app")]
+  [InlineData("/\\evil.example", "/app")]
+  [InlineData("https://evil.example/", "/app")]
+  [InlineData("app", "/app")]
+  public void ReturnUrl_OnlyAllowsLocalPaths(string? returnUrl, string expected)
+  {
+    Assert.Equal(expected, Api.Endpoints.AuthEndpoints.SafeReturnUrl(returnUrl));
+  }
+
   private sealed record UserResponse(string UserName, string? Email);
 }

@@ -15,6 +15,7 @@ public static class PlaylistServices
     services.AddSingleton<PlaylistFileCache>();
     services.AddSingleton<PlaylistSourceFetcher>();
     services.AddSingleton<PlaylistJobGate>();
+    services.AddSingleton<PlaylistPipeline>();
     services.AddHostedService<PlaylistCacheCleanupService>();
     services.AddHostedService<PlaylistRefreshService>();
 

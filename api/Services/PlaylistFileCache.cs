@@ -406,17 +406,6 @@ public sealed class PlaylistFileCache
     }
   }
 
-  public PlaylistFileLease LeaseTransientFile(
-    string path,
-    string? fileName = null,
-    IDisposable? associatedResource = null,
-    long knownLengthBytes = 0) =>
-    new(path, fileName, () =>
-    {
-      DeleteTemporaryFile(path, knownLengthBytes);
-      associatedResource?.Dispose();
-    });
-
   /// <summary>
   /// Deletes a cache-owned temporary file. If the filesystem rejects the delete, retain a
   /// conservative capacity debt and retry it from later cleanup passes.
