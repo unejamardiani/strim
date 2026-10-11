@@ -22,9 +22,6 @@ docs/
 infra/
 AGENTS.md
 DESIGN.md
-design-mockup.html
-spec.md
 README.md
 LICENSE
-cors-proxy.js
 docker-compose*.yml

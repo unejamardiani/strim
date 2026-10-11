@@ -1,7 +1,7 @@
 version: '3.9'
 
 # WARNING: This compose file is for LOCAL DEVELOPMENT ONLY.
-# For production deployments, use proper secrets management (Azure Key Vault, Docker Secrets, etc.)
+# For production deployments, use proper secrets management (Docker secrets, your platform's secret store).
 
 services:
   app:

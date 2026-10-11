@@ -21,7 +21,7 @@ public static class PlaylistProcessor
 
   /// <summary>
   /// Key for one content type of a group-title that the provider reuses across live channels,
-  /// movies and series (e.g. "Germany · Series"). Must match groupKey() in main.js and filter-worker.js.
+  /// movies and series (e.g. "Germany · Series"). Must match groupKey() in main.js.
   /// </summary>
   public static string GroupKey(string groupTitle, PlaylistContentType contentType) =>
     $"{groupTitle}{GroupKeySeparator}{contentType}";

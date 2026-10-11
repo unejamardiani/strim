@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="#e8e8ec" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Icon version — just the custom S + line + cut, for favicon/avatar -->
-  <path d="M 16,76 C 16,92 50,92 52,78 C 54,64 32,56 24,52 C 18,48 18,38 32,36 L 76,36" />
-  <line x1="73" y1="28" x2="79" y2="44" stroke-width="3" />
-  <line x1="82" y1="38" x2="88" y2="38" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Strim">
+  <!-- App icon: ink tile, cream "s", tangerine signal dot. Same drawing as the favicon. -->
+  <rect width="64" height="64" rx="18" fill="#1d1a16" />
+  <text x="29" y="49" text-anchor="middle" font-family="'Bricolage Grotesque', system-ui, sans-serif" font-size="46" font-weight="800" fill="#f5eee4">s</text>
+  <circle cx="47" cy="19" r="7.5" fill="#ff5b1f" />
 </svg>

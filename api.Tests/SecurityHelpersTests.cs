@@ -105,4 +105,33 @@ public class SecurityHelpersTests
     var addr = IPAddress.Parse("fc00::1");
     Assert.True(SecurityHelpers.IsPrivateOrReservedIP(addr));
   }
+
+  [Theory]
+  [InlineData("::ffff:10.0.0.1")]
+  [InlineData("::ffff:127.0.0.1")]
+  [InlineData("100.64.0.1")]
+  [InlineData("100.127.255.254")]
+  public void IsPrivateOrReservedIP_BlocksMappedAndSharedAddresses(string address)
+  {
+    Assert.True(SecurityHelpers.IsPrivateOrReservedIP(IPAddress.Parse(address)));
+  }
+
+  [Theory]
+  [InlineData("100.63.255.255")]
+  [InlineData("100.128.0.1")]
+  [InlineData("::ffff:8.8.8.8")]
+  public void IsPrivateOrReservedIP_AllowsPublicNeighbours(string address)
+  {
+    Assert.False(SecurityHelpers.IsPrivateOrReservedIP(IPAddress.Parse(address)));
+  }
+
+  [Theory]
+  [InlineData("127.0.0.1")]
+  [InlineData("10.1.2.3")]
+  [InlineData("localhost")]
+  public async Task ConnectToPublicAddress_RefusesPrivateTargets(string host)
+  {
+    await Assert.ThrowsAsync<HttpRequestException>(async () =>
+      await SecurityHelpers.ConnectToPublicAddressAsync(new DnsEndPoint(host, 80), CancellationToken.None));
+  }
 }

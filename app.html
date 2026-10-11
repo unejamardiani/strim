@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+
+    <title>Strim</title>
+    <meta name="description" content="Strim playlist editor: switch off the IPTV groups you never watch and get a clean player link." />
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href="https://strim.plis.dev/app" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>" />
+
+    <!-- No third-party scripts, styles or fonts: the app ships as plain CSS and one ES module.
+         connect-src allows the local API on :5000 for the split frontend/API dev setup. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: http://localhost:5000 http://127.0.0.1:5000; form-action 'self'; base-uri 'self';" />
+
+    <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="app.css" />
+    <script type="module" src="main.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a href="#/" class="brand" aria-label="Strim home">
+        <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
+      </a>
+      <button id="account-button" type="button" class="account guest" aria-haspopup="dialog" hidden>Sign in</button>
+    </header>
+
+    <main id="app" class="page">
+      <div class="boot"><span class="spinner" aria-label="Loading"></span></div>
+    </main>
+
+    <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+    <dialog id="account-dialog" class="sheet" aria-labelledby="account-title">
+      <div class="sheet-head">
+        <h2 id="account-title">Sign in</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </div>
+      <div id="account-body" class="sheet-body"></div>
+    </dialog>
+
+    <dialog id="menu-dialog" class="sheet" aria-labelledby="menu-title">
+      <div class="sheet-head">
+        <h2 id="menu-title"></h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </div>
+      <div id="menu-body" class="sheet-body"></div>
+    </dialog>
+
+    <footer class="site-links">
+      <a href="/">Home</a>
+      <a href="features.html">Features</a>
+      <a href="how-to-use.html">How to use</a>
+      <a href="comparison.html">Compare</a>
+      <a href="blog/">Blog</a>
+      <a href="https://github.com/unejamardiani/strim" rel="noopener">Source</a>
+    </footer>
+  </body>
+</html>

@@ -36,7 +36,7 @@ public sealed class PlaylistSourceFetcher
     CancellationToken cancellationToken)
   {
     var initialUri = ValidateSourceUri(sourceUrl);
-    var client = _httpClientFactory.CreateClient("fetcher");
+    var client = _httpClientFactory.CreateClient(Configuration.PlaylistServices.FetcherClient);
     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _options.DownloadTimeoutSeconds)));
 

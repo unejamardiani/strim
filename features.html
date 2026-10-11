@@ -2,275 +2,200 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>M3U Editor Features - Filter, Clean & Organize IPTV Playlists | Strim</title>
-    <meta name="title" content="M3U Editor Features - Filter, Clean & Organize IPTV Playlists | Strim" />
-    <meta name="description" content="Powerful M3U editor features: filter channels, remove duplicates, organize groups, clean large playlists (50,000+ channels). Works with TiviMate, IPTV Smarters, Kodi, VLC." />
-    <meta name="keywords" content="m3u editor features, iptv playlist cleaner, m3u filter, playlist organizer, m3u duplicate remover, tivimate playlist editor, iptv tools, m3u8 editor features" />
-    <meta name="author" content="Strim" />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://strim.plis.dev/features.html" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://strim.plis.dev/features.html" />
-    <meta property="og:title" content="M3U Editor Features - Filter, Clean & Organize IPTV Playlists" />
-    <meta property="og:description" content="Powerful M3U playlist editor features: filter channels, organize groups, remove duplicates, and more." />
-    <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://strim.plis.dev/features.html" />
-    <meta property="twitter:title" content="M3U Editor Features - Strim" />
-    <meta property="twitter:description" content="Powerful M3U playlist editor features: filter channels, organize groups, remove duplicates, and more." />
-    <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'system-ui', 'sans-serif'],
-            },
-            colors: {
-              'zone-input': '#e8e8ec',
-              'zone-filter': '#e8e8ec',
-              'zone-output': '#e8e8ec',
-            },
-          },
-        },
-      }
-    </script>
-    <link rel="stylesheet" href="style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <title>M3U Editor Features - Filter, Clean &amp; Organize IPTV Playlists | Strim</title>
+    <meta content="M3U Editor Features - Filter, Clean &amp; Organize IPTV Playlists | Strim" name="title"/>
+    <meta content="What Strim does: load large M3U playlists, split live TV, movies and series, switch off groups and get a player link that stays current. Works with TiviMate, IPTV Smarters, VLC and Kodi." name="description"/>
+    <meta content="m3u editor features, iptv playlist cleaner, m3u filter, playlist organizer, m3u duplicate remover, tivimate playlist editor, iptv tools, m3u8 editor features" name="keywords"/>
+    <meta content="Strim" name="author"/>
+    <meta content="index, follow" name="robots"/>
+    <meta content="website" property="og:type"/>
+    <meta content="https://strim.plis.dev/features.html" property="og:url"/>
+    <meta content="M3U Editor Features - Filter, Clean &amp; Organize IPTV Playlists" property="og:title"/>
+    <meta content="Powerful M3U playlist editor features: switch off groups, split live TV, movies and series, and get one clean player link." property="og:description"/>
+    <meta content="https://strim.plis.dev/og-image.png" property="og:image"/>
+    <meta content="summary_large_image" property="twitter:card"/>
+    <meta content="https://strim.plis.dev/features.html" property="twitter:url"/>
+    <meta content="M3U Editor Features - Strim" property="twitter:title"/>
+    <meta content="Powerful M3U playlist editor features: switch off groups, split live TV, movies and series, and get one clean player link." property="twitter:description"/>
+    <meta content="https://strim.plis.dev/twitter-image.png" property="twitter:image"/>
+    <link href="https://strim.plis.dev/features.html" rel="canonical"/>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self';" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>" />
+    <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="site.css" />
   </head>
-  <body class="m-0 font-sans bg-[#0c0c0e] text-[#e8e8ec] min-h-dvh flex flex-col antialiased">
-
-    <!-- Top bar -->
-    <nav class="flex items-center gap-3 px-4 h-11 border-b border-[#1a1a1d] shrink-0 bg-[#0c0c0e]">
-      <a href="index.html" class="flex items-center gap-2 no-underline shrink-0">
-        <span class="w-7 h-7 inline-flex items-center justify-center rounded-[6px] border border-[#252529] text-sm font-bold text-[#e8e8ec] bg-[#141416]">S</span>
-        <span class="text-sm font-semibold text-[#e8e8ec] tracking-tight">strim</span>
+  <body class="site">
+    <header class="site-top">
+      <a href="/" class="brand" aria-label="Strim home">
+        <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
       </a>
-      <span class="w-px h-4 bg-[#1a1a1d]"></span>
-      <div class="hidden md:flex items-center gap-0">
-        <a href="index.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Home</a>
-        <a href="features.html" class="px-2.5 py-1 text-xs text-[#e8e8ec] no-underline font-medium">Features</a>
-        <a href="how-to-use.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">How to Use</a>
-        <a href="comparison.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Compare</a>
-        <a href="blog/" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Blog</a>
-      </div>
-    </nav>
+      <nav class="site-nav" aria-label="Site">
+        <a href="features.html" aria-current="page">Features</a>
+        <a href="how-to-use.html">How to use</a>
+        <a href="comparison.html">Compare</a>
+        <a href="blog/">Blog</a>
+      </nav>
+      <a class="btn btn-primary btn-sm site-cta" href="/app">Open app</a>
+    </header>
 
-    <!-- Page content -->
-    <div class="flex-1 px-4 py-4 max-w-[1000px] mx-auto w-full">
-      <div class="flex flex-col gap-6">
+    <main class="site-main">
+      <header class="page-head">
+        <span class="eyebrow">Features</span>
+        <h1>Everything Strim does, <em>nothing it doesn’t.</em></h1>
+        <p class="lead">Strim takes the playlist your IPTV provider sends, lets you switch off the groups you never watch and gives your player a clean list. Here is all of it.</p>
+      </header>
 
-        <!-- Header -->
-        <header>
-          <h1 class="m-0 text-lg font-bold tracking-tight">Features</h1>
-          <p class="m-0 mt-1 text-xs text-[#7a7a80] max-w-[65ch]">Everything you need to clean, organize, and manage IPTV playlists. Works with all major IPTV apps.</p>
-        </header>
+      <section aria-labelledby="load-title">
+        <div class="section-head">
+          <h2 id="load-title">Loading a playlist</h2>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <h3>From your provider’s link</h3>
+            <p>Paste the M3U or M3U8 URL (Xtream Codes <code>get.php</code> links work too). Strim downloads it on the server, so your phone never has to parse a 50 MB file.</p>
+          </article>
+          <article class="card">
+            <h3>Large lists welcome</h3>
+            <p>Lists are streamed to disk and read line by line. Tens of thousands of channels, films and episodes load in seconds; up to 10,000 groups are supported.</p>
+          </article>
+          <article class="card">
+            <h3>Try it with a sample</h3>
+            <p>No link at hand? Load the built-in sample playlist and see how the editor works before you paste your own.</p>
+          </article>
+          <article class="card">
+            <h3>Subscription date</h3>
+            <p>When the provider link carries an expiry date, Strim shows it and warns you once the subscription has ended.</p>
+          </article>
+        </div>
+      </section>
 
-        <!-- Core Features -->
-        <section>
-          <h2 class="m-0 text-sm font-semibold text-[#e8e8ec] mb-3">Core</h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <section class="section" aria-labelledby="pick-title">
+        <div class="section-head">
+          <h2 id="pick-title">Picking groups</h2>
+          <p>Every group in the playlist appears once, with its number of entries and a switch.</p>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <h3>Live, movies and series</h3>
+            <p>Strim recognises the content type of every entry and marks each group:</p>
+            <div class="types">
+              <span><span class="dot"></span>Live</span>
+              <span><span class="dot movies"></span>Movies</span>
+              <span><span class="dot series"></span>Series</span>
+            </div>
+          </article>
+          <article class="card">
+            <h3>Mixed groups split</h3>
+            <p>Providers often reuse one group name for live channels and series. Strim splits such a group into “Germany” and “Germany · Series”, so you can keep one and drop the other.</p>
+          </article>
+          <article class="card">
+            <h3>Search, filter, sort</h3>
+            <ul>
+              <li>Search group names as you type</li>
+              <li>Show only live, movies or series</li>
+              <li>Show only groups that are on or off</li>
+              <li>Original order or largest first</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>All on, all off</h3>
+            <p>Switch every visible group at once. Filter to “Movies”, press “All off” and every film group is gone.</p>
+          </article>
+        </div>
+      </section>
 
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Smart Group Filtering</p>
-              <p class="m-0 text-xs text-[#7a7a80] mb-3 leading-relaxed">Toggle channel groups on/off with a single click. Keep only the channels you watch, remove everything else.</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>Filter by group name</li>
-                <li>Select/deselect all groups instantly</li>
-                <li>Real-time channel count updates</li>
-                <li>Handles 50,000+ channels</li>
-              </ul>
-            </div>
+      <section class="section" aria-labelledby="use-title">
+        <div class="section-head">
+          <h2 id="use-title">Using the result</h2>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <h3>Download .m3u</h3>
+            <p>Get the cleaned file straight away, no account needed. Channel names, logos, EPG IDs and other attributes stay as the provider wrote them; only the movies and series of a split group get their new group name.</p>
+          </article>
+          <article class="card">
+            <h3>Player link</h3>
+            <p>Sign in to save a playlist and get a permanent link for your IPTV app. Each time the player refreshes, Strim reads the provider’s current list and applies your choices.</p>
+          </article>
+          <article class="card">
+            <h3>Link controls</h3>
+            <ul>
+              <li>Turn the link off and on</li>
+              <li>Replace it with a new link if it leaks</li>
+              <li>See when a player last fetched it</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Auto-refresh</h3>
+            <p>Switch on auto-refresh and Strim re-checks the provider every six hours, keeping channel counts current and the next player refresh fast.</p>
+          </article>
+        </div>
+      </section>
 
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Lightning Fast Processing</p>
-              <p class="m-0 text-xs text-[#7a7a80] mb-3 leading-relaxed">Process massive playlists in seconds using Web Workers. No server uploads required.</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>Client-side processing for privacy</li>
-                <li>Background workers prevent UI freezing</li>
-                <li>Virtualized lists for smooth scrolling</li>
-                <li>Instant preview of changes</li>
-              </ul>
-            </div>
+      <section class="section" aria-labelledby="account-title">
+        <div class="section-head">
+          <h2 id="account-title">Accounts and privacy</h2>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <h3>Optional accounts</h3>
+            <p>A username and password is all it takes. Sign-in with Google, Microsoft or GitHub is available where the server has it configured.</p>
+          </article>
+          <article class="card">
+            <h3>No tracking</h3>
+            <p>No analytics, no ads, no third-party scripts or fonts. Fonts are served by Strim itself.</p>
+          </article>
+          <article class="card">
+            <h3>Your provider login stays private</h3>
+            <p>A player link contains a random code, never your provider URL or login. Temporary files are deleted automatically.</p>
+          </article>
+          <article class="card">
+            <h3>Open source</h3>
+            <p>The code is on GitHub. Run your own copy with Docker and SQLite or PostgreSQL.</p>
+          </article>
+        </div>
+      </section>
 
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Direct URL Support</p>
-              <p class="m-0 text-xs text-[#7a7a80] mb-3 leading-relaxed">Load playlists directly from URLs. Built-in CORS proxy support ensures compatibility.</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>Fetch M3U/M3U8 from any URL</li>
-                <li>Automatic CORS proxy fallback</li>
-                <li>Support for HTTP and HTTPS</li>
-                <li>Or paste raw M3U text directly</li>
-              </ul>
-            </div>
+      <section class="section" aria-labelledby="players-title">
+        <div class="section-head">
+          <h2 id="players-title">Works with your player</h2>
+          <p>Any app that accepts an M3U URL or file, including:</p>
+        </div>
+        <div class="grid">
+          <div class="card"><h3>TiviMate</h3><p>Android TV, Fire TV</p></div>
+          <div class="card"><h3>IPTV Smarters</h3><p>iOS, Android, Fire TV</p></div>
+          <div class="card"><h3>VLC</h3><p>Windows, macOS, Linux, mobile</p></div>
+          <div class="card"><h3>Kodi</h3><p>With the PVR IPTV Simple client</p></div>
+          <div class="card"><h3>OTT Navigator</h3><p>Android, Fire TV</p></div>
+          <div class="card"><h3>GSE Smart IPTV</h3><p>iOS, Apple TV</p></div>
+        </div>
+      </section>
 
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Multiple Export Options</p>
-              <p class="m-0 text-xs text-[#7a7a80] mb-3 leading-relaxed">Download cleaned playlists or generate shareable URLs. Perfect for syncing across devices.</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>Download as .m3u file</li>
-                <li>Copy to clipboard instantly</li>
-                <li>Generate shareable URL</li>
-                <li>Auto-refresh for live updates</li>
-              </ul>
-            </div>
+      <section class="cta-band" aria-labelledby="cta-title">
+        <div>
+          <h2 id="cta-title">See your own groups</h2>
+          <p>Paste your provider’s link and switch off what you skip.</p>
+        </div>
+        <a class="btn btn-primary btn-lg" href="/app">Open Strim</a>
+      </section>
+    </main>
 
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Privacy-First Design</p>
-              <p class="m-0 text-xs text-[#7a7a80] mb-3 leading-relaxed">Your playlists never leave your browser unless you explicitly save or share them.</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>Client-side processing only</li>
-                <li>No tracking or analytics by default</li>
-                <li>Optional backend for persistence</li>
-                <li>You control your data</li>
-              </ul>
-            </div>
-
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Universal Compatibility</p>
-              <p class="m-0 text-xs text-[#7a7a80] mb-3 leading-relaxed">Works with all major IPTV applications. Clean your playlists once, use everywhere.</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>TiviMate, IPTV Smarters Pro</li>
-                <li>Kodi, VLC Media Player</li>
-                <li>Perfect Player, GSE Smart IPTV</li>
-                <li>OTT Navigator, and more</li>
-              </ul>
-            </div>
-
-          </div>
-        </section>
-
-        <!-- Advanced Features -->
-        <section>
-          <h2 class="m-0 text-sm font-semibold text-[#e8e8ec] mb-3">Advanced</h2>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Search and Filter</p>
-              <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Quickly find specific groups or channels with instant search.</p>
-            </div>
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Statistics Dashboard</p>
-              <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">See total channels, groups, and filtered counts at a glance.</p>
-            </div>
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Auto-Refresh</p>
-              <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Set up automatic playlist refresh intervals.</p>
-            </div>
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">User Accounts (Optional)</p>
-              <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Save playlists to cloud. Sync across devices.</p>
-            </div>
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">Multi-Language Support</p>
-              <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Full UTF-8 support for international channels.</p>
-            </div>
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <p class="m-0 text-xs font-semibold mb-1">100% Free</p>
-              <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">No hidden costs, no subscriptions. Open source forever.</p>
-            </div>
-          </div>
-        </section>
-
-        <!-- Strim vs Manual -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-          <h2 class="m-0 text-sm font-semibold mb-1">Why Use Strim vs Manual Editing?</h2>
-          <p class="m-0 text-xs text-[#7a7a80] mb-3 leading-relaxed">Manual M3U editing is error-prone and time-consuming. Strim handles everything visually.</p>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <p class="m-0 text-xs font-semibold text-[#7a7a80] mb-2">Manual Editing</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>Takes hours for large playlists</li>
-                <li>Easy to break syntax</li>
-                <li>Overwhelming with 10,000+ channels</li>
-                <li>Must repeat for every update</li>
-                <li>Risk of duplicate entries</li>
-              </ul>
-            </div>
-            <div>
-              <p class="m-0 text-xs font-semibold text-[#e8e8ec] mb-2">Using Strim</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>Process 50,000+ channels in seconds</li>
-                <li>Validated output, impossible to break</li>
-                <li>Visual interface, just click checkboxes</li>
-                <li>Generate shareable URL, auto-updates</li>
-                <li>Clean and duplicate-free</li>
-              </ul>
-            </div>
-          </div>
-          <div class="mt-3 pt-3 border-t border-[#1a1a1d]">
-            <a href="index.html" class="inline-flex items-center gap-1 h-8 px-4 rounded-[4px] bg-[#e8e8ec] text-[#0c0c0e] text-xs font-semibold no-underline hover:brightness-110 transition-all">Start using Strim</a>
-          </div>
-        </section>
-
-        <!-- Works With -->
-        <section>
-          <h2 class="m-0 text-sm font-semibold text-[#e8e8ec] mb-3">Works With</h2>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div class="p-3 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-              <p class="m-0 text-xs text-[#e8e8ec] font-medium">TiviMate</p>
-              <p class="m-0 text-[10px] text-[#55555a]">Android TV, Fire TV</p>
-            </div>
-            <div class="p-3 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-              <p class="m-0 text-xs text-[#e8e8ec] font-medium">IPTV Smarters</p>
-              <p class="m-0 text-[10px] text-[#55555a]">iOS, Android, Fire TV</p>
-            </div>
-            <div class="p-3 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-              <p class="m-0 text-xs text-[#e8e8ec] font-medium">Kodi</p>
-              <p class="m-0 text-[10px] text-[#55555a]">All Platforms</p>
-            </div>
-            <div class="p-3 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-              <p class="m-0 text-xs text-[#e8e8ec] font-medium">VLC</p>
-              <p class="m-0 text-[10px] text-[#55555a]">Windows, Mac, Linux</p>
-            </div>
-            <div class="p-3 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-              <p class="m-0 text-xs text-[#e8e8ec] font-medium">Perfect Player</p>
-              <p class="m-0 text-[10px] text-[#55555a]">Android, Fire TV</p>
-            </div>
-            <div class="p-3 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-              <p class="m-0 text-xs text-[#e8e8ec] font-medium">GSE Smart IPTV</p>
-              <p class="m-0 text-[10px] text-[#55555a]">iOS, Apple TV</p>
-            </div>
-            <div class="p-3 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-              <p class="m-0 text-xs text-[#e8e8ec] font-medium">OTT Navigator</p>
-              <p class="m-0 text-[10px] text-[#55555a]">Android, Fire TV</p>
-            </div>
-            <div class="p-3 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-              <p class="m-0 text-xs text-[#e8e8ec] font-medium">And More</p>
-              <p class="m-0 text-[10px] text-[#55555a]">All M3U-compatible apps</p>
-            </div>
-          </div>
-        </section>
-
-        <!-- CTA -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-          <p class="m-0 text-sm font-semibold mb-1">Ready to Clean Your Playlist?</p>
-          <p class="m-0 text-xs text-[#7a7a80] mb-3">Free, fast, and privacy-focused. No sign-up required.</p>
-          <a href="index.html" class="inline-flex items-center gap-1 h-8 px-4 rounded-[4px] bg-[#e8e8ec] text-[#0c0c0e] text-xs font-semibold no-underline hover:brightness-110 transition-all">Try Strim Now</a>
-        </section>
-
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="border-t border-[#1a1a1d] px-4 py-3 text-center text-[10px] text-[#55555a]">
-      <p class="m-0">
-        <a href="index.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Home</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="features.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Features</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="how-to-use.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">How to Use</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="comparison.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Compare</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="blog/" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Blog</a>
-      </p>
-      <p class="m-0 mt-1">Strim &#8212; Free M3U Playlist Editor. Open source and privacy-first.</p>
+    <footer class="site-footer">
+      <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
+      <p>Free M3U playlist editor. Open source on <a href="https://github.com/unejamardiani/strim" rel="noopener">GitHub</a>.</p>
+      <nav aria-label="Footer">
+        <a href="/app">App</a>
+        <a href="features.html" aria-current="page">Features</a>
+        <a href="how-to-use.html">How to use</a>
+        <a href="comparison.html">Compare</a>
+        <a href="blog/">Blog</a>
+      </nav>
     </footer>
-
   </body>
 </html>

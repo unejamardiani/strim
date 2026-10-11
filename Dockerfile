@@ -8,21 +8,22 @@ RUN dotnet restore api/api.csproj
 # Copy the full source
 COPY . .
 
-# Place static frontend assets into api/wwwroot so they get published with the API
+# Place the frontend (landing, app, guides, blog) into api/wwwroot so it is published with the API.
 RUN mkdir -p api/wwwroot && \
-    cp index.html app.css style.css main.js api/wwwroot/ && \
-    cp -r fonts api/wwwroot/ && \
-    cp features.html how-to-use.html comparison.html api/wwwroot/ && \
-    cp 404.html 500.html 50x.html api/wwwroot/ && \
-    cp -r blog api/wwwroot/
+    cp index.html app.html features.html how-to-use.html comparison.html 404.html 500.html 50x.html api/wwwroot/ && \
+    cp theme.css app.css site.css main.js robots.txt sitemap.xml api/wwwroot/ && \
+    cp -r fonts blog api/wwwroot/
 
-# Version the app's CSS and JS by content hash so a cached old file is never paired with a new page.
+# Version every stylesheet and script by content hash so a cached old file is never paired with a
+# new page. Matches "x.css", "../x.css" and "/x.css" in every page.
 RUN cd api/wwwroot && \
-    for f in app.css main.js; do \
+    pages=$(find . -name '*.html') && \
+    for f in theme.css app.css site.css main.js; do \
       v=$(sha256sum "$f" | cut -c1-12); \
-      sed -i "s#\"$f\"#\"$f?v=$v\"#g" index.html; \
+      sed -i -E "s#([\"/])$f\"#\1$f?v=$v\"#g" $pages; \
     done && \
-    grep -q 'main.js?v=' index.html && grep -q 'app.css?v=' index.html
+    ! grep -l -E '(theme|app|site)\.css"|main\.js"' $pages && \
+    grep -q 'main.js?v=' app.html
 
 # Publish
 RUN dotnet publish api/api.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore

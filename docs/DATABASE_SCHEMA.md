@@ -12,7 +12,7 @@ This project currently uses `EnsureCreated()` with manual schema patching instea
 
 ### Files Involved
 
-- `api/Program.cs`: Contains `EnsureSchema()`, `TryPatchPostgresSchema()`, `TryAddSqliteColumn()`, etc.
+- `api/Configuration/Database.cs`: `EnsureStrimSchema()`, `TryPatchPostgresSchema()`, `TryAddSqliteColumn()`, etc.
 - `api/Data/AppDbContext.cs`: Entity configuration and model definition
 
 ## Limitations of Current Approach
