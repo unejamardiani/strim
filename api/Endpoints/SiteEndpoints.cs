@@ -26,8 +26,12 @@ public static class SiteEndpoints
 
     app.MapGet("/api/config", () => Results.Ok(new { publicShareBaseUrl }));
 
-    // The landing page is the default document; the editor lives at /app (and /app/).
-    app.MapGet("/app", (HttpContext context) => Page(context, Path.Combine(webRoot, "app.html")));
+    // The landing page is the default document; the editor lives at /app. The route also matches
+    // "/app/", where the page's relative asset paths would resolve under /app/, so redirect that.
+    app.MapGet("/app", (HttpContext context) =>
+      context.Request.Path.Value!.EndsWith('/')
+        ? Results.Redirect($"/app{context.Request.QueryString}", permanent: true)
+        : Page(context, Path.Combine(webRoot, "app.html")));
 
     app.MapGet("/error/{statusCode:int}", (int statusCode, HttpContext context) =>
     {

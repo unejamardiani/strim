@@ -13,8 +13,9 @@
     <link rel="canonical" href="https://strim.plis.dev/app" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>" />
 
-    <!-- No third-party scripts, styles or fonts: the app ships as plain CSS and one ES module. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https:; form-action 'self'; base-uri 'self';" />
+    <!-- No third-party scripts, styles or fonts: the app ships as plain CSS and one ES module.
+         connect-src allows the local API on :5000 for the split frontend/API dev setup. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: http://localhost:5000 http://127.0.0.1:5000; form-action 'self'; base-uri 'self';" />
 
     <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />

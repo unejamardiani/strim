@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using System.Net.Http.Json;
 using Xunit;
@@ -68,6 +69,15 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
   {
     var response = await factory.CreateClient().GetAsync("/no-such-page");
     Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+  }
+
+  [Fact]
+  public async Task AppWithTrailingSlash_RedirectsToApp()
+  {
+    var client = factory.CreateClient(new() { AllowAutoRedirect = false });
+    var response = await client.GetAsync("/app/?api=x");
+    Assert.Equal(HttpStatusCode.MovedPermanently, response.StatusCode);
+    Assert.Equal("/app?api=x", response.Headers.Location!.OriginalString);
   }
 
   private sealed record StatsDto(long ViewCount);
