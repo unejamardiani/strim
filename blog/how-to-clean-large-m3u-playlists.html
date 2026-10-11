@@ -2,35 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <!-- Primary Meta Tags -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
     <title>How to Clean Large M3U Playlists (50,000+ Channels) | Strim Guide</title>
-    <meta name="title" content="How to Clean Large M3U Playlists (50,000+ Channels) | Strim Guide" />
-    <meta name="description" content="Complete guide to cleaning massive M3U IPTV playlists with 50,000+ channels. Learn performance optimization, filtering techniques, and best practices for large playlists." />
-    <meta name="keywords" content="clean m3u playlist, large iptv playlist, 50000 channels, massive playlist, m3u performance, optimize iptv playlist" />
-    <meta name="author" content="Strim" />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://strim.plis.dev/blog/how-to-clean-large-m3u-playlists.html" />
-
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="article" />
-    <meta property="og:url" content="https://strim.plis.dev/blog/how-to-clean-large-m3u-playlists.html" />
-    <meta property="og:title" content="How to Clean Large M3U Playlists (50,000+ Channels)" />
-    <meta property="og:description" content="Complete guide to cleaning massive M3U playlists efficiently." />
-    <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
-
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://strim.plis.dev/blog/how-to-clean-large-m3u-playlists.html" />
-    <meta property="twitter:title" content="How to Clean Large M3U Playlists" />
-    <meta property="twitter:description" content="Guide to cleaning massive IPTV playlists with 50k+ channels." />
-    <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
-
-    <!-- Content Security Policy -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
-
-    <!-- Article Schema -->
+    <meta content="How to Clean Large M3U Playlists (50,000+ Channels) | Strim Guide" name="title"/>
+    <meta content="Complete guide to cleaning massive M3U IPTV playlists with 50,000+ channels. Learn performance optimization, filtering techniques, and best practices for large playlists." name="description"/>
+    <meta content="clean m3u playlist, large iptv playlist, 50000 channels, massive playlist, m3u performance, optimize iptv playlist" name="keywords"/>
+    <meta content="Strim" name="author"/>
+    <meta content="index, follow" name="robots"/>
+    <meta content="article" property="og:type"/>
+    <meta content="https://strim.plis.dev/blog/how-to-clean-large-m3u-playlists.html" property="og:url"/>
+    <meta content="How to Clean Large M3U Playlists (50,000+ Channels)" property="og:title"/>
+    <meta content="Complete guide to cleaning massive M3U playlists efficiently." property="og:description"/>
+    <meta content="https://strim.plis.dev/og-image.png" property="og:image"/>
+    <meta content="summary_large_image" property="twitter:card"/>
+    <meta content="https://strim.plis.dev/blog/how-to-clean-large-m3u-playlists.html" property="twitter:url"/>
+    <meta content="How to Clean Large M3U Playlists" property="twitter:title"/>
+    <meta content="Guide to cleaning massive IPTV playlists with 50k+ channels." property="twitter:description"/>
+    <meta content="https://strim.plis.dev/twitter-image.png" property="twitter:image"/>
+    <link href="https://strim.plis.dev/blog/how-to-clean-large-m3u-playlists.html" rel="canonical"/>
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -63,313 +55,235 @@
       "dateModified": "2025-12-08T00:00:00Z"
     }
     </script>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-
-    <!-- ⚠️ DEVELOPMENT ONLY - DO NOT USE IN PRODUCTION
-         Tailwind CDN has security risks (no SRI, requires unsafe-inline CSP)
-         For production: Replace with built CSS - See ../docs/PRODUCTION_BUILD.md -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
-            },
-            colors: {
-              'zone-input': '#4ac9ff',
-              'zone-filter': '#6df0c2',
-              'zone-output': '#00ff9f',
-            },
-          },
-        },
-      }
-    </script>
-    <link rel="stylesheet" href="../style.css" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self';" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>" />
+    <link rel="preload" href="../fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="../fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../theme.css" />
+    <link rel="stylesheet" href="../site.css" />
   </head>
-  <body class="m-0 font-sans bg-[#050912] text-[#e7ecf5] min-h-screen p-6 md:p-[26px] flex flex-col gap-6 md:gap-[26px] leading-relaxed">
+  <body class="site">
+    <header class="site-top">
+      <a href="../index.html" class="brand" aria-label="Strim home">
+        <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
+      </a>
+      <nav class="site-nav" aria-label="Site">
+        <a href="../features.html">Features</a>
+        <a href="../how-to-use.html">How to use</a>
+        <a href="../comparison.html">Compare</a>
+        <a href="../blog/" aria-current="page">Blog</a>
+      </nav>
+      <a class="btn btn-primary btn-sm site-cta" href="../index.html">Open app</a>
+    </header>
 
-    <!-- Navigation -->
-    <nav class="w-full max-w-[1400px] mx-auto flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
-      <div class="flex items-center gap-3">
-        <a href="../index.html" class="text-2xl font-extrabold bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent no-underline">strim</a>
-      </div>
-      <div class="flex gap-4 md:gap-6">
-        <a href="../index.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Home</a>
-        <a href="../features.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Features</a>
-        <a href="../how-to-use.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">How to Use</a>
-        <a href="../comparison.html" class="text-[#aab6ce] hover:text-zone-filter transition-colors no-underline font-medium">Compare</a>
-        <a href="index.html" class="text-zone-filter font-bold no-underline">Blog</a>
-      </div>
-    </nav>
-
-    <div class="w-full max-w-[900px] mx-auto flex flex-col gap-8">
-
-      <!-- Article Header -->
-      <header class="flex flex-col gap-4">
-        <a href="index.html" class="text-zone-filter hover:underline text-sm">← Back to Blog</a>
-        <h1 class="m-0 text-4xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-br from-zone-filter to-zone-output bg-clip-text text-transparent">
+    <main class="site-main prose-page">
+<div>
+<header>
+<a href="index.html">← Back to Blog</a>
+<h1>
           How to Clean Large M3U Playlists (50,000+ Channels)
         </h1>
-        <div class="flex gap-4 text-sm text-[#aab6ce]">
-          <span>📅 December 8, 2025</span>
-          <span>⏱️ 8 min read</span>
-        </div>
-      </header>
-
-      <!-- Article Content -->
-      <article class="prose prose-invert max-w-none">
-
-        <div class="p-6 rounded-xl bg-zone-filter/10 border border-zone-filter/30 mb-8">
-          <p class="text-lg text-[#e7ecf5] mb-0">
-            <strong>TL;DR:</strong> Use a specialized M3U editor like Strim to clean large playlists. Traditional text editors can't handle 50,000+ channels efficiently. Follow the "deselect all, then enable favorites" strategy for best results.
+<div>
+<span> December 8, 2025</span>
+<span>⏱ 8 min read</span>
+</div>
+</header>
+<article>
+<div class="callout">
+<p>
+<strong>TL;DR:</strong> Use a specialized M3U editor like Strim to clean large playlists. Traditional text editors can't handle 50,000+ channels efficiently. Follow the "deselect all, then enable favorites" strategy for best results.
           </p>
-        </div>
-
-        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">The Challenge with Large IPTV Playlists</h2>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-4">
+</div>
+<h2>The Challenge with Large IPTV Playlists</h2>
+<p>
           Many IPTV providers give you access to 30,000-100,000 channels from around the world. While this sounds amazing, it creates several problems:
         </p>
-
-        <ul class="list-disc list-inside space-y-2 text-[#aab6ce] mb-6">
-          <li><strong>Overwhelming navigation</strong> - Finding what you want among tens of thousands of channels is impossible</li>
-          <li><strong>Slow loading times</strong> - Your IPTV app struggles to load massive playlists</li>
-          <li><strong>Wasted bandwidth</strong> - Loading channel lists you'll never watch</li>
-          <li><strong>Outdated content</strong> - Many channels are dead links or duplicates</li>
-        </ul>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-6">
+<ul>
+<li><strong>Overwhelming navigation</strong> - Finding what you want among tens of thousands of channels is impossible</li>
+<li><strong>Slow loading times</strong> - Your IPTV app struggles to load massive playlists</li>
+<li><strong>Wasted bandwidth</strong> - Loading channel lists you'll never watch</li>
+<li><strong>Outdated content</strong> - Many channels are dead links or duplicates</li>
+</ul>
+<p>
           The solution? Clean your playlist to include only channels you actually watch. Here's how to do it efficiently.
         </p>
-
-        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Why Text Editors Don't Work</h2>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-4">
+<h2>Why Text Editors Don't Work</h2>
+<p>
           You might think: "I'll just open the M3U file in Notepad and delete what I don't need." This doesn't work for large playlists because:
         </p>
-
-        <div class="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
-          <ul class="list-disc list-inside space-y-2 text-[#aab6ce]">
-            <li>Text editors freeze with files over 10MB (large playlists are 50-100MB)</li>
-            <li>You can't visually see groups - just thousands of lines of text</li>
-            <li>One wrong character breaks the entire playlist</li>
-            <li>No way to preview what you're keeping vs removing</li>
-            <li>Takes hours to manually delete entries</li>
-          </ul>
-        </div>
-
-        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">The Right Way: Use Strim</h2>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-6">
+<div class="card">
+<ul>
+<li>Text editors freeze with files over 10MB (large playlists are 50-100MB)</li>
+<li>You can't visually see groups - just thousands of lines of text</li>
+<li>One wrong character breaks the entire playlist</li>
+<li>No way to preview what you're keeping vs removing</li>
+<li>Takes hours to manually delete entries</li>
+</ul>
+</div>
+<h2>The Right Way: Use Strim</h2>
+<p>
           Strim is specifically designed to handle massive playlists efficiently. Here's the step-by-step process:
         </p>
-
-        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Step 1: Load Your Playlist</h3>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-4">
-          Open <a href="../index.html" class="text-zone-filter hover:underline">Strim</a> and paste your playlist URL or raw M3U text. For a 50,000-channel playlist, expect:
+<h3>Step 1: Load Your Playlist</h3>
+<p>
+          Open <a href="../index.html">Strim</a> and paste your playlist URL. For a 50,000-channel playlist, expect:
         </p>
-
-        <ul class="list-disc list-inside space-y-2 text-[#aab6ce] mb-6">
-          <li><strong>5-10 seconds</strong> to fetch and parse the playlist</li>
-          <li>Automatic background processing using Web Workers</li>
-          <li>No browser freezing - UI stays responsive</li>
-        </ul>
-
-        <div class="p-4 rounded-xl bg-zone-input/10 border border-zone-input/30 mb-6">
-          <p class="text-sm text-[#aab6ce]">
-            <strong>💡 Pro Tip:</strong> If your URL is blocked, Strim automatically retries through CORS proxies. No extra steps needed!
+<ul>
+<li><strong>5-10 seconds</strong> to fetch and parse the playlist</li>
+<li>Processing on Strim's server, not on your device</li>
+<li>No freezing, even on a phone: only the group list is sent to your browser</li>
+</ul>
+<div class="card">
+<p>
+<strong> Pro Tip:</strong> Strim downloads the playlist on its server, so browser CORS errors never happen.
           </p>
-        </div>
-
-        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Step 2: Use the "Deselect All" Strategy</h3>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-4">
+</div>
+<h3>Step 2: Switch everything off, then pick favourites</h3>
+<p>
           Instead of toggling off thousands of unwanted groups, do this:
         </p>
-
-        <ol class="list-decimal list-inside space-y-3 text-[#aab6ce] mb-6">
-          <li>Click the <strong>"Deselect All"</strong> button to disable all groups</li>
-          <li>Use the search box to find groups you actually watch</li>
-          <li>Toggle on only your favorites (Sports, Movies, News, etc.)</li>
-          <li>Watch the channel count drop from 50,000 to 500-2,000</li>
-        </ol>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-6">
+<ol>
+<li>Tap <strong>All off</strong> to switch off every group</li>
+<li>Use the search box to find groups you actually watch</li>
+<li>Toggle on only your favorites (Sports, Movies, News, etc.)</li>
+<li>Watch the channel count drop from 50,000 to 500-2,000</li>
+</ol>
+<p>
           This is <strong>10x faster</strong> than clicking through hundreds of groups you don't want!
         </p>
-
-        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Step 3: Export Your Cleaned Playlist</h3>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-4">
+<h3>Step 3: Export Your Cleaned Playlist</h3>
+<p>
           Now that you've filtered your playlist down to essentials, choose your export method:
         </p>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
-            <h4 class="text-lg font-bold text-zone-filter mb-2">📥 Download File</h4>
-            <p class="text-[#aab6ce] text-sm">
+<div class="grid">
+<div class="card">
+<h4> Download File</h4>
+<p>
               Best for VLC, Kodi, or apps that import local files. Save the .m3u file and transfer to your device.
             </p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
-            <h4 class="text-lg font-bold text-zone-filter mb-2">🔗 Shareable URL</h4>
-            <p class="text-[#aab6ce] text-sm">
+</div>
+<div class="card">
+<h4> Shareable URL</h4>
+<p>
               Best for TiviMate, IPTV Smarters. Paste the URL in your app and it auto-updates when you change filters.
             </p>
-          </div>
-        </div>
-
-        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Common Filtering Strategies</h2>
-
-        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Strategy 1: Language-Based Filtering</h3>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-4">
+</div>
+</div>
+<h2>Common Filtering Strategies</h2>
+<h3>Strategy 1: Language-Based Filtering</h3>
+<p>
           If you only speak English, why load 70,000 international channels?
         </p>
-
-        <ol class="list-decimal list-inside space-y-2 text-[#aab6ce] mb-6">
-          <li>Deselect all groups</li>
-          <li>Search for "USA", "UK", "English", "Canada"</li>
-          <li>Enable only English-language groups</li>
-          <li>Result: 50,000 channels → 5,000 channels</li>
-        </ol>
-
-        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Strategy 2: Category-Based Filtering</h3>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-4">
+<ol>
+<li>Tap <strong>All off</strong></li>
+<li>Search for "USA", "UK", "English", "Canada"</li>
+<li>Enable only English-language groups</li>
+<li>Result: 50,000 channels → 5,000 channels</li>
+</ol>
+<h3>Strategy 2: Category-Based Filtering</h3>
+<p>
           Only watch sports and news? Filter everything else:
         </p>
-
-        <ol class="list-decimal list-inside space-y-2 text-[#aab6ce] mb-6">
-          <li>Deselect all groups</li>
-          <li>Search for "Sports", "ESPN", "News", "CNN"</li>
-          <li>Enable only sports and news groups</li>
-          <li>Result: 50,000 channels → 1,500 channels</li>
-        </ol>
-
-        <h3 class="text-xl font-bold text-zone-output mt-6 mb-3">Strategy 3: Family-Friendly Filtering</h3>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-4">
+<ol>
+<li>Tap <strong>All off</strong></li>
+<li>Search for "Sports", "ESPN", "News", "CNN"</li>
+<li>Enable only sports and news groups</li>
+<li>Result: 50,000 channels → 1,500 channels</li>
+</ol>
+<h3>Strategy 3: Family-Friendly Filtering</h3>
+<p>
           Remove adult content for family viewing:
         </p>
-
-        <ol class="list-decimal list-inside space-y-2 text-[#aab6ce] mb-6">
-          <li>Keep all groups selected (start with full playlist)</li>
-          <li>Search for "XXX", "Adult", "18+"</li>
-          <li>Disable these groups</li>
-          <li>Result: Clean, family-safe playlist</li>
-        </ol>
-
-        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Performance Tips</h2>
-
-        <div class="space-y-4 mb-6">
-
-          <div class="p-6 rounded-xl bg-white/5 border border-white/10">
-            <h4 class="text-lg font-bold text-zone-filter mb-2">✅ Use Shareable URLs When Possible</h4>
-            <p class="text-[#aab6ce] text-sm">
+<ol>
+<li>Keep all groups selected (start with full playlist)</li>
+<li>Search for "XXX", "Adult", "18+"</li>
+<li>Disable these groups</li>
+<li>Result: Clean, family-safe playlist</li>
+</ol>
+<h2>Performance Tips</h2>
+<div>
+<div class="card">
+<h4> Use Shareable URLs When Possible</h4>
+<p>
               Apps like TiviMate can fetch from URLs. This means you can update your filter in Strim, and your app gets the updated playlist automatically.
             </p>
-          </div>
-
-          <div class="p-6 rounded-xl bg-white/5 border border-white/10">
-            <h4 class="text-lg font-bold text-zone-filter mb-2">✅ Target 500-2,000 Channels</h4>
-            <p class="text-[#aab6ce] text-sm">
+</div>
+<div class="card">
+<h4> Target 500-2,000 Channels</h4>
+<p>
               Even 2,000 channels is more than you'll ever watch. Aim for quality over quantity. Your IPTV app will be much faster.
             </p>
-          </div>
-
-          <div class="p-6 rounded-xl bg-white/5 border border-white/10">
-            <h4 class="text-lg font-bold text-zone-filter mb-2">✅ Re-filter Periodically</h4>
-            <p class="text-[#aab6ce] text-sm">
+</div>
+<div class="card">
+<h4> Re-filter Periodically</h4>
+<p>
               IPTV providers add/remove channels monthly. Re-filter your playlist every few months to keep it fresh and remove dead links.
             </p>
-          </div>
-
-        </div>
-
-        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Before & After Results</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-
-          <div class="p-6 rounded-xl bg-red-900/10 border border-red-400/30">
-            <h4 class="text-lg font-bold text-red-400 mb-4">❌ Before Cleaning</h4>
-            <ul class="space-y-2 text-[#aab6ce] text-sm">
-              <li>73,542 channels</li>
-              <li>1,200+ groups</li>
-              <li>85MB playlist file</li>
-              <li>30+ seconds to load in app</li>
-              <li>Impossible to navigate</li>
-            </ul>
-          </div>
-
-          <div class="p-6 rounded-xl bg-green-900/10 border border-green-400/30">
-            <h4 class="text-lg font-bold text-green-400 mb-4">✅ After Cleaning with Strim</h4>
-            <ul class="space-y-2 text-[#aab6ce] text-sm">
-              <li>1,247 channels (98% reduction!)</li>
-              <li>42 groups</li>
-              <li>1.8MB playlist file</li>
-              <li>2-3 seconds to load</li>
-              <li>Easy to navigate</li>
-            </ul>
-          </div>
-
-        </div>
-
-        <h2 class="text-2xl font-bold text-zone-filter mt-8 mb-4">Conclusion</h2>
-
-        <p class="text-[#aab6ce] leading-relaxed mb-6">
-          Cleaning large M3U playlists doesn't have to be painful. With the right tool (Strim) and the right strategy (deselect all, then enable favorites), you can reduce 50,000+ channels to a manageable, fast-loading playlist in under 5 minutes.
+</div>
+</div>
+<h2>Before &amp; After Results</h2>
+<div class="grid">
+<div class="card">
+<h4> Before Cleaning</h4>
+<ul>
+<li>73,542 channels</li>
+<li>1,200+ groups</li>
+<li>85MB playlist file</li>
+<li>30+ seconds to load in app</li>
+<li>Impossible to navigate</li>
+</ul>
+</div>
+<div class="card">
+<h4> After Cleaning with Strim</h4>
+<ul>
+<li>1,247 channels (98% reduction!)</li>
+<li>42 groups</li>
+<li>1.8MB playlist file</li>
+<li>2-3 seconds to load</li>
+<li>Easy to navigate</li>
+</ul>
+</div>
+</div>
+<h2>Conclusion</h2>
+<p>
+          Cleaning large M3U playlists doesn't have to be painful. With the right tool (Strim) and the right strategy (all off, then switch on your favourites), you can reduce 50,000+ channels to a manageable, fast-loading playlist in under 5 minutes.
         </p>
-
-        <div class="p-8 rounded-2xl bg-gradient-to-br from-zone-filter/10 to-zone-output/10 border border-zone-filter/30 text-center mt-8">
-          <h3 class="text-2xl font-bold mb-4 text-zone-filter">Ready to Clean Your Playlist?</h3>
-          <p class="text-[#aab6ce] mb-6">
+<div class="callout">
+<h3>Ready to Clean Your Playlist?</h3>
+<p>
             Try Strim now - it's free, fast, and handles playlists of any size.
           </p>
-          <a href="../index.html" class="inline-block primary px-8 py-4 rounded-xl bg-gradient-to-br from-zone-filter to-zone-output text-[#031019] font-bold text-lg shadow-[0_8px_32px_rgba(109,240,194,0.3)] border border-white/20 transition-all hover:scale-105 no-underline">
+<a class="btn btn-primary" href="../index.html">
             Start Using Strim →
           </a>
-        </div>
+</div>
+</article>
+<section>
+<h2>Related Articles</h2>
+<div class="grid">
+<a href="best-iptv-apps-m3u-files.html">
+<h3>Best IPTV Apps for M3U Files</h3>
+<p>Discover the best apps to use with your cleaned playlist</p>
+</a>
+<a href="fix-iptv-playlist-not-loading.html">
+<h3>Fix Playlist Loading Issues</h3>
+<p>Troubleshoot common M3U playlist problems</p>
+</a>
+</div>
+</section>
+</div>
+    </main>
 
-      </article>
-
-      <!-- Related Articles -->
-      <section class="mt-12 pt-8 border-t border-white/10">
-        <h2 class="text-2xl font-bold mb-6 text-zone-filter">Related Articles</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <a href="best-iptv-apps-m3u-files.html" class="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-zone-filter/50 transition-all no-underline">
-            <div class="text-2xl mb-2">📱</div>
-            <h3 class="text-lg font-bold text-zone-filter mb-2">Best IPTV Apps for M3U Files</h3>
-            <p class="text-[#aab6ce] text-sm">Discover the best apps to use with your cleaned playlist</p>
-          </a>
-          <a href="fix-iptv-playlist-not-loading.html" class="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-zone-filter/50 transition-all no-underline">
-            <div class="text-2xl mb-2">🔧</div>
-            <h3 class="text-lg font-bold text-zone-filter mb-2">Fix Playlist Loading Issues</h3>
-            <p class="text-[#aab6ce] text-sm">Troubleshoot common M3U playlist problems</p>
-          </a>
-        </div>
-      </section>
-
-    </div>
-
-    <!-- Footer -->
-    <footer class="w-full max-w-[1400px] mx-auto mt-12 pt-8 border-t border-white/10 text-center text-[#aab6ce] text-sm">
-      <p class="mb-4">
-        <a href="../index.html" class="text-zone-filter hover:underline">Home</a> •
-        <a href="../features.html" class="text-zone-filter hover:underline">Features</a> •
-        <a href="../how-to-use.html" class="text-zone-filter hover:underline">How to Use</a> •
-        <a href="../comparison.html" class="text-zone-filter hover:underline">Compare</a> •
-        <a href="index.html" class="text-zone-filter hover:underline">Blog</a>
-      </p>
-      <p>Strim - Free M3U Playlist Editor | Open Source | Privacy-First</p>
-      <p class="mt-2">Made with AI assistance</p>
+    <footer class="site-footer">
+      <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
+      <p>Free M3U playlist editor. Open source on <a href="https://github.com/unejamardiani/strim" rel="noopener">GitHub</a>.</p>
+      <nav aria-label="Footer">
+        <a href="../index.html">App</a>
+        <a href="../features.html">Features</a>
+        <a href="../how-to-use.html">How to use</a>
+        <a href="../comparison.html">Compare</a>
+        <a href="../blog/" aria-current="page">Blog</a>
+      </nav>
     </footer>
-
   </body>
 </html>

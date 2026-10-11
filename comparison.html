@@ -2,321 +2,274 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
     <title>Strim vs M3U4U vs Playlist Buddy - Best M3U Editor Comparison 2025</title>
-    <meta name="title" content="Strim vs M3U4U vs Playlist Buddy - Best M3U Editor Comparison 2025" />
-    <meta name="description" content="Compare Strim with M3U4U, Playlist Buddy, and Xtream Editor. Honest comparison of M3U playlist editors: features, pricing, privacy. Find the best free IPTV playlist cleaner." />
-    <meta name="keywords" content="m3u4u alternative, playlist buddy alternative, xtream editor alternative, best m3u editor, free m3u editor comparison, iptv playlist editor comparison, m3u editor review" />
-    <meta name="author" content="Strim" />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://strim.plis.dev/comparison.html" />
-    <meta property="og:type" content="article" />
-    <meta property="og:url" content="https://strim.plis.dev/comparison.html" />
-    <meta property="og:title" content="Strim vs M3U4U vs Playlist Buddy - M3U Editor Comparison" />
-    <meta property="og:description" content="Honest comparison of the best M3U playlist editors. Find which tool is right for you." />
-    <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://strim.plis.dev/comparison.html" />
-    <meta property="twitter:title" content="M3U Editor Comparison - Strim vs Alternatives" />
-    <meta property="twitter:description" content="Compare the best M3U playlist editors for IPTV." />
-    <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'system-ui', 'sans-serif'],
-            },
-            colors: {
-              'zone-input': '#e8e8ec',
-              'zone-filter': '#e8e8ec',
-              'zone-output': '#e8e8ec',
-            },
-          },
-        },
-      }
-    </script>
-    <link rel="stylesheet" href="style.css" />
+    <meta content="Strim vs M3U4U vs Playlist Buddy - Best M3U Editor Comparison 2025" name="title"/>
+    <meta content="Compare Strim with M3U4U, Playlist Buddy, and Xtream Editor. Honest comparison of M3U playlist editors: features, pricing, privacy. Find the best free IPTV playlist cleaner." name="description"/>
+    <meta content="m3u4u alternative, playlist buddy alternative, xtream editor alternative, best m3u editor, free m3u editor comparison, iptv playlist editor comparison, m3u editor review" name="keywords"/>
+    <meta content="Strim" name="author"/>
+    <meta content="index, follow" name="robots"/>
+    <meta content="article" property="og:type"/>
+    <meta content="https://strim.plis.dev/comparison.html" property="og:url"/>
+    <meta content="Strim vs M3U4U vs Playlist Buddy - M3U Editor Comparison" property="og:title"/>
+    <meta content="Honest comparison of the best M3U playlist editors. Find which tool is right for you." property="og:description"/>
+    <meta content="https://strim.plis.dev/og-image.png" property="og:image"/>
+    <meta content="summary_large_image" property="twitter:card"/>
+    <meta content="https://strim.plis.dev/comparison.html" property="twitter:url"/>
+    <meta content="M3U Editor Comparison - Strim vs Alternatives" property="twitter:title"/>
+    <meta content="Compare the best M3U playlist editors for IPTV." property="twitter:description"/>
+    <meta content="https://strim.plis.dev/twitter-image.png" property="twitter:image"/>
+    <link href="https://strim.plis.dev/comparison.html" rel="canonical"/>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self';" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>" />
+    <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="site.css" />
   </head>
-  <body class="m-0 font-sans bg-[#0c0c0e] text-[#e8e8ec] min-h-dvh flex flex-col antialiased">
-
-    <!-- Top bar -->
-    <nav class="flex items-center gap-3 px-4 h-11 border-b border-[#1a1a1d] shrink-0 bg-[#0c0c0e]">
-      <a href="index.html" class="flex items-center gap-2 no-underline shrink-0">
-        <span class="w-7 h-7 inline-flex items-center justify-center rounded-[6px] border border-[#252529] text-sm font-bold text-[#e8e8ec] bg-[#141416]">S</span>
-        <span class="text-sm font-semibold text-[#e8e8ec] tracking-tight">strim</span>
+  <body class="site">
+    <header class="site-top">
+      <a href="index.html" class="brand" aria-label="Strim home">
+        <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
       </a>
-      <span class="w-px h-4 bg-[#1a1a1d]"></span>
-      <div class="hidden md:flex items-center gap-0">
-        <a href="index.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Home</a>
-        <a href="features.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Features</a>
-        <a href="how-to-use.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">How to Use</a>
-        <a href="comparison.html" class="px-2.5 py-1 text-xs text-[#e8e8ec] no-underline font-medium">Compare</a>
-        <a href="blog/" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Blog</a>
-      </div>
-    </nav>
+      <nav class="site-nav" aria-label="Site">
+        <a href="features.html">Features</a>
+        <a href="how-to-use.html">How to use</a>
+        <a href="comparison.html" aria-current="page">Compare</a>
+        <a href="blog/">Blog</a>
+      </nav>
+      <a class="btn btn-primary btn-sm site-cta" href="index.html">Open app</a>
+    </header>
 
-    <div class="flex-1 px-4 py-4 max-w-[1000px] mx-auto w-full">
-      <div class="flex flex-col gap-6">
-
-        <!-- Header -->
-        <header>
-          <h1 class="m-0 text-lg font-bold tracking-tight">M3U Editor Comparison</h1>
-          <p class="m-0 mt-1 text-xs text-[#7a7a80] max-w-[65ch]">Honest comparison of Strim vs M3U4U, Playlist Buddy, Xtream Editor, and other M3U playlist tools.</p>
-        </header>
-
-        <!-- Quick Comparison Table -->
-        <section>
-          <h2 class="m-0 text-sm font-semibold text-[#e8e8ec] mb-3">Quick Comparison</h2>
-          <div class="overflow-x-auto rounded-[4px] border border-[#1a1a1d]">
-            <table class="w-full border-collapse text-xs">
-              <thead>
-                <tr class="border-b border-[#1a1a1d] bg-[#121213]">
-                  <th class="p-3 text-left text-[#7a7a80] font-semibold">Feature</th>
-                  <th class="p-3 text-center text-[#e8e8ec] font-semibold">Strim</th>
-                  <th class="p-3 text-center text-[#7a7a80] font-semibold">M3U4U</th>
-                  <th class="p-3 text-center text-[#7a7a80] font-semibold">Playlist Buddy</th>
-                  <th class="p-3 text-center text-[#7a7a80] font-semibold">Xtream Editor</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr class="border-b border-[#1a1a1d]">
-                  <td class="p-3 text-[#7a7a80] font-medium">Price</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Free</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Freemium</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Paid</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Freemium</td>
-                </tr>
-                <tr class="border-b border-[#1a1a1d] bg-[#121213]">
-                  <td class="p-3 text-[#7a7a80] font-medium">Open Source</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#55555a]">No</td>
-                  <td class="p-3 text-center text-[#55555a]">No</td>
-                  <td class="p-3 text-center text-[#55555a]">No</td>
-                </tr>
-                <tr class="border-b border-[#1a1a1d]">
-                  <td class="p-3 text-[#7a7a80] font-medium">Group Filtering</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                </tr>
-                <tr class="border-b border-[#1a1a1d] bg-[#121213]">
-                  <td class="p-3 text-[#7a7a80] font-medium">Large Playlists (50k+)</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Optimized</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Slow</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Limited</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Good</td>
-                </tr>
-                <tr class="border-b border-[#1a1a1d]">
-                  <td class="p-3 text-[#7a7a80] font-medium">Privacy (Client-side)</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#55555a]">Server-side</td>
-                  <td class="p-3 text-center text-[#55555a]">Server-side</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Mixed</td>
-                </tr>
-                <tr class="border-b border-[#1a1a1d] bg-[#121213]">
-                  <td class="p-3 text-[#7a7a80] font-medium">Shareable URLs</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Yes (Pro)</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                </tr>
-                <tr class="border-b border-[#1a1a1d]">
-                  <td class="p-3 text-[#7a7a80] font-medium">Download / Copy</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                </tr>
-                <tr class="border-b border-[#1a1a1d] bg-[#121213]">
-                  <td class="p-3 text-[#7a7a80] font-medium">CORS Proxy Support</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Built-in</td>
-                  <td class="p-3 text-center text-[#55555a]">No</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Limited</td>
-                  <td class="p-3 text-center text-[#55555a]">No</td>
-                </tr>
-                <tr class="border-b border-[#1a1a1d]">
-                  <td class="p-3 text-[#7a7a80] font-medium">Mobile Friendly</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Fully Responsive</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Desktop First</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Desktop First</td>
-                </tr>
-                <tr class="bg-[#121213]">
-                  <td class="p-3 text-[#7a7a80] font-medium">No Account Required</td>
-                  <td class="p-3 text-center text-[#e8e8ec]">Yes (optional)</td>
-                  <td class="p-3 text-center text-[#55555a]">Required</td>
-                  <td class="p-3 text-center text-[#55555a]">Required</td>
-                  <td class="p-3 text-center text-[#7a7a80]">Some features</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <!-- Detailed Comparisons -->
-        <section>
-          <h2 class="m-0 text-sm font-semibold text-[#e8e8ec] mb-3">Detailed Comparisons</h2>
-          <div class="flex flex-col gap-3">
-
-            <!-- Strim vs M3U4U -->
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <h3 class="m-0 text-xs font-semibold mb-3">Strim vs M3U4U</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1">Strim Advantages</p>
-                  <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                    <li>100% Free - No premium tiers, no feature limits</li>
-                    <li>Privacy-First - Client-side processing, data stays in browser</li>
-                    <li>Open Source - Transparent code, community-driven</li>
-                    <li>No Account Required - Play immediately</li>
-                    <li>Handles 50,000+ channels with Web Workers</li>
-                    <li>CORS Proxy Built-in for blocked URLs</li>
-                  </ul>
-                </div>
-                <div>
-                  <p class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1">M3U4U Advantages</p>
-                  <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                    <li>More established, larger user base</li>
-                    <li>Advanced channel-level editing</li>
-                    <li>EPG support (Pro)</li>
-                    <li>Multiple playlist management</li>
-                    <li>Premium features require paid subscription</li>
-                  </ul>
-                </div>
+    <main class="site-main">
+<div>
+<header>
+<h1>M3U Editor Comparison</h1>
+<p>Honest comparison of Strim vs M3U4U, Playlist Buddy, Xtream Editor, and other M3U playlist tools.</p>
+</header>
+<section>
+<h2>Quick Comparison</h2>
+<div class="card">
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Strim</th>
+<th>M3U4U</th>
+<th>Playlist Buddy</th>
+<th>Xtream Editor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Price</td>
+<td>Free</td>
+<td>Freemium</td>
+<td>Paid</td>
+<td>Freemium</td>
+</tr>
+<tr>
+<td>Open Source</td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Group Filtering</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Large Playlists (50k+)</td>
+<td>Optimized (up to 10,000 groups)</td>
+<td>Slow</td>
+<td>Limited</td>
+<td>Good</td>
+</tr>
+<tr>
+<td>Processing</td>
+<td>Server-side, no tracking</td>
+<td>Server-side</td>
+<td>Server-side</td>
+<td>Mixed</td>
+</tr>
+<tr>
+<td>Shareable URLs</td>
+<td>Yes</td>
+<td>Yes (Pro)</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Download</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Mobile Friendly</td>
+<td>Fully Responsive</td>
+<td>Desktop First</td>
+<td>Yes</td>
+<td>Desktop First</td>
+</tr>
+<tr>
+<td>No Account Required</td>
+<td>Yes (optional)</td>
+<td>Required</td>
+<td>Required</td>
+<td>Some features</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section>
+<h2>Detailed Comparisons</h2>
+<div>
+<div class="card">
+<h3>Strim vs M3U4U</h3>
+<div class="grid">
+<div>
+<p>Strim Advantages</p>
+<ul>
+<li>100% Free - No premium tiers, no feature limits</li>
+<li>No tracking - no analytics, no ads</li>
+<li>Open Source - Transparent code, community-driven</li>
+<li>No Account Required - Play immediately</li>
+<li>Handles playlists with hundreds of thousands of entries</li>
+<li>Splits mixed live, movie and series groups automatically</li>
+</ul>
+</div>
+<div>
+<p>M3U4U Advantages</p>
+<ul>
+<li>More established, larger user base</li>
+<li>Advanced channel-level editing</li>
+<li>EPG support (Pro)</li>
+<li>Multiple playlist management</li>
+<li>Premium features require paid subscription</li>
+</ul>
+</div>
+</div>
+<div>
+<strong>Best For:</strong> Use <strong>Strim</strong> for fast, free group filtering. Use <strong>M3U4U</strong> if you need advanced channel editing and EPG.
               </div>
-              <div class="mt-3 pt-3 border-t border-[#1a1a1d] text-xs text-[#7a7a80]">
-                <strong class="text-[#e8e8ec]">Best For:</strong> Use <strong class="text-[#e8e8ec]">Strim</strong> for fast, free group filtering. Use <strong class="text-[#e8e8ec]">M3U4U</strong> if you need advanced channel editing and EPG.
+</div>
+<div class="card">
+<h3>Strim vs Playlist Buddy</h3>
+<div class="grid">
+<div>
+<p>Strim Advantages</p>
+<ul>
+<li>100% Free vs paid subscription</li>
+<li>Open source, transparent code</li>
+<li>No tracking, no ads</li>
+<li>Optimized for massive playlists</li>
+<li>No account required</li>
+</ul>
+</div>
+<div>
+<p>Playlist Buddy Advantages</p>
+<ul>
+<li>More polished user interface</li>
+<li>Multi-playlist management</li>
+<li>Customer support for paid users</li>
+<li>Monthly/yearly fees required</li>
+</ul>
+</div>
+</div>
+<div>
+<strong>Best For:</strong> Use <strong>Strim</strong> for free, no-tracking use. Use <strong>Playlist Buddy</strong> if you want a polished commercial product.
               </div>
-            </div>
-
-            <!-- Strim vs Playlist Buddy -->
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <h3 class="m-0 text-xs font-semibold mb-3">Strim vs Playlist Buddy</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1">Strim Advantages</p>
-                  <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                    <li>100% Free vs paid subscription</li>
-                    <li>Open source, transparent code</li>
-                    <li>Client-side privacy, no data uploads</li>
-                    <li>Optimized for massive playlists</li>
-                    <li>No account required</li>
-                  </ul>
-                </div>
-                <div>
-                  <p class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1">Playlist Buddy Advantages</p>
-                  <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                    <li>More polished user interface</li>
-                    <li>Multi-playlist management</li>
-                    <li>Customer support for paid users</li>
-                    <li>Monthly/yearly fees required</li>
-                  </ul>
-                </div>
+</div>
+<div class="card">
+<h3>Strim vs Xtream Editor</h3>
+<div class="grid">
+<div>
+<p>Strim Advantages</p>
+<ul>
+<li>Simpler interface, focused on group filtering</li>
+<li>Works the same on phone, tablet and desktop</li>
+<li>Open source and community-driven</li>
+<li>Built for very large playlists</li>
+<li>Fully responsive mobile design</li>
+</ul>
+</div>
+<div>
+<p>Xtream Editor Advantages</p>
+<ul>
+<li>Advanced channel reordering and logos</li>
+<li>Native Xtream Codes API support</li>
+<li>Custom categories and editing</li>
+<li>Some features locked behind paywall</li>
+</ul>
+</div>
+</div>
+<div>
+<strong>Best For:</strong> Use <strong>Strim</strong> for simple group filtering. Use <strong>Xtream Editor</strong> for advanced editing features.
               </div>
-              <div class="mt-3 pt-3 border-t border-[#1a1a1d] text-xs text-[#7a7a80]">
-                <strong class="text-[#e8e8ec]">Best For:</strong> Use <strong class="text-[#e8e8ec]">Strim</strong> for free, privacy-focused use. Use <strong class="text-[#e8e8ec]">Playlist Buddy</strong> if you want a polished commercial product.
-              </div>
-            </div>
+</div>
+</div>
+</section>
+<section>
+<h2>Which Tool Should You Choose?</h2>
+<div class="grid">
+<div>
+<p>Choose Strim If You...</p>
+<ul>
+<li>Want a 100% free solution with no limitations</li>
+<li>Want a permanent player link that always serves your selection</li>
+<li>Have large playlists (50,000+ channels)</li>
+<li>Only need group filtering, not individual edits</li>
+<li>Prefer open source software</li>
+<li>Don't want to create an account</li>
+</ul>
+</div>
+<div>
+<p>Choose Alternatives If You...</p>
+<ul>
+<li>Need advanced channel editing (logos, names, URLs)</li>
+<li>Require EPG integration</li>
+<li>Need channel reordering and custom categories</li>
+<li>Don't mind paying for premium features</li>
+<li>Need to manage multiple playlists in one account</li>
+</ul>
+</div>
+</div>
+</section>
+<section>
+<h2>Bottom Line</h2>
+<div>
+<p><strong>Strim is the best choice for most users</strong> who simply want to clean their IPTV playlists by filtering out unwanted groups. It's free, fast, works well on a phone, and handles massive playlists.</p>
+<p>If you need advanced channel editing, EPG integration, or customer support, consider M3U4U or Playlist Buddy. For Xtream Codes-specific features, try Xtream Editor.</p>
+<p><strong>If simplicity, speed and cost matter to you, Strim is a good fit.</strong></p>
+</div>
+<div>
+<a class="btn btn-primary" href="index.html">Open Strim</a>
+<a class="btn" href="features.html">See All Features</a>
+</div>
+</section>
+</div>
+    </main>
 
-            <!-- Strim vs Xtream Editor -->
-            <div class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-              <h3 class="m-0 text-xs font-semibold mb-3">Strim vs Xtream Editor</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1">Strim Advantages</p>
-                  <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                    <li>Simpler interface, focused on group filtering</li>
-                    <li>All processing happens locally in browser</li>
-                    <li>Open source and community-driven</li>
-                    <li>Better for large playlists with Web Workers</li>
-                    <li>Fully responsive mobile design</li>
-                  </ul>
-                </div>
-                <div>
-                  <p class="m-0 text-xs font-semibold text-[#e8e8ec] mb-1">Xtream Editor Advantages</p>
-                  <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                    <li>Advanced channel reordering and logos</li>
-                    <li>Native Xtream Codes API support</li>
-                    <li>Custom categories and editing</li>
-                    <li>Some features locked behind paywall</li>
-                  </ul>
-                </div>
-              </div>
-              <div class="mt-3 pt-3 border-t border-[#1a1a1d] text-xs text-[#7a7a80]">
-                <strong class="text-[#e8e8ec]">Best For:</strong> Use <strong class="text-[#e8e8ec]">Strim</strong> for simple group filtering. Use <strong class="text-[#e8e8ec]">Xtream Editor</strong> for advanced editing features.
-              </div>
-            </div>
-
-          </div>
-        </section>
-
-        <!-- Use Case Recommendations -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-          <h2 class="m-0 text-sm font-semibold mb-3">Which Tool Should You Choose?</h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <p class="m-0 text-xs font-semibold text-[#e8e8ec] mb-2">Choose Strim If You...</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>Want a 100% free solution with no limitations</li>
-                <li>Care about privacy and client-side processing</li>
-                <li>Have large playlists (50,000+ channels)</li>
-                <li>Only need group filtering, not individual edits</li>
-                <li>Prefer open source software</li>
-                <li>Dont want to create an account</li>
-              </ul>
-            </div>
-            <div>
-              <p class="m-0 text-xs font-semibold text-[#e8e8ec] mb-2">Choose Alternatives If You...</p>
-              <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-1">
-                <li>Need advanced channel editing (logos, names, URLs)</li>
-                <li>Require EPG integration</li>
-                <li>Need channel reordering and custom categories</li>
-                <li>Dont mind paying for premium features</li>
-                <li>Need to manage multiple playlists in one account</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <!-- Bottom Line -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-          <h2 class="m-0 text-sm font-semibold mb-2">Bottom Line</h2>
-          <div class="text-xs text-[#7a7a80] space-y-2 leading-relaxed">
-            <p class="m-0"><strong class="text-[#e8e8ec]">Strim is the best choice for most users</strong> who simply want to clean their IPTV playlists by filtering out unwanted groups. It's free, fast, privacy-focused, and handles massive playlists better than the competition.</p>
-            <p class="m-0">If you need advanced channel editing, EPG integration, or customer support, consider M3U4U or Playlist Buddy. For Xtream Codes-specific features, try Xtream Editor.</p>
-            <p class="m-0"><strong class="text-[#e8e8ec]">But if simplicity, speed, privacy, and cost matter to you — Strim is the clear winner.</strong></p>
-          </div>
-          <div class="flex flex-col sm:flex-row gap-2 mt-3 pt-3 border-t border-[#1a1a1d]">
-            <a href="index.html" class="inline-flex items-center gap-1 h-8 px-4 rounded-[4px] bg-[#e8e8ec] text-[#0c0c0e] text-xs font-semibold no-underline hover:brightness-110 transition-all">Try Strim Now - It's Free</a>
-            <a href="features.html" class="inline-flex items-center gap-1 h-8 px-3 rounded-[4px] border border-[#252529] text-[#e8e8ec] text-xs font-medium no-underline hover:bg-[#252529] transition-all">See All Features</a>
-          </div>
-        </section>
-
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="border-t border-[#1a1a1d] px-4 py-3 text-center text-[10px] text-[#55555a]">
-      <p class="m-0">
-        <a href="index.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Home</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="features.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Features</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="how-to-use.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">How to Use</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="comparison.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Compare</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="blog/" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Blog</a>
-      </p>
-      <p class="m-0 mt-1">Strim &#8212; Free M3U Playlist Editor. Open source and privacy-first.</p>
+    <footer class="site-footer">
+      <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
+      <p>Free M3U playlist editor. Open source on <a href="https://github.com/unejamardiani/strim" rel="noopener">GitHub</a>.</p>
+      <nav aria-label="Footer">
+        <a href="index.html">App</a>
+        <a href="features.html">Features</a>
+        <a href="how-to-use.html">How to use</a>
+        <a href="comparison.html" aria-current="page">Compare</a>
+        <a href="blog/">Blog</a>
+      </nav>
     </footer>
-
   </body>
 </html>

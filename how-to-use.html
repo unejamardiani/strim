@@ -2,157 +2,117 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>How to Use M3U Editor - Filter & Clean IPTV Playlists Guide | Strim</title>
-    <meta name="title" content="How to Use M3U Editor - Filter & Clean IPTV Playlists Guide | Strim" />
-    <meta name="description" content="Step-by-step guide to filtering and cleaning M3U playlists. Remove unwanted channels, organize groups, and create clean IPTV playlists for TiviMate, IPTV Smarters, and VLC." />
-    <meta name="keywords" content="how to use m3u editor, iptv playlist guide, clean m3u playlist, filter channels tutorial, m3u organizer, tivimate playlist guide" />
-    <meta name="author" content="Strim" />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://strim.plis.dev/how-to-use.html" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://strim.plis.dev/how-to-use.html" />
-    <meta property="og:title" content="How to Use Strim - M3U Playlist Editor Guide" />
-    <meta property="og:description" content="Step-by-step guide to filtering and cleaning M3U playlists with Strim." />
-    <meta property="og:image" content="https://strim.plis.dev/og-image.png" />
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://strim.plis.dev/how-to-use.html" />
-    <meta property="twitter:title" content="How to Use Strim - M3U Playlist Editor Guide" />
-    <meta property="twitter:description" content="Step-by-step guide to filtering and cleaning M3U playlists with Strim." />
-    <meta property="twitter:image" content="https://strim.plis.dev/twitter-image.png" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'system-ui', 'sans-serif'],
-            },
-            colors: {
-              'zone-input': '#e8e8ec',
-              'zone-filter': '#e8e8ec',
-              'zone-output': '#e8e8ec',
-            },
-          },
-        },
-      }
-    </script>
-    <link rel="stylesheet" href="style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <title>How to Use M3U Editor - Filter &amp; Clean IPTV Playlists Guide | Strim</title>
+    <meta content="How to Use M3U Editor - Filter &amp; Clean IPTV Playlists Guide | Strim" name="title"/>
+    <meta content="Step-by-step guide to filtering and cleaning M3U playlists. Remove unwanted channels, organize groups, and create clean IPTV playlists for TiviMate, IPTV Smarters, and VLC." name="description"/>
+    <meta content="how to use m3u editor, iptv playlist guide, clean m3u playlist, filter channels tutorial, m3u organizer, tivimate playlist guide" name="keywords"/>
+    <meta content="Strim" name="author"/>
+    <meta content="index, follow" name="robots"/>
+    <meta content="website" property="og:type"/>
+    <meta content="https://strim.plis.dev/how-to-use.html" property="og:url"/>
+    <meta content="How to Use Strim - M3U Playlist Editor Guide" property="og:title"/>
+    <meta content="Step-by-step guide to filtering and cleaning M3U playlists with Strim." property="og:description"/>
+    <meta content="https://strim.plis.dev/og-image.png" property="og:image"/>
+    <meta content="summary_large_image" property="twitter:card"/>
+    <meta content="https://strim.plis.dev/how-to-use.html" property="twitter:url"/>
+    <meta content="How to Use Strim - M3U Playlist Editor Guide" property="twitter:title"/>
+    <meta content="Step-by-step guide to filtering and cleaning M3U playlists with Strim." property="twitter:description"/>
+    <meta content="https://strim.plis.dev/twitter-image.png" property="twitter:image"/>
+    <link href="https://strim.plis.dev/how-to-use.html" rel="canonical"/>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self';" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>" />
+    <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="site.css" />
   </head>
-  <body class="m-0 font-sans bg-[#0c0c0e] text-[#e8e8ec] min-h-dvh flex flex-col antialiased">
-
-    <!-- Top bar -->
-    <nav class="flex items-center gap-3 px-4 h-11 border-b border-[#1a1a1d] shrink-0 bg-[#0c0c0e]">
-      <a href="index.html" class="flex items-center gap-2 no-underline shrink-0">
-        <span class="w-7 h-7 inline-flex items-center justify-center rounded-[6px] border border-[#252529] text-sm font-bold text-[#e8e8ec] bg-[#141416]">S</span>
-        <span class="text-sm font-semibold text-[#e8e8ec] tracking-tight">strim</span>
+  <body class="site">
+    <header class="site-top">
+      <a href="index.html" class="brand" aria-label="Strim home">
+        <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
       </a>
-      <span class="w-px h-4 bg-[#1a1a1d]"></span>
-      <div class="hidden md:flex items-center gap-0">
-        <a href="index.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Home</a>
-        <a href="features.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Features</a>
-        <a href="how-to-use.html" class="px-2.5 py-1 text-xs text-[#e8e8ec] no-underline font-medium">How to Use</a>
-        <a href="comparison.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Compare</a>
-        <a href="blog/" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Blog</a>
-      </div>
-    </nav>
+      <nav class="site-nav" aria-label="Site">
+        <a href="features.html">Features</a>
+        <a href="how-to-use.html" aria-current="page">How to use</a>
+        <a href="comparison.html">Compare</a>
+        <a href="blog/">Blog</a>
+      </nav>
+      <a class="btn btn-primary btn-sm site-cta" href="index.html">Open app</a>
+    </header>
 
-    <!-- Page content -->
-    <div class="flex-1 px-4 py-4 max-w-[1000px] mx-auto w-full">
-      <div class="flex flex-col gap-6">
+    <main class="site-main">
+<div>
+<header>
+<h1>How to Use Strim</h1>
+<p>Filter, organize, and clean your IPTV playlist in a few simple steps. Works with any M3U source.</p>
+</header>
+<section>
+<div>
+<span class="step-num">01</span>
+<h2>Load Your Playlist</h2>
+</div>
+<p>Open Strim in your browser. No installation or sign-up required. You can either paste your M3U URL into the input box and click <strong>Fetch</strong>, or paste the raw M3U content directly into the text area.</p>
+</section>
+<section>
+<div>
+<span class="step-num">02</span>
+<h2>Review Groups</h2>
+</div>
+<p>After loading, your playlist is automatically parsed and displayed in the sidebar grouped by category. Each group shows a count of channels it contains. The input tab displays the total channel count and group list.</p>
+</section>
+<section>
+<div>
+<span class="step-num">03</span>
+<h2>Select Channels to Keep</h2>
+</div>
+<p>Check the groups you want to keep. Use the select/deselect all toggle to quickly manage your selection. The filter tab updates in real-time as you make changes. You can also use the search bar to find specific groups.</p>
+</section>
+<section>
+<div>
+<span class="step-num">04</span>
+<h2>Generate Cleaned Playlist</h2>
+</div>
+<p>Click <strong>Generate</strong> in the output tab to create your new filtered playlist. Strim processes everything client-side and generates a clean M3U file with only your selected groups.</p>
+</section>
+<section>
+<div>
+<span class="step-num">05</span>
+<h2>Save or Share</h2>
+</div>
+<p>Download the cleaned playlist as an .m3u file, copy it to your clipboard, or generate a shareable URL for your IPTV app. The share URL can be refreshed automatically to pick up changes.</p>
+</section>
+<section>
+<h2>Tips for Best Results</h2>
+<ul>
+<li><strong>Use URL playlists if possible</strong> — they allow automatic refresh support via shareable links.</li>
+<li><strong>Start with select all, then deselect</strong> the groups you do not want.</li>
+<li><strong>Check the channel count</strong> per group to focus on the largest groups first.</li>
+<li><strong>CORS issues?</strong> Start the included CORS proxy or use the raw paste option.</li>
+<li><strong>Bookmark the share URL</strong> for one-click access to your filtered playlist.</li>
+</ul>
+</section>
+<section>
+<p>Ready to clean your playlist?</p>
+<p>Open Strim and try it yourself. No sign-up required.</p>
+<a class="btn btn-primary" href="index.html">Open Strim</a>
+</section>
+</div>
+    </main>
 
-        <!-- Header -->
-        <header>
-          <h1 class="m-0 text-lg font-bold tracking-tight">How to Use Strim</h1>
-          <p class="m-0 mt-1 text-xs text-[#7a7a80] max-w-[65ch]">Filter, organize, and clean your IPTV playlist in a few simple steps. Works with any M3U source.</p>
-        </header>
-
-        <!-- Step 1 -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">01</span>
-            <h2 class="m-0 text-sm font-semibold">Load Your Playlist</h2>
-          </div>
-          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Open Strim in your browser. No installation or sign-up required. You can either paste your M3U URL into the input box and click <strong class="text-[#e8e8ec] font-medium">Fetch</strong>, or paste the raw M3U content directly into the text area.</p>
-        </section>
-
-        <!-- Step 2 -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">02</span>
-            <h2 class="m-0 text-sm font-semibold">Review Groups</h2>
-          </div>
-          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">After loading, your playlist is automatically parsed and displayed in the sidebar grouped by category. Each group shows a count of channels it contains. The input tab displays the total channel count and group list.</p>
-        </section>
-
-        <!-- Step 3 -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">03</span>
-            <h2 class="m-0 text-sm font-semibold">Select Channels to Keep</h2>
-          </div>
-          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Check the groups you want to keep. Use the select/deselect all toggle to quickly manage your selection. The filter tab updates in real-time as you make changes. You can also use the search bar to find specific groups.</p>
-        </section>
-
-        <!-- Step 4 -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">04</span>
-            <h2 class="m-0 text-sm font-semibold">Generate Cleaned Playlist</h2>
-          </div>
-          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Click <strong class="text-[#e8e8ec] font-medium">Generate</strong> in the output tab to create your new filtered playlist. Strim processes everything client-side and generates a clean M3U file with only your selected groups.</p>
-        </section>
-
-        <!-- Step 5 -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="w-7 h-7 inline-flex items-center justify-center rounded-[4px] bg-[#1a1a1d] border border-[#252529] text-xs font-semibold text-[#7a7a80]">05</span>
-            <h2 class="m-0 text-sm font-semibold">Save or Share</h2>
-          </div>
-          <p class="m-0 text-xs text-[#7a7a80] leading-relaxed">Download the cleaned playlist as an .m3u file, copy it to your clipboard, or generate a shareable URL for your IPTV app. The share URL can be refreshed automatically to pick up changes.</p>
-        </section>
-
-        <!-- Tips -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529]">
-          <h2 class="m-0 text-sm font-semibold mb-3">Tips for Best Results</h2>
-          <ul class="m-0 list-disc list-inside text-[#7a7a80] text-xs space-y-2">
-            <li><strong class="text-[#e8e8ec] font-medium">Use URL playlists if possible</strong> &mdash; they allow automatic refresh support via shareable links.</li>
-            <li><strong class="text-[#e8e8ec] font-medium">Start with select all, then deselect</strong> the groups you do not want.</li>
-            <li><strong class="text-[#e8e8ec] font-medium">Check the channel count</strong> per group to focus on the largest groups first.</li>
-            <li><strong class="text-[#e8e8ec] font-medium">CORS issues?</strong> Start the included CORS proxy or use the raw paste option.</li>
-            <li><strong class="text-[#e8e8ec] font-medium">Bookmark the share URL</strong> for one-click access to your filtered playlist.</li>
-          </ul>
-        </section>
-
-        <!-- CTA -->
-        <section class="p-4 rounded-[4px] bg-[#121213] border border-[#252529] text-center">
-          <p class="m-0 text-sm font-semibold mb-1">Ready to clean your playlist?</p>
-          <p class="m-0 text-xs text-[#7a7a80] mb-3">Open Strim and try it yourself. No sign-up required.</p>
-          <a href="index.html" class="inline-flex items-center gap-1 h-8 px-4 rounded-[4px] bg-[#e8e8ec] text-[#0c0c0e] text-xs font-semibold no-underline hover:brightness-110 transition-all">Open Strim</a>
-        </section>
-
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="border-t border-[#1a1a1d] px-4 py-3 text-center text-[10px] text-[#55555a]">
-      <p class="m-0">
-        <a href="index.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Home</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="features.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Features</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="how-to-use.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">How to Use</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="comparison.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Compare</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="blog/" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Blog</a>
-      </p>
-      <p class="m-0 mt-1">Strim &#8212; Free M3U Playlist Editor. Open source and privacy-first.</p>
+    <footer class="site-footer">
+      <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
+      <p>Free M3U playlist editor. Open source on <a href="https://github.com/unejamardiani/strim" rel="noopener">GitHub</a>.</p>
+      <nav aria-label="Footer">
+        <a href="index.html">App</a>
+        <a href="features.html">Features</a>
+        <a href="how-to-use.html" aria-current="page">How to use</a>
+        <a href="comparison.html">Compare</a>
+        <a href="blog/">Blog</a>
+      </nav>
     </footer>
-
   </body>
 </html>
