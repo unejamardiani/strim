@@ -87,30 +87,35 @@ Danger:
 
 ## Layout
 
-### App page (index.html)
+### App page (index.html + app.css)
+
+The app is mobile-first and touch-sized; it no longer copies the dense desktop-tool layout.
+It ships as plain CSS (`app.css`) and one ES module: no Tailwind CDN, no web fonts, strict CSP.
 
 ```
-┌─────────────────────────────────────────────┐
-│  Top bar (32px)                             │
-├──────┬──────────────────────────────────────┤
-│      │                                      │
-│  S   │  URL bar  [Fetch]                    │
-│  I   │──────────────────────────────────────│
-│  D   │  [Input] [Filter] [Output]  [ ⋮ ]   │
-│  E   │──────────────────────────────────────│
-│  B   │  Stat row (3 cards)                  │
-│  A   │──────────────────────────────────────│
-│  R   │  Group list (checkboxes)             │
-│      │                                      │
-│      │                                      │
-├──────┴──────────────────────────────────────┤
-│  Bottom bar (status text)                   │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────┐
+│ Top bar (56px, sticky)       │  brand · account button
+├──────────────────────────────┤
+│ Page (max-w 800px, 16px pad) │
+│  #/      playlist cards      │  name, usage, player link + Copy, Edit groups, ⋯ menu
+│  #/new   source form         │  URL → Load groups (or Try a sample)
+│  #/p/id  player link card    │
+│          source line         │
+│          sticky filter bar   │  search · type tabs · All/Kept/Hidden · sort · Keep/Hide all
+│          group list          │  virtualised, page scroll, one row per group
+├──────────────────────────────┤
+│ Action bar (fixed bottom)    │  kept channels/groups · Download · Save
+└──────────────────────────────┘
 ```
 
-- Sidebar: 210px, collapsible, contains saved playlists
-- Content area: flex-fill, contains vertical stack of bars
-- Bottom bar: 24px, shows file status
+- One scroll surface (the page). The group list is virtualised against window scroll.
+- Dialogs are native `<dialog>`: bottom sheets below 600px, centred modals above.
+- Feedback is toasts (bottom, above the action bar); there is no status pill.
+- Touch targets: controls 44px on phones, 40px from 768px; group rows 52px / 44px.
+- Inputs use 16px text on phones so iOS does not zoom on focus.
+- Typography: system UI font stack, 15px body, 13px secondary, 20–26px headings.
+- Radius 8px for controls and cards. Secondary text `#a1a1a8`, muted `#6e6e75` (the 11px `#55555a` labels were too faint).
+- Colour stays monochrome. The only tints are warning (`#e8c26a`, expiry, sample notice) and danger (`#f08080`, delete, errors).
 
 ### Marketing pages (features, how-to, comparison, blog)
 
@@ -192,10 +197,10 @@ The 404 page is the only page with any "personality" — a flickering CRT effect
 ## File structure
 
 ```
-index.html          — Main app page (desktop-app layout)
-style.css           — App-level CSS (components, animations, scrollbars, toggles)
-main.js             — App logic (1757 lines, 39 DOM IDs, ~20 class hooks)
-filter-worker.js    — Background worker for playlist processing
+index.html          — App shell (SEO meta, top bar, dialogs)
+app.css             — App styles (tokens, components; plain CSS)
+main.js             — App logic (router, playlists, group picker, sheets)
+style.css           — Marketing-page styles
 features.html       — Features marketing page
 how-to-use.html     — Usage guide marketing page
 comparison.html     — Competitor comparison marketing page
@@ -207,7 +212,5 @@ blog/index.html     — Blog index with article cards
 
 ## Dev notes
 
-- Tailwind CDN is used during development (requires `unsafe-inline` in CSP)
-- Zone colors (`zone-input`, `zone-filter`, `zone-output`) are hardcoded to `#e8e8ec` in tailwind config — these exist only because `main.js` references them and they must resolve to a valid color
-- The `.primary` and `.ghost` CSS classes in `style.css` match the button patterns above and are used by dynamically generated buttons in `main.js`
-- For production, remove the Tailwind CDN script and `unsafe-inline` CSP, replace with built CSS
+- The app page uses no CDN and its CSP has no `unsafe-inline`: never add inline `<script>`, `<style>` or `style=""` attributes; set dynamic styles through the CSSOM (`el.style.x = …`).
+- The marketing pages still use the Tailwind CDN (requires `unsafe-inline` in their CSP); for production, replace it with built CSS (see docs/PRODUCTION_BUILD.md).

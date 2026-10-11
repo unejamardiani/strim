@@ -70,7 +70,7 @@ const int MaxUrlLength = 2048;
 const int MaxPlaylistNameLength = 200;
 const int MaxPlaylistTextSize = 50 * 1024 * 1024; // 50 MB max for playlist text
 const long MaxAnalyzeRequestBodySize = MaxPlaylistTextSize + (1L * 1024 * 1024); // JSON envelope/headroom
-const int MaxDisabledGroupsCount = 1000;
+const int MaxDisabledGroupsCount = 10_000; // Matches PlaylistCacheOptions.MaxGroupCount so every group can be hidden
 
 var configuredProvider = (builder.Configuration["DB_PROVIDER"] ?? builder.Configuration["DATABASE_PROVIDER"])?.ToLowerInvariant();
 var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres") ??

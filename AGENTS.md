@@ -4,7 +4,7 @@
 M3U/IP TV playlist editor. Vanilla JS SPA (no framework) + .NET 8 Minimal API backend with EF Core. Deployed on Azure App Service via Docker + Terraform.
 
 ## Directory structure
-- `/` — static frontend (index.html, main.js, style.css, filter-worker.js)
+- `/` — static frontend: the app (index.html, main.js, app.css) and marketing pages (features/how-to-use/comparison/blog, styled by style.css + Tailwind CDN)
 - `api/` — .NET 8 backend (single-file Program.cs ~1680 lines, no controllers)
 - `api.Tests/` — xUnit tests
 - `infra/terraform/` — Azure deployment
@@ -39,8 +39,8 @@ dotnet test --filter "FullyQualifiedName~SecurityHelpersTests"  # single test cl
 - All API endpoints are defined inline in `Program.cs` (Minimal API pattern, no controllers).
 - Auth: ASP.NET Core Identity with cookie auth. Google/Microsoft OAuth optional. CSRF via antiforgery tokens.
 - SSRF protection in `api/Services/SecurityHelpers.cs` (blocks private IPs, validates redirects).
-- Playlist processing uses a background Web Worker on the frontend (`filter-worker.js`).
-- Groups are keyed by `group-title`. When a provider reuses one title across content types (Xtream Codes `/movie/` and `/series/` URL paths vs live), analysis splits it into `Title · Live` / `Title · Movies` / `Title · Series`. A disabled entry matches either the plain title (whole group, older saved filters) or one split key. In the output, live entries keep the original `group-title`; movies/series of a split title are written as `Title · Movies` / `Title · Series` so players show them as separate groups (the UI labels rows with these output names). Logic is mirrored in `PlaylistProcessor.cs`, `main.js` and `filter-worker.js`.
+- The app (`main.js`) never parses M3U itself: `/api/playlist/analyze` returns the groups, `/api/playlist/generate` builds downloads (the sample is analyzed via `rawText`). It is a hash-routed SPA (`#/`, `#/new`, `#/p/<id>`) with plain CSS in `app.css`, no CDN and a strict CSP (no inline scripts or style attributes; set styles via CSSOM only).
+- Groups are keyed by `group-title`. When a provider reuses one title across content types (Xtream Codes `/movie/` and `/series/` URL paths vs live), analysis splits it into `Title · Live` / `Title · Movies` / `Title · Series`. A disabled entry matches either the plain title (whole group, older saved filters) or one split key. In the output, live entries keep the original `group-title`; movies/series of a split title are written as `Title · Movies` / `Title · Series` so players show them as separate groups (the UI labels rows with these output names). The server owns this logic (`PlaylistProcessor.cs`); `main.js` only mirrors `GroupKey` and the saved-filter matching (`restoreFilters`).
 - Cached for 15 min in `IMemoryCache` per analyze/generate request (500MB limit).
 - Share URLs are unauthenticated: `GET /api/playlists/{id}/share/{code}` returns filtered M3U file.
 - `HealthChecks` at `/health`, `/health/live`, `/health/ready`.

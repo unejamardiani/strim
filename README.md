@@ -25,9 +25,9 @@ Strim is a lightweight, powerful M3U/M3U8 playlist editor that runs entirely in 
 **Try it now:** [https://strim.plis.dev](https://strim.plis.dev) ← No installation required!
 
 1. **Open Strim** - Visit [strim.plis.dev](https://strim.plis.dev) (or run locally - see below)
-2. **Load your playlist** - Paste URL or raw M3U text
-3. **Filter groups** - Toggle unwanted groups off (or Deselect All → enable favorites)
-4. **Export** - Download, copy, or generate shareable URL
+2. **Load your playlist** - Paste your provider's M3U URL (or try the sample)
+3. **Pick groups** - Untick what you don't watch; search, filter by Live/Movies/Series, or hide everything shown and keep a few
+4. **Use it** - Download the .m3u, or sign in and save to get a permanent link for your player
 
 **That's it!** Your cleaned playlist is ready to use in your favorite IPTV app.
 
@@ -237,18 +237,10 @@ URLs as mixed content. strim detects this and skips the blocked direct request, 
 proxies listed above. If your provider blocks the proxies too, download the playlist and paste the
 text into the app.
 
-Note: toggling group visibility updates the counts and UI immediately, but the filtered playlist is
-only regenerated when you click `Refresh`, `Copy`, `Download`, or `Generate shareable URL` — this
-keeps toggling responsive for very large playlists.
-
-For very large playlists (hundreds of thousands of channels) the app now generates the filtered
-playlist in a background Web Worker to avoid blocking the UI. When you click `Refresh`, `Copy`,
-`Download` or `Generate shareable URL`, a background job runs and a progress indicator appears in
-the status pill. Buttons are disabled while generation runs to prevent accidental double-clicks.
-
-Additionally, the Groups list uses a virtualized renderer so only visible group rows are
-rendered to the DOM. This keeps toggling individual groups extremely fast even when there are
-hundreds of thousands of groups.
+The server fetches and analyzes the playlist and builds the filtered file, so the browser only
+handles the group list. Toggling groups updates the counts instantly; nothing is regenerated until
+you download or save. The group list is virtualized, so only visible rows are in the DOM even for
+playlists with thousands of groups.
 
 ## 🎯 Use Cases
 

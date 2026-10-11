@@ -10,7 +10,7 @@ COPY . .
 
 # Place static frontend assets into api/wwwroot so they get published with the API
 RUN mkdir -p api/wwwroot && \
-    cp index.html style.css main.js filter-worker.js api/wwwroot/ && \
+    cp index.html app.css style.css main.js api/wwwroot/ && \
     cp features.html how-to-use.html comparison.html api/wwwroot/ && \
     cp 404.html 500.html 50x.html api/wwwroot/ && \
     cp -r blog api/wwwroot/

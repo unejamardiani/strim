@@ -1,1249 +1,163 @@
+// Strim app: a playlists home and a group picker, driven by the backend (no local M3U parsing).
+// Routes: #/ (playlists, or the editor for guests), #/new, #/p/<playlist id>.
+
+// ---------- Configuration ----------
+
+const API_BASE = (() => {
+  const fromQuery = new URLSearchParams(window.location.search).get('api') || '';
+  let fromStorage = '';
+  try {
+    if (fromQuery) localStorage.setItem('strim.apiBase', fromQuery);
+    fromStorage = localStorage.getItem('strim.apiBase') || '';
+  } catch {
+    // Storage can be unavailable (private mode); the default still works.
+  }
+  return (fromQuery || window.STRIM_API_BASE || fromStorage || '/api').replace(/\/+$/, '');
+})();
+
+// Must match MaxDisabledGroupsCount in api/Program.cs.
+const MAX_HIDDEN_GROUPS = 10000;
+const CONTENT_TYPES = ['Live', 'Movies', 'Series'];
+
+// ---------- State ----------
+
 const state = {
-  groups: new Map(),
-  // Group key -> { groupTitle, contentType }; used to map saved filters onto the loaded groups.
-  groupMeta: new Map(),
-  disabledGroups: new Set(),
-  sourceName: 'untitled',
-  savedPlaylists: [],
-  currentPlaylistId: null,
-  backendSession: null,
-  backendOutputKey: null,
-  localPlaylist: null,
-  totalChannels: 0,
-  groupCount: 0,
-  groupEntries: [],
-  groupFilter: '',
-  lastOutput: '',
-  shareCode: null,
-  currentUser: null,
-  isAuthenticated: false,
-  authProviders: [],
-  filterSourceSelection: null,
+  ready: false,
+  user: null,
+  providers: [],
+  playlists: [],
+  shareBase: '',
+  editor: null,
 };
 
-const statusPill = document.getElementById('status-pill');
-const stats = document.getElementById('stats');
-const groupsGrid = document.getElementById('groups');
-const groupSearchInput = document.getElementById('group-search');
-const outputSize = document.getElementById('output-size');
-const shareUrlInput = document.getElementById('share-url');
-const playlistNameInput = document.getElementById('playlist-name');
-const savedListContainer = document.getElementById('saved-list');
-const savedEmptyState = document.getElementById('saved-empty');
-const authState = document.getElementById('auth-state');
-const authHint = document.getElementById('auth-hint');
-const authUserInput = document.getElementById('auth-username');
-const authPassInput = document.getElementById('auth-password');
-const authLoginButton = document.getElementById('auth-login');
-const authRegisterButton = document.getElementById('auth-register');
-const authLogoutButton = document.getElementById('auth-logout');
-const authProviderButtons = document.querySelectorAll('[data-auth-provider]');
-const filterSourceWrap = document.getElementById('filter-source-wrap');
-const filterSourceTrigger = document.getElementById('filter-source-trigger');
-const filterSourceMenu = document.getElementById('filter-source-menu');
-const applyFilterSourceButton = document.getElementById('apply-filter-source');
+const app = document.getElementById('app');
+const accountButton = document.getElementById('account-button');
+const accountDialog = document.getElementById('account-dialog');
+const accountTitle = document.getElementById('account-title');
+const accountBody = document.getElementById('account-body');
+const menuDialog = document.getElementById('menu-dialog');
+const menuTitle = document.getElementById('menu-title');
+const menuBody = document.getElementById('menu-body');
+const toasts = document.getElementById('toasts');
 
-const samplePlaylist = `#EXTM3U
-#EXTINF:-1 tvg-name="News HD" group-title="News" tvg-logo="https://placehold.co/40x40",Global News HD
-http://example.com/streams/global-news.m3u8
-#EXTINF:-1 tvg-name="Sports 1" group-title="Sports" tvg-logo="https://placehold.co/40x40",Sports One
-http://example.com/streams/sports1.m3u8
-#EXTINF:-1 tvg-name="Sports 2" group-title="Sports" tvg-logo="https://placehold.co/40x40",Sports Two
-http://example.com/streams/sports2.m3u8
-#EXTINF:-1 tvg-name="Kids" group-title="Family" tvg-logo="https://placehold.co/40x40",Kids Central
-http://example.com/streams/kids.m3u8
-#EXTINF:-1 tvg-name="Drama" group-title="Entertainment" tvg-logo="https://placehold.co/40x40",Drama Now
-http://example.com/streams/drama.m3u8`;
+// ---------- DOM helpers ----------
 
-const fetchButton = document.getElementById('fetch-playlist');
-const loadSampleButton = document.getElementById('load-sample');
-const toggleAllButton = document.getElementById('toggle-all');
-const refreshButton = document.getElementById('refresh-output');
-const copyButton = document.getElementById('copy-output');
-const downloadButton = document.getElementById('download-output');
-const serveButton = document.getElementById('serve-output');
-const savePlaylistButton = document.getElementById('save-playlist');
-const authTrigger = document.getElementById('auth-trigger');
-const authTriggerLabel = document.getElementById('auth-trigger-label');
-const authModal = document.getElementById('auth-modal');
-const authCloseButton = document.getElementById('auth-close');
-const authBackdrop = authModal ? authModal.querySelector('.auth-backdrop') : null;
-const manageLinksButton = document.getElementById('manage-links');
-const shareLinksModal = document.getElementById('share-links-modal');
-const shareLinksCloseButton = document.getElementById('share-links-close');
-const shareLinksBackdrop = shareLinksModal ? shareLinksModal.querySelector('.share-links-backdrop') : null;
-const shareLinksListContainer = document.getElementById('share-links-list');
-const shareLinksEmptyState = document.getElementById('share-links-empty');
+function h(tag, props, ...children) {
+  const el = document.createElement(tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value == null || value === false) continue;
+    if (key === 'class') el.className = value;
+    else if (key === 'text') el.textContent = value;
+    else if (key === 'dataset') Object.assign(el.dataset, value);
+    else if (key.startsWith('on') && typeof value === 'function') el.addEventListener(key.slice(2), value);
+    else if (key in el && typeof value !== 'string') el[key] = value;
+    else if (key === 'value') el.value = value;
+    else el.setAttribute(key, value === true ? '' : value);
+  }
+  for (const child of children.flat()) {
+    if (child == null || child === false) continue;
+    el.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return el;
+}
 
-// A source analysis can be expensive. Keep only the newest user-requested load active.
-let activeSourceLoadController = null;
-let activeGenerationController = null;
+const ICONS = {
+  back: '<path d="M15 18l-6-6 6-6"/>',
+  more: '<circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+};
 
-const savedApiBase = (() => {
+function icon(name) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+  return tpl.content.firstChild;
+}
+
+const fmt = (n) => Number(n || 0).toLocaleString();
+const plural = (n, word, many = `${word}s`) => `${fmt(n)} ${n === 1 ? word : many}`;
+
+function relativeTime(value) {
+  const date = new Date(value);
+  const seconds = Math.round((Date.now() - date.getTime()) / 1000);
+  if (!Number.isFinite(seconds)) return '';
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
+  if (seconds < 86400 * 30) return `${Math.floor(seconds / 86400)} d ago`;
+  return date.toLocaleDateString();
+}
+
+function sourceHost(url) {
   try {
-    return localStorage.getItem('strim.apiBase') || '';
+    return new URL(url).host.replace(/^www\./, '');
   } catch {
     return '';
   }
-})();
-const queryApiBase = new URLSearchParams(window.location.search).get('api') || '';
-const API_BASE = queryApiBase || window.STRIM_API_BASE || savedApiBase || '/api';
-if (queryApiBase) {
+}
+
+function fileName(name) {
+  const slug = String(name || 'playlist').trim().replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '');
+  return `${slug || 'playlist'}.m3u`;
+}
+
+// ---------- Toasts ----------
+
+function toast(message, { error = false, duration = 3200 } = {}) {
+  const el = h('div', { class: `toast${error ? ' error' : ''}`, text: message });
+  toasts.append(el);
+  while (toasts.children.length > 3) toasts.firstChild.remove();
+  setTimeout(() => {
+    el.classList.add('leaving');
+    setTimeout(() => el.remove(), 220);
+  }, error ? duration + 2000 : duration);
+}
+
+async function copyText(text, label = 'Link copied') {
   try {
-    localStorage.setItem('strim.apiBase', queryApiBase);
+    await navigator.clipboard.writeText(text);
   } catch {
-    // ignore
-  }
-}
-
-fetchButton.addEventListener('click', () => {
-  const urlInput = document.getElementById('playlist-url');
-  const url = urlInput.value.trim();
-  if (!url) {
-    setStatus('Enter a URL to fetch', 'warn');
-    return;
-  }
-  setStatus('Fetching playlist…', 'info');
-  loadPlaylistFromSource(url);
-});
-
-loadSampleButton.addEventListener('click', async () => {
-  if (!API_BASE) {
-    hydrateLocalPlaylist(samplePlaylist, 'sample.m3u', '', {
-      name: 'Sample playlist',
-      sourceUrl: 'https://example.com/sample.m3u',
-    });
-    await updateOutput({ useWorker: false });
-    return;
-  }
-  try {
-    setStatus('Loading sample playlist…', 'info');
-    const res = await apiRequest('/playlists/sample');
-    if (res && res.text) {
-      hydrateLocalPlaylist(res.text, 'sample.m3u', '', {
-        name: 'Demo playlist (80 channels)',
-        sourceUrl: null,
-      });
-      await updateOutput({ useWorker: false });
-    }
-  } catch {
-    hydrateLocalPlaylist(samplePlaylist, 'sample.m3u', '', {
-      name: 'Sample playlist',
-      sourceUrl: 'https://example.com/sample.m3u',
-    });
-    await updateOutput({ useWorker: false });
-  }
-});
-
-refreshButton.addEventListener('click', async () => {
-  await updateOutput();
-});
-
-copyButton.addEventListener('click', async () => {
-  try {
-    // Copy is the only server-backed action that needs the complete M3U in browser memory.
-    const generated = await updateOutput();
-    const text = state.backendOutputKey
-      ? await fetchBackendOutputText(state.backendOutputKey)
-      : generated || '';
-    await navigator.clipboard.writeText(text || '');
-    setStatus('Copied filtered playlist to clipboard', 'success');
-  } catch (err) {
-    console.error(err);
-    setStatus('Clipboard failed. You can still download the file.', 'warn');
-  }
-});
-
-downloadButton.addEventListener('click', async () => {
-  setStatus('Generating filtered playlist…', 'info');
-  // Prefer backend-streamed download when a saved playlist exists.
-  if (state.isAuthenticated && state.currentPlaylistId && state.shareCode && API_BASE) {
-    const link = document.createElement('a');
-    link.href = buildShareUrl();
-    link.download = `${state.sourceName || 'playlist'}-filtered.m3u`;
-    link.rel = 'noopener';
-    link.click();
-    setStatus('Download started', 'success');
-    return;
-  }
-
-  const generated = await updateOutput();
-  if (state.backendOutputKey) {
-    startBackendOutputDownload(state.backendOutputKey);
-    setStatus('Download started', 'success');
-    return;
-  }
-
-  // Local-only playlists still need client-side generation and a Blob download.
-  const text = generated || '';
-  const blob = new Blob([text || ''], { type: 'application/x-mpegURL' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `${state.sourceName || 'playlist'}-filtered.m3u`;
-  link.click();
-  URL.revokeObjectURL(link.href);
-  setStatus('Download started', 'success');
-});
-
-serveButton.addEventListener('click', async () => {
-  if (!state.isAuthenticated) {
-    setStatus('Sign in to generate shareable URLs.', 'warn');
-    return;
-  }
-  if (!state.currentPlaylistId || !state.shareCode) {
-    setStatus('Save the playlist first to get a shareable URL.', 'warn');
-    return;
-  }
-  const url = buildShareUrl();
-  shareUrlInput.value = url;
-  shareUrlInput.focus();
-  shareUrlInput.select();
-  setStatus('Shareable URL ready', 'success');
-});
-
-if (savePlaylistButton) {
-  savePlaylistButton.addEventListener('click', async () => {
-    await handleSavePlaylist();
-  });
-}
-
-if (savedListContainer) {
-  savedListContainer.addEventListener('click', (e) => {
-    const target = e.target.closest('button[data-action]');
-    if (!target) return;
-    const { action, id } = target.dataset;
-    if (!id) return;
-    if (action === 'load') {
-      loadSavedPlaylist(id);
-    } else if (action === 'delete') {
-      deleteSavedPlaylist(id);
-    } else if (action === 'auto-refresh') {
-      toggleAutoRefresh(id, target);
-    }
-  });
-}
-
-if (filterSourceTrigger) {
-  filterSourceTrigger.addEventListener('click', () => toggleFilterSourceMenu());
-}
-
-if (filterSourceMenu) {
-  filterSourceMenu.addEventListener('click', (e) => {
-    const option = e.target.closest('[data-id]');
-    if (!option) return;
-    const id = option.dataset.id;
-    selectFilterSource(id);
-    closeFilterSourceMenu();
-  });
-}
-
-if (applyFilterSourceButton) {
-  applyFilterSourceButton.addEventListener('click', () => applyFiltersFromPlaylist());
-}
-
-document.addEventListener('click', (e) => {
-  if (!filterSourceWrap) return;
-  if (filterSourceWrap.contains(e.target)) return;
-  closeFilterSourceMenu();
-});
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    closeFilterSourceMenu();
-  }
-});
-
-if (authLoginButton) {
-  authLoginButton.addEventListener('click', async (e) => {
-    e.preventDefault();
-    await handleAuthSubmit('login');
-  });
-}
-
-if (authRegisterButton) {
-  authRegisterButton.addEventListener('click', async (e) => {
-    e.preventDefault();
-    await handleAuthSubmit('register');
-  });
-}
-
-if (authLogoutButton) {
-  authLogoutButton.addEventListener('click', async (e) => {
-    e.preventDefault();
-    await handleLogout();
-  });
-}
-
-if (authProviderButtons && authProviderButtons.length) {
-  authProviderButtons.forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      const provider = btn.dataset.authProvider;
-      if (provider) startExternalProvider(provider);
-    });
-  });
-}
-
-if (authTrigger) {
-  authTrigger.addEventListener('click', () => {
-    openAuthModal();
-  });
-}
-
-if (authCloseButton) {
-  authCloseButton.addEventListener('click', () => closeAuthModal());
-}
-
-if (authBackdrop) {
-  authBackdrop.addEventListener('click', () => closeAuthModal());
-}
-
-if (manageLinksButton) {
-  manageLinksButton.addEventListener('click', async () => {
-    if (!state.isAuthenticated) {
-      setStatus('Sign in to manage share links', 'warn');
-      openAuthModal();
+    // Older mobile browsers: fall back to a temporary selection.
+    const area = h('textarea', { value: text, readonly: true, class: 'sr-only' });
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    if (!ok) {
+      toast('Copy failed. Long-press the link to copy it.', { error: true });
       return;
     }
-    try {
-      await openShareLinksModal();
-    } catch (err) {
-      console.error('Error opening share links modal:', err);
-      setStatus('Failed to open share links', 'error');
-    }
-  });
-}
-
-if (shareLinksCloseButton) {
-  shareLinksCloseButton.addEventListener('click', () => closeShareLinksModal());
-}
-
-if (shareLinksBackdrop) {
-  shareLinksBackdrop.addEventListener('click', () => closeShareLinksModal());
-}
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    closeAuthModal();
-    closeShareLinksModal();
   }
-});
-
-toggleAllButton.addEventListener('click', () => {
-  const shouldEnableAll = state.disabledGroups.size === state.groups.size;
-  state.disabledGroups = new Set();
-
-  if (!shouldEnableAll) {
-    state.groups.forEach((_, key) => state.disabledGroups.add(key));
-  }
-
-  renderGroups();
-  renderStats();
-  updateToggleAllLabel();
-  // We intentionally do not regenerate output automatically to keep toggling fast for huge lists.
-});
-
-if (groupSearchInput) {
-  groupSearchInput.addEventListener('input', (e) => {
-    state.groupFilter = e.target.value || '';
-    if (groupsGrid) groupsGrid.scrollTop = 0;
-    renderGroups();
-  });
+  toast(label);
 }
 
-function setStatus(text, tone = 'info') {
-  statusPill.textContent = text;
-  statusPill.className = 'pill';
-  statusPill.classList.add(`tone-${tone}`);
-}
+// ---------- API ----------
 
-function openAuthModal() {
-  if (!authModal) return;
-  authModal.classList.remove('hidden');
-}
-
-function closeAuthModal() {
-  if (!authModal) return;
-  authModal.classList.add('hidden');
-}
-
-function updateAuthUi() {
-  if (authState) {
-    authState.textContent = state.isAuthenticated
-      ? `Signed in${state.currentUser?.userName ? ` as ${state.currentUser.userName}` : ''}`
-      : 'Guest session';
-  }
-  if (authHint) {
-    authHint.textContent = state.isAuthenticated
-      ? 'Saved playlists stay with your account and can be shared.'
-      : 'Signed-out sessions are temporary; refresh clears your playlist.';
-  }
-  if (authLogoutButton) authLogoutButton.style.display = state.isAuthenticated ? 'inline-flex' : 'none';
-  if (authLoginButton) authLoginButton.style.display = state.isAuthenticated ? 'none' : 'inline-flex';
-  if (authRegisterButton) authRegisterButton.style.display = state.isAuthenticated ? 'none' : 'inline-flex';
-  if (authUserInput) authUserInput.disabled = state.isAuthenticated;
-  if (authPassInput) authPassInput.disabled = state.isAuthenticated;
-  if (authProviderButtons && authProviderButtons.length) {
-    authProviderButtons.forEach((btn) => {
-      const provider = btn.dataset.authProvider;
-      const enabled = state.authProviders.some((p) => p.name === provider);
-      btn.style.display = enabled ? 'inline-flex' : 'none';
-      btn.disabled = state.isAuthenticated || !enabled;
-    });
-  }
-  if (serveButton) {
-    serveButton.disabled = !state.isAuthenticated || !state.currentPlaylistId || !state.shareCode;
-  }
-  if (authTriggerLabel) {
-    authTriggerLabel.textContent = state.isAuthenticated
-      ? state.currentUser?.userName || 'Account'
-      : 'Sign in';
-  }
-  updateSaveButtonLabel();
-}
-
-function openShareLinksModal() {
-  if (!shareLinksModal) return;
-  shareLinksModal.classList.remove('hidden');
-  loadShareLinks();
-}
-
-function closeShareLinksModal() {
-  if (!shareLinksModal) return;
-  shareLinksModal.classList.add('hidden');
-}
-
-async function loadShareLinks() {
-  if (!state.isAuthenticated) return;
-
-  try {
-    const playlists = await apiRequest('/playlists');
-    if (!Array.isArray(playlists) || playlists.length === 0) {
-      shareLinksListContainer.innerHTML = '';
-      shareLinksEmptyState.classList.remove('hidden');
-      return;
-    }
-
-    shareLinksEmptyState.classList.add('hidden');
-    renderShareLinks(playlists);
-  } catch (err) {
-    console.error('Failed to load share links:', err);
-    setStatus('Failed to load share links', 'error');
-  }
-}
-
-let publicShareBaseUrl = '';
-
-function buildShareUrlForPlaylist(playlistId, shareCode) {
-  if (!API_BASE || !playlistId || !shareCode) return '';
-  const base = getShareBaseUrl();
-  return `${base}/playlists/${playlistId}/share/${shareCode}`;
-}
-
-function getShareBaseUrl() {
-  if (publicShareBaseUrl) return publicShareBaseUrl;
-  return API_BASE.startsWith('http')
-    ? API_BASE.replace(/\/$/, '')
-    : new URL(API_BASE.replace(/\/$/, ''), window.location.origin).toString().replace(/\/$/, '');
-}
-
-function renderShareLinks(playlists) {
-  if (!shareLinksListContainer) return;
-
-  shareLinksListContainer.innerHTML = playlists.map((playlist) => {
-    const shareUrl = buildShareUrlForPlaylist(playlist.id, playlist.shareCode);
-    const isActive = playlist.isActive !== false; // Default to true if undefined
-    const statusClass = isActive ? 'text-zone-filter' : 'text-[#ff6b6b]';
-    const statusText = isActive ? 'Active' : 'Inactive';
-    const toggleText = isActive ? 'Deactivate' : 'Activate';
-
-    // Hide URL for inactive links to prevent exposure
-    const displayUrl = isActive ? shareUrl : '(Link deactivated - activate to view)';
-    const urlInputClass = isActive
-      ? 'flex-1 bg-white/[0.04] text-[#aab6ce] border border-white/10 rounded-lg px-2 py-1 text-xs font-mono'
-      : 'flex-1 bg-white/[0.04] text-[#555] border border-white/10 rounded-lg px-2 py-1 text-xs italic';
-
-    return `
-      <div class="share-link-item p-4 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.06] transition-all" data-playlist-id="${playlist.id}" data-is-active="${isActive}">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-              <h4 class="text-[#e7ecf5] font-bold text-base m-0 truncate">${escapeHtml(playlist.name)}</h4>
-              <span class="chip px-2 py-1 rounded-full text-[11px] font-semibold ${statusClass}">${statusText}</span>
-            </div>
-            <p class="text-[#aab6ce] text-xs m-0 mb-2">${playlist.totalChannels || 0} channels • Created ${formatDate(playlist.createdAt)}${playlist.viewCount > 0 ? ` • ${playlist.viewCount.toLocaleString()} view${playlist.viewCount === 1 ? '' : 's'}` : ''}</p>
-            <div class="flex items-center gap-2">
-              <input type="text" readonly value="${isActive ? shareUrl : ''}" placeholder="${!isActive ? displayUrl : ''}" class="${urlInputClass}" data-share-url="${shareUrl}" />
-            </div>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button class="ghost copy-url-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px ${!isActive ? 'opacity-50 cursor-not-allowed' : ''}" data-url="${shareUrl}" ${!isActive ? 'disabled' : ''}>Copy</button>
-            <button class="ghost toggle-active-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-playlist-id="${playlist.id}">${toggleText}</button>
-            <button class="ghost regenerate-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px" data-playlist-id="${playlist.id}">Regenerate</button>
-            <button class="ghost delete-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#ff6b6b] font-bold text-xs transition-all hover:bg-[#ff6b6b]/10 active:translate-y-px" data-playlist-id="${playlist.id}">Delete</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  // Add event listeners with improved clipboard fallback
-  shareLinksListContainer.querySelectorAll('.copy-url-btn').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      const button = e.target;
-      const url = button.dataset.url;
-      const item = button.closest('.share-link-item');
-      const input = item?.querySelector('input[type="text"]');
-
-      // Don't copy if disabled
-      if (button.disabled) return;
-
-      try {
-        // Try modern clipboard API first
-        await navigator.clipboard.writeText(url);
-        setStatus('URL copied to clipboard', 'success');
-      } catch (err) {
-        console.warn('Clipboard API failed, using fallback:', err);
-
-        // Fallback: select the input field for manual copy
-        if (input) {
-          input.value = url; // Ensure URL is visible
-          input.select();
-          input.setSelectionRange(0, 99999); // For mobile
-
-          try {
-            // Try legacy execCommand as fallback
-            const success = document.execCommand('copy');
-            if (success) {
-              setStatus('URL copied to clipboard', 'success');
-            } else {
-              setStatus('Please copy the URL manually (Ctrl+C)', 'warn');
-            }
-          } catch (execErr) {
-            console.error('Fallback copy failed:', execErr);
-            setStatus('Please copy the URL manually (Ctrl+C)', 'warn');
-          }
-        } else {
-          setStatus('Failed to copy URL', 'error');
-        }
-      }
-    });
-  });
-
-  shareLinksListContainer.querySelectorAll('.toggle-active-btn').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      const playlistId = e.target.dataset.playlistId;
-      await togglePlaylistActive(playlistId);
-    });
-  });
-
-  shareLinksListContainer.querySelectorAll('.regenerate-btn').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      const playlistId = e.target.dataset.playlistId;
-      await regenerateShareCode(playlistId);
-    });
-  });
-
-  shareLinksListContainer.querySelectorAll('.delete-btn').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      const playlistId = e.target.dataset.playlistId;
-      if (confirm('Are you sure you want to delete this playlist and its share link?')) {
-        await deletePlaylist(playlistId);
-      }
-    });
-  });
-}
-
-async function togglePlaylistActive(playlistId) {
-  try {
-    const result = await apiRequest(`/playlists/${playlistId}/toggle-active`, { method: 'PATCH' });
-    setStatus(`Share link ${result.isActive ? 'activated' : 'deactivated'}`, 'success');
-
-    // Update UI locally instead of refetching
-    updatePlaylistItemUI(playlistId, { isActive: result.isActive });
-  } catch (err) {
-    console.error('Failed to toggle playlist active status:', err);
-    setStatus('Failed to update status', 'error');
-  }
-}
-
-async function regenerateShareCode(playlistId) {
-  if (!confirm('Regenerate share link? The old URL will stop working.')) return;
-
-  try {
-    const result = await apiRequest(`/playlists/${playlistId}/regenerate-code`, { method: 'POST' });
-    setStatus('Share link regenerated', 'success');
-
-    // Update state if this is the current playlist
-    if (state.currentPlaylistId === playlistId) {
-      state.shareCode = result.shareCode;
-      updateShareUrlDisplay();
-    }
-
-    // Update UI locally instead of refetching
-    updatePlaylistItemUI(playlistId, { shareCode: result.shareCode });
-  } catch (err) {
-    console.error('Failed to regenerate share code:', err);
-    setStatus('Failed to regenerate link', 'error');
-  }
-}
-
-async function deletePlaylist(playlistId) {
-  try {
-    await apiRequest(`/playlists/${playlistId}`, { method: 'DELETE' });
-    setStatus('Playlist deleted', 'success');
-
-    // Clear current playlist if it was deleted
-    if (state.currentPlaylistId === playlistId) {
-      state.currentPlaylistId = null;
-      state.shareCode = null;
-      updateShareUrlDisplay();
-      updateSaveButtonLabel();
-    }
-
-    // Remove from UI locally instead of refetching
-    removePlaylistItemFromUI(playlistId);
-
-    // Still need to refresh the saved playlists sidebar
-    await loadSavedPlaylists();
-  } catch (err) {
-    console.error('Failed to delete playlist:', err);
-    setStatus('Failed to delete playlist', 'error');
-  }
-}
-
-function updatePlaylistItemUI(playlistId, updates) {
-  const item = shareLinksListContainer?.querySelector(`[data-playlist-id="${playlistId}"]`);
-  if (!item) return;
-
-  // Update isActive status
-  if (updates.hasOwnProperty('isActive')) {
-    const isActive = updates.isActive;
-    const statusBadge = item.querySelector('.chip');
-    const toggleBtn = item.querySelector('.toggle-active-btn');
-    const urlInput = item.querySelector('input[type="text"]');
-    const copyBtn = item.querySelector('.copy-url-btn');
-
-    // Update badge
-    if (statusBadge) {
-      statusBadge.textContent = isActive ? 'Active' : 'Inactive';
-      statusBadge.className = `chip px-2 py-1 rounded-full text-[11px] font-semibold ${isActive ? 'text-zone-filter' : 'text-[#ff6b6b]'}`;
-    }
-
-    // Update toggle button
-    if (toggleBtn) {
-      toggleBtn.textContent = isActive ? 'Deactivate' : 'Activate';
-    }
-
-    // Show/hide URL based on active status
-    if (urlInput) {
-      const shareUrl = urlInput.dataset.shareUrl || copyBtn?.dataset.url || '';
-
-      if (isActive) {
-        urlInput.value = shareUrl;
-        urlInput.placeholder = '';
-        urlInput.className = 'flex-1 bg-white/[0.04] text-[#aab6ce] border border-white/10 rounded-lg px-2 py-1 text-xs font-mono';
-      } else {
-        urlInput.value = '';
-        urlInput.placeholder = '(Link deactivated - activate to view)';
-        urlInput.className = 'flex-1 bg-white/[0.04] text-[#555] border border-white/10 rounded-lg px-2 py-1 text-xs italic';
-      }
-    }
-
-    // Enable/disable copy button
-    if (copyBtn) {
-      if (isActive) {
-        copyBtn.disabled = false;
-        copyBtn.className = 'ghost copy-url-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px';
-      } else {
-        copyBtn.disabled = true;
-        copyBtn.className = 'ghost copy-url-btn px-3 py-2 rounded-lg bg-white/6 border border-white/10 text-[#e7ecf5] font-bold text-xs transition-all hover:bg-white/10 active:translate-y-px opacity-50 cursor-not-allowed';
-      }
-    }
-
-    // Update data attribute
-    item.dataset.isActive = isActive;
-  }
-
-  // Update shareCode
-  if (updates.hasOwnProperty('shareCode')) {
-    const urlInput = item.querySelector('input[type="text"]');
-    const copyBtn = item.querySelector('.copy-url-btn');
-    const isActive = item.dataset.isActive !== 'false';
-
-    if (urlInput) {
-      const newUrl = buildShareUrlForPlaylist(playlistId, updates.shareCode);
-      urlInput.dataset.shareUrl = newUrl;
-
-      // Only show URL if link is active
-      if (isActive) {
-        urlInput.value = newUrl;
-      }
-
-      if (copyBtn) {
-        copyBtn.dataset.url = newUrl;
-      }
-    }
-  }
-}
-
-function removePlaylistItemFromUI(playlistId) {
-  const item = shareLinksListContainer?.querySelector(`[data-playlist-id="${playlistId}"]`);
-  if (item) {
-    item.remove();
-
-    // Show empty state if no items left
-    const remainingItems = shareLinksListContainer?.querySelectorAll('.share-link-item');
-    if (remainingItems && remainingItems.length === 0) {
-      shareLinksEmptyState?.classList.remove('hidden');
-    }
-  }
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function formatDate(dateString) {
-  try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'today';
-    if (diffDays === 1) return 'yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-
-    return date.toLocaleDateString();
-  } catch {
-    return 'recently';
-  }
-}
-
-function timeAgo(dateString) {
-  try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffSec = Math.floor((now - date) / 1000);
-    if (diffSec < 60) return 'just now';
-    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}min ago`;
-    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
-    return formatDate(dateString);
-  } catch {
-    return 'recently';
-  }
-}
-
-function updateShareUrlDisplay() {
-  if (!shareUrlInput) return;
-  if (state.currentPlaylistId && state.shareCode) {
-    shareUrlInput.value = buildShareUrl();
-  } else {
-    shareUrlInput.value = '';
-  }
-}
-
-async function fetchAuthProviders() {
-  if (!API_BASE) return;
-  try {
-    const providers = await apiRequest('/auth/providers');
-    state.authProviders = Array.isArray(providers) ? providers : [];
-  } catch (err) {
-    console.warn('Failed to load auth providers', err);
-    state.authProviders = [];
-  }
-  updateAuthUi();
-}
-
-async function fetchAuthState() {
-  if (!API_BASE) {
-    state.isAuthenticated = false;
-    state.currentUser = null;
-    updateAuthUi();
-    return;
-  }
-  try {
-    const me = await apiRequest('/auth/me');
-    state.currentUser = me;
-    state.isAuthenticated = true;
-  } catch (err) {
-    state.currentUser = null;
-    state.isAuthenticated = false;
-  }
-  updateAuthUi();
-}
-
-async function handleAuthSubmit(mode) {
-  if (!API_BASE) {
-    setStatus('Backend not configured for authentication.', 'warn');
-    return;
-  }
-  const username = (authUserInput && authUserInput.value.trim()) || '';
-  const password = (authPassInput && authPassInput.value) || '';
-  if (!username || !password) {
-    setStatus('Enter a username and password.', 'warn');
-    return;
-  }
-
-  try {
-    const path = mode === 'register' ? '/auth/register' : '/auth/login';
-    await apiRequest(path, {
-      method: 'POST',
-      body: {
-        userName: username,
-        password,
-        email: username.includes('@') ? username : undefined,
-      },
-    });
-    if (authPassInput) authPassInput.value = '';
-    setStatus(mode === 'register' ? 'Account created' : 'Signed in', 'success');
-    await fetchAuthState();
-    await loadSavedPlaylists();
-    closeAuthModal();
-  } catch (err) {
-    console.error('Authentication failed', err);
-    setStatus(err?.message || 'Authentication failed', 'warn');
-  }
-}
-
-async function handleLogout() {
-  try {
-    await apiRequest('/auth/logout', { method: 'POST' });
-  } catch (err) {
-    console.warn('Logout failed', err);
-  }
-  state.isAuthenticated = false;
-  state.currentUser = null;
-  state.savedPlaylists = [];
-  state.currentPlaylistId = null;
-  state.shareCode = null;
-  state.filterSourceSelection = null;
-  if (shareUrlInput) {
-    shareUrlInput.value = '';
-  }
-  renderSavedPlaylists();
-  renderFilterSources();
-  updateAuthUi();
-  closeAuthModal();
-  setStatus('Signed out', 'info');
-}
-
-function startExternalProvider(provider) {
-  if (!API_BASE) {
-    setStatus('Backend not configured for authentication.', 'warn');
-    return;
-  }
-  const enabled = state.authProviders.some((p) => p.name === provider);
-  if (!enabled) {
-    setStatus('Provider not configured.', 'warn');
-    return;
-  }
-  const returnUrl = `${window.location.pathname}${window.location.search}`;
-  const url = `${API_BASE}/auth/external/${provider}?returnUrl=${encodeURIComponent(returnUrl)}`;
-  window.location.href = url;
-}
-
-async function loadPlaylistFromSource(url, hydrateOptions = {}) {
-  if (!API_BASE) {
-    setStatus('Backend URL not configured; cannot fetch playlist.', 'warn');
-    return;
-  }
-
-  const controller = beginSourceLoad();
-
-  try {
-    setStatus('Fetching and analyzing playlist via backend…', 'info');
-    const payload = { sourceUrl: url };
-    const providedName = playlistNameInput && playlistNameInput.value.trim();
-    if (providedName) {
-      payload.sourceName = providedName;
-    }
-    const analysis = await apiRequest('/playlist/analyze', {
-      method: 'POST',
-      body: payload,
-      signal: controller.signal,
-    });
-    if (!isCurrentSourceLoad(controller)) return false;
-
-    const friendlyName = analysis.sourceName || deriveNameFromUrl(url);
-    hydrateFromAnalysis(analysis, { ...hydrateOptions, sourceUrl: url, name: friendlyName });
-    return true;
-  } catch (err) {
-    if (controller.signal.aborted || isAbortError(err) || !isCurrentSourceLoad(controller)) {
-      return false;
-    }
-    console.error('Backend fetch failed', err);
-    setStatus(`Unable to fetch playlist from backend: ${err.message || err}`, 'warn');
-    return false;
-  } finally {
-    completeSourceLoad(controller);
-  }
-}
-
-function beginSourceLoad() {
-  activeSourceLoadController?.abort();
-  cancelActiveGeneration();
-  setControlsDisabled(false);
-  const controller = new AbortController();
-  activeSourceLoadController = controller;
-  return controller;
-}
-
-function isCurrentSourceLoad(controller) {
-  return activeSourceLoadController === controller && !controller.signal.aborted;
-}
-
-function completeSourceLoad(controller) {
-  if (activeSourceLoadController === controller) {
-    activeSourceLoadController = null;
-  }
-}
-
-function isAbortError(err) {
-  return err?.name === 'AbortError' || err?.code === 'ABORT_ERR';
-}
-
-function cancelActiveGeneration() {
-  activeGenerationController?.abort();
-  activeGenerationController = null;
-}
-
-function beginGeneration(session) {
-  cancelActiveGeneration();
-  const controller = new AbortController();
-  activeGenerationController = controller;
-  return { controller, cacheKey: session.cacheKey };
-}
-
-function isCurrentGeneration(controller, cacheKey) {
-  return activeGenerationController === controller
-    && !controller.signal.aborted
-    && state.backendSession?.cacheKey === cacheKey;
-}
-
-function hydrateFromAnalysis(analysis, options = {}) {
-  cancelActiveGeneration();
-  const groups = new Map();
-  const groupMeta = new Map();
-  (analysis.groups || []).forEach((g) => {
-    groups.set(g.name, g.count);
-    groupMeta.set(g.name, { groupTitle: g.groupTitle || g.name, contentType: g.contentType || 'Live' });
-  });
-  state.groups = groups;
-  state.groupMeta = groupMeta;
-  state.totalChannels = analysis.totalChannels || Array.from(groups.values()).reduce((acc, val) => acc + val, 0);
-  state.groupCount = analysis.groupCount || groups.size || 0;
-  state.disabledGroups = restoreDisabledGroups(options.disabledGroups, groupMeta);
-  state.currentPlaylistId = options.id || null;
-  state.backendSession = {
-    cacheKey: analysis.cacheKey,
-    sourceUrl: analysis.sourceUrl || options.sourceUrl || '',
-    totalChannels: state.totalChannels,
-    groupCount: state.groupCount,
-    expirationUtc: analysis.expirationUtc ? new Date(analysis.expirationUtc).toISOString() : null,
-  };
-  state.localPlaylist = null;
-  state.backendOutputKey = null;
-  state.lastOutput = '';
-  outputSize.textContent = 'Not generated';
-  state.shareCode = null;
-
-  const nameChoice = options.name || analysis.sourceName || (playlistNameInput && playlistNameInput.value.trim()) || 'playlist';
-  state.sourceName = nameChoice;
-
-  if (playlistNameInput) {
-    playlistNameInput.value = nameChoice;
-  }
-  renderGroups();
-  renderStats();
-  updateAuthUi();
-  const noteSuffix = options.note ? ` (${options.note})` : '';
-  setStatus(`Loaded ${state.totalChannels.toLocaleString()} channels from ${state.sourceName}${noteSuffix}`.trim(), 'success');
-  updateSaveButtonLabel();
-}
-
-function hydrateLocalPlaylist(text, sourceName = 'playlist', note = '', options = {}) {
-  cancelActiveGeneration();
-  const parsed = parseM3U(text);
-  state.groups = parsed.groups;
-  state.groupMeta = parsed.groupMeta;
-  state.totalChannels = parsed.channels.length;
-  state.groupCount = parsed.groups.size;
-  state.disabledGroups = restoreDisabledGroups(options.disabledGroups, parsed.groupMeta);
-  state.currentPlaylistId = options.id || null;
-  state.backendSession = null;
-  state.backendOutputKey = null;
-  state.localPlaylist = {
-    text,
-    channels: parsed.channels,
-    channelLines: parsed.channelLines,
-  };
-  state.lastOutput = '';
-  state.shareCode = options.shareCode || null;
-
-  const nameChoice = options.name || (playlistNameInput && playlistNameInput.value.trim()) || sourceName;
-  state.sourceName = nameChoice;
-
-  if (playlistNameInput) {
-    playlistNameInput.value = nameChoice;
-  }
-  renderGroups();
-  renderStats();
-  updateAuthUi();
-  const noteSuffix = note ? ` (${note})` : '';
-  setStatus(`Loaded ${state.totalChannels.toLocaleString()} channels from ${state.sourceName}${noteSuffix}`.trim(), 'success');
-  updateSaveButtonLabel();
-}
-
-function parseM3U(text) {
-  const lines = text
-    .replace(/\r\n?/g, '\n')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const channels = [];
-  // groupTitle -> Map(contentType -> count)
-  const titleCounts = new Map();
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.startsWith('#EXTINF')) continue;
-    const extinf = line;
-    const url = lines[i + 1] || '';
-    i++;
-
-    const attributes = {};
-    const attrRegex = /(\w[\w-]*)="([^"]*)"/g;
-    let match;
-    while ((match = attrRegex.exec(extinf)) !== null) {
-      attributes[match[1]] = match[2];
-    }
-
-    const name = extinf.split(',').slice(1).join(',').trim() || attributes['tvg-name'] || 'Unknown';
-    const groupTitle = attributes['group-title'] || 'Ungrouped';
-    const contentType = detectContentType(url);
-
-    const hasGroup = /group-title="[^"]*"/i.test(extinf);
-    const normalizedExtinf = hasGroup ? extinf : `${extinf} group-title="${groupTitle}"`;
-
-    const channel = {
-      extinf,
-      normalizedExtinf,
-      url,
-      name,
-      groupTitle,
-      contentType,
-      attributes,
-    };
-
-    channels.push(channel);
-    if (!titleCounts.has(groupTitle)) titleCounts.set(groupTitle, new Map());
-    const typeCounts = titleCounts.get(groupTitle);
-    typeCounts.set(contentType, (typeCounts.get(contentType) || 0) + 1);
-  }
-
-  // Same rule as PlaylistProcessor.BuildGroups: only titles that mix content types are split.
-  const groups = new Map();
-  const groupMeta = new Map();
-  titleCounts.forEach((typeCounts, groupTitle) => {
-    const split = typeCounts.size > 1;
-    typeCounts.forEach((count, contentType) => {
-      const key = split ? groupKey(groupTitle, contentType) : groupTitle;
-      groups.set(key, (groups.get(key) || 0) + count);
-      groupMeta.set(key, { groupTitle, contentType });
-    });
-  });
-
-  const splitTitles = splitGroupTitles(groupMeta);
-  const channelLines = channels.map((channel) => {
-    const outputTitle = outputGroupTitle(channel.groupTitle, channel.contentType, splitTitles);
-    const extinf = outputTitle === channel.groupTitle
-      ? channel.normalizedExtinf
-      : withGroupTitle(channel.normalizedExtinf, outputTitle);
-    return `${extinf}\n${channel.url}`;
-  });
-
-  return { channels, groups, groupMeta, channelLines };
-}
-
-// Xtream Codes providers reuse one group-title for live channels, movies and series.
-// Keep in sync with PlaylistProcessor.DetectContentType/GroupKey and filter-worker.js.
-function detectContentType(url) {
-  const match = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\/(movie|series)\//i.exec(url || '');
-  if (!match) return 'Live';
-  return match[1].toLowerCase() === 'movie' ? 'Movies' : 'Series';
-}
-
-function groupKey(groupTitle, contentType) {
-  return `${groupTitle} \u00B7 ${contentType}`;
-}
-
-function isGroupDisabled(disabled, groupTitle, contentType) {
-  return disabled.has(groupTitle) || disabled.has(groupKey(groupTitle, contentType));
-}
-
-function splitGroupTitles(groupMeta) {
-  const titles = new Set();
-  groupMeta.forEach((meta, key) => {
-    if (key !== meta.groupTitle) titles.add(meta.groupTitle);
-  });
-  return titles;
-}
-
-// Live channels keep the provider's group-title; movies and series of a split title get their own
-// group so players show them apart (same rule as PlaylistProcessor.OutputGroupTitle).
-function outputGroupTitle(groupTitle, contentType, splitTitles) {
-  return contentType !== 'Live' && splitTitles.has(groupTitle) ? groupKey(groupTitle, contentType) : groupTitle;
-}
-
-function withGroupTitle(extinf, groupTitle) {
-  return extinf.replace(/group-title="[^"]*"/i, () => `group-title="${groupTitle}"`);
-}
-
-// The group name as it appears in the generated playlist.
-function groupLabel(key) {
-  const meta = state.groupMeta.get(key);
-  return meta && meta.contentType === 'Live' ? meta.groupTitle : key;
-}
-
-// A saved filter can be a plain group-title (older saves, or a title that is not split) or a
-// content-type key; map either onto the group keys of the playlist that was just loaded.
-function restoreDisabledGroups(savedDisabled, groupMeta) {
-  const saved = new Set(savedDisabled || []);
-  const restored = new Set();
-  groupMeta.forEach((meta, key) => {
-    if (isGroupDisabled(saved, meta.groupTitle, meta.contentType)) {
-      restored.add(key);
-    }
-  });
-  return restored;
-}
-
-function deriveNameFromUrl(url) {
-  try {
-    const parsed = new URL(url);
-    const lastSegment = parsed.pathname.split('/').filter(Boolean).pop();
-    return lastSegment || parsed.hostname || url || 'playlist';
-  } catch {
-    return url || 'playlist';
-  }
-}
-
-function sanitizePlaylistRecord(pl) {
-  if (!pl) return null;
-  return {
-    id: pl.id,
-    name: pl.name,
-    sourceUrl: pl.sourceUrl,
-    sourceName: pl.sourceName,
-    disabledGroups: Array.isArray(pl.disabledGroups) ? pl.disabledGroups : [],
-    totalChannels: pl.totalChannels || 0,
-    groupCount: pl.groupCount || 0,
-    expirationUtc: pl.expirationUtc || null,
-    shareCode: pl.shareCode || null,
-    viewCount: Number.isFinite(Number(pl.viewCount)) ? Number(pl.viewCount) : 0,
-    lastViewedUtc: pl.lastViewedUtc || null,
-    autoRefreshEnabled: pl.autoRefreshEnabled === true,
-    lastRefreshedUtc: pl.lastRefreshedUtc || null,
-    createdAt: pl.createdAt,
-    updatedAt: pl.updatedAt,
-  };
-}
-
-function hasLoadedPlaylist() {
-  return Boolean(state.backendSession || state.localPlaylist);
-}
-
-function buildShareUrl() {
-  if (!state.isAuthenticated || !API_BASE || !state.currentPlaylistId || !state.shareCode) return '';
-  const base = getShareBaseUrl();
-  return `${base}/playlists/${state.currentPlaylistId}/share/${state.shareCode}`;
-}
-
-function buildBackendOutputUrl(outputKey) {
-  if (!API_BASE || !outputKey) return '';
-  return `${API_BASE}/playlist/output/${encodeURIComponent(outputKey)}`;
-}
-
-function startBackendOutputDownload(outputKey) {
-  const url = buildBackendOutputUrl(outputKey);
-  if (!url) {
-    throw new Error('Generated playlist is unavailable. Refresh it and try again.');
-  }
-
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${state.sourceName || 'playlist'}-filtered.m3u`;
-  link.rel = 'noopener';
-  link.click();
-}
-
-async function loadRuntimeConfig() {
-  try {
-    const config = await apiRequest('/config');
-    const configuredShareBaseUrl = config?.publicShareBaseUrl || '';
-    publicShareBaseUrl = String(configuredShareBaseUrl).replace(/\/+$/, '');
-  } catch (err) {
-    console.warn('Failed to load runtime configuration; using the application URL for share links.', err);
-  }
-}
-
-function formatExpiration(expiration) {
-  if (!expiration) return 'Expiry unknown';
-  const date = new Date(expiration);
-  if (Number.isNaN(date.getTime())) return 'Expiry unknown';
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-let cachedCsrfToken = null;
+let csrfToken = null;
 
 async function getCsrfToken() {
-  if (cachedCsrfToken) return cachedCsrfToken;
-  if (!API_BASE) return null;
-
+  if (csrfToken) return csrfToken;
   try {
-    const res = await fetch(`${API_BASE}/auth/csrf-token`, {
-      method: 'GET',
-      credentials: 'include',
-    });
-    if (res.ok) {
-      const data = await res.json();
-      cachedCsrfToken = data.token;
-      return cachedCsrfToken;
-    }
+    const res = await fetch(`${API_BASE}/auth/csrf-token`, { credentials: 'include' });
+    if (res.ok) csrfToken = (await res.json()).token;
   } catch (err) {
     console.warn('Failed to fetch CSRF token', err);
   }
-  return null;
+  return csrfToken;
 }
 
-async function apiRequest(path, { method = 'GET', body, signal } = {}) {
-  if (!API_BASE) {
-    throw new Error('Backend API not configured.');
-  }
-
-  const headers = {
-    'Content-Type': 'application/json',
-  };
-
-  // Include CSRF token for state-changing requests
-  if (method !== 'GET' && method !== 'HEAD') {
+async function api(path, { method = 'GET', body, signal } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  const mutating = method !== 'GET' && method !== 'HEAD';
+  if (mutating) {
     const token = await getCsrfToken();
-    if (token) {
-      headers['X-CSRF-TOKEN'] = token;
-    }
+    if (token) headers['X-CSRF-TOKEN'] = token;
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -1254,830 +168,1203 @@ async function apiRequest(path, { method = 'GET', body, signal } = {}) {
     signal,
   });
 
-  // Clear cached CSRF token on 400/403 as it might be invalid/expired
-  if ((res.status === 400 || res.status === 403) && method !== 'GET' && method !== 'HEAD') {
-    cachedCsrfToken = null;
-  }
-
+  // The antiforgery token is bound to the session; drop it when it may have gone stale.
+  if (mutating && (res.status === 400 || res.status === 403)) csrfToken = null;
   if (res.status === 204) return null;
   if (!res.ok) {
-    const message = await readApiErrorMessage(res);
-    throw createApiError(res, message);
+    const err = new Error(await readError(res));
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
 
-async function fetchBackendOutputText(outputKey) {
-  const url = buildBackendOutputUrl(outputKey);
-  if (!url) {
-    throw new Error('Generated playlist is unavailable. Refresh it and try again.');
-  }
-
-  setStatus('Fetching filtered playlist for clipboard…', 'info');
-  const res = await fetch(url, { credentials: 'include' });
-  if (!res.ok) {
-    const message = await readApiErrorMessage(res);
-    throw createApiError(res, message);
-  }
-  return res.text();
-}
-
-function createApiError(res, message) {
-  const err = new Error(message || defaultApiErrorMessage(res));
-  err.code = res.status === 401 ? 'unauthorized' : res.status === 403 ? 'forbidden' : res.status;
-  return err;
-}
-
-async function readApiErrorMessage(res) {
-  const text = await res.text();
-  if (!text) return '';
-
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('json')) {
+async function readError(res) {
+  let message = '';
+  try {
+    const text = await res.text();
     try {
       const data = JSON.parse(text);
-      return data.detail || data.error || data.message || data.title || text;
+      message = data.error || data.detail || data.message || data.title || '';
     } catch {
-      return text;
+      message = text.startsWith('<') ? '' : text;
+    }
+  } catch {
+    // ignore unreadable bodies
+  }
+  message = message.replace(/\s+/g, ' ').trim().slice(0, 240);
+  if (message) return message;
+  if (res.status === 401) return 'You are signed out.';
+  if (res.status === 429) return 'Too many requests. Wait a moment and try again.';
+  return `Request failed (${res.status}).`;
+}
+
+const isAbort = (err) => err?.name === 'AbortError';
+
+function shareUrl(playlist) {
+  if (!playlist?.id || !playlist.shareCode) return '';
+  return `${state.shareBase}/playlists/${playlist.id}/share/${playlist.shareCode}`;
+}
+
+// ---------- Group filters ----------
+// Keep in sync with PlaylistProcessor.GroupKey and the disabled-group matching on the server.
+
+function groupKey(groupTitle, contentType) {
+  return `${groupTitle} · ${contentType}`;
+}
+
+// A saved filter entry is either a group key or a plain group-title (older saves, or a title
+// that is not split by content type). Map the entries onto the groups of the loaded source and
+// keep the ones that match nothing, so groups a provider drops for a while stay hidden.
+function restoreFilters(entries, groups) {
+  const saved = new Set(entries || []);
+  const disabled = new Set();
+  const matched = new Set();
+  for (const g of groups) {
+    if (saved.has(g.key)) {
+      disabled.add(g.key);
+      matched.add(g.key);
+    }
+    if (saved.has(g.title)) {
+      disabled.add(g.key);
+      matched.add(g.title);
     }
   }
-
-  return text;
+  const extras = [...saved].filter((entry) => !matched.has(entry));
+  return { disabled, extras };
 }
 
-function defaultApiErrorMessage(res) {
-  if (res.status === 401) return 'Unauthorized';
-  if (res.status === 403) return 'Forbidden';
-  return res.statusText || `Request failed with status ${res.status}`;
+// ---------- Auth ----------
+
+async function loadSession() {
+  const [config, providers, me] = await Promise.allSettled([
+    api('/config'),
+    api('/auth/providers'),
+    api('/auth/me'),
+  ]);
+
+  const configured = config.status === 'fulfilled' ? config.value?.publicShareBaseUrl : '';
+  state.shareBase = String(configured || new URL(API_BASE, window.location.origin).toString()).replace(/\/+$/, '');
+  state.providers = providers.status === 'fulfilled' && Array.isArray(providers.value) ? providers.value : [];
+  state.user = me.status === 'fulfilled' ? me.value : null;
+  if (state.user) await loadPlaylists();
 }
 
-async function loadSavedPlaylists() {
-  if (!state.isAuthenticated) {
-    state.savedPlaylists = [];
-    renderSavedPlaylists();
-    renderFilterSources();
-    return;
-  }
-
+async function loadPlaylists() {
   try {
-    const data = await apiRequest('/playlists');
-    state.savedPlaylists = Array.isArray(data) ? data.map(sanitizePlaylistRecord).filter(Boolean) : [];
+    const data = await api('/playlists');
+    state.playlists = Array.isArray(data) ? data : [];
   } catch (err) {
-    console.warn('Failed to load saved playlists', err);
-    state.savedPlaylists = [];
-  }
-  renderSavedPlaylists();
-  renderFilterSources();
-}
-
-async function handleSavePlaylist() {
-  if (!hasLoadedPlaylist()) {
-    setStatus('Load a playlist before saving', 'warn');
-    return;
-  }
-
-  if (!state.isAuthenticated) {
-    setStatus('Sign in to save or share playlists', 'warn');
-    return;
-  }
-
-  const name = (playlistNameInput && playlistNameInput.value.trim()) || state.sourceName || 'Untitled playlist';
-  const sourceUrl = document.getElementById('playlist-url').value.trim();
-  const disabledGroups = Array.from(state.disabledGroups);
-  const isUpdate = Boolean(state.currentPlaylistId);
-  let statusTone = 'success';
-  let statusMessage = isUpdate ? 'Playlist updated' : 'Playlist saved';
-
-  setStatus('Saving playlist…', 'info');
-  const payload = {
-    name,
-    sourceUrl,
-    sourceName: state.sourceName,
-    disabledGroups,
-    totalChannels: state.totalChannels,
-    groupCount: state.groupCount,
-    expirationUtc: state.backendSession?.expirationUtc || null,
-    shareCode: state.shareCode,
-  };
-
-  let saved;
-  try {
-    if (state.currentPlaylistId) {
-      saved = await apiRequest(`/playlists/${state.currentPlaylistId}`, { method: 'PUT', body: payload });
-    } else {
-      saved = await apiRequest('/playlists', { method: 'POST', body: payload });
-    }
-  } catch (err) {
-    console.warn('API save failed', err);
-    setStatus('Unable to save playlist. Please try again.', 'warn');
-    return;
-  }
-
-  state.savedPlaylists = [saved, ...state.savedPlaylists.filter((p) => p.id !== saved.id)];
-  state.currentPlaylistId = saved.id;
-  state.shareCode = saved.shareCode || state.shareCode;
-  renderSavedPlaylists();
-  renderFilterSources();
-  updateSaveButtonLabel();
-  updateAuthUi();
-  setStatus(statusMessage, statusTone);
-}
-
-async function loadSavedPlaylist(id) {
-  if (!state.isAuthenticated) {
-    setStatus('Sign in to load saved playlists', 'warn');
-    return;
-  }
-
-  const playlist = state.savedPlaylists.find((p) => p.id === id);
-  if (!playlist) return;
-
-  const name = playlist.name || playlist.sourceName || 'playlist';
-  if (playlistNameInput) playlistNameInput.value = name;
-  const urlField = document.getElementById('playlist-url');
-  if (urlField) urlField.value = playlist.sourceUrl || '';
-  state.shareCode = playlist.shareCode || null;
-
-  const hydrateOpts = {
-    disabledGroups: playlist.disabledGroups || [],
-    id: playlist.id,
-    name,
-    sourceUrl: playlist.sourceUrl,
-    note: playlist.sourceUrl ? `saved from ${playlist.sourceUrl}` : 'saved playlist',
-  };
-
-  // Backward compatibility: if a legacy saved entry still has rawText, use it locally.
-  if (playlist.rawText) {
-    hydrateLocalPlaylist(playlist.rawText, name, hydrateOpts.note, hydrateOpts);
-    renderSavedPlaylists();
-    updateSaveButtonLabel();
-    await updateOutput({ useWorker: true });
-    setStatus(`Loaded saved playlist "${name}"`, 'success');
-    return;
-  }
-
-  if (playlist.sourceUrl) {
-    const loaded = await loadPlaylistFromSource(playlist.sourceUrl, hydrateOpts);
-    if (!loaded) return;
-
-    renderSavedPlaylists();
-    updateSaveButtonLabel();
-    state.shareCode = playlist.shareCode || state.shareCode;
-    setStatus(`Loaded saved playlist "${name}"`, 'success');
-    return;
-  }
-
-  setStatus('Saved playlist is missing a source URL', 'warn');
-}
-
-async function deleteSavedPlaylist(id) {
-  if (!state.isAuthenticated) {
-    setStatus('Sign in to manage saved playlists', 'warn');
-    return;
-  }
-
-  try {
-    await apiRequest(`/playlists/${id}`, { method: 'DELETE' });
-  } catch (err) {
-    console.warn('API delete failed', err);
-  }
-  state.savedPlaylists = state.savedPlaylists.filter((p) => p.id !== id);
-  if (state.currentPlaylistId === id) {
-    state.currentPlaylistId = null;
-    state.shareCode = null;
-    updateSaveButtonLabel();
-  }
-  renderSavedPlaylists();
-  renderFilterSources();
-  updateAuthUi();
-  setStatus('Playlist deleted', 'success');
-}
-
-async function toggleAutoRefresh(id, button) {
-  if (!state.isAuthenticated) {
-    setStatus('Sign in to manage auto-refresh', 'warn');
-    return;
-  }
-
-  const playlist = state.savedPlaylists.find((p) => p.id === id);
-  if (!playlist) return;
-
-  const newState = !playlist.autoRefreshEnabled;
-
-  try {
-    await apiRequest(`/playlists/${id}/auto-refresh`, {
-      method: 'PATCH',
-      body: { enabled: newState },
-    });
-    playlist.autoRefreshEnabled = newState;
-    button.textContent = newState ? 'Auto: on' : 'Auto: off';
-    setStatus(newState ? 'Auto-refresh enabled' : 'Auto-refresh disabled', 'success');
-  } catch (err) {
-    setStatus('Failed to update auto-refresh setting', 'warn');
+    state.playlists = [];
+    if (err.status === 401) state.user = null;
+    else toast(`Could not load your playlists. ${err.message}`, { error: true });
   }
 }
 
-function renderSavedPlaylists() {
-  if (!savedListContainer || !savedEmptyState) return;
-  savedListContainer.replaceChildren();
-  const playlists = [...state.savedPlaylists].sort((a, b) => {
-    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
-    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
-    return bTime - aTime;
-  });
-  savedEmptyState.textContent = state.isAuthenticated
-    ? 'No saved playlists yet.'
-    : 'Sign in to sync playlists across sessions.';
-  if (playlists.length === 0) {
-    savedEmptyState.style.display = 'block';
-    return;
-  }
-  savedEmptyState.style.display = 'none';
-
-  playlists.forEach((pl) => {
-    const row = document.createElement('div');
-    row.className = 'saved-item';
-    if (pl.id === state.currentPlaylistId) row.classList.add('active');
-
-    const meta = document.createElement('div');
-    meta.className = 'saved-meta';
-
-    const name = document.createElement('div');
-    name.className = 'saved-name';
-    name.textContent = pl.name || pl.sourceName || 'Untitled playlist';
-
-    const sub = document.createElement('div');
-    sub.className = 'saved-sub';
-    const filters = pl.disabledGroups ? pl.disabledGroups.length : 0;
-    const parts = [];
-    const channels = Number.isFinite(Number(pl.totalChannels)) ? Number(pl.totalChannels) : 0;
-    const groups = Number.isFinite(Number(pl.groupCount)) ? Number(pl.groupCount) : 0;
-    parts.push(formatExpiration(pl.expirationUtc));
-    parts.push(`${channels.toLocaleString()} channel${channels === 1 ? '' : 's'}`);
-    parts.push(`${groups.toLocaleString()} group${groups === 1 ? '' : 's'}`);
-    parts.push(`${filters} filter${filters === 1 ? '' : 's'}`);
-    if (pl.viewCount > 0) parts.push(`${pl.viewCount.toLocaleString()} view${pl.viewCount === 1 ? '' : 's'}`);
-    if (pl.lastRefreshedUtc) parts.push(`Refreshed ${timeAgo(pl.lastRefreshedUtc)}`);
-    sub.textContent = parts.join(' • ');
-
-    meta.append(name, sub);
-
-    const actions = document.createElement('div');
-    actions.className = 'saved-actions';
-
-    const loadBtn = document.createElement('button');
-    loadBtn.className = pl.id === state.currentPlaylistId ? 'primary' : 'ghost';
-    loadBtn.textContent = pl.id === state.currentPlaylistId ? 'Loaded' : 'Load';
-    loadBtn.dataset.action = 'load';
-    loadBtn.dataset.id = pl.id;
-    loadBtn.disabled = pl.id === state.currentPlaylistId;
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'ghost';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.dataset.action = 'delete';
-    deleteBtn.dataset.id = pl.id;
-
-    const refreshToggle = document.createElement('button');
-    refreshToggle.className = 'ghost';
-    refreshToggle.textContent = pl.autoRefreshEnabled ? 'Auto: on' : 'Auto: off';
-    refreshToggle.dataset.action = 'auto-refresh';
-    refreshToggle.dataset.id = pl.id;
-
-    actions.append(loadBtn, refreshToggle, deleteBtn);
-    row.append(meta, actions);
-    savedListContainer.append(row);
-  });
+function updateAccountButton() {
+  accountButton.hidden = false;
+  accountButton.textContent = state.user ? state.user.userName || 'Account' : 'Sign in';
 }
 
-function updateSaveButtonLabel() {
-  if (!savePlaylistButton) return;
-  if (!state.isAuthenticated) {
-    savePlaylistButton.textContent = 'Sign in to save';
-    savePlaylistButton.disabled = true;
-    return;
-  }
-  savePlaylistButton.disabled = !hasLoadedPlaylist();
-  savePlaylistButton.textContent = state.currentPlaylistId ? 'Update playlist' : 'Save playlist';
-}
-
-function renderFilterSources() {
-  if (!filterSourceWrap || !filterSourceTrigger || !filterSourceMenu) return;
-  filterSourceMenu.replaceChildren();
-  closeFilterSourceMenu();
-
-  if (!state.isAuthenticated) {
-    filterSourceTrigger.textContent = 'Sign in to reuse filters';
-    filterSourceWrap.classList.add('disabled');
-    state.filterSourceSelection = null;
-    updateFilterSourceButtonState();
-    return;
-  }
-
-  if (!state.savedPlaylists.length) {
-    filterSourceTrigger.textContent = 'No saved playlists yet';
-    filterSourceWrap.classList.add('disabled');
-    state.filterSourceSelection = null;
-    updateFilterSourceButtonState();
-    return;
-  }
-
-  filterSourceWrap.classList.remove('disabled');
-
-  state.savedPlaylists.forEach((pl) => {
-    const option = document.createElement('div');
-    option.className = 'select-option';
-    option.setAttribute('role', 'option');
-    option.dataset.id = pl.id;
-    const name = document.createElement('span');
-    name.textContent = pl.name || pl.sourceName || 'Untitled';
-    const meta = document.createElement('small');
-    const filterCount = pl.disabledGroups ? pl.disabledGroups.length : 0;
-    meta.textContent = `${filterCount} filter${filterCount === 1 ? '' : 's'}`;
-    option.append(name, meta);
-    if (pl.id === state.filterSourceSelection) {
-      option.classList.add('active');
-    }
-    filterSourceMenu.append(option);
-  });
-
-  const selected =
-    state.savedPlaylists.find((p) => p.id === state.filterSourceSelection) ?? state.savedPlaylists[0];
-  state.filterSourceSelection = selected?.id || null;
-  if (selected) {
-    const count = selected.disabledGroups ? selected.disabledGroups.length : 0;
-    filterSourceTrigger.textContent = `${selected.name || selected.sourceName || 'Untitled'} • ${count} filter${count === 1 ? '' : 's'}`;
+function openAccount(hint) {
+  accountBody.replaceChildren();
+  if (state.user) {
+    accountTitle.textContent = 'Account';
+    accountBody.append(
+      h('p', { class: 'secondary' }, 'Signed in as ', h('strong', { text: state.user.userName || state.user.email })),
+      h('button', { class: 'btn btn-block', type: 'button', onclick: signOut }, 'Sign out')
+    );
   } else {
-    filterSourceTrigger.textContent = 'Select a saved playlist';
+    accountTitle.textContent = 'Sign in';
+    const form = h('form', { class: 'stack', novalidate: true });
+    const user = h('input', { class: 'input', name: 'username', type: 'text', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false', required: true });
+    const pass = h('input', { class: 'input', name: 'password', type: 'password', autocomplete: 'current-password', required: true });
+    const signIn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Sign in');
+    const register = h('button', { class: 'btn', type: 'button' }, 'Create account');
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitAuth('login', user, pass, signIn);
+    });
+    register.addEventListener('click', () => {
+      pass.autocomplete = 'new-password';
+      submitAuth('register', user, pass, register);
+    });
+
+    if (hint) accountBody.append(h('p', { class: 'secondary', text: hint }));
+    const enabled = state.providers.map((p) => p.name).filter(Boolean);
+    if (enabled.length) {
+      const labels = { google: 'Google', github: 'GitHub', microsoft: 'Microsoft' };
+      accountBody.append(
+        h('div', { class: 'stack' },
+          enabled.map((name) => h('button', {
+            class: 'btn btn-block',
+            type: 'button',
+            onclick: () => startExternalLogin(name),
+          }, `Continue with ${labels[name] || name}`))),
+        h('div', { class: 'divider', text: 'or' })
+      );
+    }
+    form.append(
+      h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Username or email' }), user),
+      h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Password' }), pass),
+      h('div', { class: 'row-actions' }, signIn, register)
+    );
+    accountBody.append(form);
+    setTimeout(() => user.focus(), 50);
   }
-  updateFilterSourceButtonState();
+  if (!accountDialog.open) accountDialog.showModal();
 }
 
-function selectFilterSource(id) {
-  state.filterSourceSelection = id || null;
-  renderFilterSources();
-}
-
-function updateFilterSourceButtonState() {
-  const disabled = !state.filterSourceSelection || !state.isAuthenticated;
-  if (applyFilterSourceButton) applyFilterSourceButton.disabled = disabled;
-}
-
-function toggleFilterSourceMenu() {
-  if (!filterSourceMenu || !filterSourceWrap) return;
-  if (filterSourceWrap.classList.contains('disabled')) return;
-  filterSourceMenu.classList.toggle('hidden');
-}
-
-function closeFilterSourceMenu() {
-  if (filterSourceMenu) {
-    filterSourceMenu.classList.add('hidden');
-  }
-}
-
-function applyFiltersFromPlaylist() {
-  if (!state.isAuthenticated) {
-    setStatus('Sign in to copy filters from a saved playlist.', 'warn');
+async function submitAuth(mode, userInput, passInput, button) {
+  const userName = userInput.value.trim();
+  const password = passInput.value;
+  if (!userName || !password) {
+    toast('Enter a username and a password.', { error: true });
     return;
   }
-  if (state.groups.size === 0) {
-    setStatus('Load a playlist before copying filters.', 'warn');
-    return;
+  button.disabled = true;
+  try {
+    await api(mode === 'register' ? '/auth/register' : '/auth/login', {
+      method: 'POST',
+      body: { userName, password, email: userName.includes('@') ? userName : undefined },
+    });
+    csrfToken = null;
+    state.user = await api('/auth/me');
+    await loadPlaylists();
+    accountDialog.close();
+    toast(mode === 'register' ? 'Account created' : 'Signed in');
+    afterAuthChange();
+  } catch (err) {
+    const messages = { 401: 'Wrong username or password.', 423: 'Account locked. Try again later.' };
+    toast(messages[err.status] || err.message, { error: true });
+  } finally {
+    button.disabled = false;
   }
-  const sourceId = state.filterSourceSelection;
-  if (!sourceId) {
-    setStatus('Choose a playlist to copy filters from.', 'warn');
-    return;
-  }
-  const source = state.savedPlaylists.find((p) => p.id === sourceId);
-  if (!source) {
-    setStatus('Could not find the selected playlist.', 'warn');
-    return;
-  }
-  const disabled = restoreDisabledGroups(source.disabledGroups, state.groupMeta);
-  state.disabledGroups = disabled;
-  renderGroups();
-  renderStats();
-  updateToggleAllLabel();
-  setStatus(
-    `Copied ${disabled.size} filter${disabled.size === 1 ? '' : 's'} from "${source.name || source.sourceName || 'playlist'}"`,
-    'success'
-  );
 }
 
-let groupsResizeObserver = null;
-let windowResizeHooked = false;
+function startExternalLogin(provider) {
+  const returnUrl = `${window.location.pathname}${window.location.search}`;
+  window.location.href = `${API_BASE}/auth/external/${encodeURIComponent(provider)}?returnUrl=${encodeURIComponent(returnUrl)}`;
+}
 
-function renderGroups() {
-  const filterTerm = (state.groupFilter || '').trim().toLowerCase();
-  const groupsArray = [...state.groups.entries()];
-  const filtered = filterTerm ? groupsArray.filter(([name]) => name.toLowerCase().includes(filterTerm)) : groupsArray;
-  state.groupEntries = filtered.sort((a, b) => b[1] - a[1]);
+async function signOut() {
+  try {
+    await api('/auth/logout', { method: 'POST' });
+  } catch (err) {
+    console.warn('Logout failed', err);
+  }
+  csrfToken = null;
+  state.user = null;
+  state.playlists = [];
+  if (state.editor?.id) closeEditor();
+  accountDialog.close();
+  toast('Signed out');
+  afterAuthChange();
+}
 
-  const totalItems = state.groupEntries.length;
+function afterAuthChange() {
+  updateAccountButton();
+  // A guest who loaded groups keeps them after signing in, so they can save right away.
+  const ed = state.editor;
+  if (state.user && ed && !ed.id && ed.phase === 'ready') {
+    navigate('#/new', { replace: true });
+  } else if (!state.user && location.hash !== '#/' && location.hash !== '') {
+    navigate('#/', { replace: true });
+  } else {
+    route();
+  }
+}
 
-  const renderStatic = () => {
-    groupsGrid.classList.remove('group-virtual');
-    groupsGrid.classList.add('group-list');
-    groupsGrid.style.position = 'relative';
-    groupsGrid.style.overflowY = 'auto';
-    groupsGrid.replaceChildren();
+// ---------- Router ----------
 
-    if (totalItems === 0) {
-      const el = document.createElement('div');
-      el.className = 'hint';
-      if (filterTerm) {
-        el.textContent = 'No groups match your search.';
-      } else {
-        el.innerHTML = 'Paste an M3U URL above or click <strong>Sample</strong> to try a demo with thousands of channels.';
-      }
-      groupsGrid.append(el);
+let currentHash = location.hash;
+
+function parseRoute() {
+  const path = location.hash.replace(/^#/, '') || '/';
+  const match = /^\/p\/([0-9a-f-]{36})$/i.exec(path);
+  if (match) return { name: 'playlist', id: match[1].toLowerCase() };
+  if (path === '/new') return { name: 'new' };
+  return { name: 'home' };
+}
+
+function navigate(hash, { replace = false } = {}) {
+  if (location.hash === hash) {
+    route();
+    return;
+  }
+  if (replace) {
+    history.replaceState(null, '', hash);
+    currentHash = hash;
+    route();
+  } else {
+    location.hash = hash;
+  }
+}
+
+window.addEventListener('hashchange', () => {
+  if (location.hash === currentHash) return;
+  const target = parseRoute();
+  const ed = state.editor;
+  const leavingEditor = ed && !(target.name === 'playlist' && target.id === ed.id) && !(target.name === 'new' && !ed.id);
+  if (leavingEditor && isDirty(ed)) {
+    if (!confirm('Discard unsaved changes?')) {
+      history.replaceState(null, '', currentHash || '#/');
       return;
     }
+    closeEditor();
+  }
+  currentHash = location.hash;
+  route();
+});
 
-    const fragment = document.createDocumentFragment();
-    state.groupEntries.forEach(([groupTitle, cnt], idx) => {
-      const node = document.createElement('div');
-      node.className = 'group-list-item';
+window.addEventListener('beforeunload', (e) => {
+  if (state.editor && isDirty(state.editor)) e.preventDefault();
+});
 
-      const info = document.createElement('div');
-      info.className = 'group-info';
+function route() {
+  if (!state.ready) return;
+  closeSheets();
+  const target = parseRoute();
+  if (!state.user) {
+    if (target.name !== 'home') {
+      history.replaceState(null, '', '#/');
+      currentHash = '#/';
+    }
+    showEditor(null);
+    return;
+  }
+  if (target.name === 'home') return showHome();
+  if (target.name === 'new') return showEditor(null);
+  const playlist = state.playlists.find((p) => p.id === target.id);
+  if (!playlist) {
+    toast('That playlist does not exist any more.', { error: true });
+    navigate('#/', { replace: true });
+    return;
+  }
+  showEditor(playlist);
+}
 
-      const title = document.createElement('span');
-      title.className = 'group-title';
-      title.textContent = groupLabel(groupTitle);
+function closeSheets() {
+  if (menuDialog.open) menuDialog.close();
+}
 
-      const count = document.createElement('span');
-      count.className = 'group-count';
-      count.textContent = `${cnt.toLocaleString()} channel${cnt === 1 ? '' : 's'}`;
+for (const dialog of [accountDialog, menuDialog]) {
+  dialog.addEventListener('click', (e) => {
+    // Close on backdrop clicks and on the close button.
+    if (e.target === dialog || e.target.closest('[data-close]')) dialog.close();
+  });
+}
 
-      info.append(title, count);
+function setActionBar(visible) {
+  document.body.classList.toggle('has-actionbar', visible);
+}
 
-      const switchLabel = document.createElement('label');
-      switchLabel.className = 'switch';
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.className = 'group-toggle';
-      checkbox.dataset.index = idx;
-      checkbox.checked = !state.disabledGroups.has(groupTitle);
-      const slider = document.createElement('span');
-      slider.className = 'slider';
-      switchLabel.append(checkbox, slider);
+// ---------- Home ----------
 
-      node.append(info, switchLabel);
-      node.classList.toggle('disabled', state.disabledGroups.has(groupTitle));
-      fragment.append(node);
-    });
+function showHome() {
+  clearInterval(loadingTimer);
+  teardownPicker();
+  setActionBar(false);
+  document.title = 'Your playlists · Strim';
 
-    groupsGrid.append(fragment);
+  const playlists = [...state.playlists].sort(
+    (a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
+  );
 
-    // Clear event handlers from virtual list mode
-    groupsGrid.onclick = null;
-    groupsGrid.onscroll = null;
+  const head = h('div', { class: 'page-head' },
+    h('h1', { text: 'Playlists' }),
+    playlists.length ? h('a', { class: 'btn btn-primary btn-sm', href: '#/new' }, icon('plus'), 'New playlist') : null
+  );
 
-    groupsGrid.onchange = (e) => {
-      const target = e.target;
-      if (!target.classList.contains('group-toggle')) return;
-      const idx = Number(target.dataset.index);
-      const [groupTitle] = state.groupEntries[idx] || [];
-      if (!groupTitle) return;
-      if (target.checked) {
-        state.disabledGroups.delete(groupTitle);
-      } else {
-        state.disabledGroups.add(groupTitle);
-      }
-      renderStats();
-      updateToggleAllLabel();
-      target.closest('.group-list-item')?.classList.toggle('disabled', !target.checked);
-    };
+  if (!playlists.length) {
+    app.replaceChildren(
+      head,
+      h('div', { class: 'card empty' },
+        h('strong', { text: 'No playlists yet' }),
+        h('p', { text: 'Add your provider’s M3U link, pick the groups you want and get a link for your player.' }),
+        h('a', { class: 'btn btn-primary', href: '#/new' }, icon('plus'), 'New playlist'))
+    );
+    return;
+  }
 
-    updateToggleAllLabel();
+  app.replaceChildren(head, h('div', { class: 'playlist-list' }, playlists.map(playlistCard)));
+}
+
+function playlistMeta(playlist) {
+  const parts = [];
+  const total = playlist.groupCount || 0;
+  const kept = Math.max(0, total - (playlist.disabledGroups?.length || 0));
+  parts.push(h('span', { text: `${fmt(kept)} of ${plural(total, 'group')} kept` }));
+  if (playlist.viewCount > 0) {
+    const last = playlist.lastViewedUtc ? `, last ${relativeTime(playlist.lastViewedUtc)}` : '';
+    parts.push(h('span', { text: `Fetched ${fmt(playlist.viewCount)}×${last}` }));
+  } else {
+    parts.push(h('span', { text: 'Not fetched by a player yet' }));
+  }
+  if (playlist.expirationUtc) {
+    const expires = new Date(playlist.expirationUtc);
+    const days = Math.ceil((expires - Date.now()) / 86400000);
+    if (days < 0) parts.push(h('span', { class: 'bad', text: 'Subscription expired' }));
+    else if (days <= 14) parts.push(h('span', { class: 'warn', text: `Expires in ${plural(days, 'day')}` }));
+    else parts.push(h('span', { text: `Expires ${expires.toLocaleDateString()}` }));
+  }
+  return h('div', { class: 'meta' }, parts);
+}
+
+function linkBox(playlist) {
+  const active = playlist.isActive !== false;
+  const url = shareUrl(playlist);
+  if (!active) {
+    return h('div', { class: 'link-box' },
+      h('div', { class: 'link-url off', text: 'Link turned off. Players get an error.' }),
+      h('button', { class: 'btn btn-sm', type: 'button', onclick: () => toggleLink(playlist) }, 'Turn on'));
+  }
+  return h('div', { class: 'link-box' },
+    h('div', { class: 'link-url', title: url }, h('span', { text: url })),
+    h('button', { class: 'btn btn-sm', type: 'button', onclick: () => copyText(url) }, icon('copy'), 'Copy'));
+}
+
+function playlistCard(playlist) {
+  return h('article', { class: 'card playlist-card' },
+    h('div', { class: 'playlist-card-head' },
+      h('div', null,
+        h('h2', { class: 'playlist-title' }, h('a', { href: `#/p/${playlist.id}`, text: playlist.name || 'Untitled' })),
+        playlistMeta(playlist)),
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Actions for ${playlist.name}`, onclick: () => openPlaylistMenu(playlist.id) }, icon('more'))),
+    linkBox(playlist),
+    h('div', { class: 'row-actions' },
+      h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}` }, icon('list'), 'Edit groups')));
+}
+
+function openPlaylistMenu(id) {
+  const playlist = state.playlists.find((p) => p.id === id);
+  if (!playlist) return;
+  const active = playlist.isActive !== false;
+  const item = (iconName, label, onclick, { danger = false, sub = '', trailing = null } = {}) =>
+    h('button', { class: `menu-item${danger ? ' danger' : ''}`, type: 'button', onclick },
+      icon(iconName),
+      h('span', { class: 'grow' }, label, sub ? h('small', { text: sub }) : null),
+      trailing);
+
+  const current = parseRoute();
+  const inEditor = current.name === 'playlist' && current.id === playlist.id;
+  menuTitle.textContent = playlist.name || 'Playlist';
+  menuBody.replaceChildren(h('div', { class: 'menu' },
+    inEditor ? null : item('list', 'Edit groups', () => navigate(`#/p/${playlist.id}`)),
+    active ? item('copy', 'Copy player link', () => { menuDialog.close(); copyText(shareUrl(playlist)); }) : null,
+    active ? h('a', { class: 'menu-item', href: shareUrl(playlist), download: fileName(playlist.name), onclick: () => menuDialog.close() },
+      icon('download'), h('span', { class: 'grow', text: 'Download .m3u' })) : null,
+    h('div', { class: 'menu-sep' }),
+    item('clock', 'Refresh every 6 hours', () => toggleAutoRefresh(playlist), {
+      sub: playlist.lastRefreshedUtc ? `Last refresh ${relativeTime(playlist.lastRefreshedUtc)}` : 'Keeps the provider list cached for players',
+      trailing: h('span', { class: `switch${playlist.autoRefreshEnabled ? ' on' : ''}`, 'aria-hidden': 'true' }),
+    }),
+    item('link', active ? 'Turn link off' : 'Turn link on', () => toggleLink(playlist), {
+      sub: active ? 'Players stop receiving the playlist' : 'Players can fetch the playlist again',
+    }),
+    item('refresh', 'Replace link', () => regenerateLink(playlist), { sub: 'The current link stops working' }),
+    h('div', { class: 'menu-sep' }),
+    item('trash', 'Delete playlist', () => deletePlaylist(playlist), { danger: true })
+  ));
+  if (!menuDialog.open) menuDialog.showModal();
+}
+
+function replacePlaylist(updated) {
+  state.playlists = state.playlists.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+  return state.playlists.find((p) => p.id === updated.id);
+}
+
+function refreshViews(playlist) {
+  if (menuDialog.open && playlist) openPlaylistMenu(playlist.id);
+  const target = parseRoute();
+  if (target.name === 'home') showHome();
+  else if (state.editor?.id === playlist?.id) renderLinkCard();
+}
+
+async function toggleLink(playlist) {
+  try {
+    const result = await api(`/playlists/${playlist.id}/toggle-active`, { method: 'PATCH' });
+    const updated = replacePlaylist({ id: playlist.id, isActive: result.isActive });
+    toast(result.isActive ? 'Link turned on' : 'Link turned off');
+    refreshViews(updated);
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+async function regenerateLink(playlist) {
+  if (!confirm('Replace the player link? The current link stops working and you need to update your players.')) return;
+  try {
+    const result = await api(`/playlists/${playlist.id}/regenerate-code`, { method: 'POST' });
+    const updated = replacePlaylist({ id: playlist.id, shareCode: result.shareCode });
+    toast('New link created');
+    refreshViews(updated);
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+async function toggleAutoRefresh(playlist) {
+  const enabled = !playlist.autoRefreshEnabled;
+  try {
+    await api(`/playlists/${playlist.id}/auto-refresh`, { method: 'PATCH', body: { enabled } });
+    const updated = replacePlaylist({ id: playlist.id, autoRefreshEnabled: enabled });
+    refreshViews(updated);
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+async function deletePlaylist(playlist) {
+  if (!confirm(`Delete "${playlist.name}"? Its player link stops working.`)) return;
+  try {
+    await api(`/playlists/${playlist.id}`, { method: 'DELETE' });
+    state.playlists = state.playlists.filter((p) => p.id !== playlist.id);
+    menuDialog.close();
+    toast('Playlist deleted');
+    if (state.editor?.id === playlist.id) closeEditor();
+    if (parseRoute().name === 'home') showHome();
+    else navigate('#/', { replace: true });
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+// ---------- Editor ----------
+
+function newEditor(playlist) {
+  return {
+    id: playlist?.id || null,
+    name: playlist?.name || '',
+    sourceUrl: playlist?.sourceUrl || '',
+    savedName: playlist?.name || '',
+    savedUrl: playlist?.sourceUrl || '',
+    savedFilters: playlist?.disabledGroups || [],
+    phase: 'source', // source | loading | ready | error
+    error: '',
+    editingSource: !playlist,
+    isSample: false,
+    controller: null,
+    startedAt: 0,
+    cacheKey: null,
+    totalChannels: 0,
+    expirationUtc: null,
+    groups: [],
+    typeCounts: {},
+    disabled: new Set(),
+    extras: [],
+    baseline: '',
+    filter: { query: '', type: 'all', show: 'all', sort: 'provider' },
+    view: [],
+    busy: false,
   };
+}
 
-  const shouldVirtualize = totalItems > 500;
-  if (!shouldVirtualize) {
-    renderStatic();
-    return;
-  }
+function filterSignature(ed) {
+  return JSON.stringify([...ed.disabled, ...ed.extras].sort());
+}
 
-  const ITEM_HEIGHT = 56;
-  const BUFFER = 6;
+function isDirty(ed) {
+  if (!ed || ed.isSample) return false;
+  if (!ed.id) return Boolean(state.user) && ed.phase === 'ready';
+  if (ed.name.trim() !== ed.savedName || ed.sourceUrl !== ed.savedUrl) return true;
+  return ed.phase === 'ready' && filterSignature(ed) !== ed.baseline;
+}
 
-  groupsGrid.classList.remove('group-list');
-  groupsGrid.classList.add('group-virtual');
-  groupsGrid.style.position = 'relative';
-  groupsGrid.style.overflowY = 'auto';
-  groupsGrid.replaceChildren();
+function closeEditor() {
+  state.editor?.controller?.abort();
+  state.editor = null;
+  teardownPicker();
+}
 
-  if (totalItems === 0) {
-    const message = document.createElement('div');
-    message.className = 'hint';
-    message.textContent = filterTerm ? 'No groups match your search.' : 'Load a playlist to see groups.';
-    groupsGrid.append(message);
-    return;
-  }
-
-  const spacer = document.createElement('div');
-  spacer.className = 'group-spacer';
-  spacer.style.height = `${totalItems * ITEM_HEIGHT}px`;
-  spacer.style.width = '100%';
-  spacer.style.pointerEvents = 'none';
-
-  const itemsLayer = document.createElement('div');
-  itemsLayer.className = 'group-items-layer';
-  itemsLayer.style.position = 'absolute';
-  itemsLayer.style.top = '0';
-  itemsLayer.style.left = '0';
-  itemsLayer.style.right = '0';
-
-  groupsGrid.append(spacer, itemsLayer);
-
-  const containerHeight = Math.max(groupsGrid.clientHeight, 300);
-  const visibleCount = Math.ceil(containerHeight / ITEM_HEIGHT);
-  const poolSize = Math.min(totalItems, visibleCount + BUFFER * 2);
-
-  const pool = [];
-  for (let i = 0; i < poolSize; i++) {
-    const node = document.createElement('div');
-    node.className = 'group-list-item';
-    node.style.position = 'absolute';
-    node.style.height = `${ITEM_HEIGHT - 6}px`;
-    node.style.left = '0';
-    node.style.right = '0';
-    node.dataset.poolIndex = i;
-
-    const info = document.createElement('div');
-    info.className = 'group-info';
-    info.style.display = 'flex';
-    info.style.flexDirection = 'column';
-
-    const title = document.createElement('span');
-    title.className = 'group-title';
-    title.style.fontSize = '14px';
-    title.style.fontWeight = '600';
-
-    const count = document.createElement('span');
-    count.className = 'group-count';
-    count.style.fontSize = '12px';
-    count.style.color = 'var(--muted)';
-
-    info.append(title, count);
-
-    const switchLabel = document.createElement('label');
-    switchLabel.className = 'switch';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'group-toggle';
-    const slider = document.createElement('span');
-    slider.className = 'slider';
-    switchLabel.append(checkbox, slider);
-
-    node.append(info, switchLabel);
-    pool.push({ node, title, count, checkbox });
-    itemsLayer.append(node);
-  }
-
-  let lastStart = -1;
-  function renderSlice(startIndex) {
-    startIndex = Math.max(0, Math.min(startIndex, Math.max(0, totalItems - poolSize)));
-    if (startIndex === lastStart) return;
-    const prevStart = lastStart;
-    lastStart = startIndex;
-    for (let i = 0; i < pool.length; i++) {
-      const idx = startIndex + i;
-      const poolItem = pool[i];
-      if (idx >= totalItems) {
-        if (poolItem.node.style.display !== 'none') {
-          poolItem.node.style.display = 'none';
-        }
-        continue;
+function showEditor(playlist) {
+  const id = playlist?.id || null;
+  if (!state.editor || state.editor.id !== id) {
+    state.editor?.controller?.abort();
+    state.editor = newEditor(playlist);
+    if (playlist) {
+      if (playlist.sourceUrl) loadGroups(state.editor, playlist.sourceUrl);
+      else {
+        state.editor.phase = 'error';
+        state.editor.error = 'This playlist has no source URL. Add one to load its groups.';
+        state.editor.editingSource = true;
       }
-      // Skip update if this pool item already shows this data index
-      const prevIdx = prevStart + i;
-      if (prevStart !== -1 && prevIdx === idx && prevIdx < totalItems) {
-        continue;
-      }
-      const [groupTitle, cnt] = state.groupEntries[idx];
-      if (poolItem.node.style.display !== 'flex') {
-        poolItem.node.style.display = 'flex';
-      }
-      poolItem.node.style.transform = `translateY(${idx * ITEM_HEIGHT}px)`;
-      poolItem.title.textContent = groupLabel(groupTitle);
-      poolItem.count.textContent = `${cnt.toLocaleString()} channel${cnt === 1 ? '' : 's'}`;
-      const disabled = state.disabledGroups.has(groupTitle);
-      poolItem.checkbox.checked = !disabled;
-      poolItem.node.classList.toggle('disabled', disabled);
-      poolItem.checkbox.dataset.index = idx;
     }
   }
+  renderEditor();
+}
 
-  renderSlice(0);
+// Background loads finish after the user may have moved on; only render the editor on its own route.
+function isVisible(ed) {
+  if (state.editor !== ed) return false;
+  const target = parseRoute();
+  if (!state.user) return !ed.id && target.name === 'home';
+  return ed.id ? target.name === 'playlist' && target.id === ed.id : target.name === 'new';
+}
 
-  let scrollTick = null;
-  groupsGrid.onscroll = () => {
-    if (scrollTick) return;
-    scrollTick = requestAnimationFrame(() => {
-      const scrollTop = groupsGrid.scrollTop;
-      const start = Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER;
-      renderSlice(start);
-      scrollTick = null;
-    });
-  };
+async function loadGroups(ed, url, { sample = false } = {}) {
+  ed.controller?.abort();
+  const controller = new AbortController();
+  ed.controller = controller;
+  ed.phase = 'loading';
+  ed.error = '';
+  ed.startedAt = Date.now();
+  if (isVisible(ed)) renderEditor();
 
-  if (!groupsResizeObserver && window.ResizeObserver) {
-    groupsResizeObserver = new ResizeObserver(() => {
-      renderGroups();
-    });
-    groupsResizeObserver.observe(groupsGrid);
-  } else if (!window.ResizeObserver && !windowResizeHooked) {
-    window.addEventListener('resize', () => renderGroups());
-    windowResizeHooked = true;
-  }
-
-  itemsLayer.onchange = (e) => {
-    const target = e.target;
-    if (!target.classList.contains('group-toggle')) return;
-    const idx = Number(target.dataset.index);
-    const [groupTitle] = state.groupEntries[idx] || [];
-    if (!groupTitle) return;
-    if (target.checked) {
-      state.disabledGroups.delete(groupTitle);
+  try {
+    let body;
+    if (sample) {
+      const res = await api('/playlists/sample', { signal: controller.signal });
+      body = { rawText: res.text, sourceName: 'Sample playlist' };
     } else {
-      state.disabledGroups.add(groupTitle);
+      body = { sourceUrl: url };
     }
-    renderStats();
-    updateToggleAllLabel();
-    const poolIdx = idx - lastStart;
-    if (poolIdx >= 0 && poolIdx < pool.length) {
-      pool[poolIdx].node.classList.toggle('disabled', state.disabledGroups.has(groupTitle));
+    const analysis = await api('/playlist/analyze', { method: 'POST', body, signal: controller.signal });
+    if (ed.controller !== controller) return;
+    applyAnalysis(ed, analysis, { sample });
+  } catch (err) {
+    if (isAbort(err) || ed.controller !== controller) return;
+    ed.phase = 'error';
+    ed.error = err.status === 504
+      ? 'The provider took too long to answer. Try again in a moment.'
+      : err.message || 'Could not load the playlist.';
+  } finally {
+    if (ed.controller === controller) ed.controller = null;
+  }
+  if (isVisible(ed)) renderEditor();
+}
+
+function applyAnalysis(ed, analysis, { sample }) {
+  const groups = (analysis.groups || []).map((g, index) => {
+    const title = g.groupTitle || g.name;
+    const type = CONTENT_TYPES.includes(g.contentType) ? g.contentType : 'Live';
+    return { key: g.name, title, type, count: g.count || 0, index, split: false, search: '' };
+  });
+
+  const perTitle = new Map();
+  for (const g of groups) perTitle.set(g.title, (perTitle.get(g.title) || 0) + 1);
+  const typeCounts = {};
+  for (const g of groups) {
+    g.split = perTitle.get(g.title) > 1;
+    g.search = `${g.title} ${g.type === 'Live' && !g.split ? '' : g.type}`.toLowerCase();
+    typeCounts[g.type] = (typeCounts[g.type] || 0) + 1;
+  }
+
+  // Changing the source of a saved playlist carries the current selection over to the new list.
+  const entries = ed.groups.length ? [...ed.disabled, ...ed.extras] : ed.savedFilters;
+  const { disabled, extras } = restoreFilters(entries, groups);
+
+  ed.groups = groups;
+  ed.typeCounts = typeCounts;
+  ed.disabled = disabled;
+  ed.extras = extras;
+  ed.cacheKey = analysis.cacheKey;
+  ed.totalChannels = analysis.totalChannels || groups.reduce((sum, g) => sum + g.count, 0);
+  ed.expirationUtc = analysis.expirationUtc || null;
+  ed.isSample = sample;
+  ed.phase = 'ready';
+  ed.editingSource = false;
+  if (!ed.id && !ed.name) ed.name = sample ? 'Sample playlist' : sourceHost(ed.sourceUrl) || 'My playlist';
+  if (ed.filter.type !== 'all' && !typeCounts[ed.filter.type]) ed.filter.type = 'all';
+  // A saved playlist starts clean even when old filter names were mapped onto split groups.
+  if (ed.id && !ed.baseline) ed.baseline = filterSignature(ed);
+}
+
+let loadingTimer = null;
+
+function renderEditor() {
+  const ed = state.editor;
+  if (!ed) return;
+  clearInterval(loadingTimer);
+  teardownPicker();
+  const playlist = ed.id ? state.playlists.find((p) => p.id === ed.id) : null;
+  document.title = `${ed.name || (ed.id ? 'Playlist' : 'New playlist')} · Strim`;
+
+  const nodes = [];
+
+  if (!state.user && !ed.id) {
+    nodes.push(h('section', { class: 'intro' },
+      h('h1', { text: 'Trim your IPTV playlist' }),
+      h('p', { class: 'lead', text: 'Paste your M3U link, untick the groups you never watch and download a clean playlist. Sign in to get a permanent link for your player that always serves your selection.' })));
+  } else {
+    nodes.push(editorHead(ed, playlist));
+  }
+
+  if (playlist) nodes.push(h('div', { id: 'link-card' }, linkCard(playlist)));
+
+  if (ed.editingSource || ed.phase === 'source') {
+    nodes.push(sourceForm(ed));
+  } else if (!ed.isSample) {
+    nodes.push(h('div', { class: 'source-line' },
+      h('span', { class: 'host' }, 'Source: ', sourceHost(ed.sourceUrl) || 'unknown'),
+      h('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => { ed.editingSource = true; renderEditor(); } }, 'Change')));
+  }
+
+  if (ed.phase === 'loading') nodes.push(loadingCard(ed));
+  if (ed.phase === 'error') {
+    nodes.push(h('div', { class: 'notice error' },
+      h('p', { text: ed.error }),
+      ed.sourceUrl ? h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadGroups(ed, ed.sourceUrl) }, 'Try again')) : null));
+  }
+
+  const ready = ed.phase === 'ready';
+  if (ready) {
+    if (ed.isSample) {
+      nodes.push(h('div', { class: 'notice' }, 'This is a sample. Paste your own playlist URL to save it and get a player link.'));
     }
+    nodes.push(...pickerNodes(ed));
+  }
+
+  app.replaceChildren(...nodes);
+  setActionBar(ready);
+  if (ready) {
+    app.append(actionBar(ed));
+    mountPicker(ed);
+  }
+}
+
+function editorHead(ed, playlist) {
+  const back = h('a', { class: 'icon-btn', href: '#/', 'aria-label': 'Back to playlists' }, icon('back'));
+  if (!ed.id && ed.phase !== 'ready') {
+    return h('div', { class: 'editor-head' }, back, h('h1', { class: 'page-title', text: 'New playlist' }));
+  }
+  const nameInput = h('input', {
+    class: 'input input-name',
+    type: 'text',
+    value: ed.name,
+    maxlength: '200',
+    placeholder: 'Playlist name',
+    'aria-label': 'Playlist name',
+    autocomplete: 'off',
+    oninput: (e) => {
+      ed.name = e.target.value;
+      updateActionBar();
+    },
+    onkeydown: (e) => {
+      if (e.key === 'Enter') e.target.blur();
+    },
+  });
+  return h('div', { class: 'editor-head' },
+    state.user ? back : null,
+    nameInput,
+    playlist ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Playlist actions', onclick: () => openPlaylistMenu(playlist.id) }, icon('more')) : null);
+}
+
+function linkCard(playlist) {
+  return h('section', { class: 'card stack' },
+    h('div', { class: 'field-label', text: 'Player link' }),
+    linkBox(playlist),
+    h('p', { class: 'field-hint', text: 'Add this link to your IPTV player. It always serves the groups you saved here.' }));
+}
+
+function renderLinkCard() {
+  const slot = document.getElementById('link-card');
+  const playlist = state.playlists.find((p) => p.id === state.editor?.id);
+  if (slot && playlist) slot.replaceChildren(linkCard(playlist));
+}
+
+function sourceForm(ed) {
+  const url = h('input', {
+    class: 'input',
+    name: 'url',
+    type: 'url',
+    inputmode: 'url',
+    autocomplete: 'off',
+    autocapitalize: 'off',
+    spellcheck: 'false',
+    placeholder: 'https://provider.example/get.php?username=…',
+    value: ed.sourceUrl,
+    required: true,
+  });
+  const form = h('form', { class: 'card stack', novalidate: true },
+    h('label', { class: 'field' },
+      h('span', { class: 'field-label', text: 'Playlist URL' }),
+      url,
+      h('span', { class: 'field-hint', text: 'The M3U or M3U8 link from your provider.' })));
+
+  const actions = h('div', { class: 'row-actions' },
+    h('button', { class: 'btn btn-primary', type: 'submit' }, ed.phase === 'ready' ? 'Reload groups' : 'Load groups'));
+  if (!ed.id && ed.phase !== 'ready') {
+    actions.append(h('button', {
+      class: 'btn btn-ghost',
+      type: 'button',
+      onclick: () => {
+        ed.sourceUrl = '';
+        loadGroups(ed, '', { sample: true });
+      },
+    }, 'Try a sample'));
+  }
+  if (ed.phase === 'ready' || (ed.id && ed.phase !== 'error')) {
+    actions.append(h('button', {
+      class: 'btn btn-ghost',
+      type: 'button',
+      onclick: () => {
+        ed.sourceUrl = ed.savedUrl || ed.sourceUrl;
+        ed.editingSource = false;
+        renderEditor();
+      },
+    }, 'Cancel'));
+  }
+  form.append(actions);
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const value = url.value.trim();
+    let parsed;
+    try {
+      parsed = new URL(value);
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || !/^https?:$/.test(parsed.protocol)) {
+      toast('Enter a full http(s) playlist URL.', { error: true });
+      url.focus();
+      return;
+    }
+    ed.sourceUrl = value;
+    ed.editingSource = false;
+    loadGroups(ed, value);
+  });
+  if (!ed.sourceUrl) setTimeout(() => url.focus({ preventScroll: true }), 0);
+  return form;
+}
+
+function loadingCard(ed) {
+  const elapsed = h('span', { class: 'num' });
+  const tick = () => {
+    const seconds = Math.floor((Date.now() - ed.startedAt) / 1000);
+    elapsed.textContent = seconds >= 2 ? ` · ${seconds} s` : '';
+  };
+  tick();
+  loadingTimer = setInterval(tick, 1000);
+  return h('div', { class: 'card loading-card' },
+    h('span', { class: 'spinner', 'aria-hidden': 'true' }),
+    h('div', { class: 'grow' },
+      h('div', null, ed.isSample || !ed.sourceUrl ? 'Loading sample' : 'Loading groups from your provider', elapsed),
+      h('div', { class: 'field-hint', text: 'Large playlists can take up to a minute.' })),
+    h('button', {
+      class: 'btn btn-ghost btn-sm',
+      type: 'button',
+      onclick: () => {
+        ed.controller?.abort();
+        ed.controller = null;
+        ed.phase = ed.groups.length ? 'ready' : ed.id ? 'error' : 'source';
+        ed.error = 'Loading was cancelled.';
+        if (!ed.groups.length && !ed.id) ed.editingSource = true;
+        renderEditor();
+      },
+    }, 'Cancel'));
+}
+
+// ---------- Group picker ----------
+
+const picker = {
+  ed: null,
+  list: null,
+  rows: [],
+  rowHeight: 48,
+  frame: 0,
+  shownLabel: null,
+  typeButtons: null,
+  showButtons: null,
+};
+
+function pickerNodes(ed) {
+  const search = h('input', {
+    class: 'input input-search',
+    type: 'search',
+    placeholder: `Search ${plural(ed.groups.length, 'group')}`,
+    'aria-label': 'Search groups',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    enterkeyhint: 'search',
+    value: ed.filter.query,
+    id: 'group-search',
+  });
+  search.addEventListener('input', () => {
+    ed.filter.query = search.value;
+    scheduleViewUpdate();
+  });
+
+  const sort = h('select', { class: 'input', 'aria-label': 'Sort groups' },
+    h('option', { value: 'provider', text: 'Original order' }),
+    h('option', { value: 'name', text: 'A–Z' }),
+    h('option', { value: 'size', text: 'Largest' }));
+  sort.value = ed.filter.sort;
+  sort.addEventListener('change', () => {
+    ed.filter.sort = sort.value;
+    updateView(true);
+  });
+
+  const segmented = (options, current, onPick) => {
+    const wrap = h('div', { class: 'segmented', role: 'group' });
+    for (const option of options) {
+      wrap.append(h('button', {
+        type: 'button',
+        'aria-pressed': String(option.value === current),
+        dataset: { value: option.value },
+        onclick: () => {
+          for (const b of wrap.children) b.setAttribute('aria-pressed', String(b.dataset.value === option.value));
+          onPick(option.value);
+        },
+      }, option.label, option.count != null ? h('span', { class: 'count', text: fmt(option.count) }) : null));
+    }
+    return wrap;
   };
 
-  updateToggleAllLabel();
-}
+  const rows = [search];
 
-function updateToggleAllLabel() {
-  toggleAllButton.textContent = state.disabledGroups.size === state.groups.size ? 'Enable all' : 'Disable none';
-}
+  const types = CONTENT_TYPES.filter((t) => ed.typeCounts[t]);
+  const filters = h('div', { class: 'toolbar-row' });
+  if (types.length > 1) {
+    filters.append(segmented(
+      [{ value: 'all', label: 'All' }, ...types.map((t) => ({ value: t, label: t, count: ed.typeCounts[t] }))],
+      ed.filter.type,
+      (value) => {
+        ed.filter.type = value;
+        updateView(true);
+      }));
+  }
+  filters.append(segmented(
+    [{ value: 'all', label: 'All' }, { value: 'kept', label: 'Kept' }, { value: 'hidden', label: 'Hidden' }],
+    ed.filter.show,
+    (value) => {
+      ed.filter.show = value;
+      updateView(true);
+    }));
+  filters.append(h('div', { class: 'grow' }), sort);
+  rows.push(filters);
 
-function renderStats() {
-  stats.innerHTML = '';
-  const total = state.totalChannels || 0;
-  const disabled = state.disabledGroups.size;
-  const groupsTotal = state.groupCount || state.groups.size;
-  const keptGroups = Math.max(0, groupsTotal - disabled);
+  picker.shownLabel = h('span', { class: 'num' });
+  rows.push(h('div', { class: 'summary' },
+    picker.shownLabel,
+    h('div', { class: 'bulk' },
+      h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(false) }, 'Keep all'),
+      h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(true) }, 'Hide all'))));
 
-  const cards = [
-    { label: 'Channels', value: total },
-    { label: 'Groups enabled', value: keptGroups },
-    { label: 'Groups disabled', value: disabled },
+  return [
+    h('section', { class: 'picker-toolbar', 'aria-label': 'Group filters' }, rows),
+    h('div', { class: 'group-list', id: 'group-list', role: 'list', 'aria-label': 'Groups' }),
   ];
-
-  cards.forEach((card) => {
-    const div = document.createElement('div');
-    div.className = 'stat-card';
-    const eyebrow = document.createElement('div');
-    eyebrow.className = 'eyebrow';
-    eyebrow.textContent = card.label;
-    const statValue = document.createElement('div');
-    statValue.className = 'stat-value';
-    statValue.textContent = card.value;
-    div.append(eyebrow, statValue);
-    stats.append(div);
-  });
 }
 
-function generateFilteredM3U() {
-  if (!state.localPlaylist) return '';
-  const disabled = state.disabledGroups;
-  const outputLines = ['#EXTM3U', '# Created with Strim (https://strim.plis.dev)'];
+function mountPicker(ed) {
+  picker.ed = ed;
+  picker.list = document.getElementById('group-list');
+  picker.rows = [];
+  picker.list.addEventListener('change', onRowToggle);
+  measureRowHeight();
+  updateView(false);
+}
 
-  let kept = 0;
-  for (let i = 0; i < state.localPlaylist.channels.length; i++) {
-    const channel = state.localPlaylist.channels[i];
-    if (isGroupDisabled(disabled, channel.groupTitle, channel.contentType)) continue;
-    outputLines.push(state.localPlaylist.channelLines[i]);
-    kept++;
+function teardownPicker() {
+  picker.ed = null;
+  picker.list = null;
+  picker.rows = [];
+  cancelAnimationFrame(picker.frame);
+}
+
+function measureRowHeight() {
+  const value = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h'));
+  picker.rowHeight = Number.isFinite(value) && value > 0 ? value : 48;
+}
+
+let viewTimer = 0;
+function scheduleViewUpdate() {
+  clearTimeout(viewTimer);
+  viewTimer = setTimeout(() => {
+    viewTimer = 0;
+    updateView(true);
+  }, 60);
+}
+
+const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+
+function updateView(scrollToTop) {
+  const ed = picker.ed;
+  viewTimer = 0;
+  if (!ed) return;
+  const terms = ed.filter.query.toLowerCase().split(/\s+/).filter(Boolean);
+  const { type, show, sort } = ed.filter;
+  const view = [];
+  for (const g of ed.groups) {
+    if (type !== 'all' && g.type !== type) continue;
+    if (show === 'kept' && ed.disabled.has(g.key)) continue;
+    if (show === 'hidden' && !ed.disabled.has(g.key)) continue;
+    if (terms.length && !terms.every((t) => g.search.includes(t))) continue;
+    view.push(g);
   }
+  if (sort === 'name') view.sort((a, b) => collator.compare(a.title, b.title) || a.index - b.index);
+  else if (sort === 'size') view.sort((a, b) => b.count - a.count || a.index - b.index);
+  ed.view = view;
 
-  outputSize.textContent = `${kept} channel${kept === 1 ? '' : 's'}`;
-  return outputLines.join('\n');
-}
+  picker.list.style.height = view.length ? `${view.length * picker.rowHeight}px` : '';
+  picker.shownLabel.textContent = view.length === ed.groups.length
+    ? plural(view.length, 'group')
+    : `${fmt(view.length)} of ${plural(ed.groups.length, 'group')} shown`;
 
-async function updateOutput({ useWorker = true } = {}) {
-  if (state.backendSession && API_BASE) {
-    const session = state.backendSession;
-    const { controller, cacheKey } = beginGeneration(session);
-    try {
-      setStatus('Generating filtered playlist on server…', 'info');
-      setControlsDisabled(true);
-      state.backendOutputKey = null;
-      state.lastOutput = '';
-      const body = {
-        cacheKey,
-        sourceUrl: session.sourceUrl,
-        disabledGroups: Array.from(state.disabledGroups),
-      };
-      const res = await apiRequest('/playlist/generate', { method: 'POST', body, signal: controller.signal });
-      if (!isCurrentGeneration(controller, cacheKey)) return null;
-      const outputKey = String(res?.outputKey || '');
-      if (!outputKey) {
-        throw new Error('The server did not return a generated playlist key.');
-      }
-
-      state.backendOutputKey = outputKey;
-      const channelCount = res.keptChannels ?? 0;
-      outputSize.textContent = `${channelCount} channel${channelCount === 1 ? '' : 's'}`;
-      state.totalChannels = res.totalChannels ?? state.totalChannels;
-      session.totalChannels = state.totalChannels;
-      renderStats();
-      setStatus('Filtered playlist ready to download', 'success');
-      setControlsDisabled(false);
-      return outputKey;
-    } catch (err) {
-      if (controller.signal.aborted || !isCurrentGeneration(controller, cacheKey)) {
-        return null;
-      }
-      console.error('Backend generation failed; attempting local fallback', err);
-      setStatus('Backend generation failed; falling back to local processing.', 'warn');
-      setControlsDisabled(false);
-    } finally {
-      if (activeGenerationController === controller) {
-        activeGenerationController = null;
-      }
+  let empty = picker.list.querySelector('.list-empty');
+  if (!view.length) {
+    if (!empty) {
+      empty = h('div', { class: 'list-empty' });
+      picker.list.append(empty);
     }
+    empty.textContent = terms.length ? 'No groups match your search.' : 'No groups here.';
+  } else if (empty) {
+    empty.remove();
   }
 
-  if (useWorker && window.Worker && state.localPlaylist?.text) {
-    return new Promise((resolve) => {
-      setStatus('Generating filtered playlist (background)…', 'info');
-      setControlsDisabled(true);
-      const worker = new Worker('filter-worker.js');
-      const disabledArr = Array.from(state.disabledGroups);
-      worker.postMessage({
-        cmd: 'generate',
-        text: state.localPlaylist.text,
-        disabled: disabledArr,
-        splitTitles: Array.from(splitGroupTitles(state.groupMeta)),
-      });
-      worker.addEventListener('message', (ev) => {
-        const msg = ev.data || {};
-        if (msg.type === 'progress') {
-          setStatus(
-            `Generating… ${Math.min(100, Math.round((msg.processed / msg.totalLines) * 100))}%`,
-            'info'
-          );
-        } else if (msg.type === 'result') {
-          state.lastOutput = msg.text;
-          const channelCount = (msg.text.match(/\nhttps?:\/\//g) || []).length;
-          outputSize.textContent = `${channelCount} channel${channelCount === 1 ? '' : 's'}`;
-          setStatus('Filtered playlist ready', 'success');
-          setControlsDisabled(false);
-          worker.terminate();
-          resolve(msg.text);
-        }
-      });
-      worker.addEventListener('error', (err) => {
-        console.error('Worker error', err);
-        setControlsDisabled(false);
-        worker.terminate();
-        setStatus('Worker failed; falling back to synchronous generation.', 'warn');
-        const text = generateFilteredM3U();
-        state.lastOutput = text;
-        setStatus('Filtered playlist ready', 'success');
-        resolve(text);
-      });
+  if (scrollToTop) {
+    const toolbar = document.querySelector('.picker-toolbar');
+    const listTop = picker.list.getBoundingClientRect().top + window.scrollY;
+    const stickyOffset = (toolbar?.offsetHeight || 0) + parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h'));
+    if (window.scrollY > listTop - stickyOffset) window.scrollTo({ top: listTop - stickyOffset });
+  }
+  for (const row of picker.rows) row.dataset.index = '';
+  paintRows();
+  updateActionBar();
+}
+
+function createRow() {
+  const check = h('input', { class: 'check', type: 'checkbox' });
+  const name = h('span', { class: 'group-name' });
+  const badge = h('span', { class: 'badge' });
+  const count = h('span', { class: 'group-count' });
+  const row = h('label', { class: 'group-row', role: 'listitem' }, check, name, badge, count);
+  row._parts = { check, name, badge, count };
+  picker.list.append(row);
+  return row;
+}
+
+function paintRows() {
+  const ed = picker.ed;
+  if (!ed || !picker.list) return;
+  const rowHeight = picker.rowHeight;
+  const top = picker.list.getBoundingClientRect().top;
+  const buffer = 8;
+  const first = Math.max(0, Math.floor(-top / rowHeight) - buffer);
+  const last = Math.min(ed.view.length, Math.ceil((window.innerHeight - top) / rowHeight) + buffer);
+  const needed = Math.max(0, last - first);
+
+  while (picker.rows.length < needed) picker.rows.push(createRow());
+
+  for (let i = 0; i < picker.rows.length; i++) {
+    const row = picker.rows[i];
+    const index = first + i;
+    if (i >= needed) {
+      row.hidden = true;
+      continue;
+    }
+    const g = ed.view[index];
+    row.hidden = false;
+    if (row.dataset.index !== String(index)) {
+      row.dataset.index = String(index);
+      row.style.transform = `translateY(${index * rowHeight}px)`;
+      const { name, badge, count } = row._parts;
+      name.textContent = g.title;
+      name.title = g.title;
+      const showBadge = g.type !== 'Live' || g.split;
+      badge.hidden = !showBadge;
+      if (showBadge) badge.textContent = g.type;
+      count.textContent = fmt(g.count);
+    }
+    const off = ed.disabled.has(g.key);
+    row._parts.check.checked = !off;
+    row._parts.check.setAttribute('aria-label', `${g.title}${g.type !== 'Live' || g.split ? ` (${g.type})` : ''}, ${plural(g.count, 'channel')}`);
+    row.classList.toggle('off', off);
+  }
+}
+
+function onRowToggle(e) {
+  const check = e.target;
+  if (!check.classList.contains('check')) return;
+  const ed = picker.ed;
+  const row = check.closest('.group-row');
+  const g = ed?.view[Number(row?.dataset.index)];
+  if (!g) return;
+  if (check.checked) ed.disabled.delete(g.key);
+  else ed.disabled.add(g.key);
+  row.classList.toggle('off', !check.checked);
+  updateActionBar();
+}
+
+function bulkSet(hide) {
+  const ed = picker.ed;
+  if (!ed) return;
+  // Apply a search that is still debounced, so the action hits the groups the user sees.
+  if (viewTimer) {
+    clearTimeout(viewTimer);
+    updateView(false);
+  }
+  if (!ed.view.length) return;
+  for (const g of ed.view) {
+    if (hide) ed.disabled.add(g.key);
+    else ed.disabled.delete(g.key);
+  }
+  toast(`${hide ? 'Hid' : 'Kept'} ${plural(ed.view.length, 'group')}`);
+  paintRows();
+  updateActionBar();
+}
+
+window.addEventListener('scroll', () => {
+  if (!picker.ed) return;
+  cancelAnimationFrame(picker.frame);
+  picker.frame = requestAnimationFrame(paintRows);
+}, { passive: true });
+
+window.addEventListener('resize', () => {
+  if (!picker.ed) return;
+  const before = picker.rowHeight;
+  measureRowHeight();
+  if (before !== picker.rowHeight) updateView(false);
+  else paintRows();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || !picker.ed) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.querySelector('dialog[open]')) return;
+  e.preventDefault();
+  document.getElementById('group-search')?.focus();
+});
+
+// ---------- Action bar ----------
+
+const bar = { info: null, save: null, download: null };
+
+function actionBar(ed) {
+  bar.info = h('div', { class: 'actionbar-info' });
+  bar.download = h('button', { class: 'btn', type: 'button', onclick: () => downloadSelection(ed) }, icon('download'), h('span', { text: 'Download' }));
+  const buttons = [bar.download];
+
+  bar.save = null;
+  if (!ed.isSample) {
+    bar.save = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => saveEditor(ed) });
+    buttons.push(bar.save);
+  } else {
+    bar.download.classList.add('btn-primary');
+  }
+  return h('div', { class: 'actionbar' }, h('div', { class: 'actionbar-inner' }, bar.info, ...buttons));
+}
+
+function selectionStats(ed) {
+  let channels = 0;
+  let groups = 0;
+  for (const g of ed.groups) {
+    if (ed.disabled.has(g.key)) continue;
+    channels += g.count;
+    groups += 1;
+  }
+  return { channels, groups };
+}
+
+function updateActionBar() {
+  const ed = state.editor;
+  if (!ed || ed.phase !== 'ready' || !bar.info) return;
+  const { channels, groups } = selectionStats(ed);
+  bar.info.replaceChildren(
+    h('strong', { text: plural(channels, 'channel') }),
+    h('span', { class: 'detail', text: `${fmt(groups)} of ${plural(ed.groups.length, 'group')} kept` }));
+  bar.download.disabled = ed.busy || channels === 0;
+
+  if (bar.save) {
+    const dirty = isDirty(ed);
+    bar.save.disabled = ed.busy || (ed.id && !dirty) || channels === 0;
+    bar.save.textContent = ed.busy === 'save' ? 'Saving…' : ed.id && !dirty ? 'Saved' : state.user ? 'Save' : 'Save…';
+  }
+}
+
+async function downloadSelection(ed) {
+  ed.busy = 'download';
+  updateActionBar();
+  try {
+    const res = await api('/playlist/generate', {
+      method: 'POST',
+      body: { cacheKey: ed.cacheKey, sourceUrl: ed.isSample ? null : ed.sourceUrl, disabledGroups: [...ed.disabled] },
     });
-  }
-
-  const text = generateFilteredM3U();
-  state.lastOutput = text;
-  setStatus(text ? 'Filtered playlist ready' : 'Load a playlist to generate output', text ? 'success' : 'warn');
-  return text;
-}
-
-function setControlsDisabled(disabled) {
-  [downloadButton, copyButton, refreshButton].forEach((b) => {
-    if (b) b.disabled = disabled;
-  });
-  if (serveButton) {
-    serveButton.disabled = disabled || !state.isAuthenticated || !state.currentPlaylistId || !state.shareCode;
+    const link = h('a', { href: `${API_BASE}/playlist/output/${encodeURIComponent(res.outputKey)}`, download: fileName(ed.name), rel: 'noopener' });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    toast(`Downloading ${plural(res.keptChannels ?? 0, 'channel')}`);
+  } catch (err) {
+    toast(err.message, { error: true });
+  } finally {
+    ed.busy = false;
+    updateActionBar();
   }
 }
+
+async function saveEditor(ed) {
+  if (!state.user) {
+    openAccount('Sign in to save this playlist and get a link for your player. Your selection stays as it is.');
+    return;
+  }
+  const name = ed.name.trim() || sourceHost(ed.sourceUrl) || 'My playlist';
+  const loaded = ed.phase === 'ready';
+  const disabledGroups = loaded ? [...ed.disabled, ...ed.extras] : ed.savedFilters;
+  if (disabledGroups.length > MAX_HIDDEN_GROUPS) {
+    toast(`You can hide at most ${fmt(MAX_HIDDEN_GROUPS)} groups.`, { error: true });
+    return;
+  }
+
+  const existing = ed.id ? state.playlists.find((p) => p.id === ed.id) : null;
+  const body = {
+    name,
+    sourceUrl: ed.sourceUrl,
+    sourceName: existing?.sourceName || sourceHost(ed.sourceUrl),
+    disabledGroups,
+    totalChannels: loaded ? ed.totalChannels : existing?.totalChannels,
+    groupCount: loaded ? ed.groups.length : existing?.groupCount,
+    expirationUtc: (loaded ? ed.expirationUtc : existing?.expirationUtc) || null,
+  };
+
+  ed.busy = 'save';
+  updateActionBar();
+  try {
+    const saved = ed.id
+      ? await api(`/playlists/${ed.id}`, { method: 'PUT', body })
+      : await api('/playlists', { method: 'POST', body });
+    state.playlists = [saved, ...state.playlists.filter((p) => p.id !== saved.id)];
+    const created = !ed.id;
+    ed.id = saved.id;
+    ed.name = saved.name;
+    ed.savedName = saved.name;
+    ed.savedUrl = saved.sourceUrl || '';
+    ed.savedFilters = saved.disabledGroups || [];
+    ed.baseline = filterSignature(ed);
+    ed.busy = false;
+    if (created) {
+      toast('Saved. Copy the player link into your IPTV app.');
+      navigate(`#/p/${saved.id}`, { replace: true });
+      window.scrollTo({ top: 0 });
+    } else {
+      toast('Changes saved. Players get them on their next refresh.');
+      renderLinkCard();
+      updateActionBar();
+    }
+  } catch (err) {
+    ed.busy = false;
+    updateActionBar();
+    toast(err.status === 401 ? 'You were signed out. Sign in and save again.' : err.message, { error: true });
+  }
+}
+
+// ---------- Start ----------
+
+accountButton.addEventListener('click', () => openAccount());
 
 async function init() {
-  await loadRuntimeConfig();
-  await fetchAuthProviders();
-  await fetchAuthState();
-  await loadSavedPlaylists();
-  renderGroups();
-  renderStats();
-  updateSaveButtonLabel();
+  try {
+    await loadSession();
+  } catch (err) {
+    console.error('Failed to start', err);
+  }
+  state.ready = true;
+  updateAccountButton();
+  route();
 }
 
-init().catch((err) => {
-  console.error('Failed to initialize app', err);
-  setStatus('Failed to load saved playlists', 'warn');
-  renderGroups();
-  renderStats();
-});
+init();
