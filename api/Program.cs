@@ -1204,6 +1204,25 @@ async Task<PlaylistSourceFile> FetchAndCacheSourceAsync(
     ?? throw new InvalidOperationException("Playlist source did not return a body."));
 }
 
+// Generation needs the analysis to know which group-titles mix content types. It is cached on the
+// source, so the file is only read twice when that source was never analyzed before.
+static async Task<PlaylistAnalysisResult> GetOrAnalyzeSourceAsync(
+  PlaylistSourceFile source,
+  PlaylistFileCache cache,
+  CancellationToken cancellationToken)
+{
+  var analysis = cache.TryGetAnalysis(source)
+    ?? await PlaylistProcessor.AnalyzeFileAsync(
+      source.FilePath,
+      cancellationToken,
+      cache.MaxLineLengthChars,
+      cache.MaxGroupCount,
+      cache.MaxGroupTitleLengthChars,
+      cache.MaxGroupMetadataBytes);
+  cache.StoreAnalysis(source, analysis);
+  return analysis;
+}
+
 static void CopySourceMetadata(Playlist playlist, PlaylistSourceFile source)
 {
   playlist.SourceHash = source.ContentHash;
@@ -1575,15 +1594,7 @@ app.MapPost("/api/playlist/analyze", async (
         source = cache.StoreRawText(Guid.NewGuid().ToString("N"), raw);
       }
 
-      var analysis = cache.TryGetAnalysis(source)
-        ?? await PlaylistProcessor.AnalyzeFileAsync(
-          source.FilePath,
-          context.RequestAborted,
-          cache.MaxLineLengthChars,
-          cache.MaxGroupCount,
-          cache.MaxGroupTitleLengthChars,
-          cache.MaxGroupMetadataBytes);
-      cache.StoreAnalysis(source, analysis);
+      var analysis = await GetOrAnalyzeSourceAsync(source, cache, context.RequestAborted);
       var cacheKey = cache.CreateSession(source);
 
       DateTimeOffset? expiration = null;
@@ -1691,6 +1702,7 @@ app.MapPost("/api/playlist/generate", async (
       var output = cache.TryGetOutput(source.ContentHash, disabled);
       if (output is null)
       {
+        var analysis = await GetOrAnalyzeSourceAsync(source, cache, context.RequestAborted);
         var temporaryOutputPath = cache.CreateOutputTemporaryPath();
         using var outputReservation = cache.ReserveOutputCapacity(source);
         try
@@ -1701,7 +1713,8 @@ app.MapPost("/api/playlist/generate", async (
             disabled,
             context.RequestAborted,
             cache.MaxLineLengthChars,
-            cache.MaxGeneratedBytes);
+            cache.MaxGeneratedBytes,
+            analysis.SplitGroupTitles);
           output = cache.StoreOutput(source, disabled, temporaryOutputPath, result);
         }
         catch
@@ -1919,6 +1932,7 @@ app.MapGet("/api/playlists/{id:guid}/share/{code}", async Task<IResult> (
       var fileName = $"{(playlist.SourceName ?? playlist.Name ?? "playlist")}-filtered.m3u";
       if (output is null)
       {
+        var analysis = await GetOrAnalyzeSourceAsync(source, cache, context.RequestAborted);
         var temporaryOutputPath = cache.CreateOutputTemporaryPath();
         using var outputReservation = cache.ReserveOutputCapacity(source);
         try
@@ -1929,7 +1943,8 @@ app.MapGet("/api/playlists/{id:guid}/share/{code}", async Task<IResult> (
             disabled,
             context.RequestAborted,
             cache.MaxLineLengthChars,
-            cache.MaxGeneratedBytes);
+            cache.MaxGeneratedBytes,
+            analysis.SplitGroupTitles);
           output = cache.StoreOutput(source, disabled, temporaryOutputPath, result);
         }
         catch

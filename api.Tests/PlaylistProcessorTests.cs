@@ -189,8 +189,57 @@ public class PlaylistProcessorTests
       Assert.All(expectedKept, name => Assert.Contains(name, output));
       Assert.All(expectedRemoved, name => Assert.DoesNotContain(name, output));
       Assert.DoesNotContain("Netflix Show", output);
-      // The provider's group-title is written unchanged; the split only affects filtering.
+      // Without split titles from the analysis, group-titles are written unchanged.
       Assert.DoesNotContain("·", output);
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  [Fact]
+  public async Task FileFiltering_MovesSeriesOfASplitTitleIntoTheirOwnGroup()
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    const string source = """
+      #EXTM3U
+      #EXTINF:-1 group-title="Germany",Das Erste HD
+      http://provider.example/user/pass/1001
+      #EXTINF:-1 tvg-name="The Witcher S01E01" group-title="Germany" tvg-logo="",The Witcher S01E01
+      http://provider.example/series/user/pass/2001.mkv
+      #EXTINF:-1 group-title="German Movies",Some Film
+      http://provider.example/movie/user/pass/3001.mp4
+      #EXTINF:-1,Loose Channel
+      http://provider.example/user/pass/1002
+      #EXTINF:-1,Loose Episode
+      http://provider.example/series/user/pass/2002.mkv
+      """;
+
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, source);
+      var analysis = await PlaylistProcessor.AnalyzeFileAsync(sourcePath, CancellationToken.None);
+      Assert.Equal(new[] { "Germany", "Ungrouped" }, analysis.SplitGroupTitles.Order());
+
+      var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath,
+        outputPath,
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+        CancellationToken.None,
+        splitGroupTitles: analysis.SplitGroupTitles);
+      var output = await File.ReadAllLinesAsync(outputPath);
+
+      Assert.Equal(5, result.KeptChannels);
+      Assert.Contains("#EXTINF:-1 group-title=\"Germany\",Das Erste HD", output);
+      Assert.Contains(
+        "#EXTINF:-1 tvg-name=\"The Witcher S01E01\" group-title=\"Germany · Series\" tvg-logo=\"\",The Witcher S01E01",
+        output);
+      Assert.Contains("#EXTINF:-1 group-title=\"German Movies\",Some Film", output);
+      Assert.Contains("#EXTINF:-1 group-title=\"Ungrouped\",Loose Channel", output);
+      Assert.Contains("#EXTINF:-1 group-title=\"Ungrouped · Series\",Loose Episode", output);
     }
     finally
     {

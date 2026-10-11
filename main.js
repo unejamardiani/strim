@@ -1008,7 +1008,6 @@ function parseM3U(text) {
     .filter(Boolean);
 
   const channels = [];
-  const channelLines = [];
   // groupTitle -> Map(contentType -> count)
   const titleCounts = new Map();
 
@@ -1047,7 +1046,6 @@ function parseM3U(text) {
     if (!titleCounts.has(groupTitle)) titleCounts.set(groupTitle, new Map());
     const typeCounts = titleCounts.get(groupTitle);
     typeCounts.set(contentType, (typeCounts.get(contentType) || 0) + 1);
-    channelLines.push(`${normalizedExtinf}\n${url}`);
   }
 
   // Same rule as PlaylistProcessor.BuildGroups: only titles that mix content types are split.
@@ -1060,6 +1058,15 @@ function parseM3U(text) {
       groups.set(key, (groups.get(key) || 0) + count);
       groupMeta.set(key, { groupTitle, contentType });
     });
+  });
+
+  const splitTitles = splitGroupTitles(groupMeta);
+  const channelLines = channels.map((channel) => {
+    const outputTitle = outputGroupTitle(channel.groupTitle, channel.contentType, splitTitles);
+    const extinf = outputTitle === channel.groupTitle
+      ? channel.normalizedExtinf
+      : withGroupTitle(channel.normalizedExtinf, outputTitle);
+    return `${extinf}\n${channel.url}`;
   });
 
   return { channels, groups, groupMeta, channelLines };
@@ -1079,6 +1086,30 @@ function groupKey(groupTitle, contentType) {
 
 function isGroupDisabled(disabled, groupTitle, contentType) {
   return disabled.has(groupTitle) || disabled.has(groupKey(groupTitle, contentType));
+}
+
+function splitGroupTitles(groupMeta) {
+  const titles = new Set();
+  groupMeta.forEach((meta, key) => {
+    if (key !== meta.groupTitle) titles.add(meta.groupTitle);
+  });
+  return titles;
+}
+
+// Live channels keep the provider's group-title; movies and series of a split title get their own
+// group so players show them apart (same rule as PlaylistProcessor.OutputGroupTitle).
+function outputGroupTitle(groupTitle, contentType, splitTitles) {
+  return contentType !== 'Live' && splitTitles.has(groupTitle) ? groupKey(groupTitle, contentType) : groupTitle;
+}
+
+function withGroupTitle(extinf, groupTitle) {
+  return extinf.replace(/group-title="[^"]*"/i, () => `group-title="${groupTitle}"`);
+}
+
+// The group name as it appears in the generated playlist.
+function groupLabel(key) {
+  const meta = state.groupMeta.get(key);
+  return meta && meta.contentType === 'Live' ? meta.groupTitle : key;
 }
 
 // A saved filter can be a plain group-title (older saves, or a title that is not split) or a
@@ -1674,7 +1705,7 @@ function renderGroups() {
 
       const title = document.createElement('span');
       title.className = 'group-title';
-      title.textContent = groupTitle;
+      title.textContent = groupLabel(groupTitle);
 
       const count = document.createElement('span');
       count.className = 'group-count';
@@ -1831,7 +1862,7 @@ function renderGroups() {
         poolItem.node.style.display = 'flex';
       }
       poolItem.node.style.transform = `translateY(${idx * ITEM_HEIGHT}px)`;
-      poolItem.title.textContent = groupTitle;
+      poolItem.title.textContent = groupLabel(groupTitle);
       poolItem.count.textContent = `${cnt.toLocaleString()} channel${cnt === 1 ? '' : 's'}`;
       const disabled = state.disabledGroups.has(groupTitle);
       poolItem.checkbox.checked = !disabled;
@@ -1983,7 +2014,12 @@ async function updateOutput({ useWorker = true } = {}) {
       setControlsDisabled(true);
       const worker = new Worker('filter-worker.js');
       const disabledArr = Array.from(state.disabledGroups);
-      worker.postMessage({ cmd: 'generate', text: state.localPlaylist.text, disabled: disabledArr });
+      worker.postMessage({
+        cmd: 'generate',
+        text: state.localPlaylist.text,
+        disabled: disabledArr,
+        splitTitles: Array.from(splitGroupTitles(state.groupMeta)),
+      });
       worker.addEventListener('message', (ev) => {
         const msg = ev.data || {};
         if (msg.type === 'progress') {

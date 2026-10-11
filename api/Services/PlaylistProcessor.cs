@@ -98,13 +98,18 @@ public static class PlaylistProcessor
   }
 
   /// <summary>Writes a filtered M3U file while reading the source one line at a time.</summary>
+  /// <param name="splitGroupTitles">
+  /// <see cref="PlaylistAnalysisResult.SplitGroupTitles"/>: movies and series of these titles are written
+  /// under their <see cref="GroupKey"/> so players show them apart from the live channels.
+  /// </param>
   public static async Task<PlaylistGenerationResult> GenerateFilteredFileAsync(
     string inputPath,
     string outputPath,
     ISet<string> disabledGroups,
     CancellationToken cancellationToken,
     int maxLineLengthChars = DefaultMaxLineLengthChars,
-    long maxOutputBytes = 0)
+    long maxOutputBytes = 0,
+    IReadOnlySet<string>? splitGroupTitles = null)
   {
     var total = 0;
     var kept = 0;
@@ -139,10 +144,12 @@ public static class PlaylistProcessor
       total++;
       var url = await lines.ReadNextContentLineAsync(cancellationToken) ?? string.Empty;
       var groupTitle = ExtractGroupTitle(line);
-      if (IsDisabled(disabledGroups, groupTitle, url)) continue;
+      var contentType = DetectContentType(url);
+      if (IsDisabled(disabledGroups, groupTitle, contentType)) continue;
 
       kept++;
-      await WriteLineAsync(writer, EnsureGroupInExtinf(line, groupTitle), cancellationToken, outputBytes);
+      var outputGroupTitle = OutputGroupTitle(groupTitle, contentType, splitGroupTitles);
+      await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, outputGroupTitle), cancellationToken, outputBytes);
       await WriteLineAsync(writer, url, cancellationToken, outputBytes);
     }
 
@@ -166,7 +173,7 @@ public static class PlaylistProcessor
       total++;
       var url = ReadNextContentLine(reader) ?? string.Empty;
       var groupTitle = ExtractGroupTitle(line);
-      if (IsDisabled(disabledGroups, groupTitle, url)) continue;
+      if (IsDisabled(disabledGroups, groupTitle, DetectContentType(url))) continue;
 
       kept++;
       writer.WriteLine(EnsureGroupInExtinf(line, groupTitle));
@@ -219,10 +226,22 @@ public static class PlaylistProcessor
   /// A plain group-title disables every entry of that title (unsplit groups and filters saved
   /// before groups were split); a <see cref="GroupKey"/> disables only that content type.
   /// </summary>
-  private static bool IsDisabled(ISet<string> disabledGroups, string groupTitle, string url) =>
+  private static bool IsDisabled(ISet<string> disabledGroups, string groupTitle, PlaylistContentType contentType) =>
     disabledGroups.Count > 0 &&
     (disabledGroups.Contains(groupTitle) ||
-     disabledGroups.Contains(GroupKey(groupTitle, DetectContentType(url))));
+     disabledGroups.Contains(GroupKey(groupTitle, contentType)));
+
+  /// <summary>
+  /// Live channels keep the provider's group-title; movies and series of a title the provider also
+  /// uses for another content type move to their own group (e.g. "Germany · Series").
+  /// </summary>
+  private static string OutputGroupTitle(
+    string groupTitle,
+    PlaylistContentType contentType,
+    IReadOnlySet<string>? splitGroupTitles) =>
+    contentType != PlaylistContentType.Live && splitGroupTitles?.Contains(groupTitle) == true
+      ? GroupKey(groupTitle, contentType)
+      : groupTitle;
 
   public static DateTimeOffset? TryExtractExpiration(Uri? uri)
   {
@@ -350,8 +369,18 @@ public static class PlaylistProcessor
 
   private static string ExtractGroupTitle(string extinf)
   {
+    if (!TryFindGroupTitleValue(extinf, out var start, out var end)) return "Ungrouped";
+
+    var value = extinf[start..end].Trim();
+    return string.IsNullOrWhiteSpace(value) ? "Ungrouped" : value;
+  }
+
+  /// <summary>Finds the quoted value of the first group-title attribute as [start, end).</summary>
+  private static bool TryFindGroupTitleValue(string extinf, out int start, out int end)
+  {
     const string attribute = "group-title";
     var searchAt = 0;
+    start = end = 0;
 
     while (searchAt < extinf.Length)
     {
@@ -381,14 +410,15 @@ public static class PlaylistProcessor
       }
 
       var quote = extinf[cursor++];
-      var end = extinf.IndexOf(quote, cursor);
-      if (end < 0) return "Ungrouped";
+      var closingQuote = extinf.IndexOf(quote, cursor);
+      if (closingQuote < 0) return false;
 
-      var value = extinf[cursor..end].Trim();
-      return string.IsNullOrWhiteSpace(value) ? "Ungrouped" : value;
+      start = cursor;
+      end = closingQuote;
+      return true;
     }
 
-    return "Ungrouped";
+    return false;
   }
 
   private static bool HasGroupTitleAttribute(string extinf)
@@ -411,6 +441,18 @@ public static class PlaylistProcessor
   }
 
   private static bool IsAttributeCharacter(char value) => char.IsLetterOrDigit(value) || value is '-' or '_';
+
+  private static string WithGroupTitle(string extinf, string groupTitle, string outputGroupTitle)
+  {
+    if (string.Equals(groupTitle, outputGroupTitle, StringComparison.Ordinal))
+    {
+      return EnsureGroupInExtinf(extinf, groupTitle);
+    }
+
+    return TryFindGroupTitleValue(extinf, out var start, out var end)
+      ? string.Concat(extinf.AsSpan(0, start), outputGroupTitle, extinf.AsSpan(end))
+      : EnsureGroupInExtinf(extinf, outputGroupTitle);
+  }
 
   private static string EnsureGroupInExtinf(string extinf, string groupTitle)
   {
@@ -521,7 +563,13 @@ public static class PlaylistProcessor
   }
 }
 
-public sealed record PlaylistAnalysisResult(IReadOnlyList<PlaylistGroup> Groups, int TotalChannels);
+public sealed record PlaylistAnalysisResult(IReadOnlyList<PlaylistGroup> Groups, int TotalChannels)
+{
+  /// <summary>Group-titles the provider reuses across content types, i.e. the titles that were split.</summary>
+  public IReadOnlySet<string> SplitGroupTitles { get; } = new HashSet<string>(
+    Groups.Where(g => g.Key != g.GroupTitle).Select(g => g.GroupTitle),
+    StringComparer.OrdinalIgnoreCase);
+}
 
 public enum PlaylistContentType
 {

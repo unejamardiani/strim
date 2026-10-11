@@ -11,11 +11,16 @@ function groupKey(groupTitle, contentType) {
   return `${groupTitle} \u00B7 ${contentType}`;
 }
 
+function outputGroupTitle(groupTitle, contentType, splitTitles) {
+  return contentType !== 'Live' && splitTitles.has(groupTitle) ? groupKey(groupTitle, contentType) : groupTitle;
+}
+
 self.addEventListener('message', (ev) => {
   const msg = ev.data || {};
   if (msg.cmd === 'generate') {
     const text = msg.text || '';
     const disabled = new Set(msg.disabled || []);
+    const splitTitles = new Set(msg.splitTitles || []);
     // Parse lines lazily and emit progress periodically.
     const lines = text.replace(/\r\n?/g, '\n').split('\n');
     const totalLines = lines.length;
@@ -44,12 +49,17 @@ self.addEventListener('message', (ev) => {
       }
 
       // A plain title disables the whole group; a groupKey only one content type of it.
-      if (disabled.has(groupTitle) || disabled.has(groupKey(groupTitle, detectContentType(url)))) {
+      const contentType = detectContentType(url);
+      if (disabled.has(groupTitle) || disabled.has(groupKey(groupTitle, contentType))) {
         // skip
       } else {
-        // Ensure group-title present in extinf
+        // Ensure group-title present in extinf; movies/series of a split title get their own group.
+        const outputTitle = outputGroupTitle(groupTitle, contentType, splitTitles);
         const hasGroup = /group-title="[^"]*"/i.test(extinf);
-        const outExtinf = hasGroup ? extinf : `${extinf} group-title="${groupTitle}"`;
+        let outExtinf = hasGroup ? extinf : `${extinf} group-title="${outputTitle}"`;
+        if (hasGroup && outputTitle !== groupTitle) {
+          outExtinf = extinf.replace(/group-title="[^"]*"/i, () => `group-title="${outputTitle}"`);
+        }
         outputParts.push(outExtinf);
         outputParts.push(url);
       }
