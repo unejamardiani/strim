@@ -71,7 +71,8 @@ public static class Security
       }
       else if (environment.IsDevelopment())
       {
-        policy.AllowAnyOrigin();
+        // Local static servers run on other localhost ports and auth uses cookies.
+        policy.SetIsOriginAllowed(IsLocalDevelopmentOrigin).AllowCredentials();
       }
       else
       {
@@ -79,6 +80,20 @@ public static class Security
       }
     }));
   }
+
+  private static bool IsLocalDevelopmentOrigin(string origin)
+  {
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+    if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)) return true;
+    return IPAddress.TryParse(uri.Host, out var address) && IPAddress.IsLoopback(address);
+  }
+
+  /// <summary>
+  /// SameSite=None for cross-origin clients in production. Browsers reject SameSite=None without
+  /// Secure, so local HTTP development uses Lax.
+  /// </summary>
+  public static SameSiteMode CookieSameSite(IHostEnvironment environment) =>
+    environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.None;
 
   public static class RateLimits
   {
@@ -132,7 +147,7 @@ public static class Security
       options.HeaderName = "X-CSRF-TOKEN";
       options.Cookie.Name = development ? "strim.csrf" : "__Host-strim.csrf";
       options.Cookie.SecurePolicy = development ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
-      options.Cookie.SameSite = SameSiteMode.None;
+      options.Cookie.SameSite = CookieSameSite(environment);
       options.Cookie.HttpOnly = true;
     });
 }

@@ -12,8 +12,18 @@ const API_BASE = (() => {
   } catch {
     // Storage can be unavailable (private mode); the default still works.
   }
-  return (fromQuery || window.STRIM_API_BASE || fromStorage || '/api').replace(/\/+$/, '');
+  return (fromQuery || window.STRIM_API_BASE || fromStorage || defaultApiBase()).replace(/\/+$/, '');
 })();
+
+// A frontend served by a local static server (another localhost port) talks to the API on :5000.
+function defaultApiBase() {
+  const { protocol, hostname, port } = window.location;
+  const loopback = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(hostname);
+  if (protocol === 'http:' && loopback && port && !['5000', '5161', '8080'].includes(port)) {
+    return `http://${hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname}:5000/api`;
+  }
+  return '/api';
+}
 
 // Must match MaxDisabledGroupsCount in api/Program.cs.
 const MAX_HIDDEN_GROUPS = 10000;

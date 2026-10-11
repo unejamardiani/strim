@@ -50,7 +50,7 @@ public static class Authentication
       {
         o.SlidingExpiration = true;
         o.Cookie.Name = development ? "strim.auth" : "__Host-strim.auth";
-        o.Cookie.SameSite = SameSiteMode.None;
+        o.Cookie.SameSite = Security.CookieSameSite(environment);
         o.Cookie.SecurePolicy = development ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
         o.Cookie.HttpOnly = true;
         // An API: answer with status codes instead of redirecting to a login page.
@@ -69,7 +69,7 @@ public static class Authentication
       {
         o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
         o.Cookie.Name = development ? "strim.external" : "__Host-strim.external";
-        o.Cookie.SameSite = SameSiteMode.None;
+        o.Cookie.SameSite = Security.CookieSameSite(environment);
         o.Cookie.SecurePolicy = development ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
         o.Cookie.HttpOnly = true;
       });
