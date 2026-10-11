@@ -16,6 +16,14 @@ RUN mkdir -p api/wwwroot && \
     cp 404.html 500.html 50x.html api/wwwroot/ && \
     cp -r blog api/wwwroot/
 
+# Version the app's CSS and JS by content hash so a cached old file is never paired with a new page.
+RUN cd api/wwwroot && \
+    for f in app.css main.js; do \
+      v=$(sha256sum "$f" | cut -c1-12); \
+      sed -i "s#\"$f\"#\"$f?v=$v\"#g" index.html; \
+    done && \
+    grep -q 'main.js?v=' index.html && grep -q 'app.css?v=' index.html
+
 # Publish
 RUN dotnet publish api/api.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore
 
