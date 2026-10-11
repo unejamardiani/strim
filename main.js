@@ -25,7 +25,7 @@ function defaultApiBase() {
   return '/api';
 }
 
-// Must match MaxDisabledGroupsCount in api/Program.cs.
+// Must match Limits.MaxDisabledGroupsCount in api/Endpoints/EndpointSupport.cs.
 const MAX_HIDDEN_GROUPS = 10000;
 const CONTENT_TYPES = ['Live', 'Movies', 'Series'];
 
@@ -163,7 +163,10 @@ async function getCsrfToken() {
   return csrfToken;
 }
 
-async function api(path, { method = 'GET', body, signal } = {}) {
+// Must match EndpointFilters.CsrfError in api/Endpoints/EndpointSupport.cs.
+const CSRF_ERROR = 'Invalid or missing CSRF token';
+
+async function api(path, { method = 'GET', body, signal } = {}, retried = false) {
   const headers = { 'Content-Type': 'application/json' };
   const mutating = method !== 'GET' && method !== 'HEAD';
   if (mutating) {
@@ -179,8 +182,12 @@ async function api(path, { method = 'GET', body, signal } = {}) {
     signal,
   });
 
-  // The antiforgery token is bound to the session; drop it when it may have gone stale.
-  if (mutating && (res.status === 400 || res.status === 403)) csrfToken = null;
+  // The antiforgery token is bound to the session (it changes on sign-in in another tab, for
+  // example). A rejected token is fetched again and the request retried once.
+  if (mutating && res.status === 400 && !retried && (await isCsrfRejection(res))) {
+    csrfToken = null;
+    return api(path, { method, body, signal }, true);
+  }
   if (res.status === 204) return null;
   if (!res.ok) {
     const err = new Error(await readError(res));
@@ -188,6 +195,14 @@ async function api(path, { method = 'GET', body, signal } = {}) {
     throw err;
   }
   return res.json();
+}
+
+async function isCsrfRejection(res) {
+  try {
+    return (await res.clone().json()).error === CSRF_ERROR;
+  } catch {
+    return false;
+  }
 }
 
 async function readError(res) {
@@ -1407,6 +1422,15 @@ async function init() {
   state.ready = true;
   updateAccountButton();
   route();
+
+  // The external sign-in callback comes back with ?auth=failed when the provider refused.
+  const params = new URLSearchParams(location.search);
+  if (params.get('auth') === 'failed') {
+    params.delete('auth');
+    const query = params.toString();
+    history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`);
+    toast('Sign-in did not complete. Try again.', { error: true });
+  }
 }
 
 init();

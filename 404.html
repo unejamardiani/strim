@@ -2,167 +2,47 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>404 - Page Not Found | Strim</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Page not found | Strim</title>
     <meta name="robots" content="noindex, follow" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'system-ui', 'sans-serif'],
-            },
-          },
-        },
-      }
-    </script>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body {
-        font-family: 'Inter', system-ui, sans-serif;
-        background: #0c0c0e;
-        color: #e8e8ec;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        line-height: 1.5;
-      }
-      a { text-decoration: none; }
-      .scanline {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        z-index: 10;
-        background: repeating-linear-gradient(
-          0deg,
-          transparent,
-          transparent 2px,
-          rgba(255,255,255,0.008) 2px,
-          rgba(255,255,255,0.008) 4px
-        );
-      }
-      @keyframes flicker {
-        0%, 100% { opacity: 1; }
-        92% { opacity: 1; }
-        93% { opacity: 0.3; }
-        94% { opacity: 0.8; }
-        95% { opacity: 0.2; }
-        96% { opacity: 1; }
-      }
-      .flicker { animation: flicker 4s infinite; }
-      @keyframes blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0; }
-      }
-      .blink { animation: blink 1.2s step-end infinite; }
-    </style>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self';" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>" />
+    <!-- Served at any URL, so every asset path is absolute. -->
+    <link rel="stylesheet" href="/theme.css" />
+    <link rel="stylesheet" href="/site.css" />
   </head>
-  <body>
-
-    <div class="scanline"></div>
-
-    <!-- Top bar -->
-    <nav class="flex items-center gap-3 px-4 h-11 border-b border-[#1a1a1d] shrink-0 bg-[#0c0c0e] relative z-20">
-      <a href="index.html" class="flex items-center gap-2 no-underline shrink-0">
-        <span class="w-7 h-7 inline-flex items-center justify-center rounded-[6px] border border-[#252529] text-sm font-bold text-[#e8e8ec] bg-[#141416]">S</span>
-        <span class="text-sm font-semibold text-[#e8e8ec] tracking-tight">strim</span>
+  <body class="site">
+    <header class="site-top">
+      <a href="/" class="brand" aria-label="Strim home">
+        <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
       </a>
-      <span class="w-px h-4 bg-[#1a1a1d]"></span>
-      <div class="hidden md:flex items-center gap-0">
-        <a href="index.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Home</a>
-        <a href="features.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Features</a>
-        <a href="how-to-use.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">How to Use</a>
-        <a href="comparison.html" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Compare</a>
-        <a href="blog/" class="px-2.5 py-1 text-xs text-[#7a7a80] hover:text-[#e8e8ec] no-underline font-medium transition-colors">Blog</a>
-      </div>
-    </nav>
+      <nav class="site-nav" aria-label="Site">
+        <a href="/features.html">Features</a>
+        <a href="/how-to-use.html">How to use</a>
+        <a href="/comparison.html">Compare</a>
+        <a href="/blog/">Blog</a>
+      </nav>
+      <a class="btn btn-primary btn-sm site-cta" href="/app">Open app</a>
+    </header>
 
-    <div class="flex-1 flex items-center justify-center px-4 py-8 relative z-20">
-      <div class="max-w-[520px] w-full flex flex-col items-center gap-5">
-
-        <!-- Glitchy TV display -->
-        <div class="w-28 h-24 rounded-[4px] border border-[#252529] bg-[#121213] flex items-center justify-center flicker">
-          <div class="text-center">
-            <div class="text-4xl font-bold text-[#55555a] tracking-tighter">404</div>
-            <div class="text-[8px] text-[#55555a] mt-0.5 font-mono uppercase tracking-widest">Signal Lost</div>
-          </div>
+    <main class="site-main">
+      <section class="error-page">
+        <span class="error-code" aria-hidden="true">404</span>
+        <h1>Nothing here.</h1>
+        <p class="lead">This page does not exist, or it moved. Your playlists are fine.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="/app">Open Strim</a>
+          <a class="btn" href="/">Home</a>
         </div>
+      </section>
+    </main>
 
-        <div class="text-center">
-          <h1 class="text-base font-bold tracking-tight">This page is buffering...</h1>
-          <p class="text-xs text-[#7a7a80] mt-1 leading-relaxed">
-            Actually no, it's just gone. Either someone changed the URL, the page was<br class="hidden sm:inline" />
-            abducted by the content police, or you typed faster than your internet.
-          </p>
-        </div>
-
-        <!-- Dead channel stats -->
-        <div class="w-full rounded-[4px] border border-[#252529] bg-[#121213]">
-          <div class="px-4 py-2 border-b border-[#1a1a1d] flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-[#55555a]"></span>
-            <span class="text-[10px] text-[#55555a] font-medium uppercase tracking-wider">System Info</span>
-          </div>
-          <div class="p-4 font-mono text-[10px] leading-relaxed text-[#7a7a80]">
-            <div><span class="text-[#55555a]">$</span> ping plis.dev</div>
-            <div class="text-[#ff6b6b]">Request timeout — destination not found</div>
-            <div><br /></div>
-            <div><span class="text-[#55555a]">$</span> curl -I <span id="error-path" class="text-[#55555a]"></span></div>
-            <div class="text-[#ff6b6b]">HTTP/1.1 <span class="text-[#ff6b6b]">404</span> <span class="text-[#7a7a80]">Whoops</span></div>
-            <div><br /></div>
-            <div><span class="text-[#55555a]">$</span> whatis <span id="error-path2" class="text-[#55555a]"></span></div>
-            <div class="text-[#55555a]">no manual entry for this page</div>
-            <div><br /></div>
-            <div><span class="text-[#55555a]">$</span> <span class="blink">&#9610;</span></div>
-          </div>
-        </div>
-
-        <!-- Action buttons -->
-        <div class="w-full flex flex-col sm:flex-row gap-2">
-          <a href="index.html" class="flex-1 h-8 inline-flex items-center justify-center gap-1 px-4 rounded-[4px] bg-[#e8e8ec] text-[#0c0c0e] text-xs font-semibold no-underline hover:brightness-110 transition-all">Go to Home</a>
-          <button onclick="history.back()" class="flex-1 h-8 inline-flex items-center justify-center gap-1 px-3 rounded-[4px] border border-[#252529] text-[#e8e8ec] text-xs font-medium no-underline hover:bg-[#252529] transition-all cursor-pointer bg-transparent">Go Back</button>
-        </div>
-
-        <!-- Helpful links -->
-        <div class="text-center">
-          <p class="text-[10px] text-[#55555a] mb-2">or try one of these channels:</p>
-          <div class="flex items-center justify-center gap-2 text-[10px]">
-            <a href="features.html" class="text-[#7a7a80] hover:text-[#e8e8ec] transition-colors">Features</a>
-            <span class="text-[#252529]">/</span>
-            <a href="how-to-use.html" class="text-[#7a7a80] hover:text-[#e8e8ec] transition-colors">How to Use</a>
-            <span class="text-[#252529]">/</span>
-            <a href="comparison.html" class="text-[#7a7a80] hover:text-[#e8e8ec] transition-colors">Compare</a>
-            <span class="text-[#252529]">/</span>
-            <a href="blog/" class="text-[#7a7a80] hover:text-[#e8e8ec] transition-colors">Blog</a>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="border-t border-[#1a1a1d] px-4 py-3 text-center text-[10px] text-[#55555a] relative z-20">
-      <p class="m-0">
-        <a href="index.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Home</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="features.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Features</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="how-to-use.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">How to Use</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="comparison.html" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Compare</a>
-        <span class="mx-1 opacity-40">/</span>
-        <a href="blog/" class="text-[#7a7a80] no-underline hover:text-[#e8e8ec] transition-colors">Blog</a>
-      </p>
-      <p class="m-0 mt-1">Strim &#8212; Free M3U Playlist Editor. Open source and privacy-first.</p>
+    <footer class="site-footer">
+      <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
+      <p>Free M3U playlist editor. Open source on <a href="https://github.com/unejamardiani/strim" rel="noopener">GitHub</a>.</p>
     </footer>
-
-    <script>
-      var path = window.location.pathname;
-      document.getElementById('error-path').textContent = path;
-      document.getElementById('error-path2').textContent = path;
-    </script>
   </body>
 </html>

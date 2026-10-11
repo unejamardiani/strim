@@ -26,11 +26,8 @@ public static class SiteEndpoints
 
     app.MapGet("/api/config", () => Results.Ok(new { publicShareBaseUrl }));
 
-    // Endpoint routing runs before the static file middleware for these paths, so the two
-    // documents are served explicitly. Both revalidate so a deploy is picked up immediately.
-    app.MapGet("/", (HttpContext context) => Page(context, Path.Combine(webRoot, "index.html")));
+    // The landing page is the default document; the editor lives at /app (and /app/).
     app.MapGet("/app", (HttpContext context) => Page(context, Path.Combine(webRoot, "app.html")));
-    app.MapGet("/app/", () => Results.Redirect("/app", permanent: true));
 
     app.MapGet("/error/{statusCode:int}", (int statusCode, HttpContext context) =>
     {

@@ -61,3 +61,6 @@ local-data/
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+
+# Built by the Dockerfile from the root frontend files
+api/wwwroot/

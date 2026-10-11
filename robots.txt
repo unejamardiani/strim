@@ -1,18 +1,7 @@
-# Robots.txt for Strim - M3U Playlist Editor
-# Allow all search engines to index the site
-
+# Strim: the landing page, guides and blog are public; the app and API are not for crawlers.
 User-agent: *
 Allow: /
-
-# Sitemap location
-Sitemap: https://strim.plis.dev/sitemap.xml
-
-# Crawl delay (optional, helps prevent server overload)
-Crawl-delay: 1
-
-# Disallow indexing of API endpoints (if hosted on same domain)
+Disallow: /app
 Disallow: /api/
 
-# Disallow indexing of any private or temporary files
-Disallow: /*.db$
-Disallow: /*.env$
+Sitemap: https://strim.plis.dev/sitemap.xml

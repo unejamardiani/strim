@@ -32,7 +32,7 @@
   </head>
   <body class="site">
     <header class="site-top">
-      <a href="index.html" class="brand" aria-label="Strim home">
+      <a href="/" class="brand" aria-label="Strim home">
         <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
       </a>
       <nav class="site-nav" aria-label="Site">
@@ -41,73 +41,89 @@
         <a href="comparison.html">Compare</a>
         <a href="blog/">Blog</a>
       </nav>
-      <a class="btn btn-primary btn-sm site-cta" href="index.html">Open app</a>
+      <a class="btn btn-primary btn-sm site-cta" href="/app">Open app</a>
     </header>
 
     <main class="site-main">
-<div>
-<header>
-<h1>How to Use Strim</h1>
-<p>Filter, organize, and clean your IPTV playlist in a few simple steps. Works with any M3U source.</p>
-</header>
-<section>
-<div>
-<span class="step-num">01</span>
-<h2>Load Your Playlist</h2>
-</div>
-<p>Open Strim in your browser. No installation or sign-up required. You can either paste your M3U URL into the input box and click <strong>Fetch</strong>, or paste the raw M3U content directly into the text area.</p>
-</section>
-<section>
-<div>
-<span class="step-num">02</span>
-<h2>Review Groups</h2>
-</div>
-<p>After loading, your playlist is automatically parsed and displayed in the sidebar grouped by category. Each group shows a count of channels it contains. The input tab displays the total channel count and group list.</p>
-</section>
-<section>
-<div>
-<span class="step-num">03</span>
-<h2>Select Channels to Keep</h2>
-</div>
-<p>Check the groups you want to keep. Use the select/deselect all toggle to quickly manage your selection. The filter tab updates in real-time as you make changes. You can also use the search bar to find specific groups.</p>
-</section>
-<section>
-<div>
-<span class="step-num">04</span>
-<h2>Generate Cleaned Playlist</h2>
-</div>
-<p>Click <strong>Generate</strong> in the output tab to create your new filtered playlist. Strim processes everything client-side and generates a clean M3U file with only your selected groups.</p>
-</section>
-<section>
-<div>
-<span class="step-num">05</span>
-<h2>Save or Share</h2>
-</div>
-<p>Download the cleaned playlist as an .m3u file, copy it to your clipboard, or generate a shareable URL for your IPTV app. The share URL can be refreshed automatically to pick up changes.</p>
-</section>
-<section>
-<h2>Tips for Best Results</h2>
-<ul>
-<li><strong>Use URL playlists if possible</strong> — they allow automatic refresh support via shareable links.</li>
-<li><strong>Start with select all, then deselect</strong> the groups you do not want.</li>
-<li><strong>Check the channel count</strong> per group to focus on the largest groups first.</li>
-<li><strong>CORS issues?</strong> Start the included CORS proxy or use the raw paste option.</li>
-<li><strong>Bookmark the share URL</strong> for one-click access to your filtered playlist.</li>
-</ul>
-</section>
-<section>
-<p>Ready to clean your playlist?</p>
-<p>Open Strim and try it yourself. No sign-up required.</p>
-<a class="btn btn-primary" href="index.html">Open Strim</a>
-</section>
-</div>
+      <header class="page-head">
+        <span class="eyebrow">How to use</span>
+        <h1>From provider link to <em>clean player list.</em></h1>
+        <p class="lead">You need the M3U link from your IPTV provider and about a minute. Here is the whole flow, step by step.</p>
+      </header>
+
+      <ol class="guide">
+        <li>
+          <h2>Open Strim and paste your link</h2>
+          <p>Open <a href="/app">the app</a> and paste the M3U or M3U8 URL your provider gave you, then press <strong>Load groups</strong>. Xtream Codes links that look like <code>…/get.php?username=…&amp;password=…&amp;type=m3u_plus</code> work as they are.</p>
+          <p>Large playlists can take up to a minute. No link yet? Choose <strong>Try a sample</strong> to explore with a made-up playlist.</p>
+        </li>
+        <li>
+          <h2>Switch off the groups you never watch</h2>
+          <p>Every group is listed with its number of entries and a switch. Its marker shows what it contains: a circle for live TV, a diamond for movies, a square for series.</p>
+          <ul>
+            <li>Type in the search box to find a group by name.</li>
+            <li>Use the <strong>Live</strong>, <strong>Movies</strong> and <strong>Series</strong> pills to show one type, then <strong>All off</strong> to drop all of it.</li>
+            <li>Sort by <strong>Largest</strong> to find the groups that make your list slow.</li>
+          </ul>
+          <p>The bar at the bottom shows how many entries are still on.</p>
+        </li>
+        <li>
+          <h2>Download, or save for a player link</h2>
+          <p><strong>Download</strong> gives you the cleaned .m3u file right away, no account needed. It is a snapshot: it will not pick up changes from your provider.</p>
+          <p>To get a link that stays current, <strong>sign in</strong> and press <strong>Save</strong>. Strim gives the playlist a <strong>player link</strong>; each time your player refreshes, Strim reads the provider’s current list and applies your choices.</p>
+        </li>
+        <li>
+          <h2>Add the player link to your IPTV app</h2>
+          <p>Press <strong>Copy</strong> on the player link and add it as an M3U playlist URL:</p>
+          <ul>
+            <li><strong>TiviMate</strong>: Settings → Playlists → Add playlist → Enter URL.</li>
+            <li><strong>IPTV Smarters</strong>: Add user → Load your playlist or file/URL.</li>
+            <li><strong>VLC</strong>: Media → Open Network Stream.</li>
+            <li><strong>Kodi</strong>: PVR IPTV Simple Client → M3U play list URL.</li>
+          </ul>
+        </li>
+        <li>
+          <h2>Change it whenever you like</h2>
+          <p>Open the playlist in Strim, switch groups on or off and press <strong>Save</strong>. Players get the change on their next refresh; the link itself stays the same.</p>
+          <p>From the playlist’s menu you can turn the link off, create a new link (the old one stops working), switch on auto-refresh or delete the playlist.</p>
+        </li>
+      </ol>
+
+      <section class="section" aria-labelledby="tips-title">
+        <div class="section-head">
+          <h2 id="tips-title">If something does not work</h2>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <h3>“The source returned HTTP 403”</h3>
+            <p>Some providers block requests from servers. Check the link works in a browser on your own network, or ask your provider whether it allows server access.</p>
+          </article>
+          <article class="card">
+            <h3>The player shows no channels</h3>
+            <p>Check that the link is turned on in Strim and that your subscription has not expired. Strim shows the expiry date when the provider link contains one.</p>
+          </article>
+          <article class="card">
+            <h3>A group is missing</h3>
+            <p>Use the <strong>Off</strong> filter to list every group you switched off. Groups your provider removes disappear from Strim as well.</p>
+          </article>
+        </div>
+        <p class="cta-row"><a class="btn" href="blog/fix-iptv-playlist-not-loading.html">More troubleshooting</a></p>
+      </section>
+
+      <section class="cta-band" aria-labelledby="cta-title">
+        <div>
+          <h2 id="cta-title">Try it with your playlist</h2>
+          <p>Free, no account needed to start.</p>
+        </div>
+        <a class="btn btn-primary btn-lg" href="/app">Open Strim</a>
+      </section>
     </main>
 
     <footer class="site-footer">
       <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
       <p>Free M3U playlist editor. Open source on <a href="https://github.com/unejamardiani/strim" rel="noopener">GitHub</a>.</p>
       <nav aria-label="Footer">
-        <a href="index.html">App</a>
+        <a href="/app">App</a>
         <a href="features.html">Features</a>
         <a href="how-to-use.html" aria-current="page">How to use</a>
         <a href="comparison.html">Compare</a>

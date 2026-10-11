@@ -84,6 +84,9 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseWhen(
   context => !context.Request.Path.StartsWithSegments("/api"),
   site => site.UseStatusCodePagesWithReExecute("/error/{0}"));
+// Explicit and after the static files: otherwise routing runs first and the fallback route claims
+// paths such as "/" and "/blog/" before their default documents are found.
+app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();
