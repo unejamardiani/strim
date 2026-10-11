@@ -74,6 +74,12 @@ public static class SecurityHelpers
   /// </summary>
   public static bool IsPrivateOrReservedIP(IPAddress addr)
   {
+    // ::ffff:10.0.0.1 reaches the IPv4 host, so judge it as IPv4.
+    if (addr.IsIPv4MappedToIPv6)
+    {
+      addr = addr.MapToIPv4();
+    }
+
     var bytes = addr.GetAddressBytes();
 
     // IPv4 checks
@@ -90,6 +96,9 @@ public static class SecurityHelpers
 
       // Private: 192.168.0.0/16
       if (bytes[0] == 192 && bytes[1] == 168) return true;
+
+      // Shared address space / CGNAT: 100.64.0.0/10 (also used by overlay VPNs such as Tailscale)
+      if (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) return true;
 
       // Link-local: 169.254.0.0/16 (AWS metadata, Azure IMDS, etc.)
       if (bytes[0] == 169 && bytes[1] == 254) return true;
@@ -123,5 +132,34 @@ public static class SecurityHelpers
     }
 
     return false;
+  }
+
+  /// <summary>
+  /// Opens the TCP connection for an outbound playlist request, resolving the host here and
+  /// connecting only to public addresses. Checking the URL beforehand is not enough on its own:
+  /// the HTTP stack would resolve the name again, which a DNS-rebinding host can exploit.
+  /// </summary>
+  public static async ValueTask<Stream> ConnectToPublicAddressAsync(DnsEndPoint endPoint, CancellationToken cancellationToken)
+  {
+    var addresses = IPAddress.TryParse(endPoint.Host, out var literal)
+      ? new[] { literal }
+      : await Dns.GetHostAddressesAsync(endPoint.Host, cancellationToken);
+    var allowed = addresses.Where(address => !IsPrivateOrReservedIP(address)).ToArray();
+    if (allowed.Length == 0)
+    {
+      throw new HttpRequestException("Access to internal or private network addresses is not allowed");
+    }
+
+    var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+    try
+    {
+      await socket.ConnectAsync(allowed, endPoint.Port, cancellationToken);
+      return new NetworkStream(socket, ownsSocket: true);
+    }
+    catch
+    {
+      socket.Dispose();
+      throw;
+    }
   }
 }

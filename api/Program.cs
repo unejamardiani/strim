@@ -2101,3 +2101,6 @@ public record RegisterRequest(string UserName, string Password, string? Email);
 public record LoginRequest(string UserName, string Password);
 
 public record AutoRefreshRequest(bool Enabled);
+
+// Lets the integration tests host the app with WebApplicationFactory<Program>.
+public partial class Program { }
