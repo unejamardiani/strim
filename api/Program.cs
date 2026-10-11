@@ -538,7 +538,15 @@ app.Use(async (context, next) =>
 });
 
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+  OnPrepareResponse = context =>
+  {
+    var request = context.Context.Request;
+    context.Context.Response.Headers.CacheControl =
+      StaticAssetCaching.GetCacheControl(request.Path.Value ?? string.Empty, request.Query.ContainsKey("v"));
+  },
+});
 
 // Status code pages for error handling
 app.UseWhen(
@@ -2048,7 +2056,11 @@ app.MapGet("/error/{statusCode:int}", async (int statusCode, HttpContext context
 var indexFilePath = Path.Combine(
   app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"),
   "index.html");
-app.MapGet("/", () => Results.File(indexFilePath, "text/html; charset=utf-8"));
+app.MapGet("/", (HttpContext context) =>
+{
+  context.Response.Headers.CacheControl = StaticAssetCaching.Revalidate;
+  return Results.File(indexFilePath, "text/html; charset=utf-8");
+});
 
 // SPA fallback for client-side routing - set 404 status and serve error page
 app.MapFallback(async (HttpContext context) =>
