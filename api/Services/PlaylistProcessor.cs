@@ -228,12 +228,8 @@ public static class PlaylistProcessor
   /// <summary>
   /// Memoises, for one run of <see cref="GenerateFilteredFileAsync"/>, what every entry of one
   /// (group title, content type) gets. Titles that differ only by case share one filtering decision,
-  /// like the case-insensitive sets the pipeline passes in; the output key of a split title is cached
-  /// per exact casing, so every entry keeps its own casing and each key string is built once.
-  /// The memo grows with the titles the source holds, which the analysis limits bound; the casings
-  /// kept per pair are capped at <see cref="MaxCachedCasings"/>, so a source with endless case
-  /// variants of one title cannot grow it further. A new casing past the cap replaces the oldest one,
-  /// so a repeated casing builds its key again only after more than that many other casings came in between.
+  /// like the case-insensitive sets the pipeline passes in; a split title's output key is cached per
+  /// exact casing, at most <see cref="MaxCachedCasings"/> per pair, a new casing replacing the oldest.
   /// </summary>
   internal sealed class GroupDecisions(ISet<string> disabledGroups, IReadOnlySet<string>? splitGroupTitles)
   {
