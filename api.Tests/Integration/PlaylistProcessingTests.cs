@@ -1,7 +1,11 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Api.Services;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Api.Tests.Integration;
@@ -359,6 +363,57 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
     Assert.Contains(factory.UpstreamRequests, r => r == link);
     Assert.DoesNotContain(factory.UpstreamRequests, r => r.Contains("player_api.php") && r.Contains("noacct"));
     Assert.Equal(System.Text.Json.JsonValueKind.Null, json.GetProperty("accountCheckedUtc").ValueKind);
+  }
+
+  [Fact]
+  public async Task Pipeline_AfterRestart_ReusesFreshSource()
+  {
+    using var app = new StrimAppFactory();
+    var first = await app.Services.GetRequiredService<PlaylistPipeline>()
+      .GetSourceAsync(StrimAppFactory.UpstreamUrl, CancellationToken.None);
+
+    // A second host on the same cache directory, as after a restart or deploy.
+    var restarted = app.WithWebHostBuilder(_ => { });
+    app.UpstreamRequests.Clear();
+    var reused = await restarted.Services.GetRequiredService<PlaylistPipeline>()
+      .GetSourceAsync(StrimAppFactory.UpstreamUrl, CancellationToken.None);
+
+    Assert.Empty(app.UpstreamRequests);
+    Assert.NotSame(first, reused);
+    Assert.Equal(first.FilePath, reused.FilePath);
+    Assert.Equal(first.ContentHash, reused.ContentHash);
+  }
+
+  [Fact]
+  public async Task Pipeline_AfterRestart_RevalidatesWithStoredETag()
+  {
+    using var app = new StrimAppFactory();
+    var lastModified = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    app.UpstreamResponses[StrimAppFactory.UpstreamUrl] = () =>
+    {
+      var response = new HttpResponseMessage(HttpStatusCode.OK)
+      {
+        Content = new StringContent(TestPlaylists.Mixed, System.Text.Encoding.UTF8, "application/x-mpegurl"),
+      };
+      response.Headers.ETag = new EntityTagHeaderValue("\"v1\"");
+      response.Content.Headers.LastModified = lastModified;
+      return response;
+    };
+    var first = await app.Services.GetRequiredService<PlaylistPipeline>()
+      .GetSourceAsync(StrimAppFactory.UpstreamUrl, CancellationToken.None);
+
+    var restarted = app.WithWebHostBuilder(builder => builder.UseSetting("PlaylistCache:RevalidationIntervalMinutes", "0"));
+    app.UpstreamResponses[StrimAppFactory.UpstreamUrl] = () => new HttpResponseMessage(HttpStatusCode.NotModified);
+    app.UpstreamValidators.Clear();
+    var revalidated = await restarted.Services.GetRequiredService<PlaylistPipeline>()
+      .GetSourceAsync(StrimAppFactory.UpstreamUrl, CancellationToken.None);
+
+    var request = Assert.Single(app.UpstreamValidators);
+    Assert.Equal(StrimAppFactory.UpstreamUrl, request.Url);
+    Assert.Equal("\"v1\"", request.IfNoneMatch);
+    Assert.Equal(lastModified, request.IfModifiedSince);
+    Assert.Equal(first.FilePath, revalidated.FilePath);
+    Assert.True(File.Exists(revalidated.FilePath));
   }
 
   private static async Task<AnalysisDto> AnalyzeRawAsync(ApiClient client, string rawText = TestPlaylists.Mixed)
