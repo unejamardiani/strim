@@ -493,6 +493,12 @@ public sealed class PlaylistFileCache
         return null;
       }
 
+      // An expired copy is no longer handed out; Cleanup deletes it.
+      if (IsExpired(entry))
+      {
+        return null;
+      }
+
       entry.ActiveLeases++;
       return new PlaylistFileLease(
         entry.FilePath,
@@ -574,6 +580,9 @@ public sealed class PlaylistFileCache
 
   private bool IsAvailable(PlaylistOutputFile output) =>
     output.ExpiresAtUtc > _time.GetUtcNow() && File.Exists(output.FilePath);
+
+  private bool IsExpired(LastGoodFile entry) =>
+    entry.CreatedAtUtc.Add(_lastGoodTtl) <= _time.GetUtcNow();
 
   private PlaylistDiskReservation ReserveCapacity(
     long requestedBytes,
@@ -668,6 +677,21 @@ public sealed class PlaylistFileCache
       if (usedBytes <= maxTrackedBytes) return usedBytes;
     }
 
+    // Last-good copies keep player links answering when the provider fails, so they go only
+    // after every other evictable source and output, oldest first.
+    foreach (var entry in _lastGood.Values
+      .Where(x => x.ActiveLeases == 0 && !protectedPaths.Contains(x.FilePath))
+      .OrderBy(x => x.CreatedAtUtc)
+      .ToList())
+    {
+      var length = GetTrackedLength(entry.FilePath, entry.LengthBytes);
+      if (RemoveLastGoodNoLock(entry))
+      {
+        usedBytes -= length;
+      }
+      if (usedBytes <= maxTrackedBytes) return usedBytes;
+    }
+
     _logger.LogWarning(
       "Playlist cache cannot free enough disk capacity ({UsedBytes} tracked bytes; target {TargetBytes}) because files are active, protected, or awaiting a successful delete",
       usedBytes,
@@ -698,6 +722,11 @@ public sealed class PlaylistFileCache
       .ToList())
     {
       RemoveSourceNoLock(source.SourceKey);
+    }
+
+    foreach (var entry in _lastGood.Values.Where(x => IsExpired(x) && !protectedPaths.Contains(x.FilePath)).ToList())
+    {
+      RemoveLastGoodNoLock(entry);
     }
   }
 

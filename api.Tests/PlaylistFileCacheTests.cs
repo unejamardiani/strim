@@ -419,6 +419,66 @@ public class PlaylistFileCacheTests
     Assert.NotNull(lease);
   }
 
+  [Fact]
+  public async Task LastGood_ExpiresAfterTtl()
+  {
+    Assert.Equal(7 * 24 * 60, new PlaylistCacheOptions().LastGoodTtlMinutes);
+
+    using var fixture = new LastGoodFixture(maxDiskBytes: 4096, lastGoodTtlMinutes: 60);
+    var playlistId = await fixture.RememberAsync("#EXTM3U\nkept\n");
+    var path = fixture.LastGoodPath(playlistId);
+
+    fixture.Time.Advance(TimeSpan.FromMinutes(59));
+    fixture.Cache.Cleanup();
+    using (var lease = fixture.Cache.TryLeaseLastGood(playlistId))
+    {
+      Assert.NotNull(lease);
+    }
+
+    fixture.Time.Advance(TimeSpan.FromMinutes(2));
+    Assert.Null(fixture.Cache.TryLeaseLastGood(playlistId));
+    Assert.True(File.Exists(path));
+
+    fixture.Cache.Cleanup();
+
+    Assert.False(File.Exists(path));
+    Assert.False(File.Exists(Path.ChangeExtension(path, ".json")));
+    Assert.Null(fixture.Cache.TryLeaseLastGood(playlistId));
+  }
+
+  [Fact]
+  public async Task LastGood_IsEvictedLast_UnderDiskPressure()
+  {
+    // Without a source limit a reservation asks for exactly its advertised length. The copy is
+    // the oldest file, yet the newer source and outputs go first.
+    using var fixture = new LastGoodFixture(maxDiskBytes: 300, maxSourceBytes: 0);
+    var source = await fixture.StoreSourceAsync(new string('s', 50));
+    var first = fixture.StoreOutput(source, "Sports", new string('1', 50));
+    var playlistId = Guid.NewGuid();
+    Assert.True(fixture.Cache.RememberLastGood(playlistId, first));
+    var path = fixture.LastGoodPath(playlistId);
+    fixture.Time.Advance(TimeSpan.FromMinutes(1));
+    var second = fixture.StoreOutput(source, "News", new string('2', 50));
+
+    // 200 of 300 bytes tracked; a 250-byte reservation leaves room for 50, the copy alone.
+    using (fixture.Cache.ReserveSourceCapacity(250))
+    {
+      Assert.Null(fixture.Cache.TryLeaseOutput(first.OutputKey));
+      Assert.Null(fixture.Cache.TryLeaseOutput(second.OutputKey));
+      Assert.False(File.Exists(source.FilePath));
+      using var lease = fixture.Cache.TryLeaseLastGood(playlistId);
+      Assert.NotNull(lease);
+    }
+
+    // Only when nothing else is left is the copy evicted.
+    using (fixture.Cache.ReserveSourceCapacity(300))
+    {
+      Assert.False(File.Exists(path));
+      Assert.False(File.Exists(Path.ChangeExtension(path, ".json")));
+      Assert.Null(fixture.Cache.TryLeaseLastGood(playlistId));
+    }
+  }
+
   private sealed class ManualTime : TimeProvider
   {
     private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
