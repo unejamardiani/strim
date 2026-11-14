@@ -694,6 +694,14 @@ select.input {
   font-variant-numeric: tabular-nums;
 }
 
+.adult-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
 .bulk {
   display: flex;
   gap: 4px;

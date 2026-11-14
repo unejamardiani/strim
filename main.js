@@ -784,7 +784,7 @@ function applyAnalysis(ed, analysis, { sample }) {
   const groups = (analysis.groups || []).map((g, index) => {
     const title = g.groupTitle || g.name;
     const type = CONTENT_TYPES.includes(g.contentType) ? g.contentType : 'Live';
-    return { key: g.name, title, type, count: g.count || 0, index, split: false, search: '' };
+    return { key: g.name, title, type, count: g.count || 0, index, split: false, search: '', adult: g.isAdult === true };
   });
 
   const perTitle = new Map();
@@ -1019,6 +1019,7 @@ const picker = {
   shownLabel: null,
   allOnButton: null,
   allOffButton: null,
+  adultSwitch: null,
   typeButtons: null,
   showButtons: null,
 };
@@ -1095,8 +1096,13 @@ function pickerNodes(ed) {
   picker.shownLabel = h('span', { class: 'num' });
   picker.allOnButton = h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(false) }, 'All on');
   picker.allOffButton = h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(true) }, 'All off');
+  // Shown only when the analysis flagged adult groups; it edits the same per-group choices as the rows.
+  picker.adultSwitch = ed.groups.some((g) => g.adult)
+    ? h('input', { class: 'toggle', type: 'checkbox', role: 'switch', onchange: (e) => setAdultHidden(e.target.checked) })
+    : null;
   rows.push(h('div', { class: 'summary' },
     picker.shownLabel,
+    picker.adultSwitch ? h('label', { class: 'adult-switch' }, 'Hide adult groups', picker.adultSwitch) : null,
     h('div', { class: 'bulk' }, picker.allOnButton, picker.allOffButton)));
 
   return [
@@ -1120,6 +1126,7 @@ function teardownPicker() {
   picker.ed = null;
   picker.list = null;
   picker.rows = [];
+  picker.adultSwitch = null;
   cancelAnimationFrame(picker.frame);
 }
 
@@ -1299,6 +1306,23 @@ function bulkSet(hide) {
   updateActionBar();
 }
 
+function setAdultHidden(hide) {
+  const ed = picker.ed;
+  if (!ed) return;
+  discardBulkUndo();
+  for (const g of ed.groups) {
+    if (!g.adult) continue;
+    if (hide) ed.disabled.add(g.key);
+    else ed.disabled.delete(g.key);
+  }
+  updateView(false);
+}
+
+function syncAdultSwitch(ed) {
+  if (!picker.adultSwitch || picker.ed !== ed) return;
+  picker.adultSwitch.checked = ed.groups.every((g) => !g.adult || ed.disabled.has(g.key));
+}
+
 // Only the last bulk change can be undone; any later change discards it.
 let bulkUndo = null;
 
@@ -1376,6 +1400,7 @@ function updateActionBar() {
   const ed = state.editor;
   if (!ed || ed.phase !== 'ready' || !bar.info) return;
   const { channels, groups } = selectionStats(ed);
+  syncAdultSwitch(ed);
   bar.info.replaceChildren(
     h('div', { class: 'dock-value' }, fmt(channels), h('small', { text: channels === 1 ? 'channel' : 'channels' })),
     h('div', { class: 'dock-label', text: `${fmt(groups)} of ${plural(ed.groups.length, 'group')} on` }));
