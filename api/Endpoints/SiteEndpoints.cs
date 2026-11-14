@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text.RegularExpressions;
 using Api.Services;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
@@ -33,20 +35,17 @@ public static class SiteEndpoints
         ? Results.Redirect($"/app{context.Request.QueryString}", permanent: true)
         : Page(context, Path.Combine(webRoot, "app.html")));
 
-    app.MapGet("/error/{statusCode:int}", (int statusCode, HttpContext context) =>
+    app.MapGet("/error/{statusCode:int}", async (int statusCode, HttpContext context) =>
     {
-      var page = statusCode switch
-      {
-        404 => "404.html",
-        500 => "500.html",
-        >= 500 and < 600 => "50x.html",
-        _ => "404.html",
-      };
-      var path = Path.Combine(webRoot, page);
+      var page = ErrorPages.For(statusCode);
+      var path = Path.Combine(webRoot, page.File);
       if (!File.Exists(path)) return Results.Problem($"Error {statusCode}", statusCode: statusCode);
 
       context.Response.StatusCode = statusCode;
-      return Results.File(path, "text/html; charset=utf-8");
+      if (page.Text is null) return Results.File(path, "text/html; charset=utf-8");
+
+      var html = await File.ReadAllTextAsync(path, context.RequestAborted);
+      return Results.Content(WithText(html, page.Text), "text/html; charset=utf-8", statusCode: statusCode);
     });
 
     // Unknown API routes are a JSON 404; anything else gets the HTML 404 page.
@@ -62,6 +61,21 @@ public static class SiteEndpoints
 
     return app;
   }
+
+  // Puts the rule's constant text into an existing error page: title, code (eyebrow and TV channel),
+  // heading and lead. Markup, styles, header and footer stay those of the page.
+  private static string WithText(string html, ErrorPageText text)
+  {
+    var code = WebUtility.HtmlEncode(text.Code);
+    html = Replace(html, @"<title>.*?</title>", $"<title>{WebUtility.HtmlEncode(text.Title)} | Strim</title>");
+    html = Replace(html, @"<p class=""eyebrow"">Error .*?</p>", $"<p class=\"eyebrow\">Error {code}</p>");
+    html = Replace(html, @"<span class=""tv-channel"">CH .*?</span>", $"<span class=\"tv-channel\">CH {code}</span>");
+    html = Replace(html, @"<h1>.*?</h1>", $"<h1>{WebUtility.HtmlEncode(text.Heading)}</h1>");
+    return Replace(html, @"<p class=""lead"">.*?</p>", $"<p class=\"lead\">{WebUtility.HtmlEncode(text.Lead)}</p>");
+  }
+
+  private static string Replace(string html, string pattern, string replacement) =>
+    Regex.Replace(html, pattern, _ => replacement, RegexOptions.Singleline | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
   private static IResult Page(HttpContext context, string path)
   {
