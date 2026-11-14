@@ -490,7 +490,11 @@ public static class PlaylistProcessor
     }
   }
 
-  /// <summary>The group-title value; without one, the entry's #EXTGRP value; otherwise "Ungrouped".</summary>
+  /// <summary>
+  /// The group-title value; without one, the entry's #EXTGRP value; otherwise "Ungrouped".
+  /// Double quotes in an #EXTGRP value become single quotes: the value is written into the quoted
+  /// group-title attribute, and analysis, filtering and output all use this same normalised value.
+  /// </summary>
   private static string ExtractGroupTitle(string extinf, string? extGrp = null) =>
     ExtractGroupTitle(extinf, extGrp, out _);
 
@@ -505,7 +509,7 @@ public static class PlaylistProcessor
     }
 
     var group = extGrp?.Trim();
-    if (!string.IsNullOrEmpty(group)) return group;
+    if (!string.IsNullOrEmpty(group)) return group.Replace('"', '\'');
 
     hasTitle = false;
     return UngroupedTitle;
