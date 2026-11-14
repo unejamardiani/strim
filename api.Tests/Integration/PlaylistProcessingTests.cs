@@ -116,6 +116,25 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
   }
 
   [Fact]
+  public async Task Analyze_ExplicitUngroupedOfOtherContentType_KeepsUntitledGroupWordsEmpty()
+  {
+    const string playlist = "#EXTM3U\n" +
+      "#EXTINF:-1 tvg-name=\"Loose\",Loose Channel\nhttp://provider.example/live/4001.ts\n" +
+      "#EXTINF:-1 group-title=\"Ungrouped\",Named Show\nhttp://provider.example/series/4002.mkv\n";
+    var response = await NewClient().PostAsync("/api/playlist/analyze", new { rawText = playlist });
+    response.EnsureSuccessStatusCode();
+    using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    var groups = json.RootElement.GetProperty("groups").EnumerateArray().ToList();
+
+    Assert.Equal(2, groups.Count);
+    var live = Assert.Single(groups, g => g.GetProperty("contentType").GetString() == "Live");
+    var series = Assert.Single(groups, g => g.GetProperty("contentType").GetString() == "Series");
+    Assert.Equal(JsonValueKind.Array, live.GetProperty("words").ValueKind);
+    Assert.Empty(live.GetProperty("words").EnumerateArray());
+    Assert.Equal(new[] { "ungrouped" }, series.GetProperty("words").EnumerateArray().Select(w => w.GetString()!).ToArray());
+  }
+
+  [Fact]
   public async Task Analyze_EntriesWithoutOrWithEmptyTitle_ReturnEmptyWords()
   {
     const string playlist = "#EXTM3U\n" +

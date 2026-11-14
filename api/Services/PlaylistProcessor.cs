@@ -70,8 +70,8 @@ public static class PlaylistProcessor
     var total = 0;
     var groupVariantCount = 0;
     long groupMetadataBytes = 0;
-    // True once an entry carries a real group title that equals the fallback title.
-    var explicitUngrouped = false;
+    // Per content type: true once an entry carries a real group title that equals the fallback title.
+    var explicitUngrouped = new bool[ContentTypeCount];
 
     await using var stream = new FileStream(
       filePath,
@@ -92,12 +92,13 @@ public static class PlaylistProcessor
       total++;
       (var url, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
       var groupTitle = ExtractGroupTitle(line, extGrp, out var hasTitle);
-      if (hasTitle && IsUngroupedTitle(groupTitle)) explicitUngrouped = true;
+      var contentType = DetectContentType(url);
+      if (hasTitle && IsUngroupedTitle(groupTitle)) explicitUngrouped[(int)contentType] = true;
       EnsureGroupTitleWithinLimit(groupTitle, maxGroupTitleLengthChars);
       IncrementGroup(
         groups,
         groupTitle,
-        DetectContentType(url),
+        contentType,
         maxGroupCount,
         ref groupVariantCount,
         ref groupMetadataBytes,
@@ -456,18 +457,20 @@ public static class PlaylistProcessor
     counts[typeIndex] = 1;
   }
 
-  private static List<PlaylistGroup> BuildGroups(Dictionary<string, int[]> groups, bool explicitUngrouped)
+  private static List<PlaylistGroup> BuildGroups(Dictionary<string, int[]> groups, bool[] explicitUngrouped)
   {
     var result = new List<PlaylistGroup>(groups.Count);
     foreach (var (groupTitle, counts) in groups)
     {
       // Only split titles that really mix content types so existing filters keep their names.
       var split = counts.Count(count => count > 0) > 1;
-      // Entries without a title share the fallback group; it has a title only if an entry named it so.
-      var hasTitle = explicitUngrouped || !IsUngroupedTitle(groupTitle);
+      var isFallbackTitle = IsUngroupedTitle(groupTitle);
       for (var i = 0; i < counts.Length; i++)
       {
         if (counts[i] == 0) continue;
+
+        // Untitled entries share the fallback group; per content type it has a title only if an entry named it so.
+        var hasTitle = !isFallbackTitle || explicitUngrouped[i];
 
         var contentType = (PlaylistContentType)i;
         var key = split ? GroupKey(groupTitle, contentType) : groupTitle;
