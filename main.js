@@ -553,6 +553,13 @@ function playlistMeta(playlist) {
     else if (days <= 14) parts.push(h('span', { class: 'warn', text: `Expires in ${plural(days, 'day')}` }));
     else parts.push(h('span', { text: `Expires ${expires.toLocaleDateString()}` }));
   }
+  const status = playlist.accountStatus?.trim();
+  if (status && status.toLowerCase() !== 'active') parts.push(h('span', { class: 'warn', text: `Account ${status}` }));
+  const max = playlist.accountMaxConnections;
+  if (Number.isInteger(max) && max > 0) {
+    const active = playlist.accountActiveConnections;
+    parts.push(h('span', { text: Number.isInteger(active) ? `${fmt(active)} of ${plural(max, 'connection')}` : plural(max, 'connection') }));
+  }
   return h('div', { class: 'meta' }, parts);
 }
 
@@ -698,6 +705,7 @@ function newEditor(playlist) {
     cacheKey: null,
     totalChannels: 0,
     expirationUtc: null,
+    account: null,
     groups: [],
     typeCounts: {},
     disabled: new Set(),
@@ -816,6 +824,14 @@ function applyAnalysis(ed, analysis, { sample }) {
   ed.search = null;
   ed.totalChannels = analysis.totalChannels || groups.reduce((sum, g) => sum + g.count, 0);
   ed.expirationUtc = analysis.expirationUtc || null;
+  // The API rejects a status over 32 characters (varchar(32)); drop only the status so the save still works.
+  const status = analysis.accountStatus;
+  ed.account = analysis.accountCheckedUtc ? {
+    accountStatus: typeof status === 'string' && status.length <= 32 ? status : null,
+    accountMaxConnections: analysis.maxConnections ?? null,
+    accountActiveConnections: analysis.activeConnections ?? null,
+    accountCheckedUtc: analysis.accountCheckedUtc,
+  } : null;
   ed.isSample = sample;
   ed.phase = 'ready';
   ed.editingSource = false;
@@ -1728,6 +1744,8 @@ async function saveEditor(ed) {
     totalChannels: loaded ? ed.totalChannels : existing?.totalChannels,
     groupCount: loaded ? ed.groups.length : existing?.groupCount,
     expirationUtc: (loaded ? ed.expirationUtc : existing?.expirationUtc) || null,
+    // Without a fresh account answer the fields are left out, so the API keeps the saved ones.
+    ...(loaded && ed.account ? ed.account : {}),
   };
 
   ed.busy = 'save';
