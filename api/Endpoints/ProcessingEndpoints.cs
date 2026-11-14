@@ -9,12 +9,14 @@ namespace Api.Endpoints;
 /// <summary>
 /// Reading, filtering and serving playlists: the editor's analyze/generate calls, the generated
 /// download and the public share link. All of them run through <see cref="PlaylistPipeline"/>
-/// and the single-job <see cref="PlaylistJobGate"/>.
+/// and the single-job <see cref="PlaylistJobGate"/>, except the entry search, which only reads the
+/// analysis's in-memory index.
 /// </summary>
 public static class ProcessingEndpoints
 {
   private const string AnalyzePath = "/api/playlist/analyze";
   private const string M3uContentType = "application/x-mpegurl; charset=utf-8";
+  private const string SessionExpired = "The playlist session expired. Analyze the source again.";
 
   /// <summary>
   /// Model binding turns RawText JSON into a managed string before the handler and its job gate
@@ -128,11 +130,7 @@ public static class ProcessingEndpoints
         return Results.BadRequest(new { error = "Provide a cacheKey or sourceUrl." });
       if (input.SourceUrl?.Length > Limits.MaxUrlLength)
         return Results.BadRequest(new { error = $"Source URL must be {Limits.MaxUrlLength} characters or less." });
-      if (input.DisabledGroups?.Count > Limits.MaxDisabledGroupsCount)
-        return Results.BadRequest(new { error = $"Disabled groups list cannot exceed {Limits.MaxDisabledGroupsCount} items." });
-      var maxGroupKeyLength = PlaylistProcessor.MaxGroupKeyLength(pipeline.Cache.MaxGroupTitleLengthChars);
-      if (input.DisabledGroups?.Any(group => string.IsNullOrWhiteSpace(group) || group.Length > maxGroupKeyLength) == true)
-        return Results.BadRequest(new { error = $"Each disabled group name must be between 1 and {maxGroupKeyLength} characters." });
+      if (InvalidDisabledGroups(input.DisabledGroups, pipeline.Cache) is { } invalidGroups) return invalidGroups;
 
       var job = await jobGate.TryEnterAsync(context.RequestAborted);
       if (job is null) return EndpointHelpers.Busy();
@@ -148,7 +146,7 @@ public static class ProcessingEndpoints
           }
           if (source is null)
           {
-            return Results.BadRequest(new { error = "The playlist session expired. Analyze the source again." });
+            return Results.BadRequest(new { error = SessionExpired });
           }
 
           var output = await pipeline.GetOutputAsync(source, input.DisabledGroups ?? new List<string>(), context.RequestAborted);
@@ -159,6 +157,68 @@ public static class ProcessingEndpoints
           return EndpointHelpers.PlaylistFailure(ex, logger, "generate");
         }
       }
+    }).RequireRateLimiting(Security.RateLimits.Fetch);
+
+    // Read-only: reports duplicates and quality variants; nothing is stored and no playlist is changed.
+    app.MapPost("/api/playlist/report", async (PlaylistReportRequest input, HttpContext context, PlaylistPipeline pipeline, PlaylistJobGate jobGate) =>
+    {
+      if (string.IsNullOrWhiteSpace(input.CacheKey) && string.IsNullOrWhiteSpace(input.SourceUrl))
+        return Results.BadRequest(new { error = "Provide a cacheKey or sourceUrl." });
+      if (input.SourceUrl?.Length > Limits.MaxUrlLength)
+        return Results.BadRequest(new { error = $"Source URL must be {Limits.MaxUrlLength} characters or less." });
+
+      var job = await jobGate.TryEnterAsync(context.RequestAborted);
+      if (job is null) return EndpointHelpers.Busy();
+
+      await using (job)
+      {
+        try
+        {
+          var source = string.IsNullOrWhiteSpace(input.CacheKey) ? null : pipeline.Cache.TryGetSessionSource(input.CacheKey);
+          if (source is null && !string.IsNullOrWhiteSpace(input.SourceUrl))
+          {
+            source = await pipeline.GetSourceAsync(input.SourceUrl, context.RequestAborted);
+          }
+          if (source is null)
+          {
+            return Results.BadRequest(new { error = SessionExpired });
+          }
+
+          var entries = await PlaylistProcessor.ReadEntriesFromFileAsync(
+            source.FilePath, pipeline.Cache.MaxReportBytes, context.RequestAborted, pipeline.Cache.MaxLineLengthChars);
+          return Results.Ok(PlaylistReport.Build(entries));
+        }
+        catch (Exception ex)
+        {
+          return EndpointHelpers.PlaylistFailure(ex, logger, "report");
+        }
+      }
+    }).RequireCsrfToken().RequireRateLimiting(Security.RateLimits.Fetch);
+
+    // Read-only: searches the index the analysis keeps in memory, so it needs no job gate.
+    app.MapPost("/api/playlist/search", (PlaylistSearchRequest input, PlaylistPipeline pipeline) =>
+    {
+      if (string.IsNullOrWhiteSpace(input.CacheKey))
+        return Results.BadRequest(new { error = "Provide a cacheKey." });
+      if (input.Query?.Length > Limits.MaxSearchQueryLength)
+        return Results.BadRequest(new { error = $"Search must be {Limits.MaxSearchQueryLength} characters or less." });
+      if (PlaylistSearchText.Fold(input.Query).Length < Limits.MinSearchQueryLength)
+        return Results.BadRequest(new { error = $"Search needs at least {Limits.MinSearchQueryLength} letters or digits." });
+      if (InvalidDisabledGroups(input.DisabledGroups, pipeline.Cache) is { } invalidGroups) return invalidGroups;
+
+      var source = pipeline.Cache.TryGetSessionSource(input.CacheKey);
+      var analysis = source is null ? null : pipeline.Cache.TryGetAnalysis(source);
+      if (analysis is null)
+        return Results.BadRequest(new { error = SessionExpired });
+      if (analysis.SearchIndex is not { } index)
+        return Results.BadRequest(new { error = "Search is not available for this playlist because it is too large." });
+
+      var disabled = new HashSet<string>(input.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+      var result = index.Search(input.Query, disabled, Limits.MaxSearchResults);
+      return Results.Ok(new PlaylistSearchResponse(
+        result.Matches.Select(m => new PlaylistSearchMatchResult(
+          m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled)).ToList(),
+        result.HasMore));
     }).RequireRateLimiting(Security.RateLimits.Fetch);
 
     // The random, short-lived output key is a capability issued only after a source was processed,
@@ -214,5 +274,16 @@ public static class ProcessingEndpoints
     }).RequireRateLimiting(Security.RateLimits.Share);
 
     return app;
+  }
+
+  /// <summary>The disabledGroups limits shared by generate and search.</summary>
+  private static IResult? InvalidDisabledGroups(List<string>? disabledGroups, PlaylistFileCache cache)
+  {
+    if (disabledGroups?.Count > Limits.MaxDisabledGroupsCount)
+      return Results.BadRequest(new { error = $"Disabled groups list cannot exceed {Limits.MaxDisabledGroupsCount} items." });
+    var maxGroupKeyLength = PlaylistProcessor.MaxGroupKeyLength(cache.MaxGroupTitleLengthChars);
+    if (disabledGroups?.Any(group => string.IsNullOrWhiteSpace(group) || group.Length > maxGroupKeyLength) == true)
+      return Results.BadRequest(new { error = $"Each disabled group name must be between 1 and {maxGroupKeyLength} characters." });
+    return null;
   }
 }

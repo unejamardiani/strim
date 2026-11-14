@@ -47,6 +47,10 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
       entity.Property(p => p.SourceLastModifiedUtc).HasColumnName("sourcelastmodifiedutc");
       entity.Property(p => p.SourceLengthBytes).HasColumnName("sourcelengthbytes");
       entity.Property(p => p.SourceCheckedUtc).HasColumnName("sourcecheckedutc");
+      entity.Property(p => p.AccountStatus).HasMaxLength(32).HasColumnName("accountstatus");
+      entity.Property(p => p.AccountMaxConnections).HasColumnName("accountmaxconnections");
+      entity.Property(p => p.AccountActiveConnections).HasColumnName("accountactiveconnections");
+      entity.Property(p => p.AccountCheckedUtc).HasColumnName("accountcheckedutc");
       entity.HasIndex(p => new { p.OwnerId, p.UpdatedAt });
       entity.HasIndex(p => p.ShareCode).HasFilter("\"sharecode\" IS NOT NULL");
     });

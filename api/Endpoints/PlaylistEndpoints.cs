@@ -15,7 +15,11 @@ public record PlaylistRequest(
   int? TotalChannels,
   int? GroupCount,
   DateTimeOffset? ExpirationUtc,
-  string? ShareCode);
+  string? ShareCode,
+  string? AccountStatus = null,
+  int? AccountMaxConnections = null,
+  int? AccountActiveConnections = null,
+  DateTimeOffset? AccountCheckedUtc = null);
 
 public record AutoRefreshRequest(bool Enabled);
 
@@ -59,6 +63,10 @@ public static class PlaylistEndpoints
         TotalChannels = input.TotalChannels ?? 0,
         GroupCount = input.GroupCount ?? 0,
         ExpirationUtc = input.ExpirationUtc,
+        AccountStatus = input.AccountStatus,
+        AccountMaxConnections = input.AccountMaxConnections,
+        AccountActiveConnections = input.AccountActiveConnections,
+        AccountCheckedUtc = input.AccountCheckedUtc,
         ShareCode = string.IsNullOrWhiteSpace(input.ShareCode) ? SecurityHelpers.GenerateSecureShareCode() : input.ShareCode.Trim(),
         OwnerId = user.UserId(),
       };
@@ -81,6 +89,10 @@ public static class PlaylistEndpoints
       playlist.TotalChannels = input.TotalChannels ?? playlist.TotalChannels;
       playlist.GroupCount = input.GroupCount ?? playlist.GroupCount;
       playlist.ExpirationUtc = input.ExpirationUtc ?? playlist.ExpirationUtc;
+      playlist.AccountStatus = input.AccountStatus ?? playlist.AccountStatus;
+      playlist.AccountMaxConnections = input.AccountMaxConnections ?? playlist.AccountMaxConnections;
+      playlist.AccountActiveConnections = input.AccountActiveConnections ?? playlist.AccountActiveConnections;
+      playlist.AccountCheckedUtc = input.AccountCheckedUtc ?? playlist.AccountCheckedUtc;
       if (!string.IsNullOrWhiteSpace(input.ShareCode))
       {
         playlist.ShareCode = input.ShareCode.Trim();
@@ -167,6 +179,9 @@ public static class PlaylistEndpoints
       return Results.BadRequest(new { error = $"Source URL must be {Limits.MaxUrlLength} characters or less." });
     if (input.DisabledGroups?.Count > Limits.MaxDisabledGroupsCount)
       return Results.BadRequest(new { error = $"Disabled groups list cannot exceed {Limits.MaxDisabledGroupsCount} items." });
+    // The accountstatus column is varchar(32) on PostgreSQL.
+    if (input.AccountStatus?.Length > 32)
+      return Results.BadRequest(new { error = "Account status must be 32 characters or less." });
     return null;
   }
 }

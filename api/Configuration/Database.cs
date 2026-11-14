@@ -99,6 +99,10 @@ public static class Database
       TryAddSqliteColumn(db, "sourcelastmodifiedutc", "TEXT NULL", logger);
       TryAddSqliteColumn(db, "sourcelengthbytes", "INTEGER NULL", logger);
       TryAddSqliteColumn(db, "sourcecheckedutc", "TEXT NULL", logger);
+      TryAddSqliteColumn(db, "accountstatus", "TEXT NULL", logger);
+      TryAddSqliteColumn(db, "accountmaxconnections", "INTEGER NULL", logger);
+      TryAddSqliteColumn(db, "accountactiveconnections", "INTEGER NULL", logger);
+      TryAddSqliteColumn(db, "accountcheckedutc", "TEXT NULL", logger);
       TryBackfillSqliteShareCodes(db, logger);
     }
   }
@@ -329,6 +333,18 @@ public static class Database
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'sourcecheckedutc') THEN
             ALTER TABLE playlists ADD COLUMN sourcecheckedutc timestamptz NULL;
           END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'accountstatus') THEN
+            ALTER TABLE playlists ADD COLUMN accountstatus varchar(32) NULL;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'accountmaxconnections') THEN
+            ALTER TABLE playlists ADD COLUMN accountmaxconnections integer NULL;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'accountactiveconnections') THEN
+            ALTER TABLE playlists ADD COLUMN accountactiveconnections integer NULL;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'accountcheckedutc') THEN
+            ALTER TABLE playlists ADD COLUMN accountcheckedutc timestamptz NULL;
+          END IF;
         END $$;
       ");
       logger.LogDebug("PostgreSQL schema patched successfully");
@@ -377,7 +393,11 @@ public static class Database
       ["sourceetag"] = "TEXT NULL",
       ["sourcelastmodifiedutc"] = "TEXT NULL",
       ["sourcelengthbytes"] = "INTEGER NULL",
-      ["sourcecheckedutc"] = "TEXT NULL"
+      ["sourcecheckedutc"] = "TEXT NULL",
+      ["accountstatus"] = "TEXT NULL",
+      ["accountmaxconnections"] = "INTEGER NULL",
+      ["accountactiveconnections"] = "INTEGER NULL",
+      ["accountcheckedutc"] = "TEXT NULL"
     };
 
     if (!allowedColumns.TryGetValue(columnName, out var expectedDefinition))
