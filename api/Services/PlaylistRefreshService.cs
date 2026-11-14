@@ -5,12 +5,14 @@ namespace Api.Services;
 
 /// <summary>
 /// Every six hours, revalidates the sources of playlists with auto-refresh on so their channel
-/// counts stay current and a share link usually finds a warm cache.
+/// counts stay current and a share link usually finds a warm cache. Also re-reads the provider's
+/// account facts (expiry, status, connections) for <c>get.php</c> links.
 /// </summary>
 public class PlaylistRefreshService(
   IServiceScopeFactory scopeFactory,
   PlaylistPipeline pipeline,
   PlaylistJobGate jobGate,
+  PlaylistSourceFetcher fetcher,
   ILogger<PlaylistRefreshService> logger) : BackgroundService
 {
   private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
@@ -45,7 +47,7 @@ public class PlaylistRefreshService(
     }
   }
 
-  private async Task RefreshPlaylistsAsync(CancellationToken cancellationToken)
+  internal async Task RefreshPlaylistsAsync(CancellationToken cancellationToken)
   {
     using var scope = scopeFactory.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -98,7 +100,37 @@ public class PlaylistRefreshService(
         {
           logger.LogWarning(ex, "Failed to refresh playlist {PlaylistId} ({Name})", playlist.Id, playlist.Name);
         }
+
+        await RefreshAccountAsync(db, playlist, cancellationToken);
       }
+    }
+  }
+
+  /// <summary>
+  /// Updates the stored account facts from the provider's account answer. An unusable answer
+  /// leaves the previously stored values as they are.
+  /// </summary>
+  private async Task RefreshAccountAsync(AppDbContext db, Models.Playlist playlist, CancellationToken cancellationToken)
+  {
+    try
+    {
+      var account = await ProviderAccountLookup.LookUpAsync(fetcher, playlist.SourceUrl, cancellationToken);
+      if (account is null) return;
+
+      playlist.ExpirationUtc = account.ExpiresAt ?? playlist.ExpirationUtc;
+      playlist.AccountStatus = account.Status is { Length: <= 32 } status ? status : playlist.AccountStatus;
+      playlist.AccountMaxConnections = account.MaxConnections ?? playlist.AccountMaxConnections;
+      playlist.AccountActiveConnections = account.ActiveConnections ?? playlist.AccountActiveConnections;
+      playlist.AccountCheckedUtc = DateTimeOffset.UtcNow;
+      await db.SaveChangesAsync(cancellationToken);
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+      throw;
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to refresh account info for playlist {PlaylistId}", playlist.Id);
     }
   }
 }
