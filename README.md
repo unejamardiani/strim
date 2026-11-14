@@ -23,7 +23,7 @@ Strim never hosts streams; it only edits the playlist.
 ## Architecture
 
 ```
-Browser ──▶ /           landing page, guides, blog          (static, site.css)
+Browser ──▶ /           landing page, guides                (static, site.css)
         ──▶ /app        editor: app.html + main.js          (static, app.css, no framework)
         ──▶ /api/*      .NET 8 Minimal API                   api/
 IPTV player ──▶ /api/playlists/{id}/share/{code}            filtered M3U, anonymous
@@ -36,7 +36,7 @@ IPTV player ──▶ /api/playlists/{id}/share/{code}            filtered M3U, 
 | `api/Endpoints/` | `Auth`, `Playlist` (saved playlists), `Processing` (analyze, generate, share), `Site` (health, `/app`, errors) |
 | `api/Services/` | `PlaylistPipeline` (fetch → analyze → generate), disk cache, streaming parser, SSRF helpers, background refresh |
 | `api.Tests/` | Unit tests and integration tests (`WebApplicationFactory` with SQLite and a stubbed upstream) |
-| `*.html`, `*.css`, `main.js`, `fonts/`, `blog/` | Frontend, copied into `api/wwwroot` by the Dockerfile |
+| `*.html`, `*.css`, `main.js`, `fonts/` | Frontend, copied into `api/wwwroot` by the Dockerfile |
 | `tools/Strim.DbMigrator` | One-off SQLite → PostgreSQL data migration |
 
 Playlists are streamed to disk, never held in memory as a whole. Sources, analyses and generated

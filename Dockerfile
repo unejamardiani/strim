@@ -8,11 +8,11 @@ RUN dotnet restore api/api.csproj
 # Copy the full source
 COPY . .
 
-# Place the frontend (landing, app, guides, blog) into api/wwwroot so it is published with the API.
+# Place the frontend (landing, app, guides) into api/wwwroot so it is published with the API.
 RUN mkdir -p api/wwwroot && \
     cp index.html app.html features.html how-to-use.html comparison.html 404.html 500.html 50x.html api/wwwroot/ && \
     cp theme.css app.css site.css main.js robots.txt sitemap.xml api/wwwroot/ && \
-    cp -r fonts blog api/wwwroot/
+    cp -r fonts api/wwwroot/
 
 # Version every stylesheet and script by content hash so a cached old file is never paired with a
 # new page. Matches "x.css", "../x.css" and "/x.css" in every page.
