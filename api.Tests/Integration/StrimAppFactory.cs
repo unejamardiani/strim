@@ -29,9 +29,23 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
   /// <summary>Scripted upstream answers (status codes, redirects, bodies); checked before <see cref="UpstreamPlaylists"/>.</summary>
   public Dictionary<string, Func<HttpResponseMessage>> UpstreamResponses { get; } = new();
 
+  /// <summary>Web root for the app; null keeps the default. Set it to <see cref="RepositoryRoot"/> to serve the real pages.</summary>
+  public string? WebRoot { get; init; }
+
+  /// <summary>The repository root (where strim.sln, 404.html and 50x.html live), found from the test binaries.</summary>
+  public static string RepositoryRoot()
+  {
+    for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+    {
+      if (File.Exists(Path.Combine(dir.FullName, "strim.sln"))) return dir.FullName;
+    }
+    throw new InvalidOperationException("Repository root with strim.sln not found.");
+  }
+
   protected override void ConfigureWebHost(IWebHostBuilder builder)
   {
     builder.UseEnvironment("Development");
+    if (WebRoot is not null) builder.UseWebRoot(WebRoot);
     builder.UseSetting("SQLITE_PATH", Path.Combine(_root, "strim.db"));
     builder.UseSetting("PlaylistCache:Directory", Path.Combine(_root, "cache"));
     builder.ConfigureTestServices(services =>
