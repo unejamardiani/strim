@@ -9,6 +9,9 @@ public static class PlaylistProcessor
   private const int DefaultMaxLineLengthChars = 64 * 1024;
   private const int DefaultMaxGroupCount = 10_000;
   private const int DefaultMaxGroupTitleLengthChars = 512;
+
+  /// <summary>Title given to entries without a group-title.</summary>
+  private const string UngroupedTitle = "Ungrouped";
   private const long DefaultMaxGroupMetadataBytes = 8L * 1024 * 1024;
   // Approximate dictionary + string overhead for one distinct group. This is intentionally
   // conservative: the cap protects the JSON response and process heap, not just raw text.
@@ -203,7 +206,12 @@ public static class PlaylistProcessor
   }
 
   public static List<GroupResult> ToGroupResults(IEnumerable<PlaylistGroup> groups) =>
-    groups.Select(g => new GroupResult(g.Key, g.Count, g.GroupTitle, g.ContentType.ToString())).ToList();
+    groups.Select(g => new GroupResult(
+      g.Key,
+      g.Count,
+      g.GroupTitle,
+      g.ContentType.ToString(),
+      GroupSearchWords.From(g.GroupTitle == UngroupedTitle ? null : g.GroupTitle))).ToList();
 
   /// <summary>
   /// Xtream Codes panels serve VOD as /movie/&lt;user&gt;/&lt;pass&gt;/&lt;id&gt;.&lt;ext&gt; and episodes as
@@ -411,10 +419,10 @@ public static class PlaylistProcessor
 
   private static string ExtractGroupTitle(string extinf)
   {
-    if (!TryFindGroupTitleValue(extinf, out var start, out var end)) return "Ungrouped";
+    if (!TryFindGroupTitleValue(extinf, out var start, out var end)) return UngroupedTitle;
 
     var value = extinf[start..end].Trim();
-    return string.IsNullOrWhiteSpace(value) ? "Ungrouped" : value;
+    return string.IsNullOrWhiteSpace(value) ? UngroupedTitle : value;
   }
 
   /// <summary>Finds the quoted value of the first group-title attribute as [start, end).</summary>

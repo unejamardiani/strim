@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Xunit;
 
@@ -56,6 +57,47 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
     var analysis = await AnalyzeRawAsync(client);
     var generated = await GenerateAsync(client, analysis.CacheKey, "Germany");
     Assert.Equal(1, generated.KeptChannels);
+  }
+
+  private const string SearchWordsPlaylist = """
+    #EXTM3U
+    #EXTINF:-1 tvg-name="Sport One" group-title="DE | Sport",Sport One
+    http://provider.example/live/1001.ts
+    #EXTINF:-1 tvg-name="Laugh Channel" group-title="Comedy",Laugh Channel
+    http://provider.example/live/1002.ts
+    #EXTINF:-1 tvg-name="Show Channel" group-title="Series",Show Channel
+    http://provider.example/live/1003.ts
+    #EXTINF:-1 tvg-name="Loose Channel",Loose Channel
+    http://provider.example/live/1004.ts
+    """;
+
+  [Fact]
+  public async Task Analyze_ReturnsSearchWordsPerGroup_AndKeepsExistingFields()
+  {
+    var response = await NewClient().PostAsync("/api/playlist/analyze", new { rawText = SearchWordsPlaylist });
+    response.EnsureSuccessStatusCode();
+    using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    var groups = json.RootElement.GetProperty("groups").EnumerateArray().ToList();
+
+    Assert.Equal(4, json.RootElement.GetProperty("totalChannels").GetInt32());
+    Assert.Equal(4, json.RootElement.GetProperty("groupCount").GetInt32());
+    Assert.Equal(4, groups.Count);
+
+    void AssertGroup(string name, string[] words)
+    {
+      var group = Assert.Single(groups, g => g.GetProperty("name").GetString() == name);
+      Assert.Equal(name, group.GetProperty("groupTitle").GetString());
+      Assert.Equal(1, group.GetProperty("count").GetInt32());
+      Assert.Equal("Live", group.GetProperty("contentType").GetString());
+      var wordsElement = group.GetProperty("words");
+      Assert.Equal(JsonValueKind.Array, wordsElement.ValueKind);
+      Assert.Equal(words, wordsElement.EnumerateArray().Select(w => w.GetString()!).ToArray());
+    }
+
+    AssertGroup("DE | Sport", ["de", "sport"]);
+    AssertGroup("Comedy", ["comedy"]);
+    AssertGroup("Series", ["series"]);
+    AssertGroup("Ungrouped", []);
   }
 
   [Fact]
