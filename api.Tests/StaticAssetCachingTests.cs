@@ -9,7 +9,6 @@ public class StaticAssetCachingTests
   [InlineData("/index.html")]
   [InlineData("/main.js")]
   [InlineData("/app.css")]
-  [InlineData("/blog/index.html")]
   public void UnversionedPagesAndCode_AreRevalidated(string path)
   {
     Assert.Equal("no-cache", StaticAssetCaching.GetCacheControl(path, versioned: false));

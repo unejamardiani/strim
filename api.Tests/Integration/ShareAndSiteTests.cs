@@ -71,6 +71,16 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
     Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
   }
 
+  // The blog was removed; its old addresses must end in the normal 404, not in an error.
+  [Theory]
+  [InlineData("/blog/")]
+  [InlineData("/blog/fix-iptv-playlist-not-loading.html")]
+  public async Task RemovedBlogPage_IsNotFound(string path)
+  {
+    var response = await factory.CreateClient().GetAsync(path);
+    Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+  }
+
   [Fact]
   public async Task AppWithTrailingSlash_RedirectsToApp()
   {
