@@ -275,15 +275,18 @@ public static class PlaylistProcessor
   public static List<PlaylistEntry> ReadEntries(string text)
   {
     using var lines = InMemoryLines(text);
-    return RunSync(ReadEntriesAsync(lines, CancellationToken.None));
+    return RunSync(ReadEntriesAsync(lines, long.MaxValue, CancellationToken.None));
   }
 
   /// <summary>
   /// The entries of a playlist file, read one line at a time with the same rules as <see cref="ReadEntries"/>.
-  /// Only the parsed name, group, tvg-id and address of each entry are kept, not the file's lines.
+  /// Only the parsed name, group, tvg-id and address of each entry are kept, not the file's lines; reading
+  /// stops with <see cref="PlaylistReportTooLargeException"/> once their estimated heap size passes
+  /// <paramref name="maxBytes"/>.
   /// </summary>
   public static async Task<List<PlaylistEntry>> ReadEntriesFromFileAsync(
     string filePath,
+    long maxBytes,
     CancellationToken cancellationToken,
     int maxLineLengthChars = DefaultMaxLineLengthChars)
   {
@@ -296,12 +299,22 @@ public static class PlaylistProcessor
       FileOptions.Asynchronous | FileOptions.SequentialScan);
     using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 128 * 1024, leaveOpen: false);
     using var lines = new BoundedLineReader(reader, maxLineLengthChars);
-    return await ReadEntriesAsync(lines, cancellationToken);
+    return await ReadEntriesAsync(lines, maxBytes, cancellationToken);
   }
 
-  private static async ValueTask<List<PlaylistEntry>> ReadEntriesAsync(BoundedLineReader lines, CancellationToken cancellationToken)
+  /// <summary>
+  /// Approximate heap of one kept entry: the record and its four strings (two bytes per char), counted twice
+  /// for the keys and lists the duplicate and variant rules build from it.
+  /// </summary>
+  internal static long EstimatedEntryBytes(PlaylistEntry entry) =>
+    2 * (EntryOverheadBytes + 2L * (entry.Name.Length + entry.GroupTitle.Length + (entry.TvgId?.Length ?? 0) + entry.Address.Length));
+
+  private const int EntryOverheadBytes = 160;
+
+  private static async ValueTask<List<PlaylistEntry>> ReadEntriesAsync(BoundedLineReader lines, long maxBytes, CancellationToken cancellationToken)
   {
     var entries = new List<PlaylistEntry>();
+    long estimatedBytes = 0;
     string? pending = null;
     while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
     {
@@ -309,12 +322,15 @@ public static class PlaylistProcessor
       if (!IsExtinf(line)) continue;
 
       (var address, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
-      entries.Add(new PlaylistEntry(
+      var entry = new PlaylistEntry(
         entries.Count,
         PlaylistSearchText.DisplayName(line),
         ExtractGroupTitle(line, extGrp),
         PlaylistSearchText.AttributeValue(line, "tvg-id"),
-        address ?? string.Empty));
+        address ?? string.Empty);
+      estimatedBytes += EstimatedEntryBytes(entry);
+      if (estimatedBytes > maxBytes) throw new PlaylistReportTooLargeException();
+      entries.Add(entry);
     }
     return entries;
   }

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using Api.Services;
+using Microsoft.AspNetCore.Hosting;
 using Xunit;
 
 namespace Api.Tests.Integration;
@@ -106,6 +108,42 @@ public class PlaylistReportEndpointTests : IClassFixture<StrimAppFactory>
     Assert.True(report.Truncated);
     Assert.Equal(500, report.DuplicateSets.Count);
     Assert.Equal(500, report.VariantGroups.Count);
+  }
+
+  [Fact]
+  public async Task Report_RefusesPlaylistOverMemoryBudget()
+  {
+    // The six fixture entries take roughly 3 KB by the report's estimate; a 1 KB budget is passed within the first few.
+    using var own = new StrimAppFactory();
+    using var small = own.WithWebHostBuilder(builder => builder.UseSetting("PlaylistCache:MaxReportBytes", "1024"));
+    var client = new ApiClient(small.CreateClient());
+    var analyzed = await client.PostAsync("/api/playlist/analyze", new { rawText = Fixture });
+    analyzed.EnsureSuccessStatusCode();
+    var cacheKey = (await analyzed.Content.ReadFromJsonAsync<AnalysisDto>())!.CacheKey;
+
+    var response = await client.PostAsync("/api/playlist/report", new { cacheKey });
+
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    Assert.Contains("too large for a duplicates and variants report", await response.Content.ReadAsStringAsync());
+  }
+
+  [Fact]
+  public async Task ReadEntriesFromFile_KeepsEntriesWithinBudget_RefusesOneByteLess()
+  {
+    var path = Path.GetTempFileName();
+    try
+    {
+      await File.WriteAllTextAsync(path, Fixture);
+      var budget = PlaylistProcessor.ReadEntries(Fixture).Sum(PlaylistProcessor.EstimatedEntryBytes);
+
+      Assert.Equal(6, (await PlaylistProcessor.ReadEntriesFromFileAsync(path, budget, CancellationToken.None)).Count);
+      await Assert.ThrowsAsync<PlaylistReportTooLargeException>(
+        () => PlaylistProcessor.ReadEntriesFromFileAsync(path, budget - 1, CancellationToken.None));
+    }
+    finally
+    {
+      File.Delete(path);
+    }
   }
 
   [Fact]

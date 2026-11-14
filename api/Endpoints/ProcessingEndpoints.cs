@@ -184,7 +184,8 @@ public static class ProcessingEndpoints
             return Results.BadRequest(new { error = SessionExpired });
           }
 
-          var entries = await PlaylistProcessor.ReadEntriesFromFileAsync(source.FilePath, context.RequestAborted, pipeline.Cache.MaxLineLengthChars);
+          var entries = await PlaylistProcessor.ReadEntriesFromFileAsync(
+            source.FilePath, pipeline.Cache.MaxReportBytes, context.RequestAborted, pipeline.Cache.MaxLineLengthChars);
           return Results.Ok(PlaylistReport.Build(entries));
         }
         catch (Exception ex)

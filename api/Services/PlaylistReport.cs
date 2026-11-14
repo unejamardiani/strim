@@ -41,3 +41,12 @@ public static class PlaylistReport
       variantGroups);
   }
 }
+
+/// <summary>The entries of a playlist pass <c>PlaylistCache:MaxReportBytes</c>; the message is safe to show.</summary>
+public sealed class PlaylistReportTooLargeException : InvalidOperationException
+{
+  public PlaylistReportTooLargeException()
+    : base("This playlist is too large for a duplicates and variants report.")
+  {
+  }
+}
