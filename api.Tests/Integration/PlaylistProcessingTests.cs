@@ -100,6 +100,38 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
     AssertGroup("Ungrouped", []);
   }
 
+  [Theory]
+  [InlineData("#EXTINF:-1 group-title=\"Ungrouped\",Named Channel\nhttp://provider.example/live/2001.ts\n")]
+  [InlineData("#EXTINF:-1 tvg-name=\"Loose\",Loose Channel\nhttp://provider.example/live/2002.ts\n" +
+              "#EXTINF:-1 group-title=\"Ungrouped\",Named Channel\nhttp://provider.example/live/2001.ts\n")]
+  public async Task Analyze_GroupExplicitlyTitledUngrouped_ReturnsItsSearchWords(string entries)
+  {
+    var response = await NewClient().PostAsync("/api/playlist/analyze", new { rawText = "#EXTM3U\n" + entries });
+    response.EnsureSuccessStatusCode();
+    using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+    var group = Assert.Single(json.RootElement.GetProperty("groups").EnumerateArray().ToList());
+    Assert.Equal("Ungrouped", group.GetProperty("groupTitle").GetString());
+    Assert.Equal(new[] { "ungrouped" }, group.GetProperty("words").EnumerateArray().Select(w => w.GetString()!).ToArray());
+  }
+
+  [Fact]
+  public async Task Analyze_EntriesWithoutOrWithEmptyTitle_ReturnEmptyWords()
+  {
+    const string playlist = "#EXTM3U\n" +
+      "#EXTINF:-1 tvg-name=\"Loose\",Loose Channel\nhttp://provider.example/live/3001.ts\n" +
+      "#EXTINF:-1 group-title=\"\",Empty Channel\nhttp://provider.example/live/3002.ts\n";
+    var response = await NewClient().PostAsync("/api/playlist/analyze", new { rawText = playlist });
+    response.EnsureSuccessStatusCode();
+    using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+    var group = Assert.Single(json.RootElement.GetProperty("groups").EnumerateArray().ToList());
+    Assert.Equal("Ungrouped", group.GetProperty("groupTitle").GetString());
+    Assert.Equal(2, group.GetProperty("count").GetInt32());
+    Assert.Equal(JsonValueKind.Array, group.GetProperty("words").ValueKind);
+    Assert.Empty(group.GetProperty("words").EnumerateArray());
+  }
+
   [Fact]
   public async Task Analyze_FromUrl_UsesTheUpstream()
   {

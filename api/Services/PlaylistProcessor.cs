@@ -70,6 +70,8 @@ public static class PlaylistProcessor
     var total = 0;
     var groupVariantCount = 0;
     long groupMetadataBytes = 0;
+    // True once an entry carries a real group title that equals the fallback title.
+    var explicitUngrouped = false;
 
     await using var stream = new FileStream(
       filePath,
@@ -89,7 +91,8 @@ public static class PlaylistProcessor
 
       total++;
       (var url, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
-      var groupTitle = ExtractGroupTitle(line, extGrp);
+      var groupTitle = ExtractGroupTitle(line, extGrp, out var hasTitle);
+      if (hasTitle && IsUngroupedTitle(groupTitle)) explicitUngrouped = true;
       EnsureGroupTitleWithinLimit(groupTitle, maxGroupTitleLengthChars);
       IncrementGroup(
         groups,
@@ -101,7 +104,7 @@ public static class PlaylistProcessor
         maxGroupMetadataBytes);
     }
 
-    return new PlaylistAnalysisResult(BuildGroups(groups), total);
+    return new PlaylistAnalysisResult(BuildGroups(groups, explicitUngrouped), total);
   }
 
   /// <summary>Writes a filtered M3U file while reading the source one line at a time.</summary>
@@ -276,7 +279,7 @@ public static class PlaylistProcessor
       g.Count,
       g.GroupTitle,
       g.ContentType.ToString(),
-      GroupSearchWords.From(g.GroupTitle == UngroupedTitle ? null : g.GroupTitle))).ToList();
+      GroupSearchWords.From(g.HasTitle ? g.GroupTitle : null))).ToList();
 
   /// <summary>
   /// Xtream Codes panels serve VOD as /movie/&lt;user&gt;/&lt;pass&gt;/&lt;id&gt;.&lt;ext&gt; and episodes as
@@ -453,20 +456,22 @@ public static class PlaylistProcessor
     counts[typeIndex] = 1;
   }
 
-  private static List<PlaylistGroup> BuildGroups(Dictionary<string, int[]> groups)
+  private static List<PlaylistGroup> BuildGroups(Dictionary<string, int[]> groups, bool explicitUngrouped)
   {
     var result = new List<PlaylistGroup>(groups.Count);
     foreach (var (groupTitle, counts) in groups)
     {
       // Only split titles that really mix content types so existing filters keep their names.
       var split = counts.Count(count => count > 0) > 1;
+      // Entries without a title share the fallback group; it has a title only if an entry named it so.
+      var hasTitle = explicitUngrouped || !IsUngroupedTitle(groupTitle);
       for (var i = 0; i < counts.Length; i++)
       {
         if (counts[i] == 0) continue;
 
         var contentType = (PlaylistContentType)i;
         var key = split ? GroupKey(groupTitle, contentType) : groupTitle;
-        result.Add(new PlaylistGroup(key, groupTitle, contentType, counts[i]));
+        result.Add(new PlaylistGroup(key, groupTitle, contentType, counts[i], hasTitle));
       }
     }
 
@@ -483,8 +488,13 @@ public static class PlaylistProcessor
   }
 
   /// <summary>The group-title value; without one, the entry's #EXTGRP value; otherwise "Ungrouped".</summary>
-  private static string ExtractGroupTitle(string extinf, string? extGrp = null)
+  private static string ExtractGroupTitle(string extinf, string? extGrp = null) =>
+    ExtractGroupTitle(extinf, extGrp, out _);
+
+  /// <summary>As above; <paramref name="hasTitle"/> is false when the fallback title was used.</summary>
+  private static string ExtractGroupTitle(string extinf, string? extGrp, out bool hasTitle)
   {
+    hasTitle = true;
     if (TryFindGroupTitleValue(extinf, out var start, out var end))
     {
       var value = extinf[start..end].Trim();
@@ -492,8 +502,14 @@ public static class PlaylistProcessor
     }
 
     var group = extGrp?.Trim();
-    return string.IsNullOrEmpty(group) ? UngroupedTitle : group;
+    if (!string.IsNullOrEmpty(group)) return group;
+
+    hasTitle = false;
+    return UngroupedTitle;
   }
+
+  private static bool IsUngroupedTitle(string groupTitle) =>
+    string.Equals(groupTitle, UngroupedTitle, StringComparison.OrdinalIgnoreCase);
 
   /// <summary>Finds the quoted value of the first group-title attribute as [start, end).</summary>
   private static bool TryFindGroupTitleValue(string extinf, out int start, out int end)
@@ -721,7 +737,8 @@ public enum PlaylistContentType
 /// One selectable group. <see cref="Key"/> is the group-title, or a
 /// <see cref="PlaylistProcessor.GroupKey"/> when the provider reuses the title across content types.
 /// </summary>
-public sealed record PlaylistGroup(string Key, string GroupTitle, PlaylistContentType ContentType, int Count);
+/// <param name="HasTitle">False for the fallback group of entries without a group title.</param>
+public sealed record PlaylistGroup(string Key, string GroupTitle, PlaylistContentType ContentType, int Count, bool HasTitle = true);
 
 public sealed class PlaylistLineTooLongException : InvalidOperationException
 {
