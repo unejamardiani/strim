@@ -10,6 +10,7 @@ public static class PlaylistProcessor
   private const int DefaultMaxGroupCount = 10_000;
   private const int DefaultMaxGroupTitleLengthChars = 512;
   private const long DefaultMaxGroupMetadataBytes = 8L * 1024 * 1024;
+  private const long DefaultMaxSearchIndexBytes = 64L * 1024 * 1024;
   // Approximate dictionary + string overhead for one distinct group. This is intentionally
   // conservative: the cap protects the JSON response and process heap, not just raw text.
   private const int EstimatedGroupEntryOverheadBytes = 128;
@@ -60,13 +61,15 @@ public static class PlaylistProcessor
     int maxLineLengthChars = DefaultMaxLineLengthChars,
     int maxGroupCount = DefaultMaxGroupCount,
     int maxGroupTitleLengthChars = DefaultMaxGroupTitleLengthChars,
-    long maxGroupMetadataBytes = DefaultMaxGroupMetadataBytes)
+    long maxGroupMetadataBytes = DefaultMaxGroupMetadataBytes,
+    long maxSearchIndexBytes = DefaultMaxSearchIndexBytes)
   {
     // Counts per group-title, indexed by PlaylistContentType.
     var groups = new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase);
     var total = 0;
     var groupVariantCount = 0;
     long groupMetadataBytes = 0;
+    PlaylistSearchIndex? searchIndex = new(maxSearchIndexBytes);
 
     await using var stream = new FileStream(
       filePath,
@@ -88,17 +91,20 @@ public static class PlaylistProcessor
       (var url, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
       var groupTitle = ExtractGroupTitle(line, extGrp);
       EnsureGroupTitleWithinLimit(groupTitle, maxGroupTitleLengthChars);
+      var contentType = DetectContentType(url);
+      if (searchIndex?.TryAdd(line, groupTitle, contentType) == false) searchIndex = null; // Over budget: analyse without it.
       IncrementGroup(
         groups,
         groupTitle,
-        DetectContentType(url),
+        contentType,
         maxGroupCount,
         ref groupVariantCount,
         ref groupMetadataBytes,
         maxGroupMetadataBytes);
     }
 
-    return new PlaylistAnalysisResult(BuildGroups(groups), total);
+    var analysis = new PlaylistAnalysisResult(BuildGroups(groups), total);
+    return analysis with { SearchIndex = searchIndex?.Complete(analysis.Groups, analysis.SplitGroupTitles) };
   }
 
   /// <summary>Writes a filtered M3U file while reading the source one line at a time.</summary>
@@ -346,7 +352,7 @@ public static class PlaylistProcessor
   /// A plain group-title disables every entry of that title (unsplit groups and filters saved
   /// before groups were split); a <see cref="GroupKey"/> disables only that content type.
   /// </summary>
-  private static bool IsDisabled(ISet<string> disabledGroups, string groupTitle, PlaylistContentType contentType) =>
+  internal static bool IsDisabled(ISet<string> disabledGroups, string groupTitle, PlaylistContentType contentType) =>
     disabledGroups.Count > 0 &&
     (disabledGroups.Contains(groupTitle) ||
      disabledGroups.Contains(GroupKey(groupTitle, contentType)));
@@ -705,6 +711,11 @@ public sealed record PlaylistAnalysisResult(IReadOnlyList<PlaylistGroup> Groups,
   public IReadOnlySet<string> SplitGroupTitles { get; } = new HashSet<string>(
     Groups.Where(g => g.Key != g.GroupTitle).Select(g => g.GroupTitle),
     StringComparer.OrdinalIgnoreCase);
+
+  /// <summary>Entry search index (not in the response); null above <c>PlaylistCache:MaxSearchIndexBytes</c>.</summary>
+  public PlaylistSearchIndex? SearchIndex { get; init; }
+
+  public bool SearchIndexAvailable => SearchIndex is not null;
 }
 
 public enum PlaylistContentType

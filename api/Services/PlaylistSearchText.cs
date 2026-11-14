@@ -13,11 +13,14 @@ public static class PlaylistSearchText
   /// The text after the last comma outside double-quoted attributes, trimmed. An empty name
   /// falls back to the tvg-name attribute, then to an empty string.
   /// </summary>
-  public static string DisplayName(string? extinfLine)
+  public static string DisplayName(string? extinfLine) => DisplayNameSpan(extinfLine).ToString();
+
+  /// <summary><see cref="DisplayName"/> as a slice of the line, so an index can copy it without a string per entry.</summary>
+  internal static ReadOnlySpan<char> DisplayNameSpan(string? extinfLine)
   {
     if (string.IsNullOrEmpty(extinfLine))
     {
-      return string.Empty;
+      return ReadOnlySpan<char>.Empty;
     }
 
     var lastComma = -1;
@@ -35,8 +38,33 @@ public static class PlaylistSearchText
       }
     }
 
-    var name = lastComma >= 0 ? extinfLine[(lastComma + 1)..].Trim() : string.Empty;
-    return name.Length > 0 ? name : AttributeValue(extinfLine, "tvg-name")?.Trim() ?? string.Empty;
+    var name = lastComma >= 0 ? extinfLine.AsSpan(lastComma + 1).Trim() : ReadOnlySpan<char>.Empty;
+    return name.Length > 0 ? name : (AttributeValue(extinfLine, "tvg-name") ?? string.Empty).AsSpan().Trim();
+  }
+
+  /// <summary>
+  /// Appends <see cref="Fold"/> of the text to <paramref name="target"/>. ASCII text, the common
+  /// case, is folded in place without temporary strings.
+  /// </summary>
+  internal static StringBuilder AppendFolded(StringBuilder target, ReadOnlySpan<char> text)
+  {
+    if (!Ascii.IsValid(text)) return target.Append(Fold(text.ToString()));
+
+    var start = target.Length;
+    var pendingSpace = false;
+    foreach (var c in text)
+    {
+      if (!char.IsAsciiLetterOrDigit(c))
+      {
+        pendingSpace = true;
+        continue;
+      }
+
+      if (pendingSpace && target.Length > start) target.Append(' ');
+      pendingSpace = false;
+      target.Append(char.ToLowerInvariant(c));
+    }
+    return target;
   }
 
   /// <summary>
@@ -49,6 +77,8 @@ public static class PlaylistSearchText
     {
       return string.Empty;
     }
+
+    if (Ascii.IsValid(text)) return AppendFolded(new StringBuilder(text.Length), text).ToString();
 
     var decomposed = text.ToLowerInvariant().Normalize(NormalizationForm.FormD);
     var folded = new StringBuilder(decomposed.Length);
