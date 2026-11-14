@@ -450,6 +450,30 @@ public class PlaylistProcessorTests
     }
   }
 
+  [Fact]
+  public void GenerateFiltered_RepeatedSplitCaseVariantsBuildEachKeyOnce()
+  {
+    var casings = new[] { "News", "NEWS", "news" };
+    var types = new[] { PlaylistContentType.Live, PlaylistContentType.Movies, PlaylistContentType.Series };
+    var split = new HashSet<string>(new[] { "news" }, StringComparer.OrdinalIgnoreCase);
+    var decisions = new PlaylistProcessor.GroupDecisions(
+      new HashSet<string>(new[] { "Unrelated" }, StringComparer.OrdinalIgnoreCase), split);
+
+    for (var i = 0; i < 3_000; i++)
+    {
+      var title = casings[i % casings.Length];
+      var type = types[i / casings.Length % types.Length];
+      var (disabled, output) = decisions.Decide(title, type);
+
+      Assert.False(disabled);
+      Assert.Equal(type == PlaylistContentType.Live ? title : PlaylistProcessor.GroupKey(title, type), output);
+    }
+
+    // The disabled check builds one key per content type (first casing seen); every other casing of
+    // a split movie or series title builds its own output key once, however often it repeats.
+    Assert.Equal(3 + 2 * (casings.Length - 1), decisions.KeysBuilt);
+  }
+
   /// <summary>Counts the membership checks made through <see cref="ISet{T}"/>.</summary>
   private sealed class CountingSet : HashSet<string>, ICollection<string>
   {

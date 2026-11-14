@@ -137,10 +137,8 @@ public static class PlaylistProcessor
     await WriteLineAsync(writer, "#EXTM3U", cancellationToken, outputBytes);
     await WriteLineAsync(writer, "# Created with Strim (https://strim.plis.dev)", cancellationToken, outputBytes);
 
-    // Decisions per group-title, indexed by PlaylistContentType, so each GroupKey is built at most
-    // once per (title, content type). Titles that differ only by case share one decision, like the
-    // case-insensitive sets the pipeline passes in; each entry still keeps its own casing in the output.
-    var decisions = new Dictionary<string, GroupDecision?[]>(StringComparer.OrdinalIgnoreCase);
+    // Each GroupKey is built at most once per (title, content type) and casing.
+    var decisions = new GroupDecisions(disabledGroups, splitGroupTitles);
 
     while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
     {
@@ -150,7 +148,7 @@ public static class PlaylistProcessor
       var url = await lines.ReadNextContentLineAsync(cancellationToken) ?? string.Empty;
       var groupTitle = ExtractGroupTitle(line);
       var contentType = DetectContentType(url);
-      var decision = Decide(decisions, disabledGroups, splitGroupTitles, groupTitle, contentType);
+      var decision = decisions.Decide(groupTitle, contentType);
       if (decision.Disabled) continue;
 
       kept++;
@@ -228,50 +226,69 @@ public static class PlaylistProcessor
   }
 
   /// <summary>
-  /// What every entry of one (group title, content type) gets. <see cref="Title"/> and <see cref="Key"/>
-  /// use the casing seen first; <see cref="Key"/> stays null when it was never needed.
+  /// Memoises, for one run of <see cref="GenerateFilteredFileAsync"/>, what every entry of one
+  /// (group title, content type) gets. Titles that differ only by case share one filtering decision,
+  /// like the case-insensitive sets the pipeline passes in; the output key of a split title is cached
+  /// per exact casing, so every entry keeps its own casing and each key string is built once.
+  /// The memo grows with the titles the source holds, which its size limit already bounds.
   /// </summary>
-  private sealed record GroupDecision(bool Disabled, bool Split, string Title, string? Key);
-
-  private static (bool Disabled, string OutputGroupTitle) Decide(
-    Dictionary<string, GroupDecision?[]> decisions,
-    ISet<string> disabledGroups,
-    IReadOnlySet<string>? splitGroupTitles,
-    string groupTitle,
-    PlaylistContentType contentType)
+  internal sealed class GroupDecisions(ISet<string> disabledGroups, IReadOnlySet<string>? splitGroupTitles)
   {
-    // Every distinct title is memoised: the memo grows with the titles the source holds, which its
-    // size limit already bounds, so no entry falls back to deciding per entry.
-    if (!decisions.TryGetValue(groupTitle, out var perType))
+    private sealed class Decision(bool disabled, bool split)
     {
-      perType = new GroupDecision?[ContentTypeCount];
-      decisions[groupTitle] = perType;
+      public bool Disabled { get; } = disabled;
+      public bool Split { get; } = split;
+      // Output keys of a split title, one per exact casing seen.
+      public Dictionary<string, string> Keys { get; } = new(StringComparer.Ordinal);
     }
 
-    var decision = perType[(int)contentType];
-    if (decision is null)
+    private readonly Dictionary<string, Decision?[]> decisions = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How many <see cref="GroupKey"/> strings this memo has built.</summary>
+    internal int KeysBuilt { get; private set; }
+
+    public (bool Disabled, string OutputGroupTitle) Decide(string groupTitle, PlaylistContentType contentType)
     {
-      // The key is built at most once and serves both the disabled check and the output title.
-      string? key = null;
-      var disabled = disabledGroups.Count > 0 &&
-        (disabledGroups.Contains(groupTitle) ||
-         disabledGroups.Contains(key = GroupKey(groupTitle, contentType)));
-      var split = !disabled &&
-        contentType != PlaylistContentType.Live &&
-        splitGroupTitles?.Contains(groupTitle) == true;
-      if (split) key ??= GroupKey(groupTitle, contentType);
-      decision = new GroupDecision(disabled, split, groupTitle, key);
-      perType[(int)contentType] = decision;
+      if (!decisions.TryGetValue(groupTitle, out var perType))
+      {
+        perType = new Decision?[ContentTypeCount];
+        decisions[groupTitle] = perType;
+      }
+
+      var decision = perType[(int)contentType];
+      if (decision is null)
+      {
+        // The key is built at most once and serves both the disabled check and the output title.
+        string? key = null;
+        var disabled = disabledGroups.Count > 0 &&
+          (disabledGroups.Contains(groupTitle) ||
+           disabledGroups.Contains(key = BuildKey(groupTitle, contentType)));
+        var split = !disabled &&
+          contentType != PlaylistContentType.Live &&
+          splitGroupTitles?.Contains(groupTitle) == true;
+        decision = new Decision(disabled, split);
+        if (split) decision.Keys[groupTitle] = key ?? BuildKey(groupTitle, contentType);
+        perType[(int)contentType] = decision;
+      }
+
+      // Live channels keep the provider's group-title; movies and series of a split title move to
+      // their own group (e.g. "Germany · Series"), each casing under its own key.
+      if (decision.Disabled) return (true, groupTitle);
+      if (!decision.Split) return (false, groupTitle);
+      if (!decision.Keys.TryGetValue(groupTitle, out var outputTitle))
+      {
+        outputTitle = BuildKey(groupTitle, contentType);
+        decision.Keys[groupTitle] = outputTitle;
+      }
+
+      return (false, outputTitle);
     }
 
-    // Live channels keep the provider's group-title; movies and series of a split title move to
-    // their own group (e.g. "Germany · Series").
-    if (decision.Disabled) return (true, groupTitle);
-    if (!decision.Split) return (false, groupTitle);
-    // A case variant of the first-seen title keeps its own casing in the output.
-    return (false, string.Equals(decision.Title, groupTitle, StringComparison.Ordinal)
-      ? decision.Key!
-      : GroupKey(groupTitle, contentType));
+    private string BuildKey(string groupTitle, PlaylistContentType contentType)
+    {
+      KeysBuilt++;
+      return GroupKey(groupTitle, contentType);
+    }
   }
 
   /// <summary>
