@@ -120,14 +120,18 @@ function fileName(name) {
 
 // ---------- Toasts ----------
 
-function toast(message, { error = false, duration = 3200 } = {}) {
-  const el = h('div', { class: `toast${error ? ' error' : ''}`, text: message });
+function toast(message, { error = false, duration = 3200, action = null } = {}) {
+  const el = h('div', { class: `toast${error ? ' error' : ''}` }, h('span', { text: message }));
+  if (action) {
+    el.append(h('button', { class: 'toast-action', type: 'button', onclick: action.onClick }, action.label));
+  }
   toasts.append(el);
   while (toasts.children.length > 3) toasts.firstChild.remove();
   setTimeout(() => {
     el.classList.add('leaving');
     setTimeout(() => el.remove(), 220);
   }, error ? duration + 2000 : duration);
+  return el;
 }
 
 async function copyText(text, label = 'Link copied') {
@@ -796,6 +800,7 @@ function applyAnalysis(ed, analysis, { sample }) {
   const entries = ed.groups.length ? [...ed.disabled, ...ed.extras] : ed.savedFilters;
   const { disabled, extras } = restoreFilters(entries, groups);
 
+  if (bulkUndo?.ed === ed) discardBulkUndo();
   ed.groups = groups;
   ed.typeCounts = typeCounts;
   ed.disabled = disabled;
@@ -1101,6 +1106,7 @@ function pickerNodes(ed) {
 }
 
 function mountPicker(ed) {
+  discardBulkUndo();
   picker.ed = ed;
   picker.list = document.getElementById('group-list');
   picker.rows = [];
@@ -1110,6 +1116,7 @@ function mountPicker(ed) {
 }
 
 function teardownPicker() {
+  discardBulkUndo();
   picker.ed = null;
   picker.list = null;
   picker.rows = [];
@@ -1260,6 +1267,7 @@ function onRowToggle(e) {
   const row = check.closest('.group-row');
   const g = ed?.view[Number(row?.dataset.index)];
   if (!g) return;
+  discardBulkUndo();
   if (check.checked) ed.disabled.delete(g.key);
   else ed.disabled.add(g.key);
   row.classList.toggle('off', !check.checked);
@@ -1275,11 +1283,37 @@ function bulkSet(hide) {
     updateView(false);
   }
   if (!ed.view.length) return;
+  const before = new Set(ed.disabled);
   for (const g of ed.view) {
     if (hide) ed.disabled.add(g.key);
     else ed.disabled.delete(g.key);
   }
-  toast(`Switched ${hide ? 'off' : 'on'} ${plural(ed.view.length, 'group')}`);
+  discardBulkUndo();
+  const entry = { ed, disabled: before, toast: null };
+  entry.toast = toast(`Switched ${hide ? 'off' : 'on'} ${plural(ed.view.length, 'group')}`, {
+    duration: 8000,
+    action: { label: 'Undo', onClick: () => undoBulk(entry) },
+  });
+  bulkUndo = entry;
+  paintRows();
+  updateActionBar();
+}
+
+// Only the last bulk change can be undone; any later change discards it.
+let bulkUndo = null;
+
+function discardBulkUndo() {
+  bulkUndo?.toast.querySelector('.toast-action')?.remove();
+  bulkUndo = null;
+}
+
+function undoBulk(entry) {
+  if (bulkUndo !== entry || picker.ed !== entry.ed) return;
+  discardBulkUndo();
+  entry.ed.disabled = entry.disabled;
+  entry.toast.classList.add('leaving');
+  setTimeout(() => entry.toast.remove(), 220);
+  toast('Bulk change undone');
   paintRows();
   updateActionBar();
 }
@@ -1392,6 +1426,7 @@ async function saveEditor(ed) {
     toast(`You can hide at most ${fmt(MAX_HIDDEN_GROUPS)} groups.`, { error: true });
     return;
   }
+  discardBulkUndo();
 
   const existing = ed.id ? state.playlists.find((p) => p.id === ed.id) : null;
   const body = {
