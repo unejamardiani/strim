@@ -137,6 +137,11 @@ public static class PlaylistProcessor
     await WriteLineAsync(writer, "#EXTM3U", cancellationToken, outputBytes);
     await WriteLineAsync(writer, "# Created with Strim (https://strim.plis.dev)", cancellationToken, outputBytes);
 
+    // Decisions per group-title, indexed by PlaylistContentType, so each GroupKey is built at most
+    // once per (title, content type). Ordinal keys: titles that differ only by case keep their own
+    // casing in the output and get exactly the answer the caller's set gives them.
+    var decisions = new Dictionary<string, GroupDecision?[]>(StringComparer.Ordinal);
+
     while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
     {
       if (!line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase)) continue;
@@ -145,11 +150,11 @@ public static class PlaylistProcessor
       var url = await lines.ReadNextContentLineAsync(cancellationToken) ?? string.Empty;
       var groupTitle = ExtractGroupTitle(line);
       var contentType = DetectContentType(url);
-      if (IsDisabled(disabledGroups, groupTitle, contentType)) continue;
+      var decision = Decide(decisions, disabledGroups, splitGroupTitles, groupTitle, contentType);
+      if (decision.Disabled) continue;
 
       kept++;
-      var outputGroupTitle = OutputGroupTitle(groupTitle, contentType, splitGroupTitles);
-      await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, outputGroupTitle), cancellationToken, outputBytes);
+      await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, decision.OutputGroupTitle), cancellationToken, outputBytes);
       await WriteLineAsync(writer, url, cancellationToken, outputBytes);
     }
 
@@ -220,6 +225,31 @@ public static class PlaylistProcessor
     if (path.StartsWith("/movie/", StringComparison.OrdinalIgnoreCase)) return PlaylistContentType.Movies;
     if (path.StartsWith("/series/", StringComparison.OrdinalIgnoreCase)) return PlaylistContentType.Series;
     return PlaylistContentType.Live;
+  }
+
+  private readonly record struct GroupDecision(bool Disabled, string OutputGroupTitle);
+
+  private static GroupDecision Decide(
+    Dictionary<string, GroupDecision?[]> decisions,
+    ISet<string> disabledGroups,
+    IReadOnlySet<string>? splitGroupTitles,
+    string groupTitle,
+    PlaylistContentType contentType)
+  {
+    if (!decisions.TryGetValue(groupTitle, out var perType))
+    {
+      perType = new GroupDecision?[ContentTypeCount];
+      // Bounded like the analysis' group cap; beyond it, entries are decided without the memo.
+      if (decisions.Count < DefaultMaxGroupCount) decisions[groupTitle] = perType;
+    }
+
+    if (perType[(int)contentType] is { } cached) return cached;
+
+    var decision = IsDisabled(disabledGroups, groupTitle, contentType)
+      ? new GroupDecision(true, groupTitle)
+      : new GroupDecision(false, OutputGroupTitle(groupTitle, contentType, splitGroupTitles));
+    perType[(int)contentType] = decision;
+    return decision;
   }
 
   /// <summary>
