@@ -13,6 +13,8 @@ public static class PlaylistProcessor
   // Approximate dictionary + string overhead for one distinct group. This is intentionally
   // conservative: the cap protects the JSON response and process heap, not just raw text.
   private const int EstimatedGroupEntryOverheadBytes = 128;
+  /// <summary>Most #EXTVLCOPT/#KODIPROP/other '#' lines kept between one #EXTINF and its address.</summary>
+  public const int MaxOptionLinesPerEntry = 32;
   private const string GroupKeySeparator = " \u00B7 ";
   private static readonly int ContentTypeCount = Enum.GetValues<PlaylistContentType>().Length;
   private static readonly int MaxGroupKeySuffixLength =
@@ -75,15 +77,17 @@ public static class PlaylistProcessor
       FileOptions.Asynchronous | FileOptions.SequentialScan);
     using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 128 * 1024, leaveOpen: false);
     using var lines = new BoundedLineReader(reader, maxLineLengthChars);
+    string? pending = null;
 
-    while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
+    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
     {
-      if (!line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase)) continue;
+      pending = null;
+      if (!IsExtinf(line)) continue;
 
       total++;
       var groupTitle = ExtractGroupTitle(line);
       EnsureGroupTitleWithinLimit(groupTitle, maxGroupTitleLengthChars);
-      var url = await lines.ReadNextContentLineAsync(cancellationToken);
+      (var url, pending) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
       IncrementGroup(
         groups,
         groupTitle,
@@ -140,12 +144,16 @@ public static class PlaylistProcessor
     // Each GroupKey is built at most once per (title, content type), whatever the casing.
     var decisions = new GroupDecisions(disabledGroups, splitGroupTitles);
 
-    while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
+    var optionLines = new List<string>();
+    string? pending = null;
+    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
     {
-      if (!line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase)) continue;
+      pending = null;
+      if (!IsExtinf(line)) continue;
 
       total++;
-      var url = await lines.ReadNextContentLineAsync(cancellationToken) ?? string.Empty;
+      (var address, pending) = await ReadEntryTailAsync(lines, optionLines, cancellationToken);
+      var url = address ?? string.Empty;
       var groupTitle = ExtractGroupTitle(line);
       var contentType = DetectContentType(url);
       var decision = decisions.Decide(groupTitle, contentType);
@@ -153,11 +161,44 @@ public static class PlaylistProcessor
 
       kept++;
       await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, decision.Suffix), cancellationToken, outputBytes);
+      foreach (var optionLine in optionLines)
+      {
+        await WriteLineAsync(writer, optionLine, cancellationToken, outputBytes);
+      }
       await WriteLineAsync(writer, url, cancellationToken, outputBytes);
     }
 
     await writer.FlushAsync(cancellationToken);
     return new PlaylistGenerationResult(total, kept, outputBytes.WrittenBytes);
+  }
+
+  private static bool IsExtinf(string line) => line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase);
+
+  /// <summary>
+  /// Reads the lines after an #EXTINF: every '#' line (#EXTVLCOPT, #KODIPROP, ...) belongs to the entry,
+  /// the first other line is its address. A following #EXTINF ends the entry without an address and is
+  /// returned as <c>Next</c> so the caller starts a new entry with it. Only this entry's lines are buffered.
+  /// </summary>
+  private static async ValueTask<(string? Address, string? Next)> ReadEntryTailAsync(
+    BoundedLineReader lines,
+    List<string>? optionLines,
+    CancellationToken cancellationToken)
+  {
+    optionLines?.Clear();
+    var optionCount = 0;
+    while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
+    {
+      if (IsExtinf(line)) return (null, line);
+      if (!line.StartsWith('#')) return (line, null);
+
+      if (++optionCount > MaxOptionLinesPerEntry)
+      {
+        throw new PlaylistEntryOptionLinesLimitExceededException(MaxOptionLinesPerEntry);
+      }
+      optionLines?.Add(line);
+    }
+
+    return (null, null);
   }
 
   public static PlaylistFilterResult GenerateFiltered(string text, HashSet<string> disabledGroups)
@@ -682,6 +723,14 @@ public sealed class PlaylistGeneratedSizeExceededException : InvalidOperationExc
 {
   public PlaylistGeneratedSizeExceededException(long maxOutputBytes)
     : base($"Generated playlist exceeds the configured {maxOutputBytes / (1024 * 1024)} MiB output limit. Increase PlaylistCache__MaxSourceBytes and PlaylistCache__MaxDiskBytes together to support it.")
+  {
+  }
+}
+
+public sealed class PlaylistEntryOptionLinesLimitExceededException : InvalidOperationException
+{
+  public PlaylistEntryOptionLinesLimitExceededException(int maxOptionLines)
+    : base($"Playlist contains a channel with more than {maxOptionLines:N0} option lines (such as #EXTVLCOPT or #KODIPROP) between #EXTINF and its address.")
   {
   }
 }
