@@ -138,14 +138,23 @@ public static class PlaylistProcessor
     PlaylistFileCache.TrySetPrivateFile(outputPath);
     await using var writer = new StreamWriter(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 128 * 1024, leaveOpen: false);
 
-    await WriteLineAsync(writer, "#EXTM3U", cancellationToken, outputBytes);
+    // The source's header carries the programme-guide address (url-tvg, x-tvg-url, ...), so it is passed
+    // through as is; any other first line is processed as content.
+    string? pending = await lines.ReadNextContentLineAsync(cancellationToken);
+    var header = "#EXTM3U";
+    if (pending is not null && IsHeader(pending))
+    {
+      if (pending.Length > header.Length) header = pending;
+      pending = null;
+    }
+
+    await WriteLineAsync(writer, header, cancellationToken, outputBytes);
     await WriteLineAsync(writer, "# Created with Strim (https://strim.plis.dev)", cancellationToken, outputBytes);
 
     // Each GroupKey is built at most once per (title, content type), whatever the casing.
     var decisions = new GroupDecisions(disabledGroups, splitGroupTitles);
 
     var optionLines = new List<string>();
-    string? pending = null;
     while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
     {
       pending = null;
@@ -171,6 +180,11 @@ public static class PlaylistProcessor
     await writer.FlushAsync(cancellationToken);
     return new PlaylistGenerationResult(total, kept, outputBytes.WrittenBytes);
   }
+
+  /// <summary>#EXTM3U followed by the end of the line or whitespace; "#EXTM3U8foo" is not a header.</summary>
+  private static bool IsHeader(string line) =>
+    line.StartsWith("#EXTM3U", StringComparison.OrdinalIgnoreCase)
+    && (line.Length == 7 || char.IsWhiteSpace(line[7]));
 
   private static bool IsExtinf(string line) => line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase);
 
