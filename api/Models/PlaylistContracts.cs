@@ -2,6 +2,9 @@ namespace Api.Models;
 
 public record AnalyzePlaylistRequest(string? SourceUrl, string? RawText, string? SourceName);
 
+/// <param name="ExpirationUtc">From the provider's account answer when it has one, otherwise from URL parameters.</param>
+/// <param name="AccountStatus">Account fields come from the provider's player_api.php; all null when it gave no usable answer.</param>
+/// <param name="AccountCheckedUtc">When the account answer was read.</param>
 public record AnalyzePlaylistResponse(
   string CacheKey,
   string? SourceUrl,
@@ -9,7 +12,11 @@ public record AnalyzePlaylistResponse(
   int TotalChannels,
   int GroupCount,
   DateTimeOffset? ExpirationUtc,
-  List<GroupResult> Groups);
+  List<GroupResult> Groups,
+  string? AccountStatus = null,
+  int? MaxConnections = null,
+  int? ActiveConnections = null,
+  DateTimeOffset? AccountCheckedUtc = null);
 
 /// <param name="Name">Filter key sent back in disabledGroups.</param>
 /// <param name="GroupTitle">The provider's group-title; differs from Name when one title is split by content type.</param>
