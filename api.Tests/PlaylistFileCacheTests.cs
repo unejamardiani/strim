@@ -233,59 +233,21 @@ public class PlaylistFileCacheTests
   }
 
   [Fact]
-  public async Task LastGood_ExpiresAfterTtl()
+  public async Task LastGood_CountsAgainstMaxDiskBytes()
   {
-    Assert.Equal(7 * 24 * 60, new PlaylistCacheOptions().LastGoodTtlMinutes);
-
-    using var fixture = new LastGoodFixture(maxDiskBytes: 4096, lastGoodTtlMinutes: 60);
-    var source = await fixture.StoreSourceAsync(new string('s', 100));
-    var output = fixture.StoreOutput(source, "Sports", "#EXTM3U\n");
-    var leasedId = Guid.NewGuid();
-    var cleanedId = Guid.NewGuid();
-    Assert.True(fixture.Cache.RememberLastGood(leasedId, output));
-    Assert.True(fixture.Cache.RememberLastGood(cleanedId, output));
-    var cleanedPath = fixture.LastGoodPath(cleanedId);
-
-    fixture.Time.Advance(TimeSpan.FromMinutes(59));
-    fixture.Cache.Cleanup();
-    Assert.True(File.Exists(cleanedPath));
-    using (var stillGood = fixture.Cache.TryLeaseLastGood(leasedId)) Assert.NotNull(stillGood);
-
-    fixture.Time.Advance(TimeSpan.FromMinutes(2));
-    Assert.Null(fixture.Cache.TryLeaseLastGood(leasedId));
-    Assert.True(File.Exists(cleanedPath));
-    fixture.Cache.Cleanup();
-    Assert.False(File.Exists(cleanedPath));
-    Assert.Null(fixture.Cache.TryLeaseLastGood(cleanedId));
-  }
-
-  [Fact]
-  public async Task LastGood_IsEvictedLast_UnderDiskPressure()
-  {
+    // Source, output and copy fill the 300-byte budget. Without the copy counted, a 100-byte
+    // reservation would fit without evicting the output.
     using var fixture = new LastGoodFixture(maxDiskBytes: 300, maxSourceBytes: 100);
     var source = await fixture.StoreSourceAsync(new string('s', 100));
     var output = fixture.StoreOutput(source, "Sports", new string('o', 100));
     var playlistId = Guid.NewGuid();
     Assert.True(fixture.Cache.RememberLastGood(playlistId, output));
-    var lastGoodPath = fixture.LastGoodPath(playlistId);
 
-    // The source and output are used more recently than the copy; it must still go last.
-    fixture.Time.Advance(TimeSpan.FromMinutes(1));
-    Assert.NotNull(fixture.Cache.TryGetOutput(source.ContentHash, new[] { "Sports" }));
-    Assert.NotNull(fixture.Cache.TryGetSource(LastGoodFixture.SourceUrlValue));
+    using var reservation = fixture.Cache.ReserveSourceCapacity(null);
 
-    using var first = fixture.Cache.ReserveSourceCapacity(null);
     Assert.Null(fixture.Cache.TryLeaseOutput(output.OutputKey));
-    Assert.True(File.Exists(source.FilePath));
-    Assert.True(File.Exists(lastGoodPath));
-
-    using var second = fixture.Cache.ReserveSourceCapacity(null);
-    Assert.False(File.Exists(source.FilePath));
-    Assert.True(File.Exists(lastGoodPath));
-
-    using var third = fixture.Cache.ReserveSourceCapacity(null);
-    Assert.False(File.Exists(lastGoodPath));
-    Assert.Null(fixture.Cache.TryLeaseLastGood(playlistId));
+    using var lease = fixture.Cache.TryLeaseLastGood(playlistId);
+    Assert.NotNull(lease);
   }
 
   [Fact]
@@ -349,9 +311,7 @@ public class PlaylistFileCacheTests
 
   private sealed class LastGoodFixture : IDisposable
   {
-    public const string SourceUrlValue = "https://example.com/playlist.m3u";
-
-    public LastGoodFixture(long maxDiskBytes, long maxSourceBytes = 1024, int lastGoodTtlMinutes = 7 * 24 * 60)
+    public LastGoodFixture(long maxDiskBytes, long maxSourceBytes = 1024)
     {
       Directory = Path.Combine(Path.GetTempPath(), $"strim-cache-test-{Guid.NewGuid():N}");
       Cache = new PlaylistFileCache(
@@ -360,7 +320,6 @@ public class PlaylistFileCacheTests
           Directory = Directory,
           MaxSourceBytes = maxSourceBytes,
           MaxDiskBytes = maxDiskBytes,
-          LastGoodTtlMinutes = lastGoodTtlMinutes,
         }),
         NullLogger<PlaylistFileCache>.Instance,
         PlaylistFileCache.TryDelete,
@@ -374,7 +333,7 @@ public class PlaylistFileCacheTests
     public async Task<PlaylistSourceFile> StoreSourceAsync(string text)
     {
       var downloaded = await Cache.WriteRawTextAsync(text, CancellationToken.None);
-      return Cache.StoreDownloaded(SourceUrlValue, downloaded);
+      return Cache.StoreDownloaded("https://example.com/playlist.m3u", downloaded);
     }
 
     public PlaylistOutputFile StoreOutput(PlaylistSourceFile source, string disabledGroup, string content)

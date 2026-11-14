@@ -26,7 +26,6 @@ public sealed class PlaylistFileCache
   private readonly TimeSpan _entryTtl;
   private readonly TimeSpan _sourceTtl;
   private readonly TimeSpan _revalidationInterval;
-  private readonly TimeSpan _lastGoodTtl;
   private readonly TimeProvider _time;
   // Pinned last-good output per player link, independent of the output TTL. Superseded or
   // forgotten copies that are still leased stay accounted until their last lease is released.
@@ -59,7 +58,6 @@ public sealed class PlaylistFileCache
     _deleteFile = deleteFile ?? throw new ArgumentNullException(nameof(deleteFile));
     _entryTtl = TimeSpan.FromMinutes(Math.Max(1, _options.EntryTtlMinutes));
     _sourceTtl = TimeSpan.FromMinutes(Math.Max(1, _options.SourceTtlMinutes));
-    _lastGoodTtl = TimeSpan.FromMinutes(Math.Max(1, _options.LastGoodTtlMinutes));
     _revalidationInterval = TimeSpan.FromMinutes(Math.Max(0, _options.RevalidationIntervalMinutes));
     _directory = string.IsNullOrWhiteSpace(_options.Directory)
       ? Path.Combine(Path.GetTempPath(), "strim-playlists")
@@ -425,7 +423,8 @@ public sealed class PlaylistFileCache
 
   /// <summary>
   /// Pins a private copy of a generated output as the last good list of a player link. The copy
-  /// outlives the output's TTL, replaces any earlier copy for the playlist and is evicted last.
+  /// outlives the output's TTL, replaces any earlier copy for the playlist and counts against
+  /// MaxDiskBytes.
   /// Returns false when the output is no longer available.
   /// </summary>
   public bool RememberLastGood(Guid playlistId, PlaylistOutputFile output)
@@ -457,7 +456,7 @@ public sealed class PlaylistFileCache
         RemoveLastGoodNoLock(previous);
       }
 
-      _lastGood[playlistId] = new LastGoodFile(playlistId, finalPath, length, _time.GetUtcNow());
+      _lastGood[playlistId] = new LastGoodFile(playlistId, finalPath, length);
       _pendingDeletes.Remove(finalPath);
       // Hand the reserved bytes over to the tracked copy in the same critical section, so a
       // concurrent Cleanup never counts the copy twice (Monitor locks are re-entrant).
@@ -476,7 +475,7 @@ public sealed class PlaylistFileCache
         return null;
       }
 
-      if (!IsAvailable(entry))
+      if (!File.Exists(entry.FilePath))
       {
         RemoveLastGoodNoLock(entry);
         return null;
@@ -551,18 +550,12 @@ public sealed class PlaylistFileCache
     lock (_sync)
     {
       entry.ActiveLeases = Math.Max(0, entry.ActiveLeases - 1);
-      if (entry.ActiveLeases == 0 && (entry.Retired || IsExpired(entry)))
+      if (entry.ActiveLeases == 0 && entry.Retired)
       {
         RemoveLastGoodNoLock(entry);
       }
     }
   }
-
-  private bool IsExpired(LastGoodFile entry) =>
-    entry.RememberedUtc.Add(_lastGoodTtl) <= _time.GetUtcNow();
-
-  private bool IsAvailable(LastGoodFile entry) =>
-    !IsExpired(entry) && File.Exists(entry.FilePath);
 
   private bool IsAvailable(PlaylistSourceFile source) =>
     source.ExpiresAtUtc > _time.GetUtcNow() && File.Exists(source.FilePath);
@@ -663,20 +656,6 @@ public sealed class PlaylistFileCache
       if (usedBytes <= maxTrackedBytes) return usedBytes;
     }
 
-    // A last-good copy is what a player falls back to, so it goes only after everything else.
-    foreach (var lastGood in _lastGood.Values
-      .Where(x => x.ActiveLeases == 0 && !protectedPaths.Contains(x.FilePath))
-      .OrderBy(x => x.RememberedUtc)
-      .ToList())
-    {
-      var length = GetTrackedLength(lastGood.FilePath, lastGood.LengthBytes);
-      if (RemoveLastGoodNoLock(lastGood))
-      {
-        usedBytes -= length;
-      }
-      if (usedBytes <= maxTrackedBytes) return usedBytes;
-    }
-
     _logger.LogWarning(
       "Playlist cache cannot free enough disk capacity ({UsedBytes} tracked bytes; target {TargetBytes}) because files are active, protected, or awaiting a successful delete",
       usedBytes,
@@ -707,13 +686,6 @@ public sealed class PlaylistFileCache
       .ToList())
     {
       RemoveSourceNoLock(source.SourceKey);
-    }
-
-    foreach (var lastGood in _lastGood.Values
-      .Where(x => x.ActiveLeases == 0 && IsExpired(x) && !protectedPaths.Contains(x.FilePath))
-      .ToList())
-    {
-      RemoveLastGoodNoLock(lastGood);
     }
   }
 
@@ -1071,18 +1043,16 @@ internal sealed record PendingDeleteFile(string FilePath, long LengthBytes);
 
 internal sealed class LastGoodFile
 {
-  internal LastGoodFile(Guid playlistId, string filePath, long lengthBytes, DateTimeOffset rememberedUtc)
+  internal LastGoodFile(Guid playlistId, string filePath, long lengthBytes)
   {
     PlaylistId = playlistId;
     FilePath = filePath;
     LengthBytes = lengthBytes;
-    RememberedUtc = rememberedUtc;
   }
 
   internal Guid PlaylistId { get; }
   internal string FilePath { get; }
   internal long LengthBytes { get; }
-  internal DateTimeOffset RememberedUtc { get; }
   internal int ActiveLeases { get; set; }
   internal bool Retired { get; set; }
 }
