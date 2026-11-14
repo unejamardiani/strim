@@ -475,6 +475,7 @@ public static class PlaylistProcessor
     private readonly StreamReader _reader;
     private readonly int _maxLineLengthChars;
     private char[]? _buffer;
+    private StringBuilder? _carry;
     private int _position;
     private int _count;
 
@@ -496,11 +497,13 @@ public static class PlaylistProcessor
       return null;
     }
 
+    /// <summary>
+    /// A line inside the buffer becomes a string straight from its slice; only a line that crosses
+    /// a buffer boundary is collected in the reused <see cref="_carry"/> builder.
+    /// </summary>
     private async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
     {
-      StringBuilder? line = null;
-      var length = 0;
-      var sawCharacter = false;
+      var carried = 0;
 
       while (true)
       {
@@ -511,24 +514,41 @@ public static class PlaylistProcessor
           _position = 0;
           if (_count == 0)
           {
-            return sawCharacter ? line?.ToString() ?? string.Empty : null;
+            return carried > 0 ? _carry!.ToString() : null;
           }
         }
 
-        var character = _buffer![_position++];
-        if (character is '\r' or '\n')
-        {
-          return line?.ToString() ?? string.Empty;
-        }
-
-        sawCharacter = true;
-        if (++length > _maxLineLengthChars)
-        {
-          throw new PlaylistLineTooLongException(_maxLineLengthChars);
-        }
-
-        (line ??= new StringBuilder(Math.Min(256, _maxLineLengthChars))).Append(character);
+        if (TryTakeLine(ref carried) is { } line) return line;
       }
+    }
+
+    /// <summary>Returns the line ending in the buffer, or carries the rest of the buffer over and returns null.</summary>
+    private string? TryTakeLine(ref int carried)
+    {
+      var available = _buffer.AsSpan(_position, _count - _position);
+      var end = available.IndexOfAny('\r', '\n');
+      var segment = end < 0 ? available : available[..end];
+      if (carried + segment.Length > _maxLineLengthChars)
+      {
+        throw new PlaylistLineTooLongException(_maxLineLengthChars);
+      }
+
+      if (end < 0)
+      {
+        if (carried == 0) (_carry ??= new StringBuilder(Math.Min(256, _maxLineLengthChars))).Clear();
+        _carry!.Append(segment);
+        carried += segment.Length;
+        _position = _count;
+        return null;
+      }
+
+      _position += end + 1;
+      if (carried == 0)
+      {
+        return segment.Length == 0 ? string.Empty : new string(segment);
+      }
+
+      return _carry!.Append(segment).ToString();
     }
 
     public void Dispose()
