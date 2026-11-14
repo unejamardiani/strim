@@ -27,6 +27,12 @@ public sealed class PlaylistCacheOptions
   public int SourceTtlMinutes { get; set; } = 24 * 60;
 
   /// <summary>
+  /// Maximum age of a player link's last good list that is restored after a restart. Older
+  /// copies are deleted at startup.
+  /// </summary>
+  public int LastGoodTtlMinutes { get; set; } = 7 * 24 * 60;
+
+  /// <summary>
   /// Minimum age before a cached source is checked upstream again. This avoids downloading and
   /// hashing a large source for every share request, including providers without validators.
   /// Set to 0 to revalidate every request when freshness matters more than CPU/network usage.
