@@ -261,6 +261,301 @@ public class PlaylistProcessorTests
     Assert.Equal(expected, PlaylistProcessor.DetectContentType(url));
   }
 
+  [Fact]
+  public async Task GenerateFiltered_ChecksDisabledSetOncePerGroupVariant()
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    var urlPrefixes = new[] { "", "movie/", "series/" };
+    var source = new System.Text.StringBuilder("#EXTM3U\n");
+    for (var i = 0; i < 10_000; i++)
+    {
+      source.Append($"#EXTINF:-1 group-title=\"Title {i % 20:D2}\",Entry {i}\n");
+      source.Append($"http://provider.example/{urlPrefixes[i / 20 % 3]}user/pass/{i}\n");
+    }
+
+    var disabled = new CountingSet { "Title 00 · Movies", "Title 01" };
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, source.ToString());
+
+      var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath, outputPath, disabled, CancellationToken.None);
+
+      Assert.Equal(10_000, result.TotalChannels);
+      Assert.True(result.KeptChannels < 10_000);
+      Assert.InRange(disabled.ContainsCalls, 1, 2 * 60);
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  [Fact]
+  public async Task GenerateFiltered_CaseVariantsShareOneMembershipCheck()
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    var casings = new[] { "News", "NEWS", "news", "nEWS", "NeWs" };
+    var urlPrefixes = new[] { "", "movie/", "series/" };
+    var source = new System.Text.StringBuilder("#EXTM3U\n");
+    for (var i = 0; i < 300; i++)
+    {
+      source.Append($"#EXTINF:-1 group-title=\"{casings[i % casings.Length]}\",Entry {i}\n");
+      source.Append($"http://provider.example/{urlPrefixes[i / casings.Length % 3]}user/pass/{i}\n");
+    }
+
+    var disabled = new CountingSet { "Unrelated" };
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, source.ToString());
+
+      var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath, outputPath, disabled, CancellationToken.None);
+
+      Assert.Equal(300, result.KeptChannels);
+      // One title in three content types, whatever its casing: two checks per content type.
+      Assert.InRange(disabled.ContainsCalls, 1, 2 * 3);
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  [Fact]
+  public async Task GenerateFiltered_MemoisesTitlesBeyondTheDefaultGroupLimit()
+  {
+    const int titles = 12_000;
+    const int entriesPerTitle = 3;
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    var source = new System.Text.StringBuilder("#EXTM3U\n");
+    for (var i = 0; i < titles * entriesPerTitle; i++)
+    {
+      source.Append($"#EXTINF:-1 group-title=\"Title {i % titles:D5}\",Entry {i}\n");
+      source.Append($"http://provider.example/user/pass/{i}\n");
+    }
+
+    var disabled = new CountingSet { "Title 00000" };
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, source.ToString());
+
+      var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath, outputPath, disabled, CancellationToken.None);
+
+      Assert.Equal(titles * entriesPerTitle, result.TotalChannels);
+      Assert.Equal((titles - 1) * entriesPerTitle, result.KeptChannels);
+      Assert.InRange(disabled.ContainsCalls, 1, 2 * titles);
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  private const string CaseVariantSource = """
+    #EXTM3U
+    #EXTINF:-1 group-title="News",News Live
+    http://provider.example/user/pass/1
+    #EXTINF:-1 group-title="NEWS",NEWS Live
+    http://provider.example/user/pass/2
+    #EXTINF:-1 group-title="news",news Episode
+    http://provider.example/series/user/pass/3.mkv
+    #EXTINF:-1 group-title="News",News Episode
+    http://provider.example/series/user/pass/4.mkv
+    #EXTINF:-1 group-title="nEWS",nEWS Film
+    http://provider.example/movie/user/pass/5.mp4
+    #EXTINF:-1 group-title="Sports",Sports Live
+    http://provider.example/user/pass/6
+    """;
+
+  [Theory]
+  [InlineData("news · series", new[] { "News Live", "NEWS Live", "nEWS Film", "Sports Live" }, new[] { "news Episode", "News Episode" })]
+  [InlineData("NEWS · Movies", new[] { "News Live", "NEWS Live", "news Episode", "News Episode", "Sports Live" }, new[] { "nEWS Film" })]
+  [InlineData("nEwS", new[] { "Sports Live" }, new[] { "News Live", "NEWS Live", "news Episode", "News Episode", "nEWS Film" })]
+  public async Task GenerateFiltered_CaseInsensitiveTitlesShareDecision(
+    string disabledGroup,
+    string[] expectedKept,
+    string[] expectedRemoved)
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, CaseVariantSource);
+
+      var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath,
+        outputPath,
+        new HashSet<string>(new[] { disabledGroup }, StringComparer.OrdinalIgnoreCase),
+        CancellationToken.None);
+      var output = await File.ReadAllLinesAsync(outputPath);
+
+      Assert.Equal(expectedKept.Length, result.KeptChannels);
+      Assert.All(expectedKept, name => Assert.Contains(output, line => line.EndsWith("," + name, StringComparison.Ordinal)));
+      Assert.All(expectedRemoved, name => Assert.DoesNotContain(output, line => line.EndsWith("," + name, StringComparison.Ordinal)));
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  [Fact]
+  public async Task GenerateFiltered_SplitTitlesStillRenamed()
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    const string expected =
+      "#EXTM3U\n" +
+      "# Created with Strim (https://strim.plis.dev)\n" +
+      "#EXTINF:-1 group-title=\"News\",News Live\n" +
+      "http://provider.example/user/pass/1\n" +
+      "#EXTINF:-1 group-title=\"NEWS\",NEWS Live\n" +
+      "http://provider.example/user/pass/2\n" +
+      "#EXTINF:-1 group-title=\"news · Series\",news Episode\n" +
+      "http://provider.example/series/user/pass/3.mkv\n" +
+      "#EXTINF:-1 group-title=\"News · Series\",News Episode\n" +
+      "http://provider.example/series/user/pass/4.mkv\n" +
+      "#EXTINF:-1 group-title=\"nEWS · Movies\",nEWS Film\n" +
+      "http://provider.example/movie/user/pass/5.mp4\n" +
+      "#EXTINF:-1 group-title=\"Sports\",Sports Live\n" +
+      "http://provider.example/user/pass/6\n";
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, CaseVariantSource);
+      var analysis = await PlaylistProcessor.AnalyzeFileAsync(sourcePath, CancellationToken.None);
+      Assert.Equal("NEWS", Assert.Single(analysis.SplitGroupTitles).ToUpperInvariant());
+
+      await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath,
+        outputPath,
+        new HashSet<string>(new[] { "Unrelated" }, StringComparer.OrdinalIgnoreCase),
+        CancellationToken.None,
+        splitGroupTitles: analysis.SplitGroupTitles);
+
+      Assert.Equal(expected, await File.ReadAllTextAsync(outputPath));
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  [Fact]
+  public async Task GenerateFiltered_SplitUngroupedEntriesGetTheirTypedGroup()
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    const string source =
+      "#EXTM3U\n" +
+      "#EXTINF:-1,Live One\nhttp://provider.example/user/pass/1\n" +
+      "#EXTINF:-1,Film\nhttp://provider.example/movie/user/pass/2.mp4\n" +
+      "#EXTINF:-1 group-title=\"\",Episode\nhttp://provider.example/series/user/pass/3.mkv\n" +
+      "#EXTINF:-1\nhttp://provider.example/series/user/pass/4.mkv\n";
+    const string expected =
+      "#EXTM3U\n" +
+      "# Created with Strim (https://strim.plis.dev)\n" +
+      "#EXTINF:-1 group-title=\"Ungrouped\",Live One\nhttp://provider.example/user/pass/1\n" +
+      "#EXTINF:-1 group-title=\"Ungrouped · Movies\",Film\nhttp://provider.example/movie/user/pass/2.mp4\n" +
+      "#EXTINF:-1 group-title=\"Ungrouped · Series\",Episode\nhttp://provider.example/series/user/pass/3.mkv\n" +
+      "#EXTINF:-1 group-title=\"Ungrouped · Series\"\nhttp://provider.example/series/user/pass/4.mkv\n";
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, source);
+      var analysis = await PlaylistProcessor.AnalyzeFileAsync(sourcePath, CancellationToken.None);
+      Assert.Equal("Ungrouped", Assert.Single(analysis.SplitGroupTitles));
+
+      await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath,
+        outputPath,
+        new HashSet<string>(new[] { "Unrelated" }, StringComparer.OrdinalIgnoreCase),
+        CancellationToken.None,
+        splitGroupTitles: analysis.SplitGroupTitles);
+
+      Assert.Equal(expected, await File.ReadAllTextAsync(outputPath));
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  [Fact]
+  public void GenerateFiltered_RepeatedSplitCaseVariantsBuildEachKeyOnce()
+  {
+    var casings = new[] { "News", "NEWS", "news" };
+    var types = new[] { PlaylistContentType.Live, PlaylistContentType.Movies, PlaylistContentType.Series };
+    var split = new HashSet<string>(new[] { "news" }, StringComparer.OrdinalIgnoreCase);
+    var decisions = new PlaylistProcessor.GroupDecisions(
+      new HashSet<string>(new[] { "Unrelated" }, StringComparer.OrdinalIgnoreCase), split);
+
+    for (var i = 0; i < 3_000; i++)
+    {
+      var title = casings[i % casings.Length];
+      var type = types[i / casings.Length % types.Length];
+      var (disabled, suffix) = decisions.Decide(title, type);
+
+      Assert.False(disabled);
+      Assert.Equal(type == PlaylistContentType.Live ? title : PlaylistProcessor.GroupKey(title, type), title + suffix);
+    }
+
+    // Only the disabled check builds a key: one per content type, whichever casing comes first.
+    Assert.Equal(3, decisions.KeysBuilt);
+  }
+
+  [Fact]
+  public void GenerateFiltered_CyclingManySplitCasingsBuildsNoKeyPerEntry()
+  {
+    // All 2^10 casings of a 10-letter title, distinct under ordinal comparison, cycled three times.
+    const string baseTitle = "abcdefghij";
+    var casings = Enumerable.Range(0, 1 << baseTitle.Length)
+      .Select(mask => new string(baseTitle.Select((ch, c) => (mask & (1 << c)) != 0 ? char.ToUpperInvariant(ch) : ch).ToArray()))
+      .ToArray();
+    var split = new HashSet<string>(new[] { baseTitle }, StringComparer.OrdinalIgnoreCase);
+    var decisions = new PlaylistProcessor.GroupDecisions(
+      new HashSet<string>(new[] { "Unrelated" }, StringComparer.OrdinalIgnoreCase), split);
+
+    for (var round = 0; round < 3; round++)
+    {
+      foreach (var title in casings)
+      {
+        foreach (var type in new[] { PlaylistContentType.Movies, PlaylistContentType.Series })
+        {
+          var (disabled, suffix) = decisions.Decide(title, type);
+          Assert.False(disabled);
+          Assert.Equal(PlaylistProcessor.GroupKey(title, type), title + suffix);
+        }
+      }
+    }
+
+    // One key per content type for the disabled check, however many casings cycle through.
+    Assert.Equal(2, decisions.KeysBuilt);
+  }
+
+  /// <summary>Counts the membership checks made through <see cref="ISet{T}"/>.</summary>
+  private sealed class CountingSet : HashSet<string>, ICollection<string>
+  {
+    public CountingSet() : base(StringComparer.OrdinalIgnoreCase) { }
+
+    public int ContainsCalls { get; private set; }
+
+    bool ICollection<string>.Contains(string item)
+    {
+      ContainsCalls++;
+      return Contains(item);
+    }
+  }
+
   private static int CountOf(PlaylistAnalysisResult analysis, string key) =>
     Assert.Single(analysis.Groups, g => g.Key == key).Count;
 
