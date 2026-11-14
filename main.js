@@ -824,8 +824,10 @@ function applyAnalysis(ed, analysis, { sample }) {
   ed.search = null;
   ed.totalChannels = analysis.totalChannels || groups.reduce((sum, g) => sum + g.count, 0);
   ed.expirationUtc = analysis.expirationUtc || null;
+  // The API rejects a status over 32 characters (varchar(32)); drop only the status so the save still works.
+  const status = analysis.accountStatus;
   ed.account = analysis.accountCheckedUtc ? {
-    accountStatus: analysis.accountStatus ?? null,
+    accountStatus: typeof status === 'string' && status.length <= 32 ? status : null,
     accountMaxConnections: analysis.maxConnections ?? null,
     accountActiveConnections: analysis.activeConnections ?? null,
     accountCheckedUtc: analysis.accountCheckedUtc,
