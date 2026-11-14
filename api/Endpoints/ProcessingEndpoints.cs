@@ -66,20 +66,6 @@ public static class ProcessingEndpoints
     });
   }
 
-  /// <summary>
-  /// Asks the provider's <c>player_api.php</c> (only for <c>get.php</c> links) through the fetcher's
-  /// address and redirect checks. Null when there is no account endpoint or the answer is unusable.
-  /// </summary>
-  private static async Task<ProviderAccountResult?> LookUpAccountAsync(
-    PlaylistSourceFetcher fetcher, string? sourceUrl, CancellationToken cancellationToken)
-  {
-    if (ProviderAccountInfo.BuildEndpoint(sourceUrl) is not { } endpoint) return null;
-
-    var answer = await fetcher.FetchSmallTextAsync(endpoint.AbsoluteUri, cancellationToken);
-    var account = answer.Success ? ProviderAccountInfo.Parse(answer.Text) : ProviderAccountResult.Unknown;
-    return account.IsKnown ? account : null;
-  }
-
   public static IEndpointRouteBuilder MapProcessingEndpoints(this IEndpointRouteBuilder app)
   {
     var logger = app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Strim.Processing");
@@ -119,7 +105,7 @@ public static class ProcessingEndpoints
             ? PlaylistProcessor.TryExtractExpiration(sourceUri)
             : null;
           var account = string.IsNullOrWhiteSpace(input.RawText)
-            ? await LookUpAccountAsync(fetcher, input.SourceUrl, context.RequestAborted)
+            ? await ProviderAccountLookup.LookUpAsync(fetcher, input.SourceUrl, context.RequestAborted)
             : null;
           var friendlyName = string.IsNullOrWhiteSpace(input.SourceName)
             ? PlaylistProcessor.DeriveNameFromUrl(input.SourceUrl)
