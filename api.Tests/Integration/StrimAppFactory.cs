@@ -16,12 +16,14 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
 {
   // A public IP literal passes the SSRF pre-check without a DNS lookup; the stub answers it.
   public const string UpstreamUrl = "http://93.184.215.14/get.php?username=u&password=p";
+  public const string GuideHeaderUpstreamUrl = "http://93.184.215.14/get.php?username=u&password=p&type=guide";
 
   private readonly string _root = Path.Combine(Path.GetTempPath(), $"strim-it-{Guid.NewGuid():N}");
 
   public Dictionary<string, string> UpstreamPlaylists { get; } = new()
   {
     [UpstreamUrl] = TestPlaylists.Mixed,
+    [GuideHeaderUpstreamUrl] = TestPlaylists.WithGuideHeader,
   };
 
   protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -63,6 +65,16 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
 
 public static class TestPlaylists
 {
+  public const string GuideHeader =
+    "#EXTM3U url-tvg=\"http://epg.example/guide.xml\" x-tvg-url=\"http://epg.example/a.xml,http://epg.example/b.xml\" tvg-url=\"http://epg.example/guide.xml\" tvg-shift=\"+1\"";
+
+  public const string WithGuideHeader = GuideHeader + "\n" + """
+    #EXTINF:-1 tvg-name="ARD" group-title="Germany",ARD
+    http://line.example/live/u/p/1.ts
+    #EXTINF:-1 group-title="Kids",KiKA
+    http://line.example/live/u/p/3.ts
+    """;
+
   // "Germany" mixes live channels and series episodes (Xtream Codes style), "Kids" is live only.
   public const string Mixed = """
     #EXTM3U

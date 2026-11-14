@@ -572,6 +572,130 @@ public class PlaylistProcessorTests
     }
   }
 
+  private const string GuideHeader =
+    "#EXTM3U url-tvg=\"http://epg.example/guide.xml\" x-tvg-url=\"http://epg.example/a.xml,http://epg.example/b.xml\" tvg-url=\"http://epg.example/guide.xml\" tvg-shift=\"+1\"";
+
+  private const string CreatedWithStrim = "# Created with Strim (https://strim.plis.dev)";
+
+  private const string HeaderTestEntries =
+    "#EXTINF:-1 group-title=\"News\",News One\nhttp://line.example/1.ts\n#EXTINF:-1 group-title=\"Kids\",Kids One\nhttp://line.example/2.ts\n";
+
+  private static async Task<(string[] Lines, PlaylistGenerationResult Result)> GenerateLinesAsync(
+    byte[] source, long maxOutputBytes = 0)
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    try
+    {
+      await File.WriteAllBytesAsync(sourcePath, source);
+      var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath, outputPath, new HashSet<string>(), CancellationToken.None, maxOutputBytes: maxOutputBytes);
+      return (await File.ReadAllLinesAsync(outputPath), result);
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  private static Task<(string[] Lines, PlaylistGenerationResult Result)> GenerateLinesAsync(string source, long maxOutputBytes = 0) =>
+    GenerateLinesAsync(System.Text.Encoding.UTF8.GetBytes(source), maxOutputBytes);
+
+  [Fact]
+  public async Task GenerateFilteredFile_KeepsHeaderLineWithAllAttributes()
+  {
+    var (lines, result) = await GenerateLinesAsync(GuideHeader + "\n" + HeaderTestEntries);
+
+    Assert.Equal(GuideHeader, lines[0]);
+    Assert.Equal(CreatedWithStrim, lines[1]);
+    Assert.Equal(2, result.KeptChannels);
+  }
+
+  [Fact]
+  public async Task GenerateFilteredFile_BareHeader_WritesBareHeader()
+  {
+    var (lines, _) = await GenerateLinesAsync("#EXTM3U\n" + HeaderTestEntries);
+
+    Assert.Equal("#EXTM3U", lines[0]);
+    Assert.Equal(CreatedWithStrim, lines[1]);
+  }
+
+  [Fact]
+  public async Task GenerateFilteredFile_NoHeader_WritesBareHeader()
+  {
+    var (lines, result) = await GenerateLinesAsync(HeaderTestEntries);
+
+    Assert.Equal("#EXTM3U", lines[0]);
+    Assert.Equal(CreatedWithStrim, lines[1]);
+    Assert.Equal(2, result.TotalChannels);
+    Assert.Equal(2, result.KeptChannels);
+    Assert.Contains("#EXTINF:-1 group-title=\"News\",News One", lines);
+    Assert.Contains("http://line.example/2.ts", lines);
+  }
+
+  [Fact]
+  public async Task GenerateFilteredFile_LookalikeHeader_IsNotKept()
+  {
+    var (lines, _) = await GenerateLinesAsync("#EXTM3U8foo x-tvg-url=\"http://epg.example/guide.xml\"\n" + HeaderTestEntries);
+
+    Assert.Equal("#EXTM3U", lines[0]);
+    Assert.DoesNotContain(lines, line => line.StartsWith("#EXTM3U8", StringComparison.Ordinal));
+  }
+
+  [Fact]
+  public async Task GenerateFilteredFile_HeaderAfterBomAndBlankLines_IsKept()
+  {
+    var text = System.Text.Encoding.UTF8.GetBytes("\n\r\n  \n" + GuideHeader + "\n" + HeaderTestEntries);
+    var source = new byte[] { 0xEF, 0xBB, 0xBF }.Concat(text).ToArray();
+
+    var (lines, result) = await GenerateLinesAsync(source);
+
+    Assert.Equal(GuideHeader, lines[0]);
+    Assert.Equal(CreatedWithStrim, lines[1]);
+    Assert.Equal(2, result.KeptChannels);
+  }
+
+  [Fact]
+  public async Task GenerateFilteredFile_LaterHeaderLine_IsNotRepeated()
+  {
+    var later = "#EXTM3U x-tvg-url=\"http://epg.example/other.xml\"";
+    var (lines, result) = await GenerateLinesAsync(GuideHeader + "\n" + HeaderTestEntries + later + "\n" + HeaderTestEntries);
+
+    Assert.Equal(GuideHeader, lines[0]);
+    Assert.Equal(CreatedWithStrim, lines[1]);
+    Assert.Single(lines, line => line.StartsWith("#EXTM3U", StringComparison.OrdinalIgnoreCase));
+    Assert.Equal(4, result.KeptChannels);
+
+    // A later header between an entry's #EXTINF and its address is not kept as an option line either.
+    var inEntry = "#EXTINF:-1 group-title=\"News\",News Two\n#EXTVLCOPT:http-user-agent=Test\n"
+      + later + "\nhttp://line.example/3.ts\n";
+    (lines, result) = await GenerateLinesAsync(GuideHeader + "\n" + HeaderTestEntries + inEntry);
+
+    Assert.Equal(GuideHeader, lines[0]);
+    Assert.Equal(CreatedWithStrim, lines[1]);
+    Assert.Single(lines, line => line.StartsWith("#EXTM3U", StringComparison.OrdinalIgnoreCase));
+    Assert.Equal(3, result.KeptChannels);
+    Assert.Equal(
+      new[] { "#EXTINF:-1 group-title=\"News\",News Two", "#EXTVLCOPT:http-user-agent=Test", "http://line.example/3.ts" },
+      lines[^3..]);
+  }
+
+  [Fact]
+  public async Task GenerateFilteredFile_HeaderCountsTowardOutputLimit()
+  {
+    var (lines, result) = await GenerateLinesAsync(GuideHeader + "\n" + HeaderTestEntries);
+    var expectedBytes = lines.Sum(line => System.Text.Encoding.UTF8.GetByteCount(line) + 1L);
+    Assert.Equal(GuideHeader, lines[0]);
+    Assert.Equal(expectedBytes, result.OutputBytes);
+
+    // One byte short of the full output fails only if the header line was counted.
+    await Assert.ThrowsAsync<PlaylistGeneratedSizeExceededException>(
+      () => GenerateLinesAsync(GuideHeader + "\n" + HeaderTestEntries, maxOutputBytes: result.OutputBytes - 1));
+    await Assert.ThrowsAsync<PlaylistGeneratedSizeExceededException>(
+      () => GenerateLinesAsync(GuideHeader + "\n" + HeaderTestEntries, maxOutputBytes: GuideHeader.Length));
+  }
+
   private static int CountOf(PlaylistAnalysisResult analysis, string key) =>
     Assert.Single(analysis.Groups, g => g.Key == key).Count;
 
