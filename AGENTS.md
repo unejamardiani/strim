@@ -7,7 +7,7 @@ runs on Coolify behind Cloudflare.
 
 ## Directory structure
 - `/` — static frontend, no build step: `index.html` (landing), `app.html` + `main.js` + `app.css`
-  (editor), `theme.css` (shared), `site.css` (landing, guides, blog, error pages), `blog/`, `fonts/`
+  (editor), `theme.css` (shared), `site.css` (landing, guides, error pages), `fonts/`
 - `api/Program.cs` — composition only (services, middleware order, endpoint mapping)
 - `api/Configuration/` — `Database`, `Authentication`, `Security` (forwarded headers, CORS, rate
   limits, antiforgery), `PlaylistServices`
