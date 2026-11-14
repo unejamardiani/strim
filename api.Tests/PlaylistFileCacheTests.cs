@@ -166,4 +166,196 @@ public class PlaylistFileCacheTests
       if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
     }
   }
+
+  [Fact]
+  public async Task LastGood_SurvivesExpiryOfTheNormalOutput()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 4096);
+    var source = await fixture.StoreSourceAsync(new string('s', 100));
+    var output = fixture.StoreOutput(source, "Sports", "#EXTM3U\nkept\n");
+    var playlistId = Guid.NewGuid();
+
+    Assert.True(fixture.Cache.RememberLastGood(playlistId, output));
+    fixture.Time.Advance(TimeSpan.FromMinutes(31));
+    fixture.Cache.Cleanup();
+
+    Assert.Null(fixture.Cache.TryLeaseOutput(output.OutputKey));
+    await using var lease = fixture.Cache.TryLeaseLastGood(playlistId, "list.m3u");
+    Assert.NotNull(lease);
+    Assert.Equal("#EXTM3U\nkept\n", await File.ReadAllTextAsync(lease!.FilePath));
+  }
+
+  [Fact]
+  public async Task LastGood_LeaseReturnsRememberedBytes_OrNullWhenUnknown()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 4096);
+    var source = await fixture.StoreSourceAsync(new string('s', 100));
+    var output = fixture.StoreOutput(source, "Sports", "#EXTM3U\nremembered\n");
+    var playlistId = Guid.NewGuid();
+
+    Assert.Null(fixture.Cache.TryLeaseLastGood(playlistId, "list.m3u"));
+    Assert.True(fixture.Cache.RememberLastGood(playlistId, output));
+    Assert.Null(fixture.Cache.TryLeaseLastGood(Guid.NewGuid(), "list.m3u"));
+
+    await using var lease = fixture.Cache.TryLeaseLastGood(playlistId, "my\r\nlist.m3u");
+    Assert.NotNull(lease);
+    Assert.Equal("my__list.m3u", lease!.FileName);
+    Assert.Equal("#EXTM3U\nremembered\n"u8.ToArray(), await File.ReadAllBytesAsync(lease.FilePath));
+
+    var name = Path.GetFileName(lease.FilePath);
+    Assert.StartsWith("lastgood-", name, StringComparison.Ordinal);
+    Assert.DoesNotContain(playlistId.ToString("N"), name, StringComparison.OrdinalIgnoreCase);
+    Assert.DoesNotContain(playlistId.ToString("D"), name, StringComparison.OrdinalIgnoreCase);
+  }
+
+  [Fact]
+  public async Task LastGood_IsReplacedByNewerOutput()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 300, maxSourceBytes: 100);
+    var source = await fixture.StoreSourceAsync(new string('s', 100));
+    var first = fixture.StoreOutput(source, "Sports", new string('1', 100));
+    var playlistId = Guid.NewGuid();
+    Assert.True(fixture.Cache.RememberLastGood(playlistId, first));
+    var firstPath = fixture.LastGoodPath(playlistId);
+
+    var second = fixture.StoreOutput(source, "News", new string('2', 100));
+    Assert.True(fixture.Cache.RememberLastGood(playlistId, second));
+
+    Assert.False(File.Exists(firstPath));
+    Assert.Single(Directory.EnumerateFiles(fixture.Directory, "lastgood-*"));
+    Assert.Equal(new string('2', 100), await File.ReadAllTextAsync(fixture.LastGoodPath(playlistId)));
+
+    // Only the newer output and its copy remain tracked (200 of 300 bytes), so a 100-byte
+    // reservation needs no eviction. A still-counted old copy would force the output out.
+    using var reservation = fixture.Cache.ReserveSourceCapacity(null);
+    using var outputLease = fixture.Cache.TryLeaseOutput(second.OutputKey);
+    Assert.NotNull(outputLease);
+  }
+
+  [Fact]
+  public async Task LastGood_CountsAgainstMaxDiskBytes()
+  {
+    // Source, output and copy fill the 300-byte budget. Without the copy counted, a 100-byte
+    // reservation would fit without evicting the output.
+    using var fixture = new LastGoodFixture(maxDiskBytes: 300, maxSourceBytes: 100);
+    var source = await fixture.StoreSourceAsync(new string('s', 100));
+    var output = fixture.StoreOutput(source, "Sports", new string('o', 100));
+    var playlistId = Guid.NewGuid();
+    Assert.True(fixture.Cache.RememberLastGood(playlistId, output));
+
+    using var reservation = fixture.Cache.ReserveSourceCapacity(null);
+
+    Assert.Null(fixture.Cache.TryLeaseOutput(output.OutputKey));
+    using var lease = fixture.Cache.TryLeaseLastGood(playlistId);
+    Assert.NotNull(lease);
+  }
+
+  [Fact]
+  public async Task LastGood_RememberDoesNotCountTheCopyTwiceForConcurrentCleanup()
+  {
+    // Source, output and copy fill the budget exactly. If the copy's reservation were still held
+    // after the copy was registered, a concurrent Cleanup would see 400 of 300 bytes and evict.
+    using var fixture = new LastGoodFixture(maxDiskBytes: 300, maxSourceBytes: 100);
+    var source = await fixture.StoreSourceAsync(new string('s', 100));
+    var output = fixture.StoreOutput(source, "Sports", new string('o', 100));
+    var playlistId = Guid.NewGuid();
+    using var stop = new CancellationTokenSource();
+    var cleaner = Task.Run(() =>
+    {
+      while (!stop.IsCancellationRequested) fixture.Cache.Cleanup();
+    });
+
+    try
+    {
+      for (var i = 0; i < 100; i++)
+      {
+        Assert.True(fixture.Cache.RememberLastGood(playlistId, output));
+        Assert.True(File.Exists(source.FilePath), $"Source evicted in iteration {i}.");
+        Assert.True(File.Exists(fixture.LastGoodPath(playlistId)), $"Copy evicted in iteration {i}.");
+        fixture.Cache.ForgetLastGood(playlistId);
+      }
+    }
+    finally
+    {
+      stop.Cancel();
+      await cleaner;
+    }
+
+    using var outputLease = fixture.Cache.TryLeaseOutput(output.OutputKey);
+    Assert.NotNull(outputLease);
+  }
+
+  [Fact]
+  public async Task LastGood_ForgetDeletesTheFile()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 4096);
+    var source = await fixture.StoreSourceAsync(new string('s', 100));
+    var output = fixture.StoreOutput(source, "Sports", "#EXTM3U\n");
+    var playlistId = Guid.NewGuid();
+    Assert.True(fixture.Cache.RememberLastGood(playlistId, output));
+    var path = fixture.LastGoodPath(playlistId);
+
+    fixture.Cache.ForgetLastGood(playlistId);
+
+    Assert.False(File.Exists(path));
+    Assert.Null(fixture.Cache.TryLeaseLastGood(playlistId));
+    Assert.NotNull(fixture.Cache.TryGetOutput(source.ContentHash, new[] { "Sports" }));
+  }
+
+  private sealed class ManualTime : TimeProvider
+  {
+    private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    public override DateTimeOffset GetUtcNow() => _now;
+    public void Advance(TimeSpan by) => _now = _now.Add(by);
+  }
+
+  private sealed class LastGoodFixture : IDisposable
+  {
+    public LastGoodFixture(long maxDiskBytes, long maxSourceBytes = 1024)
+    {
+      Directory = Path.Combine(Path.GetTempPath(), $"strim-cache-test-{Guid.NewGuid():N}");
+      Cache = new PlaylistFileCache(
+        Options.Create(new PlaylistCacheOptions
+        {
+          Directory = Directory,
+          MaxSourceBytes = maxSourceBytes,
+          MaxDiskBytes = maxDiskBytes,
+        }),
+        NullLogger<PlaylistFileCache>.Instance,
+        PlaylistFileCache.TryDelete,
+        Time);
+    }
+
+    public string Directory { get; }
+    public ManualTime Time { get; } = new();
+    public PlaylistFileCache Cache { get; }
+
+    public async Task<PlaylistSourceFile> StoreSourceAsync(string text)
+    {
+      var downloaded = await Cache.WriteRawTextAsync(text, CancellationToken.None);
+      return Cache.StoreDownloaded("https://example.com/playlist.m3u", downloaded);
+    }
+
+    public PlaylistOutputFile StoreOutput(PlaylistSourceFile source, string disabledGroup, string content)
+    {
+      var temporaryPath = Cache.CreateOutputTemporaryPath();
+      File.WriteAllText(temporaryPath, content);
+      return Cache.StoreOutput(
+        source,
+        new[] { disabledGroup },
+        temporaryPath,
+        new PlaylistGenerationResult(1, 1, new FileInfo(temporaryPath).Length));
+    }
+
+    public string LastGoodPath(Guid playlistId)
+    {
+      using var lease = Cache.TryLeaseLastGood(playlistId);
+      return lease!.FilePath;
+    }
+
+    public void Dispose()
+    {
+      if (System.IO.Directory.Exists(Directory)) System.IO.Directory.Delete(Directory, recursive: true);
+    }
+  }
 }
