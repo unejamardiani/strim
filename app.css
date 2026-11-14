@@ -834,6 +834,119 @@ select.input {
   background: #fffcf7;
 }
 
+/* The row an Everything search result jumped to; a static tint, so it also shows with reduced motion. */
+.group-row.flash {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* ---------- Search field with the Groups / Everything switch ---------- */
+
+.search-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.search-row .input-search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.search-results {
+  padding: 0;
+  overflow: hidden;
+}
+
+.search-status,
+.search-more {
+  margin: 0;
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-results .notice {
+  margin: 12px;
+}
+
+.search-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.search-hit {
+  width: 100%;
+  min-height: var(--row-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 8px 18px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.search-hit:hover {
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+}
+
+.search-hit-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-hit-name,
+.search-hit-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-hit-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.search-hit-meta {
+  font-size: 13px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-badge {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.search-badge.off {
+  background: var(--surface-2);
+  color: var(--ink-3);
+}
+
+@media (min-width: 768px) {
+  .search-hit-name {
+    font-size: 15px;
+  }
+}
+
 .list-empty {
   padding: 44px 18px;
   text-align: center;

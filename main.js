@@ -704,6 +704,8 @@ function newEditor(playlist) {
     extras: [],
     baseline: '',
     filter: { query: '', type: 'all', show: 'all', sort: 'provider' },
+    searchMode: 'groups', // groups | everything
+    search: null, // Everything results: { status, query, matches, hasMore, message }
     view: [],
     busy: false,
   };
@@ -811,6 +813,7 @@ function applyAnalysis(ed, analysis, { sample }) {
   ed.disabled = disabled;
   ed.extras = extras;
   ed.cacheKey = analysis.cacheKey;
+  ed.search = null;
   ed.totalChannels = analysis.totalChannels || groups.reduce((sum, g) => sum + g.count, 0);
   ed.expirationUtc = analysis.expirationUtc || null;
   ed.isSample = sample;
@@ -1029,14 +1032,23 @@ const picker = {
   adultSwitch: null,
   typeButtons: null,
   showButtons: null,
+  results: null,
+  highlight: null,
 };
 
+function searchLabels(ed) {
+  return ed.searchMode === 'everything'
+    ? { placeholder: 'Search all entries', label: 'Search all entries' }
+    : { placeholder: `Search ${plural(ed.groups.length, 'group')}`, label: 'Search groups' };
+}
+
 function pickerNodes(ed) {
+  const labels = searchLabels(ed);
   const search = h('input', {
     class: 'input input-search',
     type: 'search',
-    placeholder: `Search ${plural(ed.groups.length, 'group')}`,
-    'aria-label': 'Search groups',
+    placeholder: labels.placeholder,
+    'aria-label': labels.label,
     autocomplete: 'off',
     spellcheck: 'false',
     enterkeyhint: 'search',
@@ -1045,7 +1057,8 @@ function pickerNodes(ed) {
   });
   search.addEventListener('input', () => {
     ed.filter.query = search.value;
-    scheduleViewUpdate();
+    if (ed.searchMode === 'everything') scheduleSearch(ed);
+    else scheduleViewUpdate();
   });
 
   const sort = h('select', { class: 'input', 'aria-label': 'Sort groups' },
@@ -1077,11 +1090,26 @@ function pickerNodes(ed) {
     return wrap;
   };
 
-  const rows = [search];
+  const modes = segmented(
+    [{ value: 'groups', label: 'Groups' }, { value: 'everything', label: 'Everything' }],
+    ed.searchMode,
+    (value) => {
+      ed.searchMode = value;
+      const next = searchLabels(ed);
+      search.placeholder = next.placeholder;
+      search.setAttribute('aria-label', next.label);
+      picker.results.hidden = value !== 'everything';
+      if (value === 'everything') runSearch(ed);
+      else cancelSearch();
+      updateView(true);
+    });
+  modes.setAttribute('aria-label', 'Search in');
+  const rows = [h('div', { class: 'search-row' }, search, modes)];
 
   const types = CONTENT_TYPES.filter((t) => ed.typeCounts[t]);
+  picker.typeButtons = null;
   if (types.length > 1) {
-    rows.push(h('div', { class: 'toolbar-row' }, segmented(
+    rows.push(h('div', { class: 'toolbar-row' }, picker.typeButtons = segmented(
       [{ value: 'all', label: 'All' }, ...types.map((t) => ({ value: t, label: t, count: ed.typeCounts[t], dot: true }))],
       ed.filter.type,
       (value) => {
@@ -1090,7 +1118,7 @@ function pickerNodes(ed) {
       })));
   }
   const filters = h('div', { class: 'toolbar-row' });
-  filters.append(segmented(
+  filters.append(picker.showButtons = segmented(
     [{ value: 'all', label: 'All' }, { value: 'kept', label: 'On' }, { value: 'hidden', label: 'Off' }],
     ed.filter.show,
     (value) => {
@@ -1112,8 +1140,11 @@ function pickerNodes(ed) {
     picker.adultSwitch ? h('label', { class: 'adult-switch' }, 'Hide adult groups', picker.adultSwitch) : null,
     h('div', { class: 'bulk' }, picker.allOnButton, picker.allOffButton)));
 
+  picker.results = h('section', { class: 'card search-results', 'aria-label': 'Search results', hidden: ed.searchMode !== 'everything' });
+
   return [
     h('section', { class: 'picker-toolbar', 'aria-label': 'Group filters' }, rows),
+    picker.results,
     h('div', { class: 'card group-list', id: 'group-list', role: 'list', 'aria-label': 'Groups' }),
   ];
 }
@@ -1126,6 +1157,9 @@ function mountPicker(ed) {
   picker.list.addEventListener('change', onRowToggle);
   measureRowHeight();
   updateView(false);
+  // A new analysis clears the results, so an Everything search runs again on the new index.
+  if (ed.searchMode === 'everything' && !ed.search) runSearch(ed);
+  else renderSearchResults(ed);
 }
 
 function teardownPicker() {
@@ -1134,6 +1168,8 @@ function teardownPicker() {
   picker.list = null;
   picker.rows = [];
   picker.adultSwitch = null;
+  picker.results = null;
+  picker.highlight = null;
   cancelAnimationFrame(picker.frame);
 }
 
@@ -1183,7 +1219,8 @@ function updateView(scrollToTop) {
   const ed = picker.ed;
   viewTimer = 0;
   if (!ed) return;
-  const terms = ed.filter.query.toLowerCase().split(/\s+/).filter(Boolean);
+  // In Everything mode the field searches entries on the server, so it does not filter groups.
+  const terms = ed.searchMode === 'everything' ? [] : ed.filter.query.toLowerCase().split(/\s+/).filter(Boolean);
   const { type, show, sort } = ed.filter;
   const view = [];
   for (const g of groupsInOrder(ed.groups, sort)) {
@@ -1218,14 +1255,19 @@ function updateView(scrollToTop) {
   }
 
   if (scrollToTop) {
-    const toolbar = document.querySelector('.picker-toolbar');
     const listTop = picker.list.getBoundingClientRect().top + window.scrollY;
-    const stickyOffset = (toolbar?.offsetHeight || 0) + parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h'));
-    if (window.scrollY > listTop - stickyOffset) window.scrollTo({ top: listTop - stickyOffset });
+    const offset = stickyOffset();
+    if (window.scrollY > listTop - offset) window.scrollTo({ top: listTop - offset });
   }
   for (const row of picker.rows) row.dataset.index = '';
   paintRows();
   updateActionBar();
+}
+
+// Height of the sticky top bar and filter toolbar that cover the top of the list.
+function stickyOffset() {
+  const toolbar = document.querySelector('.picker-toolbar');
+  return (toolbar?.offsetHeight || 0) + parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h'));
 }
 
 function createRow() {
@@ -1277,6 +1319,7 @@ function paintRows() {
     row._parts.check.checked = !off;
     row._parts.check.setAttribute('aria-label', `${g.title}${g.type !== 'Live' || g.split ? ` (${g.type})` : ''}, ${plural(g.count, 'channel')}`);
     row.classList.toggle('off', off);
+    row.classList.toggle('flash', g.key === picker.highlight);
   }
 }
 
@@ -1378,6 +1421,144 @@ document.addEventListener('keydown', (e) => {
   document.getElementById('group-search')?.focus();
 });
 
+// ---------- Everything search ----------
+
+const MAX_SEARCH_RESULTS = 50; // Limits.MaxSearchResults in api/Endpoints/EndpointSupport.cs.
+let searchTimer = 0;
+let searchController = null;
+let highlightTimer = 0;
+
+// Mirrors the server's limits (Limits.MinSearchQueryLength, MaxSearchQueryLength), so no request is sent in vain.
+function searchHint(query) {
+  if (query.length > 100) return 'Search must be 100 characters or less.';
+  if ((query.match(/[\p{L}\p{N}]/gu) || []).length < 2) return 'Type at least 2 letters or digits to search every entry.';
+  return '';
+}
+
+function cancelSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = 0;
+  searchController?.abort();
+  searchController = null;
+}
+
+function scheduleSearch(ed) {
+  cancelSearch();
+  searchTimer = setTimeout(() => runSearch(ed), 300);
+}
+
+async function runSearch(ed) {
+  cancelSearch();
+  const query = ed.filter.query.trim();
+  const hint = searchHint(query);
+  if (hint) {
+    ed.search = { status: 'hint', query, message: hint };
+    renderSearchResults(ed);
+    return;
+  }
+  if (ed.search?.status === 'done' && ed.search.query === query) {
+    renderSearchResults(ed);
+    return;
+  }
+  const controller = new AbortController();
+  searchController = controller;
+  ed.search = { status: 'loading', query, matches: ed.search?.matches || [], hasMore: false };
+  renderSearchResults(ed);
+  try {
+    const result = await api('/playlist/search', {
+      method: 'POST',
+      body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled] },
+      signal: controller.signal,
+    });
+    if (searchController !== controller) return;
+    ed.search = { status: 'done', query, matches: result.matches || [], hasMore: result.hasMore === true };
+  } catch (err) {
+    if (isAbort(err) || searchController !== controller) return;
+    ed.search = { status: 'error', query, message: err.message || 'Search failed.' };
+  } finally {
+    if (searchController === controller) searchController = null;
+  }
+  renderSearchResults(ed);
+}
+
+function renderSearchResults(ed) {
+  const panel = picker.results;
+  if (!panel || picker.ed !== ed) return;
+  const s = ed.search || { status: 'hint', message: searchHint('') };
+  const status = (text) => h('p', { class: 'search-status', role: 'status', text });
+  if (s.status === 'hint') {
+    panel.replaceChildren(status(s.message));
+    return;
+  }
+  if (s.status === 'error') {
+    panel.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+      h('p', { text: s.message }),
+      h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadGroups(ed, ed.sourceUrl, { sample: ed.isSample }) }, 'Analyse again'))));
+    return;
+  }
+  const matches = s.matches.slice(0, MAX_SEARCH_RESULTS);
+  const nodes = [status(s.status === 'loading'
+    ? 'Searching…'
+    : matches.length ? plural(matches.length, 'match', 'matches') : 'Nothing matches your search.')];
+  if (matches.length) nodes.push(h('ul', { class: 'search-list' }, matches.map((m) => searchHit(ed, m))));
+  if (s.status === 'done' && s.hasMore) nodes.push(h('p', { class: 'search-more', text: 'More matches, refine your search.' }));
+  panel.replaceChildren(...nodes);
+  syncSearchBadges(ed);
+}
+
+function searchHit(ed, m) {
+  const type = CONTENT_TYPES.includes(m.contentType) ? m.contentType : 'Live';
+  return h('li', null, h('button', {
+    class: 'search-hit',
+    type: 'button',
+    dataset: { type, groupKey: m.groupKey },
+    onclick: () => jumpToGroup(ed, m.groupKey),
+  },
+  h('span', { class: 'dot', 'aria-hidden': 'true' }),
+  h('span', { class: 'search-hit-text' },
+    h('span', { class: 'search-hit-name', text: m.name }),
+    h('span', { class: 'search-hit-meta', text: `${m.group} · No. ${fmt(m.position)} · ${type}` })),
+  h('span', { class: 'search-badge' })));
+}
+
+// The badges follow the switches in the list, so they stay right after a change made since the search.
+function syncSearchBadges(ed) {
+  if (!picker.results || picker.ed !== ed) return;
+  for (const hit of picker.results.querySelectorAll('.search-hit')) {
+    const off = ed.disabled.has(hit.dataset.groupKey);
+    const badge = hit.querySelector('.search-badge');
+    badge.textContent = off ? 'Off' : 'On';
+    badge.classList.toggle('off', off);
+  }
+}
+
+function jumpToGroup(ed, key) {
+  if (picker.ed !== ed) return;
+  ed.filter.type = 'all';
+  ed.filter.show = 'all';
+  for (const pills of [picker.typeButtons, picker.showButtons]) {
+    for (const b of pills?.children || []) b.setAttribute('aria-pressed', String(b.dataset.value === 'all'));
+  }
+  updateView(false);
+  const index = ed.view.findIndex((g) => g.key === key);
+  if (index < 0) {
+    toast('That group is not in the list.', { error: true });
+    return;
+  }
+  const listTop = picker.list.getBoundingClientRect().top + window.scrollY;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: listTop + (index - 1) * picker.rowHeight - stickyOffset(), behavior: reduceMotion ? 'auto' : 'smooth' });
+  clearTimeout(highlightTimer);
+  picker.highlight = key;
+  paintRows();
+  highlightTimer = setTimeout(() => {
+    if (picker.highlight !== key) return;
+    picker.highlight = null;
+    paintRows();
+  }, 2000);
+}
+
 // ---------- Action bar ----------
 
 const bar = { info: null, save: null, download: null };
@@ -1414,6 +1595,7 @@ function updateActionBar() {
   if (!ed || ed.phase !== 'ready' || !bar.info) return;
   const { channels, groups } = selectionStats(ed);
   syncAdultSwitch(ed);
+  syncSearchBadges(ed);
   bar.info.replaceChildren(
     h('div', { class: 'dock-value' }, fmt(channels), h('small', { text: channels === 1 ? 'channel' : 'channels' })),
     h('div', { class: 'dock-label', text: `${fmt(groups)} of ${plural(ed.groups.length, 'group')} on` }));
