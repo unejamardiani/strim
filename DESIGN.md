@@ -98,7 +98,7 @@ Short, plain, second person. "Switch off the groups you never watch", "All on / 
 │  .page-head   eyebrow · h1 · lead       │
 │  .section     .section-head + .grid     │  cards, features, steps, FAQ
 │  .cta-band    inverted dock colours     │  closes most pages
-│ Articles: .prose-page (700px column)    │
+│ Guide: .guide (700px column)            │
 ├─────────────────────────────────────────┤
 │ Footer                                  │  wordmark · line · links
 └─────────────────────────────────────────┘
