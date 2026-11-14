@@ -156,6 +156,118 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
     Assert.Equal(1, generated.KeptChannels);
   }
 
+  private const string AccountHost = "http://93.184.215.14";
+  private const string AccountPassword = "acct-pw-7Hq2";
+
+  // Registers a get.php playlist and an optional player_api.php answer under a unique username.
+  private string StubAccount(string name, Func<HttpResponseMessage>? accountAnswer)
+  {
+    var link = $"{AccountHost}/get.php?username={name}&password={AccountPassword}&type=m3u_plus";
+    factory.UpstreamPlaylists[link] = TestPlaylists.Mixed;
+    if (accountAnswer is not null)
+    {
+      factory.UpstreamResponses[$"{AccountHost}/player_api.php?username={name}&password={AccountPassword}"] = accountAnswer;
+    }
+
+    return link;
+  }
+
+  private static Func<HttpResponseMessage> Answer(HttpStatusCode status, string body, string mediaType = "application/json") =>
+    () => new HttpResponseMessage(status) { Content = new StringContent(body, System.Text.Encoding.UTF8, mediaType) };
+
+  private async Task<System.Text.Json.JsonElement> AnalyzeUrlAsync(string sourceUrl)
+  {
+    var response = await NewClient().PostAsync("/api/playlist/analyze", new { sourceUrl });
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    return await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+  }
+
+  [Theory]
+  [InlineData("number", "1767225600")]
+  [InlineData("string", "\"1767225600\"")]
+  public async Task Analyze_WithAccountEndpoint_ReturnsAccountInfo(string name, string expDate)
+  {
+    var link = StubAccount($"exp-{name}", Answer(HttpStatusCode.OK,
+      $$$"""{"user_info":{"auth":1,"status":"Active","exp_date":{{{expDate}}},"max_connections":"2","active_cons":1}}"""));
+    var before = DateTimeOffset.UtcNow;
+
+    var json = await AnalyzeUrlAsync(link);
+
+    Assert.Equal(4, json.GetProperty("totalChannels").GetInt32());
+    Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1767225600), json.GetProperty("expirationUtc").GetDateTimeOffset());
+    Assert.Equal("Active", json.GetProperty("accountStatus").GetString());
+    Assert.Equal(2, json.GetProperty("maxConnections").GetInt32());
+    Assert.Equal(1, json.GetProperty("activeConnections").GetInt32());
+    Assert.InRange(json.GetProperty("accountCheckedUtc").GetDateTimeOffset(), before, DateTimeOffset.UtcNow);
+  }
+
+  [Fact]
+  public async Task Analyze_AccountExpiryReplacesUrlParameter()
+  {
+    var link = StubAccount("exp-url", Answer(HttpStatusCode.OK,
+      """{"user_info":{"auth":1,"status":"Active","exp_date":1767225600}}""")) + "&exp=1700000000";
+    factory.UpstreamPlaylists[link] = TestPlaylists.Mixed;
+
+    var json = await AnalyzeUrlAsync(link);
+
+    Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1767225600), json.GetProperty("expirationUtc").GetDateTimeOffset());
+  }
+
+  [Fact]
+  public async Task Analyze_WithNullExpiry_ReturnsStatusWithoutExpiration()
+  {
+    var link = StubAccount("exp-null", Answer(HttpStatusCode.OK,
+      """{"user_info":{"auth":1,"status":"Active","exp_date":null,"max_connections":"1","active_cons":"0"}}"""));
+
+    var json = await AnalyzeUrlAsync(link);
+
+    Assert.Equal(System.Text.Json.JsonValueKind.Null, json.GetProperty("expirationUtc").ValueKind);
+    Assert.Equal("Active", json.GetProperty("accountStatus").GetString());
+    Assert.Equal(1, json.GetProperty("maxConnections").GetInt32());
+    Assert.Equal(0, json.GetProperty("activeConnections").GetInt32());
+  }
+
+  public static TheoryData<string, HttpStatusCode, string, string> FailingAccountAnswers => new()
+  {
+    { "not-found", HttpStatusCode.NotFound, "", "text/plain" },
+    { "html", HttpStatusCode.OK, "<html><body>Error</body></html>", "text/html" },
+    { "bad-json", HttpStatusCode.OK, "{\"user_info\":{\"status\":", "application/json" },
+  };
+
+  [Theory]
+  [MemberData(nameof(FailingAccountAnswers))]
+  public async Task Analyze_WhenAccountLookupFails_StillReturnsGroups(string name, HttpStatusCode status, string body, string mediaType)
+  {
+    var link = StubAccount($"fail-{name}", Answer(status, body, mediaType));
+    factory.LogEntries.Clear();
+
+    var json = await AnalyzeUrlAsync(link);
+
+    Assert.Equal(3, json.GetProperty("groups").GetArrayLength());
+    foreach (var field in new[] { "expirationUtc", "accountStatus", "maxConnections", "activeConnections", "accountCheckedUtc" })
+    {
+      Assert.Equal(System.Text.Json.JsonValueKind.Null, json.GetProperty(field).ValueKind);
+    }
+
+    Assert.Contains(factory.UpstreamRequests, r => r.Contains($"player_api.php?username=fail-{name}&"));
+    Assert.NotEmpty(factory.LogEntries);
+    Assert.DoesNotContain(factory.LogEntries, entry => entry.Contains(AccountPassword));
+  }
+
+  [Fact]
+  public async Task Analyze_WithoutGetPhp_AsksNoAccountEndpoint()
+  {
+    var link = $"{AccountHost}/lists/no-account.m3u?username=noacct&password={AccountPassword}";
+    factory.UpstreamPlaylists[link] = TestPlaylists.Mixed;
+
+    var json = await AnalyzeUrlAsync(link);
+
+    Assert.Equal(4, json.GetProperty("totalChannels").GetInt32());
+    Assert.Contains(factory.UpstreamRequests, r => r == link);
+    Assert.DoesNotContain(factory.UpstreamRequests, r => r.Contains("player_api.php") && r.Contains("noacct"));
+    Assert.Equal(System.Text.Json.JsonValueKind.Null, json.GetProperty("accountCheckedUtc").ValueKind);
+  }
+
   private static async Task<AnalysisDto> AnalyzeRawAsync(ApiClient client, string rawText = TestPlaylists.Mixed)
   {
     var response = await client.PostAsync("/api/playlist/analyze", new { rawText });

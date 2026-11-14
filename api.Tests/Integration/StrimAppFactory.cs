@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Api.Tests.Integration;
 
@@ -29,6 +31,12 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
   /// <summary>Scripted upstream answers (status codes, redirects, bodies); checked before <see cref="UpstreamPlaylists"/>.</summary>
   public Dictionary<string, Func<HttpResponseMessage>> UpstreamResponses { get; } = new();
 
+  /// <summary>Every address the stubbed upstream was asked for, in order.</summary>
+  public ConcurrentQueue<string> UpstreamRequests { get; } = new();
+
+  /// <summary>Formatted log entries (message and exception) written by the app.</summary>
+  public ConcurrentQueue<string> LogEntries { get; } = new();
+
   /// <summary>Web root for the app; null keeps the default. Set it to <see cref="RepositoryRoot"/> to serve the real pages.</summary>
   public string? WebRoot { get; init; }
 
@@ -48,10 +56,28 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
     if (WebRoot is not null) builder.UseWebRoot(WebRoot);
     builder.UseSetting("SQLITE_PATH", Path.Combine(_root, "strim.db"));
     builder.UseSetting("PlaylistCache:Directory", Path.Combine(_root, "cache"));
+    builder.ConfigureLogging(logging => logging.AddProvider(new CapturingLoggerProvider(LogEntries)));
     builder.ConfigureTestServices(services =>
     {
-      services.AddHttpClient("fetcher").ConfigurePrimaryHttpMessageHandler(() => new StubUpstream(UpstreamPlaylists, UpstreamResponses));
+      services.AddHttpClient("fetcher").ConfigurePrimaryHttpMessageHandler(
+        () => new StubUpstream(UpstreamPlaylists, UpstreamResponses, UpstreamRequests));
     });
+  }
+
+  private sealed class CapturingLoggerProvider(ConcurrentQueue<string> entries) : ILoggerProvider, ILogger
+  {
+    public ILogger CreateLogger(string categoryName) => this;
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+      entries.Enqueue(formatter(state, exception) + " " + exception);
+
+    public void Dispose()
+    {
+    }
   }
 
   protected override void Dispose(bool disposing)
@@ -69,11 +95,13 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
 
   private sealed class StubUpstream(
     Dictionary<string, string> playlists,
-    Dictionary<string, Func<HttpResponseMessage>> responses) : HttpMessageHandler
+    Dictionary<string, Func<HttpResponseMessage>> responses,
+    ConcurrentQueue<string> requests) : HttpMessageHandler
   {
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
       var key = request.RequestUri!.ToString();
+      requests.Enqueue(key);
       if (responses.TryGetValue(key, out var scripted))
       {
         return Task.FromResult(scripted());

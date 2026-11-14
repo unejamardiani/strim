@@ -66,11 +66,25 @@ public static class ProcessingEndpoints
     });
   }
 
+  /// <summary>
+  /// Asks the provider's <c>player_api.php</c> (only for <c>get.php</c> links) through the fetcher's
+  /// address and redirect checks. Null when there is no account endpoint or the answer is unusable.
+  /// </summary>
+  private static async Task<ProviderAccountResult?> LookUpAccountAsync(
+    PlaylistSourceFetcher fetcher, string? sourceUrl, CancellationToken cancellationToken)
+  {
+    if (ProviderAccountInfo.BuildEndpoint(sourceUrl) is not { } endpoint) return null;
+
+    var answer = await fetcher.FetchSmallTextAsync(endpoint.AbsoluteUri, cancellationToken);
+    var account = answer.Success ? ProviderAccountInfo.Parse(answer.Text) : ProviderAccountResult.Unknown;
+    return account.IsKnown ? account : null;
+  }
+
   public static IEndpointRouteBuilder MapProcessingEndpoints(this IEndpointRouteBuilder app)
   {
     var logger = app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Strim.Processing");
 
-    app.MapPost(AnalyzePath, async (AnalyzePlaylistRequest input, HttpContext context, PlaylistPipeline pipeline, PlaylistJobGate jobGate) =>
+    app.MapPost(AnalyzePath, async (AnalyzePlaylistRequest input, HttpContext context, PlaylistPipeline pipeline, PlaylistJobGate jobGate, PlaylistSourceFetcher fetcher) =>
     {
       if (string.IsNullOrWhiteSpace(input.SourceUrl) && string.IsNullOrWhiteSpace(input.RawText))
         return Results.BadRequest(new { error = "Provide a sourceUrl or rawText." });
@@ -104,6 +118,9 @@ public static class ProcessingEndpoints
           var expiration = Uri.TryCreate(input.SourceUrl, UriKind.Absolute, out var sourceUri)
             ? PlaylistProcessor.TryExtractExpiration(sourceUri)
             : null;
+          var account = string.IsNullOrWhiteSpace(input.RawText)
+            ? await LookUpAccountAsync(fetcher, input.SourceUrl, context.RequestAborted)
+            : null;
           var friendlyName = string.IsNullOrWhiteSpace(input.SourceName)
             ? PlaylistProcessor.DeriveNameFromUrl(input.SourceUrl)
             : input.SourceName.Trim();
@@ -114,8 +131,12 @@ public static class ProcessingEndpoints
             friendlyName,
             analysis.TotalChannels,
             analysis.Groups.Count,
-            expiration,
-            PlaylistProcessor.ToGroupResults(analysis.Groups)));
+            account?.ExpiresAt ?? expiration,
+            PlaylistProcessor.ToGroupResults(analysis.Groups),
+            account?.Status,
+            account?.MaxConnections,
+            account?.ActiveConnections,
+            account is null ? null : DateTimeOffset.UtcNow));
         }
         catch (Exception ex)
         {
