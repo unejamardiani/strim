@@ -18,6 +18,24 @@ public sealed record ProviderAccountResult(
 }
 
 /// <summary>
+/// Asks a provider's <c>player_api.php</c> (only for <c>get.php</c> links) through the fetcher's
+/// address and redirect checks.
+/// </summary>
+public static class ProviderAccountLookup
+{
+  /// <summary>Null when there is no account endpoint or the answer is unusable.</summary>
+  public static async Task<ProviderAccountResult?> LookUpAsync(
+    PlaylistSourceFetcher fetcher, string? sourceUrl, CancellationToken cancellationToken)
+  {
+    if (ProviderAccountInfo.BuildEndpoint(sourceUrl) is not { } endpoint) return null;
+
+    var answer = await fetcher.FetchSmallTextAsync(endpoint.AbsoluteUri, cancellationToken);
+    var account = answer.Success ? ProviderAccountInfo.Parse(answer.Text) : ProviderAccountResult.Unknown;
+    return account.IsKnown ? account : null;
+  }
+}
+
+/// <summary>
 /// Pure helpers for provider account info: builds the account endpoint from a playlist link and
 /// parses the account answer defensively. No I/O.
 /// </summary>
