@@ -5,10 +5,12 @@
   "models": {
     "default": "claude-opus-5-5",
     "review": "gpt-6-astra",
-    "review_effort": "high"
+    "review_effort": "high",
+    "advisor": "claude-opus-5-5"
   },
   "checks": [
     {"cmd": ["git", "diff", "--check", "origin/{base}...HEAD"], "timeout": 60},
+    {"cmd": ["dotnet", "build", "strim.sln", "-warnaserror"], "timeout": 900},
     {"cmd": ["dotnet", "test", "strim.sln"], "timeout": 1800}
   ],
   "limits": {
@@ -19,9 +21,10 @@
     "requirements_per_day": 100,
     "research_per_day": 2,
     "docs_per_day": 1,
-    "budget_usd": {"requirements": 2, "research": 2, "implement": 5, "fix": 3, "docs": 2},
+    "budget_usd": {"requirements": 2, "research": 2, "implement": 5, "fix": 3, "docs": 2,
+                   "advisor": 1},
     "timeout_s": {"requirements": 900, "research": 1500, "implement": 3000, "fix": 2400, "review": 1200,
-                  "docs": 1800}
+                  "docs": 1800, "advisor": 600}
   },
   "policy": {
     "protected": [".factory/*", "docs/factory/*", "AGENTS.md", "CLAUDE.md", ".claude/*", ".codex/*", ".github/*",
@@ -31,6 +34,7 @@
                      "*[Nn]u[Gg]et.[Cc]onfig"],
     "forbidden_patterns": ["'unsafe-(inline|eval)'", "-----BEGIN [A-Z ]*PRIVATE KEY-----"],
     "tests": ["api.Tests/*"],
+    "tests_exempt": ["main.js", "app.html", "app.css", "theme.css"],
     "size_exempt": ["docs/*"]
   },
   "review_inputs": ["input:feedback"]
