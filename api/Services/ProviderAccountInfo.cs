@@ -141,8 +141,7 @@ public static class ProviderAccountInfo
   private static DateTimeOffset? ReadUnixTime(JsonElement parent, string name)
   {
     var seconds = parent.TryGetProperty(name, out var value) ? ReadLong(value) : null;
-    // 0 is how some panels say "no expiry"; it is never a real expiry date.
-    return seconds is > 0 and <= MaxUnixSeconds ? DateTimeOffset.FromUnixTimeSeconds(seconds.Value) : null;
+    return seconds is >= 0 and <= MaxUnixSeconds ? DateTimeOffset.FromUnixTimeSeconds(seconds.Value) : null;
   }
 
   private static long? ReadLong(JsonElement value)

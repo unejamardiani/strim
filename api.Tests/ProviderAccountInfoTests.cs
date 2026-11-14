@@ -66,6 +66,16 @@ public class ProviderAccountInfoTests
     Assert.Null(result.ExpiresAt);
   }
 
+  [Theory]
+  [InlineData("0")]
+  [InlineData("\"0\"")]
+  public void Parse_AcceptsUnixTimeZero(string expDate)
+  {
+    var result = ProviderAccountInfo.Parse($$$"""{"user_info":{"auth":1,"exp_date":{{{expDate}}}}}""");
+
+    Assert.Equal(new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero), result.ExpiresAt);
+  }
+
   [Fact]
   public void Parse_AcceptsTheLastSecondOfYear9999()
   {
