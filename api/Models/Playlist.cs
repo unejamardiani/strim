@@ -70,6 +70,21 @@ public class Playlist
   [Column("sourcecheckedutc")]
   public DateTimeOffset? SourceCheckedUtc { get; set; }
 
+  /// <summary>Provider account status (for example "Active") as the provider last reported it.</summary>
+  [MaxLength(32)]
+  [Column("accountstatus")]
+  public string? AccountStatus { get; set; }
+
+  [Column("accountmaxconnections")]
+  public int? AccountMaxConnections { get; set; }
+
+  [Column("accountactiveconnections")]
+  public int? AccountActiveConnections { get; set; }
+
+  /// <summary>When the account facts were last read from the provider.</summary>
+  [Column("accountcheckedutc")]
+  public DateTimeOffset? AccountCheckedUtc { get; set; }
+
   public DateTimeOffset CreatedAt { get; set; }
 
   public DateTimeOffset UpdatedAt { get; set; }
