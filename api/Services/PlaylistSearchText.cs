@@ -112,7 +112,7 @@ public static class PlaylistSearchText
   }
 
   /// <summary>The double-quoted value of the first attribute with this name, or null.</summary>
-  private static string? AttributeValue(string extinf, string attribute)
+  internal static string? AttributeValue(string extinf, string attribute)
   {
     var searchAt = 0;
     while (searchAt < extinf.Length)
