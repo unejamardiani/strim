@@ -267,6 +267,32 @@ public static class PlaylistProcessor
     return new PlaylistFilterResult(writer.ToString().TrimEnd(), total, kept);
   }
 
+  /// <summary>
+  /// The entries of an in-memory playlist in their order, read with the same rules as filtering:
+  /// option lines (#EXTVLCOPT, #KODIPROP, ...) belong to the entry, the first other line is its address,
+  /// and #EXTGRP is the group of an entry without group-title. Only reads; meant for small texts and tests.
+  /// </summary>
+  public static List<PlaylistEntry> ReadEntries(string text)
+  {
+    using var lines = InMemoryLines(text);
+    var entries = new List<PlaylistEntry>();
+    string? pending = null;
+    while ((pending ?? RunSync(lines.ReadNextContentLineAsync(CancellationToken.None))) is { } line)
+    {
+      pending = null;
+      if (!IsExtinf(line)) continue;
+
+      (var address, pending, var extGrp) = RunSync(ReadEntryTailAsync(lines, optionLines: null, CancellationToken.None));
+      entries.Add(new PlaylistEntry(
+        entries.Count,
+        PlaylistSearchText.DisplayName(line),
+        ExtractGroupTitle(line, extGrp),
+        PlaylistSearchText.AttributeValue(line, "tvg-id"),
+        address ?? string.Empty));
+    }
+    return entries;
+  }
+
   public static string DeriveNameFromUrl(string? url)
   {
     if (string.IsNullOrWhiteSpace(url))
