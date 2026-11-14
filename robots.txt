@@ -1,4 +1,4 @@
-# Strim: the landing page, guides and blog are public; the app and API are not for crawlers.
+# Strim: the landing page and guides are public; the app and API are not for crawlers.
 User-agent: *
 Allow: /
 Disallow: /app
