@@ -29,12 +29,31 @@
 
     <main class="site-main">
       <section class="error-page">
-        <span class="error-code" aria-hidden="true">404</span>
-        <h1>Nothing here.</h1>
-        <p class="lead">This page does not exist, or it moved. Your playlists are fine.</p>
-        <div class="cta-row">
-          <a class="btn btn-primary" href="/app">Open Strim</a>
-          <a class="btn" href="/">Home</a>
+        <div class="tv tv-searching" aria-hidden="true">
+          <span class="tv-antenna"><i></i><i></i></span>
+          <div class="tv-set">
+            <div class="tv-screen">
+              <svg class="tv-noise" viewBox="0 0 320 240" preserveAspectRatio="none" focusable="false">
+                <filter id="tv-snow" x="0" y="0" width="100%" height="100%">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" stitchTiles="stitch" />
+                  <feColorMatrix type="matrix" values="0 0 0 0 0.96  0 0 0 0 0.93  0 0 0 0 0.89  1.9 0 0 0 -0.62" />
+                </filter>
+                <rect width="320" height="240" filter="url(#tv-snow)" />
+              </svg>
+              <span class="tv-channel">CH 404</span>
+              <span class="tv-osd tv-osd-center">No signal</span>
+            </div>
+            <div class="tv-panel"><span class="tv-grille"></span><span class="tv-led"></span><span class="tv-knob"></span><span class="tv-knob"></span></div>
+          </div>
+        </div>
+        <div class="error-copy">
+          <p class="eyebrow">Error 404</p>
+          <h1>This channel isn’t in your playlist.</h1>
+          <p class="lead">The page you asked for doesn’t exist, or it moved. Your playlists are fine.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="/app">Open Strim</a>
+            <a class="btn" href="/">Home</a>
+          </div>
         </div>
       </section>
     </main>
