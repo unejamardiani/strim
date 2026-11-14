@@ -129,9 +129,23 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
     Assert.StartsWith("#EXTM3U", sample!.Text);
   }
 
-  private static async Task<AnalysisDto> AnalyzeRawAsync(ApiClient client)
+  [Fact]
+  public async Task Generate_KeepsSourceHeaderLine()
   {
-    var response = await client.PostAsync("/api/playlist/analyze", new { rawText = TestPlaylists.Mixed });
+    var client = NewClient();
+    var analysis = await AnalyzeRawAsync(client, TestPlaylists.WithGuideHeader);
+    var generated = await GenerateAsync(client, analysis.CacheKey, "Kids");
+
+    var text = await client.Http.GetStringAsync($"/api/playlist/output/{generated.OutputKey}");
+    var lines = text.Replace("\r\n", "\n").Split('\n');
+    Assert.Equal(TestPlaylists.GuideHeader, lines[0]);
+    Assert.Equal("# Created with Strim (https://strim.plis.dev)", lines[1]);
+    Assert.Equal(1, generated.KeptChannels);
+  }
+
+  private static async Task<AnalysisDto> AnalyzeRawAsync(ApiClient client, string rawText = TestPlaylists.Mixed)
+  {
+    var response = await client.PostAsync("/api/playlist/analyze", new { rawText });
     response.EnsureSuccessStatusCode();
     return (await response.Content.ReadFromJsonAsync<AnalysisDto>())!;
   }
