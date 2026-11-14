@@ -26,6 +26,9 @@ public sealed class PlaylistCacheOptions
   /// <summary>Lifetime of a source file and its revalidation metadata.</summary>
   public int SourceTtlMinutes { get; set; } = 24 * 60;
 
+  /// <summary>Lifetime of the pinned last-good output of a player link.</summary>
+  public int LastGoodTtlMinutes { get; set; } = 7 * 24 * 60;
+
   /// <summary>
   /// Minimum age before a cached source is checked upstream again. This avoids downloading and
   /// hashing a large source for every share request, including providers without validators.

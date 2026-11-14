@@ -26,6 +26,12 @@ public sealed class PlaylistFileCache
   private readonly TimeSpan _entryTtl;
   private readonly TimeSpan _sourceTtl;
   private readonly TimeSpan _revalidationInterval;
+  private readonly TimeSpan _lastGoodTtl;
+  private readonly TimeProvider _time;
+  // Pinned last-good output per player link, independent of the output TTL. Superseded or
+  // forgotten copies that are still leased stay accounted until their last lease is released.
+  private readonly Dictionary<Guid, LastGoodFile> _lastGood = new();
+  private readonly List<LastGoodFile> _retiredLastGood = new();
   private long _reservedBytes;
 
   public PlaylistFileCache(IOptions<PlaylistCacheOptions> options, ILogger<PlaylistFileCache> logger)
@@ -37,12 +43,23 @@ public sealed class PlaylistFileCache
     IOptions<PlaylistCacheOptions> options,
     ILogger<PlaylistFileCache> logger,
     Func<string, bool> deleteFile)
+    : this(options, logger, deleteFile, TimeProvider.System)
+  {
+  }
+
+  internal PlaylistFileCache(
+    IOptions<PlaylistCacheOptions> options,
+    ILogger<PlaylistFileCache> logger,
+    Func<string, bool> deleteFile,
+    TimeProvider time)
   {
     _options = options.Value;
+    _time = time ?? throw new ArgumentNullException(nameof(time));
     _logger = logger;
     _deleteFile = deleteFile ?? throw new ArgumentNullException(nameof(deleteFile));
     _entryTtl = TimeSpan.FromMinutes(Math.Max(1, _options.EntryTtlMinutes));
     _sourceTtl = TimeSpan.FromMinutes(Math.Max(1, _options.SourceTtlMinutes));
+    _lastGoodTtl = TimeSpan.FromMinutes(Math.Max(1, _options.LastGoodTtlMinutes));
     _revalidationInterval = TimeSpan.FromMinutes(Math.Max(0, _options.RevalidationIntervalMinutes));
     _directory = string.IsNullOrWhiteSpace(_options.Directory)
       ? Path.Combine(Path.GetTempPath(), "strim-playlists")
@@ -162,7 +179,7 @@ public sealed class PlaylistFileCache
 
   public PlaylistSourceFile StoreDownloaded(string sourceUrl, DownloadedPlaylistFile downloaded)
   {
-    var now = DateTimeOffset.UtcNow;
+    var now = _time.GetUtcNow();
     var sourceKey = SourceKeyForUrl(sourceUrl);
 
     try
@@ -237,9 +254,9 @@ public sealed class PlaylistFileCache
     {
       source.ETag = eTag ?? source.ETag;
       source.LastModifiedUtc = lastModifiedUtc ?? source.LastModifiedUtc;
-      source.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(_sourceTtl);
-      source.NextRevalidationUtc = DateTimeOffset.UtcNow.Add(_revalidationInterval);
-      source.LastAccessedUtc = DateTimeOffset.UtcNow;
+      source.ExpiresAtUtc = _time.GetUtcNow().Add(_sourceTtl);
+      source.NextRevalidationUtc = _time.GetUtcNow().Add(_revalidationInterval);
+      source.LastAccessedUtc = _time.GetUtcNow();
     }
   }
 
@@ -253,7 +270,7 @@ public sealed class PlaylistFileCache
         return null;
       }
 
-      source.LastAccessedUtc = DateTimeOffset.UtcNow;
+      source.LastAccessedUtc = _time.GetUtcNow();
       return source;
     }
   }
@@ -265,12 +282,12 @@ public sealed class PlaylistFileCache
     {
       if (!_sources.TryGetValue(sourceKey, out var source) ||
           !IsAvailable(source) ||
-          source.NextRevalidationUtc <= DateTimeOffset.UtcNow)
+          source.NextRevalidationUtc <= _time.GetUtcNow())
       {
         return null;
       }
 
-      source.LastAccessedUtc = DateTimeOffset.UtcNow;
+      source.LastAccessedUtc = _time.GetUtcNow();
       return source;
     }
   }
@@ -280,7 +297,7 @@ public sealed class PlaylistFileCache
     var key = $"pl-{Guid.NewGuid():N}";
     lock (_sync)
     {
-      _sessions[key] = new PlaylistSession(source.SourceKey, DateTimeOffset.UtcNow.Add(_entryTtl));
+      _sessions[key] = new PlaylistSession(source.SourceKey, _time.GetUtcNow().Add(_entryTtl));
       return key;
     }
   }
@@ -305,7 +322,7 @@ public sealed class PlaylistFileCache
   {
     lock (_sync)
     {
-      if (!_sessions.TryGetValue(sessionKey, out var session) || session.ExpiresAtUtc <= DateTimeOffset.UtcNow)
+      if (!_sessions.TryGetValue(sessionKey, out var session) || session.ExpiresAtUtc <= _time.GetUtcNow())
       {
         _sessions.Remove(sessionKey);
         return null;
@@ -316,7 +333,7 @@ public sealed class PlaylistFileCache
         return null;
       }
 
-      source.LastAccessedUtc = DateTimeOffset.UtcNow;
+      source.LastAccessedUtc = _time.GetUtcNow();
       return source;
     }
   }
@@ -337,7 +354,7 @@ public sealed class PlaylistFileCache
         return null;
       }
 
-      output.LastAccessedUtc = DateTimeOffset.UtcNow;
+      output.LastAccessedUtc = _time.GetUtcNow();
       return output;
     }
   }
@@ -348,7 +365,7 @@ public sealed class PlaylistFileCache
     string temporaryPath,
     PlaylistGenerationResult result)
   {
-    var now = DateTimeOffset.UtcNow;
+    var now = _time.GetUtcNow();
     var outputKey = $"out-{Guid.NewGuid():N}";
     var variantKey = OutputVariantKey(source.ContentHash, disabledGroups);
     var finalPath = Path.Combine(_directory, $"output-{outputKey[4..]}.m3u");
@@ -398,11 +415,86 @@ public sealed class PlaylistFileCache
       }
 
       output.ActiveLeases++;
-      output.LastAccessedUtc = DateTimeOffset.UtcNow;
+      output.LastAccessedUtc = _time.GetUtcNow();
       return new PlaylistFileLease(
         output.FilePath,
         SanitizeFileName(downloadFileName ?? "playlist-filtered.m3u"),
         () => ReleaseOutput(outputKey));
+    }
+  }
+
+  /// <summary>
+  /// Pins a private copy of a generated output as the last good list of a player link. The copy
+  /// outlives the output's TTL, replaces any earlier copy for the playlist and is evicted last.
+  /// Returns false when the output is no longer available.
+  /// </summary>
+  public bool RememberLastGood(Guid playlistId, PlaylistOutputFile output)
+  {
+    using var outputLease = TryLeaseOutput(output.OutputKey);
+    if (outputLease is null)
+    {
+      return false;
+    }
+
+    var length = GetTrackedLength(outputLease.FilePath, output.LengthBytes);
+    using var reservation = ReserveCapacity(length, "last good playlist", new[] { outputLease.FilePath });
+    var finalPath = Path.Combine(_directory, $"lastgood-{LastGoodKey(playlistId)}-{Guid.NewGuid():N}.m3u");
+    try
+    {
+      File.Copy(outputLease.FilePath, finalPath);
+      TrySetPrivateFile(finalPath);
+    }
+    catch
+    {
+      DeleteTemporaryFile(finalPath, length);
+      throw;
+    }
+
+    lock (_sync)
+    {
+      if (_lastGood.TryGetValue(playlistId, out var previous))
+      {
+        RemoveLastGoodNoLock(previous);
+      }
+
+      _lastGood[playlistId] = new LastGoodFile(playlistId, finalPath, length, _time.GetUtcNow());
+      _pendingDeletes.Remove(finalPath);
+    }
+
+    return true;
+  }
+
+  public PlaylistFileLease? TryLeaseLastGood(Guid playlistId, string? downloadFileName = null)
+  {
+    lock (_sync)
+    {
+      if (!_lastGood.TryGetValue(playlistId, out var entry))
+      {
+        return null;
+      }
+
+      if (!IsAvailable(entry))
+      {
+        RemoveLastGoodNoLock(entry);
+        return null;
+      }
+
+      entry.ActiveLeases++;
+      return new PlaylistFileLease(
+        entry.FilePath,
+        SanitizeFileName(downloadFileName ?? "playlist-filtered.m3u"),
+        () => ReleaseLastGood(entry));
+    }
+  }
+
+  public void ForgetLastGood(Guid playlistId)
+  {
+    lock (_sync)
+    {
+      if (_lastGood.TryGetValue(playlistId, out var entry))
+      {
+        RemoveLastGoodNoLock(entry);
+      }
     }
   }
 
@@ -443,7 +535,7 @@ public sealed class PlaylistFileCache
         output.ActiveLeases = Math.Max(0, output.ActiveLeases - 1);
         var isCurrentVariant = _outputVariantKeys.TryGetValue(output.VariantKey, out var currentOutputKey) &&
           string.Equals(currentOutputKey, outputKey, StringComparison.Ordinal);
-        if (output.ActiveLeases == 0 && (output.ExpiresAtUtc <= DateTimeOffset.UtcNow || !isCurrentVariant))
+        if (output.ActiveLeases == 0 && (output.ExpiresAtUtc <= _time.GetUtcNow() || !isCurrentVariant))
         {
           RemoveOutputNoLock(outputKey);
         }
@@ -451,11 +543,29 @@ public sealed class PlaylistFileCache
     }
   }
 
+  private void ReleaseLastGood(LastGoodFile entry)
+  {
+    lock (_sync)
+    {
+      entry.ActiveLeases = Math.Max(0, entry.ActiveLeases - 1);
+      if (entry.ActiveLeases == 0 && (entry.Retired || IsExpired(entry)))
+      {
+        RemoveLastGoodNoLock(entry);
+      }
+    }
+  }
+
+  private bool IsExpired(LastGoodFile entry) =>
+    entry.RememberedUtc.Add(_lastGoodTtl) <= _time.GetUtcNow();
+
+  private bool IsAvailable(LastGoodFile entry) =>
+    !IsExpired(entry) && File.Exists(entry.FilePath);
+
   private bool IsAvailable(PlaylistSourceFile source) =>
-    source.ExpiresAtUtc > DateTimeOffset.UtcNow && File.Exists(source.FilePath);
+    source.ExpiresAtUtc > _time.GetUtcNow() && File.Exists(source.FilePath);
 
   private bool IsAvailable(PlaylistOutputFile output) =>
-    output.ExpiresAtUtc > DateTimeOffset.UtcNow && File.Exists(output.FilePath);
+    output.ExpiresAtUtc > _time.GetUtcNow() && File.Exists(output.FilePath);
 
   private PlaylistDiskReservation ReserveCapacity(
     long requestedBytes,
@@ -550,6 +660,20 @@ public sealed class PlaylistFileCache
       if (usedBytes <= maxTrackedBytes) return usedBytes;
     }
 
+    // A last-good copy is what a player falls back to, so it goes only after everything else.
+    foreach (var lastGood in _lastGood.Values
+      .Where(x => x.ActiveLeases == 0 && !protectedPaths.Contains(x.FilePath))
+      .OrderBy(x => x.RememberedUtc)
+      .ToList())
+    {
+      var length = GetTrackedLength(lastGood.FilePath, lastGood.LengthBytes);
+      if (RemoveLastGoodNoLock(lastGood))
+      {
+        usedBytes -= length;
+      }
+      if (usedBytes <= maxTrackedBytes) return usedBytes;
+    }
+
     _logger.LogWarning(
       "Playlist cache cannot free enough disk capacity ({UsedBytes} tracked bytes; target {TargetBytes}) because files are active, protected, or awaiting a successful delete",
       usedBytes,
@@ -560,7 +684,7 @@ public sealed class PlaylistFileCache
   private void RemoveExpiredEntriesNoLock(ISet<string> protectedPaths)
   {
     RetryPendingDeletesNoLock();
-    var now = DateTimeOffset.UtcNow;
+    var now = _time.GetUtcNow();
     foreach (var session in _sessions.Where(x => x.Value.ExpiresAtUtc <= now).Select(x => x.Key).ToList())
     {
       _sessions.Remove(session);
@@ -581,6 +705,13 @@ public sealed class PlaylistFileCache
     {
       RemoveSourceNoLock(source.SourceKey);
     }
+
+    foreach (var lastGood in _lastGood.Values
+      .Where(x => x.ActiveLeases == 0 && IsExpired(x) && !protectedPaths.Contains(x.FilePath))
+      .ToList())
+    {
+      RemoveLastGoodNoLock(lastGood);
+    }
   }
 
   private static ISet<string> ToPathSet(IEnumerable<string>? paths) =>
@@ -591,6 +722,8 @@ public sealed class PlaylistFileCache
   private long GetTrackedBytesNoLock() =>
     _sources.Values.Sum(x => GetTrackedLength(x.FilePath, x.LengthBytes)) +
     _outputs.Values.Sum(x => GetTrackedLength(x.FilePath, x.LengthBytes)) +
+    _lastGood.Values.Sum(x => GetTrackedLength(x.FilePath, x.LengthBytes)) +
+    _retiredLastGood.Sum(x => GetTrackedLength(x.FilePath, x.LengthBytes)) +
     _pendingDeletes.Values.Sum(x => GetTrackedLength(x.FilePath, x.LengthBytes));
 
   private bool RemoveSourceNoLock(string sourceKey)
@@ -618,6 +751,27 @@ public sealed class PlaylistFileCache
     }
 
     return DeleteOrTrackNoLock(output.FilePath, output.LengthBytes);
+  }
+
+  private bool RemoveLastGoodNoLock(LastGoodFile entry)
+  {
+    if (_lastGood.TryGetValue(entry.PlaylistId, out var current) && ReferenceEquals(current, entry))
+    {
+      _lastGood.Remove(entry.PlaylistId);
+    }
+
+    if (entry.ActiveLeases > 0)
+    {
+      if (!entry.Retired)
+      {
+        entry.Retired = true;
+        _retiredLastGood.Add(entry);
+      }
+      return false;
+    }
+
+    _retiredLastGood.Remove(entry);
+    return DeleteOrTrackNoLock(entry.FilePath, entry.LengthBytes);
   }
 
   private bool DeleteOrTrackNoLock(string path, long knownLengthBytes)
@@ -659,6 +813,7 @@ public sealed class PlaylistFileCache
           if (name.EndsWith(".partial", StringComparison.Ordinal) ||
               name.StartsWith("source-", StringComparison.Ordinal) ||
               name.StartsWith("output-", StringComparison.Ordinal) ||
+              name.StartsWith("lastgood-", StringComparison.Ordinal) ||
               name.StartsWith("raw-", StringComparison.Ordinal))
           {
             // A stat failure at startup must not make a left-over cache file invisible to the
@@ -676,6 +831,10 @@ public sealed class PlaylistFileCache
 
   private static string SourceKeyForUrl(string sourceUrl) =>
     Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sourceUrl))).ToLowerInvariant();
+
+  // The on-disk name must not reveal the playlist id.
+  private static string LastGoodKey(Guid playlistId) =>
+    Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"lastgood:{playlistId:N}")))[..32].ToLowerInvariant();
 
   private static string OutputVariantKey(string sourceHash, IReadOnlyCollection<string> disabledGroups)
   {
@@ -906,3 +1065,21 @@ public sealed class PlaylistDiskReservation : IDisposable
 internal sealed record PlaylistSession(string SourceKey, DateTimeOffset ExpiresAtUtc);
 
 internal sealed record PendingDeleteFile(string FilePath, long LengthBytes);
+
+internal sealed class LastGoodFile
+{
+  internal LastGoodFile(Guid playlistId, string filePath, long lengthBytes, DateTimeOffset rememberedUtc)
+  {
+    PlaylistId = playlistId;
+    FilePath = filePath;
+    LengthBytes = lengthBytes;
+    RememberedUtc = rememberedUtc;
+  }
+
+  internal Guid PlaylistId { get; }
+  internal string FilePath { get; }
+  internal long LengthBytes { get; }
+  internal DateTimeOffset RememberedUtc { get; }
+  internal int ActiveLeases { get; set; }
+  internal bool Retired { get; set; }
+}
