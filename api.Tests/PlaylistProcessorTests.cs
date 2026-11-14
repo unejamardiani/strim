@@ -293,6 +293,72 @@ public class PlaylistProcessorTests
     }
   }
 
+  [Fact]
+  public async Task GenerateFiltered_CaseVariantsShareOneMembershipCheck()
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    var casings = new[] { "News", "NEWS", "news", "nEWS", "NeWs" };
+    var urlPrefixes = new[] { "", "movie/", "series/" };
+    var source = new System.Text.StringBuilder("#EXTM3U\n");
+    for (var i = 0; i < 300; i++)
+    {
+      source.Append($"#EXTINF:-1 group-title=\"{casings[i % casings.Length]}\",Entry {i}\n");
+      source.Append($"http://provider.example/{urlPrefixes[i / casings.Length % 3]}user/pass/{i}\n");
+    }
+
+    var disabled = new CountingSet { "Unrelated" };
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, source.ToString());
+
+      var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath, outputPath, disabled, CancellationToken.None);
+
+      Assert.Equal(300, result.KeptChannels);
+      // One title in three content types, whatever its casing: two checks per content type.
+      Assert.InRange(disabled.ContainsCalls, 1, 2 * 3);
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  [Fact]
+  public async Task GenerateFiltered_MemoisesTitlesBeyondTheDefaultGroupLimit()
+  {
+    const int titles = 12_000;
+    const int entriesPerTitle = 3;
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    var source = new System.Text.StringBuilder("#EXTM3U\n");
+    for (var i = 0; i < titles * entriesPerTitle; i++)
+    {
+      source.Append($"#EXTINF:-1 group-title=\"Title {i % titles:D5}\",Entry {i}\n");
+      source.Append($"http://provider.example/user/pass/{i}\n");
+    }
+
+    var disabled = new CountingSet { "Title 00000" };
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, source.ToString());
+
+      var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath, outputPath, disabled, CancellationToken.None);
+
+      Assert.Equal(titles * entriesPerTitle, result.TotalChannels);
+      Assert.Equal((titles - 1) * entriesPerTitle, result.KeptChannels);
+      Assert.InRange(disabled.ContainsCalls, 1, 2 * titles);
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
   private const string CaseVariantSource = """
     #EXTM3U
     #EXTINF:-1 group-title="News",News Live

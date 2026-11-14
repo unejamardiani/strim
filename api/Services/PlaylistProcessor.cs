@@ -138,9 +138,9 @@ public static class PlaylistProcessor
     await WriteLineAsync(writer, "# Created with Strim (https://strim.plis.dev)", cancellationToken, outputBytes);
 
     // Decisions per group-title, indexed by PlaylistContentType, so each GroupKey is built at most
-    // once per (title, content type). Ordinal keys: titles that differ only by case keep their own
-    // casing in the output and get exactly the answer the caller's set gives them.
-    var decisions = new Dictionary<string, GroupDecision?[]>(StringComparer.Ordinal);
+    // once per (title, content type). Titles that differ only by case share one decision, like the
+    // case-insensitive sets the pipeline passes in; each entry still keeps its own casing in the output.
+    var decisions = new Dictionary<string, GroupDecision?[]>(StringComparer.OrdinalIgnoreCase);
 
     while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
     {
@@ -227,29 +227,51 @@ public static class PlaylistProcessor
     return PlaylistContentType.Live;
   }
 
-  private readonly record struct GroupDecision(bool Disabled, string OutputGroupTitle);
+  /// <summary>
+  /// What every entry of one (group title, content type) gets. <see cref="Title"/> and <see cref="Key"/>
+  /// use the casing seen first; <see cref="Key"/> stays null when it was never needed.
+  /// </summary>
+  private sealed record GroupDecision(bool Disabled, bool Split, string Title, string? Key);
 
-  private static GroupDecision Decide(
+  private static (bool Disabled, string OutputGroupTitle) Decide(
     Dictionary<string, GroupDecision?[]> decisions,
     ISet<string> disabledGroups,
     IReadOnlySet<string>? splitGroupTitles,
     string groupTitle,
     PlaylistContentType contentType)
   {
+    // Every distinct title is memoised: the memo grows with the titles the source holds, which its
+    // size limit already bounds, so no entry falls back to deciding per entry.
     if (!decisions.TryGetValue(groupTitle, out var perType))
     {
       perType = new GroupDecision?[ContentTypeCount];
-      // Bounded like the analysis' group cap; beyond it, entries are decided without the memo.
-      if (decisions.Count < DefaultMaxGroupCount) decisions[groupTitle] = perType;
+      decisions[groupTitle] = perType;
     }
 
-    if (perType[(int)contentType] is { } cached) return cached;
+    var decision = perType[(int)contentType];
+    if (decision is null)
+    {
+      // The key is built at most once and serves both the disabled check and the output title.
+      string? key = null;
+      var disabled = disabledGroups.Count > 0 &&
+        (disabledGroups.Contains(groupTitle) ||
+         disabledGroups.Contains(key = GroupKey(groupTitle, contentType)));
+      var split = !disabled &&
+        contentType != PlaylistContentType.Live &&
+        splitGroupTitles?.Contains(groupTitle) == true;
+      if (split) key ??= GroupKey(groupTitle, contentType);
+      decision = new GroupDecision(disabled, split, groupTitle, key);
+      perType[(int)contentType] = decision;
+    }
 
-    var decision = IsDisabled(disabledGroups, groupTitle, contentType)
-      ? new GroupDecision(true, groupTitle)
-      : new GroupDecision(false, OutputGroupTitle(groupTitle, contentType, splitGroupTitles));
-    perType[(int)contentType] = decision;
-    return decision;
+    // Live channels keep the provider's group-title; movies and series of a split title move to
+    // their own group (e.g. "Germany · Series").
+    if (decision.Disabled) return (true, groupTitle);
+    if (!decision.Split) return (false, groupTitle);
+    // A case variant of the first-seen title keeps its own casing in the output.
+    return (false, string.Equals(decision.Title, groupTitle, StringComparison.Ordinal)
+      ? decision.Key!
+      : GroupKey(groupTitle, contentType));
   }
 
   /// <summary>
@@ -260,18 +282,6 @@ public static class PlaylistProcessor
     disabledGroups.Count > 0 &&
     (disabledGroups.Contains(groupTitle) ||
      disabledGroups.Contains(GroupKey(groupTitle, contentType)));
-
-  /// <summary>
-  /// Live channels keep the provider's group-title; movies and series of a title the provider also
-  /// uses for another content type move to their own group (e.g. "Germany · Series").
-  /// </summary>
-  private static string OutputGroupTitle(
-    string groupTitle,
-    PlaylistContentType contentType,
-    IReadOnlySet<string>? splitGroupTitles) =>
-    contentType != PlaylistContentType.Live && splitGroupTitles?.Contains(groupTitle) == true
-      ? GroupKey(groupTitle, contentType)
-      : groupTitle;
 
   public static DateTimeOffset? TryExtractExpiration(Uri? uri)
   {
