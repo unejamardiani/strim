@@ -6,6 +6,22 @@ namespace Api.Tests;
 public class PlaylistProcessorTests
 {
   [Fact]
+  public void ToGroupResults_FlagsAdultGroupsByTitle()
+  {
+    var results = PlaylistProcessor.ToGroupResults(new[]
+    {
+      new PlaylistGroup("XXX Movies", "XXX Movies", PlaylistContentType.Live, 2),
+      new PlaylistGroup("Adultswim Kids", "Adultswim Kids", PlaylistContentType.Live, 3),
+    });
+
+    Assert.Equal(new[] { "XXX Movies", "Adultswim Kids" }, results.Select(r => r.Name));
+    Assert.True(results[0].IsAdult);
+    Assert.False(results[1].IsAdult);
+    Assert.Equal(2, results[0].Count);
+    Assert.Equal("Live", results[1].ContentType);
+  }
+
+  [Fact]
   public async Task FileProcessing_AnalyzesAndFiltersWithoutMaterializingThePlaylistResult()
   {
     var sourcePath = Path.GetTempFileName();
