@@ -58,6 +58,61 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
     Assert.Equal(1, generated.KeptChannels);
   }
 
+  private const string AdultMix = """
+    #EXTM3U
+    #EXTINF:-1 tvg-name="Daily Brief" group-title="News",Daily Brief
+    https://example.com/news.m3u8
+    #EXTINF:-1 tvg-name="Late Show A" group-title="XXX",Late Show A
+    https://example.com/late-a.m3u8
+    #EXTINF:-1 tvg-name="Late Show B" group-title="For Adults",Late Show B
+    https://example.com/late-b.m3u8
+    """;
+
+  [Fact]
+  public async Task Analyze_ReturnsIsAdultPerGroup()
+  {
+    var response = await NewClient().PostAsync("/api/playlist/analyze", new { rawText = AdultMix });
+    response.EnsureSuccessStatusCode();
+    var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+
+    var flags = json.GetProperty("groups").EnumerateArray()
+      .ToDictionary(g => g.GetProperty("name").GetString()!, g => g.GetProperty("isAdult").GetBoolean());
+
+    Assert.Equal(3, flags.Count);
+    Assert.False(flags["News"]);
+    Assert.True(flags["XXX"]);
+    Assert.True(flags["For Adults"]);
+  }
+
+  [Fact]
+  public async Task Generate_IgnoresAdultFlag()
+  {
+    var client = NewClient();
+    var response = await client.PostAsync("/api/playlist/analyze", new { rawText = AdultMix });
+    response.EnsureSuccessStatusCode();
+    var analysis = (await response.Content.ReadFromJsonAsync<AnalysisDto>())!;
+
+    var none = await GenerateAsync(client, analysis.CacheKey);
+    Assert.Equal(3, none.KeptChannels);
+    var noneText = await client.Http.GetStringAsync($"/api/playlist/output/{none.OutputKey}");
+    Assert.Contains("Late Show A", noneText);
+    Assert.Contains("Late Show B", noneText);
+
+    var news = await GenerateAsync(client, analysis.CacheKey, "News");
+    Assert.Equal(2, news.KeptChannels);
+    var newsText = await client.Http.GetStringAsync($"/api/playlist/output/{news.OutputKey}");
+    Assert.DoesNotContain("Daily Brief", newsText);
+    Assert.Contains("Late Show A", newsText);
+    Assert.Contains("Late Show B", newsText);
+
+    var xxx = await GenerateAsync(client, analysis.CacheKey, "XXX");
+    Assert.Equal(2, xxx.KeptChannels);
+    var xxxText = await client.Http.GetStringAsync($"/api/playlist/output/{xxx.OutputKey}");
+    Assert.Contains("Daily Brief", xxxText);
+    Assert.DoesNotContain("Late Show A", xxxText);
+    Assert.Contains("Late Show B", xxxText);
+  }
+
   [Fact]
   public async Task Analyze_FromUrl_UsesTheUpstream()
   {
