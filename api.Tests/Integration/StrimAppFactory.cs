@@ -26,6 +26,9 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
     [GuideHeaderUpstreamUrl] = TestPlaylists.WithGuideHeader,
   };
 
+  /// <summary>Scripted upstream answers (status codes, redirects, bodies); checked before <see cref="UpstreamPlaylists"/>.</summary>
+  public Dictionary<string, Func<HttpResponseMessage>> UpstreamResponses { get; } = new();
+
   /// <summary>Web root for the app; null keeps the default. Set it to <see cref="RepositoryRoot"/> to serve the real pages.</summary>
   public string? WebRoot { get; init; }
 
@@ -47,7 +50,7 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
     builder.UseSetting("PlaylistCache:Directory", Path.Combine(_root, "cache"));
     builder.ConfigureTestServices(services =>
     {
-      services.AddHttpClient("fetcher").ConfigurePrimaryHttpMessageHandler(() => new StubUpstream(UpstreamPlaylists));
+      services.AddHttpClient("fetcher").ConfigurePrimaryHttpMessageHandler(() => new StubUpstream(UpstreamPlaylists, UpstreamResponses));
     });
   }
 
@@ -64,11 +67,18 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
     }
   }
 
-  private sealed class StubUpstream(Dictionary<string, string> playlists) : HttpMessageHandler
+  private sealed class StubUpstream(
+    Dictionary<string, string> playlists,
+    Dictionary<string, Func<HttpResponseMessage>> responses) : HttpMessageHandler
   {
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
       var key = request.RequestUri!.ToString();
+      if (responses.TryGetValue(key, out var scripted))
+      {
+        return Task.FromResult(scripted());
+      }
+
       var response = playlists.TryGetValue(key, out var body)
         ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/x-mpegurl") }
         : new HttpResponseMessage(HttpStatusCode.NotFound);
