@@ -1012,6 +1012,8 @@ const picker = {
   rowHeight: 48,
   frame: 0,
   shownLabel: null,
+  allOnButton: null,
+  allOffButton: null,
   typeButtons: null,
   showButtons: null,
 };
@@ -1086,11 +1088,11 @@ function pickerNodes(ed) {
   rows.push(filters);
 
   picker.shownLabel = h('span', { class: 'num' });
+  picker.allOnButton = h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(false) }, 'All on');
+  picker.allOffButton = h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(true) }, 'All off');
   rows.push(h('div', { class: 'summary' },
     picker.shownLabel,
-    h('div', { class: 'bulk' },
-      h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(false) }, 'All on'),
-      h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => bulkSet(true) }, 'All off'))));
+    h('div', { class: 'bulk' }, picker.allOnButton, picker.allOffButton)));
 
   return [
     h('section', { class: 'picker-toolbar', 'aria-label': 'Group filters' }, rows),
@@ -1170,6 +1172,12 @@ function updateView(scrollToTop) {
   picker.shownLabel.textContent = view.length === ed.groups.length
     ? plural(view.length, 'group')
     : `${fmt(view.length)} of ${plural(ed.groups.length, 'group')} shown`;
+  // The visible label carries the count, so it is part of each button's accessible name.
+  for (const [button, label] of [[picker.allOnButton, 'All on'], [picker.allOffButton, 'All off']]) {
+    if (!button) continue;
+    button.textContent = `${label} (${fmt(view.length)})`;
+    button.disabled = !view.length;
+  }
 
   let empty = picker.list.querySelector('.list-empty');
   if (!view.length) {
