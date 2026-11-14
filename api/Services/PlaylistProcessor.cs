@@ -85,9 +85,9 @@ public static class PlaylistProcessor
       if (!IsExtinf(line)) continue;
 
       total++;
-      var groupTitle = ExtractGroupTitle(line);
+      (var url, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
+      var groupTitle = ExtractGroupTitle(line, extGrp);
       EnsureGroupTitleWithinLimit(groupTitle, maxGroupTitleLengthChars);
-      (var url, pending) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
       IncrementGroup(
         groups,
         groupTitle,
@@ -152,9 +152,9 @@ public static class PlaylistProcessor
       if (!IsExtinf(line)) continue;
 
       total++;
-      (var address, pending) = await ReadEntryTailAsync(lines, optionLines, cancellationToken);
+      (var address, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines, cancellationToken);
       var url = address ?? string.Empty;
-      var groupTitle = ExtractGroupTitle(line);
+      var groupTitle = ExtractGroupTitle(line, extGrp);
       var contentType = DetectContentType(url);
       var decision = decisions.Decide(groupTitle, contentType);
       if (decision.Disabled) continue;
@@ -178,28 +178,36 @@ public static class PlaylistProcessor
   /// Reads the lines after an #EXTINF: every '#' line (#EXTVLCOPT, #KODIPROP, ...) belongs to the entry,
   /// the first other line is its address. A following #EXTINF ends the entry without an address and is
   /// returned as <c>Next</c> so the caller starts a new entry with it. Only this entry's lines are buffered.
+  /// <c>ExtGrp</c> is the value of the entry's first #EXTGRP line, if it has one.
   /// </summary>
-  private static async ValueTask<(string? Address, string? Next)> ReadEntryTailAsync(
+  private static async ValueTask<(string? Address, string? Next, string? ExtGrp)> ReadEntryTailAsync(
     BoundedLineReader lines,
     List<string>? optionLines,
     CancellationToken cancellationToken)
   {
     optionLines?.Clear();
     var optionCount = 0;
+    string? extGrp = null;
     while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
     {
-      if (IsExtinf(line)) return (null, line);
-      if (!line.StartsWith('#')) return (line, null);
+      if (IsExtinf(line)) return (null, line, extGrp);
+      if (!line.StartsWith('#')) return (line, null, extGrp);
 
       if (++optionCount > MaxOptionLinesPerEntry)
       {
         throw new PlaylistEntryOptionLinesLimitExceededException(MaxOptionLinesPerEntry);
       }
+      if (extGrp is null && line.StartsWith(ExtGrpPrefix, StringComparison.OrdinalIgnoreCase))
+      {
+        extGrp = line[ExtGrpPrefix.Length..];
+      }
       optionLines?.Add(line);
     }
 
-    return (null, null);
+    return (null, null, extGrp);
   }
+
+  private const string ExtGrpPrefix = "#EXTGRP:";
 
   public static PlaylistFilterResult GenerateFiltered(string text, HashSet<string> disabledGroups)
   {
@@ -451,12 +459,17 @@ public static class PlaylistProcessor
     }
   }
 
-  private static string ExtractGroupTitle(string extinf)
+  /// <summary>The group-title value; without one, the entry's #EXTGRP value; otherwise "Ungrouped".</summary>
+  private static string ExtractGroupTitle(string extinf, string? extGrp = null)
   {
-    if (!TryFindGroupTitleValue(extinf, out var start, out var end)) return "Ungrouped";
+    if (TryFindGroupTitleValue(extinf, out var start, out var end))
+    {
+      var value = extinf[start..end].Trim();
+      if (value.Length > 0) return value;
+    }
 
-    var value = extinf[start..end].Trim();
-    return string.IsNullOrWhiteSpace(value) ? "Ungrouped" : value;
+    var group = extGrp?.Trim();
+    return string.IsNullOrEmpty(group) ? "Ungrouped" : group;
   }
 
   /// <summary>Finds the quoted value of the first group-title attribute as [start, end).</summary>
