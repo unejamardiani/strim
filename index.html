@@ -7,8 +7,8 @@
     <meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
 
-    <title>Strim - Free M3U Playlist Editor for IPTV</title>
-    <meta name="description" content="Switch off the IPTV groups you never watch and get one clean link for your player. Strim reads large M3U playlists, tells live TV, movies and series apart, and keeps your link up to date." />
+    <title>Strim - M3U playlist editor for IPTV</title>
+    <meta name="description" content="Switch off the IPTV groups you never watch, then download a clean M3U file or give your player one link that stays up to date. Strim edits the playlist only; it never hosts streams." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://strim.plis.dev/" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>" />
@@ -22,20 +22,6 @@
     <meta property="twitter:description" content="Switch off the IPTV groups you never watch and get one clean link for your player." />
 
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self';" />
-
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "Strim",
-      "alternateName": "M3U Playlist Editor",
-      "url": "https://strim.plis.dev/",
-      "description": "Free M3U playlist editor: switch off IPTV groups and get one clean player link.",
-      "applicationCategory": "UtilitiesApplication",
-      "operatingSystem": "Web Browser",
-      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
-    }
-    </script>
 
     <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
@@ -58,16 +44,16 @@
     <main class="site-main">
       <section class="hero">
         <div class="hero-copy">
-          <span class="eyebrow">Free M3U playlist editor</span>
+          <span class="eyebrow">M3U playlist editor</span>
           <h1>Your playlist, <em>minus the noise.</em></h1>
           <p class="lead">
-            IPTV providers send thousands of channels, movies and series you will never watch.
-            Paste your provider’s link, switch off the groups you don’t want and give your player
-            one clean link that stays up to date.
+            For anyone whose IPTV provider sends thousands of channels, movies and series they never
+            watch. Paste the provider’s link, switch off the groups you don’t want and download a
+            clean playlist, or sign in for a player link that stays up to date.
           </p>
           <div class="cta-row">
             <a class="btn btn-primary btn-lg" href="/app">Open Strim</a>
-            <a class="btn btn-lg" href="how-to-use.html">How it works</a>
+            <a class="btn btn-lg" href="how-to-use.html">How to use</a>
           </div>
           <div class="types" aria-label="Content types">
             <span><span class="dot"></span>Live TV</span>
@@ -92,8 +78,9 @@
             <li class="demo-row off"><span class="dot"></span><span class="name">Arabic · News</span><span class="count">143</span><span class="switch"></span></li>
             <li class="demo-row"><span class="dot"></span><span class="name">Kids</span><span class="count">58</span><span class="switch on"></span></li>
           </ul>
-          <div class="demo-dock">
-            <span class="total">366 <small>of 5,868 channels on</small></span>
+          <div class="demo-dock" aria-hidden="true">
+            <span class="total"><span class="value">366 <small>channels</small></span><span class="sub">3 of 6 groups on</span></span>
+            <span class="btn btn-sm">Download</span>
             <span class="btn btn-primary btn-sm">Save</span>
           </div>
         </figure>
@@ -101,30 +88,30 @@
 
       <section class="section" aria-labelledby="how-title">
         <div class="section-head">
-          <h2 id="how-title">Three steps, about a minute</h2>
+          <h2 id="how-title">How it works</h2>
         </div>
         <ol class="steps">
           <li class="card">
             <h3>Paste your link</h3>
-            <p>The M3U or M3U8 link from your provider. Strim reads it on the server, so even lists with tens of thousands of entries load without freezing your phone.</p>
+            <p>The M3U or M3U8 link from your provider. Strim downloads and reads it on the server, so lists with tens of thousands of entries load without freezing your phone.</p>
           </li>
           <li class="card">
-            <h3>Switch off what you skip</h3>
-            <p>Every group is listed with its size. Search, filter by live, movies or series, and switch off whole groups at once.</p>
+            <h3>Pick your groups</h3>
+            <p>Every group is listed with its size and type. Search, filter by live, movies or series, and switch off whole groups at once.</p>
           </li>
           <li class="card">
             <h3>Play it anywhere</h3>
-            <p>Download the cleaned .m3u, or sign in and copy the player link into TiviMate, IPTV Smarters, VLC, Kodi or any app that takes an M3U URL.</p>
+            <p>Download the cleaned .m3u, or sign in and save to get a player link for TiviMate, IPTV Smarters, VLC, Kodi or any app that takes an M3U URL.</p>
           </li>
         </ol>
       </section>
 
       <section class="section" aria-labelledby="features-title">
         <div class="section-head">
-          <h2 id="features-title">Built for the lists providers actually send</h2>
-          <p>Strim is a small tool with one job: keep the groups you watch and drop the rest, reliably.</p>
+          <h2 id="features-title">What it does</h2>
+          <p>One job: keep the groups you watch and drop the rest. It does not edit single channels.</p>
         </div>
-        <div class="grid">
+        <div class="grid grid-2">
           <article class="card feature">
             <span class="feature-icon series" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6" /></svg></span>
             <h3>Live, movies and series apart</h3>
@@ -133,7 +120,7 @@
           <article class="card feature">
             <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" /><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" /></svg></span>
             <h3>A link that stays current</h3>
-            <p>Your player link reads the provider’s list each time it is opened and applies your choices. New channels in the groups you kept simply appear.</p>
+            <p>Each time your player refreshes the link, Strim reads the provider’s current list and applies your choices. New channels in the groups you kept simply appear.</p>
           </article>
           <article class="card feature">
             <span class="feature-icon movies" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z" /></svg></span>
@@ -141,17 +128,7 @@
             <p>Turn a link off, or replace it with a new one if it ever leaks. Strim shows when a player last fetched it.</p>
           </article>
           <article class="card feature">
-            <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" /></svg></span>
-            <h3>Fast on huge lists</h3>
-            <p>Playlists are streamed to disk and filtered on the server. A list fetched moments ago is reused, and providers that support it only resend a list when it changed.</p>
-          </article>
-          <article class="card feature">
-            <span class="feature-icon series" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3" /><path d="M11 18h2" /></svg></span>
-            <h3>Made for the sofa</h3>
-            <p>Big switches, a light and a dark theme, and a layout that works one-handed on a phone.</p>
-          </article>
-          <article class="card feature">
-            <span class="feature-icon movies" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14" /></svg></span>
+            <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14" /></svg></span>
             <h3>Free and open source</h3>
             <p>No ads, no tracking. The code is on GitHub and runs anywhere Docker runs, with SQLite or PostgreSQL.</p>
           </article>
@@ -180,15 +157,15 @@
           </details>
           <details class="card">
             <summary>Is my provider link safe?</summary>
-            <p>The link usually contains your provider login, so treat it like a password. Strim stores it only when you save a playlist, never shows it on the player link, and lets you replace a player link at any time.</p>
+            <p>The link usually contains your provider login, so treat it like a password. Strim keeps it only when you save a playlist, never puts it in the player link, and lets you replace a player link at any time.</p>
           </details>
         </div>
       </section>
 
       <section class="cta-band" aria-labelledby="cta-title">
         <div>
-          <h2 id="cta-title">Ready for a shorter list?</h2>
-          <p>Paste your link and see every group in a few seconds.</p>
+          <h2 id="cta-title">Try it with your playlist</h2>
+          <p>No account needed to load a list and download the result.</p>
         </div>
         <a class="btn btn-primary btn-lg" href="/app">Open Strim</a>
       </section>
