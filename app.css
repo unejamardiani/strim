@@ -685,6 +685,7 @@ select.input {
 .summary {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
   font-size: 13px;
@@ -696,6 +697,7 @@ select.input {
 .bulk {
   display: flex;
   gap: 4px;
+  margin-left: auto;
 }
 
 .bulk .btn {
