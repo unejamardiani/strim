@@ -2,7 +2,10 @@ using Api.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using Xunit;
@@ -123,11 +126,24 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
     public StrimAppFactory Upstream { get; } = new();
     public WebApplicationFactory<Program> App { get; }
 
-    public FallbackApp()
+    /// <param name="cacheTime">Optional clock for the playlist cache; it also shortens the output TTL to one minute.</param>
+    public FallbackApp(TimeProvider? cacheTime = null)
     {
-      App = Upstream.WithWebHostBuilder(builder => builder
-        .UseSetting("PlaylistCache:RevalidationIntervalMinutes", "0")
-        .UseSetting("PlaylistCache:HeaderTimeoutSeconds", "1"));
+      App = Upstream.WithWebHostBuilder(builder =>
+      {
+        builder
+          .UseSetting("PlaylistCache:RevalidationIntervalMinutes", "0")
+          .UseSetting("PlaylistCache:HeaderTimeoutSeconds", "1");
+        if (cacheTime is not null)
+        {
+          builder.UseSetting("PlaylistCache:EntryTtlMinutes", "1");
+          builder.ConfigureTestServices(services => services.AddSingleton(sp => new PlaylistFileCache(
+            sp.GetRequiredService<IOptions<PlaylistCacheOptions>>(),
+            sp.GetRequiredService<ILogger<PlaylistFileCache>>(),
+            PlaylistFileCache.TryDelete,
+            cacheTime)));
+        }
+      });
     }
 
     public async Task<(ApiClient Owner, PlaylistDto Playlist)> CreateSharedAsync(string userName)
@@ -221,6 +237,46 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
     Assert.Contains(playlist.Id.ToString(), warning);
     Assert.DoesNotContain(playlist.ShareCode!, warning);
     Assert.DoesNotContain("93.184.215.14", warning);
+  }
+
+  [Fact]
+  public async Task Share_OutputExpiredBeforeLease_ServesLastGood_AndKeepsMetadata()
+  {
+    var time = new ExpireBeforeLeaseTime();
+    using var fallback = new FallbackApp(time);
+    var (owner, playlist) = await fallback.CreateSharedAsync("expired");
+    var anonymous = fallback.App.CreateClient();
+    var good = await anonymous.GetStringAsync(FallbackApp.SharePath(playlist));
+    var before = await owner.Http.GetFromJsonAsync<SourceMetadataDto>($"/api/playlists/{playlist.Id}");
+    var viewsBefore = (await owner.Http.GetFromJsonAsync<StatsDto>($"/api/playlists/{playlist.Id}/stats"))!.ViewCount;
+
+    // The upstream still answers; only the cached output expires between its lookup and its lease.
+    time.Armed = true;
+    var stale = await anonymous.GetAsync(FallbackApp.SharePath(playlist));
+    time.Armed = false;
+
+    Assert.Equal(HttpStatusCode.OK, stale.StatusCode);
+    Assert.Equal("1", Assert.Single(stale.Headers.GetValues("X-Strim-Stale")));
+    Assert.Equal(good, await stale.Content.ReadAsStringAsync());
+    Assert.Equal(before, await owner.Http.GetFromJsonAsync<SourceMetadataDto>($"/api/playlists/{playlist.Id}"));
+    Assert.Equal(viewsBefore, (await owner.Http.GetFromJsonAsync<StatsDto>($"/api/playlists/{playlist.Id}/stats"))!.ViewCount);
+  }
+
+  /// <summary>
+  /// Once armed, the cache's clock runs two minutes ahead (past the one-minute output TTL) only
+  /// inside TryLeaseOutput, so the output is found and then expires before it can be leased.
+  /// </summary>
+  private sealed class ExpireBeforeLeaseTime : TimeProvider
+  {
+    public volatile bool Armed;
+
+    public override DateTimeOffset GetUtcNow()
+    {
+      var now = System.GetUtcNow();
+      return Armed && new StackTrace().GetFrames().Any(f => f.GetMethod()?.Name == nameof(PlaylistFileCache.TryLeaseOutput))
+        ? now.AddMinutes(2)
+        : now;
+    }
   }
 
   [Fact]

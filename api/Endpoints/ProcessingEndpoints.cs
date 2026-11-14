@@ -263,16 +263,30 @@ public static class ProcessingEndpoints
           var source = await pipeline.GetSourceAsync(playlist.SourceUrl, context.RequestAborted);
           var output = await pipeline.GetOutputAsync(source, playlist.DisabledGroups ?? new List<string>(), context.RequestAborted);
 
-          PlaylistPipeline.CopySourceMetadata(playlist, source);
-          playlist.ViewCount++;
-          playlist.LastViewedUtc = DateTimeOffset.UtcNow;
-          await db.SaveChangesAsync(context.RequestAborted);
+          // Lease the output before persisting anything, so an output that expired in between
+          // falls back without having touched the playlist's metadata.
+          var lease = pipeline.Cache.TryLeaseOutput(output.OutputKey, ShareFileName(playlist));
+          if (lease is null)
+          {
+            return LastGoodOrNull(context, pipeline.Cache, playlist, logger, "output expired")
+              ?? Results.Problem("The generated playlist expired before it could be downloaded.", statusCode: StatusCodes.Status503ServiceUnavailable);
+          }
+
+          try
+          {
+            PlaylistPipeline.CopySourceMetadata(playlist, source);
+            playlist.ViewCount++;
+            playlist.LastViewedUtc = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(context.RequestAborted);
+          }
+          catch
+          {
+            await lease.DisposeAsync();
+            throw;
+          }
 
           RememberLastGood(pipeline.Cache, playlist.Id, output, logger);
-          return pipeline.Cache.TryLeaseOutput(output.OutputKey, ShareFileName(playlist)) is { } lease
-            ? new PlaylistFileResult(lease, M3uContentType)
-            : LastGoodOrNull(context, pipeline.Cache, playlist, logger, "output expired")
-              ?? Results.Problem("The generated playlist expired before it could be downloaded.", statusCode: StatusCodes.Status503ServiceUnavailable);
+          return new PlaylistFileResult(lease, M3uContentType);
         }
         catch (Exception ex) when (!context.RequestAborted.IsCancellationRequested)
         {
