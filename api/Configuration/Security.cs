@@ -29,23 +29,76 @@ public static class Security
         return;
       }
 
-      foreach (var proxy in trustedProxies.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+      var parsed = ParseTrustedProxies(trustedProxies);
+      foreach (var proxy in parsed.Proxies)
       {
-        if (IPAddress.TryParse(proxy, out var ipAddress))
-        {
-          options.KnownProxies.Add(ipAddress);
-        }
-        else if (proxy.Contains('/') && Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse(proxy, out var network))
-        {
-          options.KnownNetworks.Add(network);
-        }
-        else
-        {
-          Console.WriteLine($"WARNING: Invalid proxy IP or CIDR in TRUSTED_PROXIES: {proxy}");
-        }
+        options.KnownProxies.Add(proxy);
+      }
+      foreach (var network in parsed.Networks)
+      {
+        options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(network.BaseAddress, network.PrefixLength));
+      }
+      foreach (var rejected in parsed.Rejected)
+      {
+        Console.WriteLine($"WARNING: Invalid proxy IP or CIDR in TRUSTED_PROXIES: {rejected}");
       }
       options.ForwardLimit = 1;
     });
+  }
+
+  /// <summary>The addresses and CIDRs parsed from TRUSTED_PROXIES, plus the entries that were neither.</summary>
+  public sealed record TrustedProxies(
+    IReadOnlyList<IPAddress> Proxies,
+    IReadOnlyList<System.Net.IPNetwork> Networks,
+    IReadOnlyList<string> Rejected);
+
+  /// <summary>
+  /// Parses a comma-separated list of IPs and CIDRs. Entries are trimmed and empty ones ignored.
+  /// A CIDR may have host bits set (10.1.2.3/8); they are masked off, as the HttpOverrides parser did.
+  /// </summary>
+  public static TrustedProxies ParseTrustedProxies(string? value)
+  {
+    var proxies = new List<IPAddress>();
+    var networks = new List<System.Net.IPNetwork>();
+    var rejected = new List<string>();
+    if (string.IsNullOrWhiteSpace(value)) return new TrustedProxies(proxies, networks, rejected);
+
+    foreach (var entry in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+      if (IPAddress.TryParse(entry, out var address))
+      {
+        proxies.Add(address);
+      }
+      else if (TryParseCidr(entry, out var network))
+      {
+        networks.Add(network);
+      }
+      else
+      {
+        rejected.Add(entry);
+      }
+    }
+    return new TrustedProxies(proxies, networks, rejected);
+  }
+
+  private static bool TryParseCidr(string entry, out System.Net.IPNetwork network)
+  {
+    network = default;
+    var slash = entry.IndexOf('/');
+    if (slash < 0) return false;
+    if (!IPAddress.TryParse(entry.AsSpan(0, slash), out var address)) return false;
+    if (!int.TryParse(entry.AsSpan(slash + 1), out var prefixLength)) return false;
+
+    var bytes = address.GetAddressBytes();
+    if (prefixLength < 0 || prefixLength > bytes.Length * 8) return false;
+
+    for (var i = 0; i < bytes.Length; i++)
+    {
+      var bitsInByte = Math.Clamp(prefixLength - i * 8, 0, 8);
+      bytes[i] &= (byte)(0xFF << (8 - bitsInByte));
+    }
+    network = new System.Net.IPNetwork(new IPAddress(bytes), prefixLength);
+    return true;
   }
 
   /// <summary>
