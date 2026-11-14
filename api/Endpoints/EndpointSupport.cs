@@ -15,6 +15,10 @@ public static class Limits
   public const long MaxAnalyzeRequestBodySize = MaxPlaylistTextSize + (1L * 1024 * 1024);
   /// <summary>Matches PlaylistCacheOptions.MaxGroupCount so every group can be hidden.</summary>
   public const int MaxDisabledGroupsCount = 10_000;
+  public const int MaxSearchQueryLength = 100;
+  /// <summary>Minimum length of a search query after folding.</summary>
+  public const int MinSearchQueryLength = 2;
+  public const int MaxSearchResults = 50;
 }
 
 public static class EndpointFilters
