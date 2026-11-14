@@ -38,18 +38,20 @@ public static class PlaylistProcessor
   /// </summary>
   public static (Dictionary<string, int> Groups, int Total) CountGroups(string text)
   {
-    using var reader = new StringReader(text ?? string.Empty);
+    using var lines = InMemoryLines(text);
     var groups = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
     var total = 0;
+    string? pending = null;
 
-    while (ReadNextContentLine(reader) is { } line)
+    while ((pending ?? RunSync(lines.ReadNextContentLineAsync(CancellationToken.None))) is { } line)
     {
-      if (!line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase)) continue;
+      pending = null;
+      if (!IsExtinf(line)) continue;
 
       total++;
-      var groupTitle = ExtractGroupTitle(line);
+      (_, pending, var extGrp) = RunSync(ReadEntryTailAsync(lines, optionLines: null, CancellationToken.None));
+      var groupTitle = ExtractGroupTitle(line, extGrp);
       groups[groupTitle] = groups.TryGetValue(groupTitle, out var existing) ? existing + 1 : 1;
-      _ = ReadNextContentLine(reader); // Match the historical "metadata followed by URL" parser.
     }
 
     return (groups, total);
@@ -233,24 +235,32 @@ public static class PlaylistProcessor
 
   public static PlaylistFilterResult GenerateFiltered(string text, HashSet<string> disabledGroups)
   {
-    using var reader = new StringReader(text ?? string.Empty);
+    using var lines = InMemoryLines(text);
     using var writer = new StringWriter();
     writer.WriteLine("#EXTM3U");
     writer.WriteLine("# Created with Strim (https://strim.plis.dev)");
 
     var total = 0;
     var kept = 0;
-    while (ReadNextContentLine(reader) is { } line)
+    var optionLines = new List<string>();
+    string? pending = null;
+    while ((pending ?? RunSync(lines.ReadNextContentLineAsync(CancellationToken.None))) is { } line)
     {
-      if (!line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase)) continue;
+      pending = null;
+      if (!IsExtinf(line)) continue;
 
       total++;
-      var url = ReadNextContentLine(reader) ?? string.Empty;
-      var groupTitle = ExtractGroupTitle(line);
+      (var address, pending, var extGrp) = RunSync(ReadEntryTailAsync(lines, optionLines, CancellationToken.None));
+      var url = address ?? string.Empty;
+      var groupTitle = ExtractGroupTitle(line, extGrp);
       if (IsDisabled(disabledGroups, groupTitle, DetectContentType(url))) continue;
 
       kept++;
       writer.WriteLine(EnsureGroupInExtinf(line, groupTitle));
+      foreach (var optionLine in optionLines)
+      {
+        writer.WriteLine(optionLine);
+      }
       writer.WriteLine(url);
     }
 
@@ -385,16 +395,16 @@ public static class PlaylistProcessor
     return null;
   }
 
-  private static string? ReadNextContentLine(StringReader reader)
-  {
-    while (reader.ReadLine() is { } line)
-    {
-      line = line.Trim();
-      if (line.Length > 0) return line;
-    }
+  /// <summary>
+  /// The legacy helpers read through the same <see cref="BoundedLineReader"/> and
+  /// <see cref="ReadEntryTailAsync"/> as the file-backed methods, so both paths share one entry rule.
+  /// A <see cref="StringReader"/> completes synchronously; lines stay unbounded as before.
+  /// </summary>
+  private static BoundedLineReader InMemoryLines(string? text) =>
+    new(new StringReader(text ?? string.Empty), int.MaxValue);
 
-    return null;
-  }
+  private static T RunSync<T>(ValueTask<T> task) =>
+    task.IsCompleted ? task.Result : task.AsTask().GetAwaiter().GetResult();
 
   private static async Task WriteLineAsync(StreamWriter writer, string value, CancellationToken cancellationToken)
   {
@@ -593,14 +603,14 @@ public static class PlaylistProcessor
   /// </summary>
   private sealed class BoundedLineReader : IDisposable
   {
-    private readonly StreamReader _reader;
+    private readonly TextReader _reader;
     private readonly int _maxLineLengthChars;
     private char[]? _buffer;
     private StringBuilder? _carry;
     private int _position;
     private int _count;
 
-    public BoundedLineReader(StreamReader reader, int maxLineLengthChars)
+    public BoundedLineReader(TextReader reader, int maxLineLengthChars)
     {
       _reader = reader;
       _maxLineLengthChars = Math.Max(1, maxLineLengthChars);
