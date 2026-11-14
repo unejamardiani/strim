@@ -181,6 +181,63 @@ public class PlaylistProcessorExtGrpTests
     Assert.DoesNotContain("Film One", moviesOffOutput);
   }
 
+  [Fact]
+  public async Task ExtGrpWithDoubleQuotes_WritesOneWellFormedGroupTitle()
+  {
+    const string source = """
+      #EXTM3U
+      #EXTINF:-1 tvg-name="Kids One",Kids One
+      #EXTGRP:Kids "HD"
+      http://example.invalid/live/kids.m3u8
+      """;
+
+    var analysis = await AnalyzeAsync(source);
+    var group = Assert.Single(analysis.Groups);
+    Assert.Equal("Kids 'HD'", group.GroupTitle);
+    Assert.Equal("Kids 'HD'", group.Key);
+
+    var (kept, output) = await GenerateAsync(source);
+    Assert.Equal(1, kept.KeptChannels);
+    Assert.Equal(
+      Header +
+      "#EXTINF:-1 tvg-name=\"Kids One\" group-title=\"Kids 'HD'\",Kids One\n" +
+      "#EXTGRP:Kids \"HD\"\n" +
+      "http://example.invalid/live/kids.m3u8\n",
+      output);
+
+    var (dropped, droppedOutput) = await GenerateAsync(source, disabledGroups: [group.Key]);
+    Assert.Equal(0, dropped.KeptChannels);
+    Assert.DoesNotContain("kids.m3u8", droppedOutput);
+  }
+
+  [Fact]
+  public async Task ExtGrpWithDoubleQuotes_CannotInjectAttributes()
+  {
+    const string source = """
+      #EXTM3U
+      #EXTINF:-1 tvg-id="real",Real One
+      #EXTGRP:X" tvg-id="evil
+      http://example.invalid/live/real.m3u8
+      """;
+
+    var analysis = await AnalyzeAsync(source);
+    var group = Assert.Single(analysis.Groups);
+    Assert.Equal("X' tvg-id='evil", group.GroupTitle);
+
+    var (_, output) = await GenerateAsync(source);
+    Assert.Equal(
+      Header +
+      "#EXTINF:-1 tvg-id=\"real\" group-title=\"X' tvg-id='evil\",Real One\n" +
+      "#EXTGRP:X\" tvg-id=\"evil\n" +
+      "http://example.invalid/live/real.m3u8\n",
+      output);
+
+    var (dropped, _) = await GenerateAsync(source, disabledGroups: [group.Key]);
+    Assert.Equal(0, dropped.KeptChannels);
+    var (keptByOther, _) = await GenerateAsync(source, disabledGroups: ["X"]);
+    Assert.Equal(1, keptByOther.KeptChannels);
+  }
+
   private static async Task<PlaylistAnalysisResult> AnalyzeAsync(
     string source,
     int maxGroupCount = 10_000,
