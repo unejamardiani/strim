@@ -51,6 +51,9 @@ public sealed class PlaylistCacheOptions
   /// <summary>Approximate heap budget for all distinct group metadata in one analysis.</summary>
   public long MaxGroupMetadataBytes { get; set; } = 8L * 1024 * 1024;
 
+  /// <summary>Approximate heap budget for one analysis's search index; above it (or at 0) there is none.</summary>
+  public long MaxSearchIndexBytes { get; set; } = 64L * 1024 * 1024;
+
   /// <summary>Maximum number of expensive fetch/parse/generate jobs in this process.</summary>
   public int MaxConcurrentJobs { get; set; } = 1;
 

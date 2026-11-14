@@ -53,7 +53,8 @@ public sealed class PlaylistPipeline(PlaylistFileCache cache, PlaylistSourceFetc
         cache.MaxLineLengthChars,
         cache.MaxGroupCount,
         cache.MaxGroupTitleLengthChars,
-        cache.MaxGroupMetadataBytes);
+        cache.MaxGroupMetadataBytes,
+        cache.MaxSearchIndexBytes);
     cache.StoreAnalysis(source, analysis);
     return analysis;
   }
