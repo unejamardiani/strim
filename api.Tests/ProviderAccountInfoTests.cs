@@ -147,6 +147,76 @@ public class ProviderAccountInfoTests
     Assert.Same(ProviderAccountResult.Unknown, result);
   }
 
+  [Theory]
+  [InlineData("status", "\\uD800")]
+  [InlineData("status", "\\uDC00")]
+  [InlineData("exp_date", "\\uD800")]
+  [InlineData("exp_date", "\\uDC00")]
+  [InlineData("max_connections", "\\uD800")]
+  [InlineData("max_connections", "\\uDC00")]
+  [InlineData("active_cons", "\\uD800")]
+  [InlineData("active_cons", "\\uDC00")]
+  public void Parse_GivesNullForAStringFieldWithAnUnpairedSurrogateAndKeepsTheOthers(string field, string escape)
+  {
+    var fields = new Dictionary<string, string>
+    {
+      ["status"] = "\"Active\"",
+      ["exp_date"] = "\"1767225600\"",
+      ["max_connections"] = "\"2\"",
+      ["active_cons"] = "\"1\"",
+    };
+    fields[field] = $"\"{escape}\"";
+    var body = "{\"user_info\":{\"auth\":1," + string.Join(",", fields.Select(f => $"\"{f.Key}\":{f.Value}")) + "}}";
+
+    var result = ProviderAccountInfo.Parse(body);
+
+    Assert.True(result.IsKnown);
+    Assert.Equal(field == "status" ? null : "Active", result.Status);
+    Assert.Equal(field == "exp_date" ? null : new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), result.ExpiresAt);
+    Assert.Equal(field == "max_connections" ? null : 2, result.MaxConnections);
+    Assert.Equal(field == "active_cons" ? null : 1, result.ActiveConnections);
+  }
+
+  [Theory]
+  [InlineData("\\uD800")]
+  [InlineData("\\uDC00")]
+  public void Parse_TreatsAnAuthWithAnUnpairedSurrogateAsUnreadable(string escape)
+  {
+    var result = ProviderAccountInfo.Parse($$$"""{"user_info":{"auth":"{{{escape}}}","status":"Active"}}""");
+
+    Assert.True(result.IsKnown);
+    Assert.Equal("Active", result.Status);
+  }
+
+  [Fact]
+  public void Parse_NeverThrowsOnMalformedAnswers()
+  {
+    string[] bodies =
+    [
+      """{"user_info":{"status":"\u12"}}""",
+      """{"user_info":{"status":"\u"}}""",
+      """{"user_info":{"status":"\uZZZZ"}}""",
+      """{"user_info":{"status":"\""",
+      """{"user_info":{"status":"\uD800\uD800"}}""",
+      """{"user_info":{"status":"\uDC00\uD800"}}""",
+      """{"user_info":{"status":"a\uD800b","max_connections":"\uDFFF","active_cons":"\uD83D"}}""",
+      """{"user_info":{"auth":"\uDBFF","exp_date":"\uDC00"}}""",
+      """{"user_info":{"\uD800":"Active","status":"Active"}}""",
+      """{"\uD800":{},"user_info":{"status":"Active"}}""",
+      """{"user_\uD800info":{"status":"Active"}}""",
+      """{"\uDC00user_info":{"status":"Active"},"user_info":{"st\uD800atus":1}}""",
+      """{"user_info":{"status":"Active"},"\u""",
+      "{\"user_info\":{\"status\":\"\ud800\"}}",
+      "{\"user_info\":{\"\udc00\":\"x\",\"status\":\"Active\"}}",
+    ];
+
+    foreach (var body in bodies)
+    {
+      var exception = Record.Exception(() => ProviderAccountInfo.Parse(body));
+      Assert.True(exception is null, $"Parse threw {exception?.GetType().Name} for {body}");
+    }
+  }
+
   [Fact]
   public void Parse_NeverCarriesTheUsernameOrPassword()
   {

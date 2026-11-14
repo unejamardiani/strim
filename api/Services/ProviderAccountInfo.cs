@@ -114,6 +114,16 @@ public static class ProviderAccountInfo
     {
       return ProviderAccountResult.Unknown;
     }
+    catch (InvalidOperationException)
+    {
+      // Property lookups throw when a property name holds an escape that is not valid UTF-16.
+      return ProviderAccountResult.Unknown;
+    }
+    catch (ArgumentException)
+    {
+      // JsonDocument.Parse throws when the text itself holds a lone surrogate character.
+      return ProviderAccountResult.Unknown;
+    }
   }
 
   private static string? ReadText(JsonElement parent, string name)
@@ -125,7 +135,7 @@ public static class ProviderAccountInfo
 
     var text = value.ValueKind switch
     {
-      JsonValueKind.String => value.GetString(),
+      JsonValueKind.String => ReadString(value),
       JsonValueKind.Number => value.GetRawText(),
       _ => null,
     };
@@ -150,8 +160,22 @@ public static class ProviderAccountInfo
     {
       JsonValueKind.Number when value.TryGetInt64(out var number) => number,
       JsonValueKind.String when long.TryParse(
-        value.GetString()?.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var number) => number,
+        ReadString(value)?.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var number) => number,
       _ => null,
     };
+  }
+
+  // GetString throws InvalidOperationException when an escape does not decode to valid UTF-16,
+  // such as an unpaired surrogate ("\uD800"); such a field counts as unreadable.
+  private static string? ReadString(JsonElement value)
+  {
+    try
+    {
+      return value.GetString();
+    }
+    catch (InvalidOperationException)
+    {
+      return null;
+    }
   }
 }
