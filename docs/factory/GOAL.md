@@ -1,7 +1,7 @@
 # Goal
 
-> **DRAFT, awaiting the owner's approval.** Agents read this file before every run and may not change it
-> (`docs/factory/*` is protected). It takes effect only once the owner has approved and merged it.
+> Agents read this file before every run and may not change it (`docs/factory/*` is protected). The owner
+> stated this goal on 14 Nov 2026; it replaces the first draft.
 
 ## Product
 
@@ -12,9 +12,23 @@ hosts, stores or proxies streams; it only edits the playlist.
 
 ## Current target
 
-Small, self-contained improvements to the editor (`/app`) and the API that make cleaning up a playlist quicker:
-fewer taps to find and switch off groups, clearer feedback while a large list loads, better handling of the
-playlists people actually paste. Each improvement fits in one pull request and comes with its tests.
+Strim should be good enough that one would pay for it, without anyone being asked to: the best possible experience
+for the owner's own daily use. It stays free. There is no business model, no billing and no pricing.
+
+The owner manages his playlist from a phone or laptop and watches on an LG television (webOS) with the Smart IPTV
+app and on an Apple TV with IPTV apps. In that order of importance:
+
+1. **What Strim hands to the players is correct and dependable.** The playlist keeps everything a player needs
+   (the header with the programme-guide address, option lines of an entry, attributes, order), and the player link
+   answers with the last good list when the provider or Strim has a problem.
+2. **Strim is a companion to the television apps.** It answers what the apps do not: in which group a title is,
+   when the provider subscription expires, whether the link still works and when it was last fetched, what changed
+   in the provider's list.
+3. **Cleaning up is quick and safe.** Few taps to find and switch groups, no accidental bulk changes, and a way back.
+4. **Smart cleaning comes last:** duplicates, best variants, language and country preferences. Report first, remove
+   later, because wrong removals are worse than none.
+
+Each improvement fits in one pull request and comes with its tests.
 
 ## Out of scope
 
