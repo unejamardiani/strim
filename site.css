@@ -1,4 +1,4 @@
-/* Strim site: landing, guides, comparison, blog and error pages. Builds on theme.css; see DESIGN.md. */
+/* Strim site: landing, guides, comparison and error pages. Builds on theme.css; see DESIGN.md. */
 
 /* ---------- Frame ---------- */
 
@@ -811,7 +811,7 @@ kbd {
   background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
 }
 
-/* ---------- Article pages (blog, comparison details) ---------- */
+/* ---------- Article pages (comparison details) ---------- */
 
 /* Converted pages keep a plain wrapper: <main> > <div> > <header>, <section>… */
 .site-main > div > header {
@@ -933,35 +933,6 @@ kbd {
   color: var(--accent-ink);
 }
 
-/* Blog index cards are whole-card links. */
-.post-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  color: var(--ink) !important;
-  text-decoration: none !important;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-pop);
-}
-
-.post-card .post-meta {
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--accent-ink);
-}
-
-.post-card .more {
-  margin-top: auto;
-  font-weight: 700;
-  color: var(--accent-ink);
-}
-
 /* ---------- Error pages ---------- */
 
 .error-page {
@@ -987,7 +958,6 @@ kbd {
     animation: none;
   }
 
-  .post-card,
   .faq summary::after {
     transition: none;
   }

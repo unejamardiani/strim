@@ -1,7 +1,7 @@
 # Strim Design System: Signal Paper
 
 Every page uses this system: the editor (`app.html`, `app.css`, `main.js`) and the site (landing
-`index.html`, guides, comparison, blog and error pages, styled by `site.css`). Shared fonts, tokens,
+`index.html`, guides, comparison and error pages, styled by `site.css`). Shared fonts, tokens,
 buttons and cards live in `theme.css`.
 
 Idea: a calm, warm reading surface (paper) with one loud signal colour. Strim is used on the sofa
@@ -88,7 +88,7 @@ Short, plain, second person. "Switch off the groups you never watch", "All on / 
 └──────────────────────────────┘
 ```
 
-### Site (`/`, guides, blog: site.css)
+### Site (`/`, guides: site.css)
 
 ```
 ┌─────────────────────────────────────────┐
@@ -126,9 +126,9 @@ index.html          Landing page (public)
 app.html            Editor shell, served at /app
 theme.css           Fonts, tokens, base, wordmark, buttons, cards (shared)
 app.css             Editor components
-site.css            Landing, guides, blog and error pages
+site.css            Landing, guides and error pages
 main.js             Editor logic (router, playlists, group picker, sheets)
-features.html, how-to-use.html, comparison.html, blog/
+features.html, how-to-use.html, comparison.html
 404.html, 500.html, 50x.html
 fonts/              Self-hosted Bricolage Grotesque and Figtree (woff2, OFL)
 logo-icon.svg, logo-wordmark.svg
