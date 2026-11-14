@@ -137,7 +137,7 @@ public static class PlaylistProcessor
     await WriteLineAsync(writer, "#EXTM3U", cancellationToken, outputBytes);
     await WriteLineAsync(writer, "# Created with Strim (https://strim.plis.dev)", cancellationToken, outputBytes);
 
-    // Each GroupKey is built at most once per (title, content type) and casing.
+    // Each GroupKey is built at most once per (title, content type), whatever the casing.
     var decisions = new GroupDecisions(disabledGroups, splitGroupTitles);
 
     while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
@@ -152,7 +152,7 @@ public static class PlaylistProcessor
       if (decision.Disabled) continue;
 
       kept++;
-      await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, decision.OutputGroupTitle), cancellationToken, outputBytes);
+      await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, decision.Suffix), cancellationToken, outputBytes);
       await WriteLineAsync(writer, url, cancellationToken, outputBytes);
     }
 
@@ -227,99 +227,46 @@ public static class PlaylistProcessor
 
   /// <summary>
   /// Memoises, for one run of <see cref="GenerateFilteredFileAsync"/>, what every entry of one
-  /// (group title, content type) gets. Titles that differ only by case share one filtering decision,
-  /// like the case-insensitive sets the pipeline passes in; a split title's output key is cached per
-  /// exact casing, at most <see cref="MaxCachedCasings"/> per pair, a new casing replacing the oldest.
+  /// (group title, content type) gets. Titles that differ only by case share one decision, like the
+  /// case-insensitive sets the pipeline passes in. A split title is written as the entry's own title
+  /// plus a fixed content-type suffix, so no output key is built for any casing.
   /// </summary>
   internal sealed class GroupDecisions(ISet<string> disabledGroups, IReadOnlySet<string>? splitGroupTitles)
   {
-    private sealed class Decision(bool disabled, bool split)
-    {
-      public bool Disabled { get; } = disabled;
-      public bool Split { get; } = split;
+    private static readonly string[] Suffixes =
+      Enum.GetValues<PlaylistContentType>().Select(type => $"{GroupKeySeparator}{type}").ToArray();
 
-      // Output keys of a split title for the most recent exact casings, replaced oldest first.
-      private readonly string[] casings = split ? new string[MaxCachedCasings] : [];
-      private readonly string[] keys = split ? new string[MaxCachedCasings] : [];
-      private int count;
-      private int next;
+    // Marks a dropped pair; compared by reference, so no suffix can be mistaken for it.
+    private static readonly string DisabledMarker = new('\0', 1);
 
-      public bool TryGetKey(string casing, out string key)
-      {
-        for (var i = 0; i < count; i++)
-        {
-          if (string.Equals(casings[i], casing, StringComparison.Ordinal))
-          {
-            key = keys[i];
-            return true;
-          }
-        }
-
-        key = string.Empty;
-        return false;
-      }
-
-      /// <summary>Stores a key; returns whether the cache grew (false when it replaced the oldest).</summary>
-      public bool AddKey(string casing, string key)
-      {
-        casings[next] = casing;
-        keys[next] = key;
-        next = (next + 1) % MaxCachedCasings;
-        if (count == MaxCachedCasings) return false;
-        count++;
-        return true;
-      }
-    }
-
-    /// <summary>Most exact casings whose output key is cached per (title, content type).</summary>
-    internal const int MaxCachedCasings = 8;
-
-    private readonly Dictionary<string, Decision?[]> decisions = new(StringComparer.OrdinalIgnoreCase);
+    // Per content type: null until decided, DisabledMarker, or the output suffix ("" when unsplit).
+    private readonly Dictionary<string, string?[]> decisions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>How many <see cref="GroupKey"/> strings this memo has built.</summary>
     internal int KeysBuilt { get; private set; }
 
-    /// <summary>How many output keys this memo holds across all pairs.</summary>
-    internal int CachedKeys { get; private set; }
-
-    public (bool Disabled, string OutputGroupTitle) Decide(string groupTitle, PlaylistContentType contentType)
+    /// <summary>Whether the entry is dropped and, if kept, the suffix appended to its group title.</summary>
+    public (bool Disabled, string Suffix) Decide(string groupTitle, PlaylistContentType contentType)
     {
       if (!decisions.TryGetValue(groupTitle, out var perType))
       {
-        perType = new Decision?[ContentTypeCount];
+        perType = new string?[ContentTypeCount];
         decisions[groupTitle] = perType;
       }
 
       var decision = perType[(int)contentType];
       if (decision is null)
       {
-        // The key is built at most once and serves both the disabled check and the output title.
-        string? key = null;
         var disabled = disabledGroups.Count > 0 &&
-          (disabledGroups.Contains(groupTitle) ||
-           disabledGroups.Contains(key = BuildKey(groupTitle, contentType)));
-        var split = !disabled &&
-          contentType != PlaylistContentType.Live &&
-          splitGroupTitles?.Contains(groupTitle) == true;
-        decision = new Decision(disabled, split);
-        if (split && decision.AddKey(groupTitle, key ?? BuildKey(groupTitle, contentType)))
-        {
-          CachedKeys++;
-        }
+          (disabledGroups.Contains(groupTitle) || disabledGroups.Contains(BuildKey(groupTitle, contentType)));
+        // Live channels keep the provider's group-title; movies and series of a split title move to
+        // their own group (e.g. "Germany · Series").
+        var split = contentType != PlaylistContentType.Live && splitGroupTitles?.Contains(groupTitle) == true;
+        decision = disabled ? DisabledMarker : split ? Suffixes[(int)contentType] : string.Empty;
         perType[(int)contentType] = decision;
       }
 
-      // Live channels keep the provider's group-title; movies and series of a split title move to
-      // their own group (e.g. "Germany · Series"), each casing under its own key.
-      if (decision.Disabled) return (true, groupTitle);
-      if (!decision.Split) return (false, groupTitle);
-      if (!decision.TryGetKey(groupTitle, out var outputTitle))
-      {
-        outputTitle = BuildKey(groupTitle, contentType);
-        if (decision.AddKey(groupTitle, outputTitle)) CachedKeys++;
-      }
-
-      return (false, outputTitle);
+      return ReferenceEquals(decision, DisabledMarker) ? (true, string.Empty) : (false, decision);
     }
 
     private string BuildKey(string groupTitle, PlaylistContentType contentType)
@@ -537,16 +484,14 @@ public static class PlaylistProcessor
 
   private static bool IsAttributeCharacter(char value) => char.IsLetterOrDigit(value) || value is '-' or '_';
 
-  private static string WithGroupTitle(string extinf, string groupTitle, string outputGroupTitle)
+  private static string WithGroupTitle(string extinf, string groupTitle, string suffix)
   {
-    if (string.Equals(groupTitle, outputGroupTitle, StringComparison.Ordinal))
-    {
-      return EnsureGroupInExtinf(extinf, groupTitle);
-    }
+    if (suffix.Length == 0) return EnsureGroupInExtinf(extinf, groupTitle);
 
+    // The same bytes as writing GroupKey(groupTitle, type), without building the key per entry.
     return TryFindGroupTitleValue(extinf, out var start, out var end)
-      ? string.Concat(extinf.AsSpan(0, start), outputGroupTitle, extinf.AsSpan(end))
-      : EnsureGroupInExtinf(extinf, outputGroupTitle);
+      ? string.Concat(extinf.AsSpan(0, start), groupTitle, suffix, extinf.AsSpan(end))
+      : EnsureGroupInExtinf(extinf, groupTitle + suffix);
   }
 
   private static string EnsureGroupInExtinf(string extinf, string groupTitle)

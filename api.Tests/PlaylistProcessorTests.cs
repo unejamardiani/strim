@@ -463,76 +463,43 @@ public class PlaylistProcessorTests
     {
       var title = casings[i % casings.Length];
       var type = types[i / casings.Length % types.Length];
-      var (disabled, output) = decisions.Decide(title, type);
+      var (disabled, suffix) = decisions.Decide(title, type);
 
       Assert.False(disabled);
-      Assert.Equal(type == PlaylistContentType.Live ? title : PlaylistProcessor.GroupKey(title, type), output);
+      Assert.Equal(type == PlaylistContentType.Live ? title : PlaylistProcessor.GroupKey(title, type), title + suffix);
     }
 
-    // The disabled check builds one key per content type (first casing seen); every other casing of
-    // a split movie or series title builds its own output key once, however often it repeats.
-    Assert.Equal(3 + 2 * (casings.Length - 1), decisions.KeysBuilt);
+    // Only the disabled check builds a key: one per content type, whichever casing comes first.
+    Assert.Equal(3, decisions.KeysBuilt);
   }
 
   [Fact]
-  public void GenerateFiltered_SplitCasingCacheIsBounded()
+  public void GenerateFiltered_CyclingManySplitCasingsBuildsNoKeyPerEntry()
   {
-    // Every one of the 2^10 casings of a 10-letter title is distinct under ordinal comparison.
+    // All 2^10 casings of a 10-letter title, distinct under ordinal comparison, cycled three times.
     const string baseTitle = "abcdefghij";
-    var split = new HashSet<string>(new[] { baseTitle }, StringComparer.OrdinalIgnoreCase);
-    var decisions = new PlaylistProcessor.GroupDecisions(
-      new HashSet<string>(StringComparer.OrdinalIgnoreCase), split);
-
-    for (var mask = 0; mask < 1 << baseTitle.Length; mask++)
-    {
-      var chars = baseTitle.ToCharArray();
-      for (var c = 0; c < chars.Length; c++)
-      {
-        if ((mask & (1 << c)) != 0) chars[c] = char.ToUpperInvariant(chars[c]);
-      }
-
-      var title = new string(chars);
-      foreach (var type in new[] { PlaylistContentType.Movies, PlaylistContentType.Series })
-      {
-        var (disabled, output) = decisions.Decide(title, type);
-        Assert.False(disabled);
-        Assert.Equal(PlaylistProcessor.GroupKey(title, type), output);
-      }
-    }
-
-    // Two content types, each holding at most MaxCachedCasings keys however many casings arrive.
-    Assert.Equal(2 * PlaylistProcessor.GroupDecisions.MaxCachedCasings, decisions.CachedKeys);
-  }
-
-  [Fact]
-  public void GenerateFiltered_RepeatedOverflowCasingBuildsKeyOnce()
-  {
-    const string baseTitle = "abcdefghij";
-    var split = new HashSet<string>(new[] { baseTitle }, StringComparer.OrdinalIgnoreCase);
-    var decisions = new PlaylistProcessor.GroupDecisions(
-      new HashSet<string>(StringComparer.OrdinalIgnoreCase), split);
-    var max = PlaylistProcessor.GroupDecisions.MaxCachedCasings;
-
-    // Fill the cache with MaxCachedCasings casings, then repeat one more casing many times.
-    var casings = Enumerable.Range(0, max + 1)
+    var casings = Enumerable.Range(0, 1 << baseTitle.Length)
       .Select(mask => new string(baseTitle.Select((ch, c) => (mask & (1 << c)) != 0 ? char.ToUpperInvariant(ch) : ch).ToArray()))
       .ToArray();
-    foreach (var casing in casings[..max])
+    var split = new HashSet<string>(new[] { baseTitle }, StringComparer.OrdinalIgnoreCase);
+    var decisions = new PlaylistProcessor.GroupDecisions(
+      new HashSet<string>(new[] { "Unrelated" }, StringComparer.OrdinalIgnoreCase), split);
+
+    for (var round = 0; round < 3; round++)
     {
-      decisions.Decide(casing, PlaylistContentType.Movies);
+      foreach (var title in casings)
+      {
+        foreach (var type in new[] { PlaylistContentType.Movies, PlaylistContentType.Series })
+        {
+          var (disabled, suffix) = decisions.Decide(title, type);
+          Assert.False(disabled);
+          Assert.Equal(PlaylistProcessor.GroupKey(title, type), title + suffix);
+        }
+      }
     }
 
-    var overflow = casings[max];
-    for (var i = 0; i < 1_000; i++)
-    {
-      var (disabled, output) = decisions.Decide(overflow, PlaylistContentType.Movies);
-      Assert.False(disabled);
-      Assert.Equal(PlaylistProcessor.GroupKey(overflow, PlaylistContentType.Movies), output);
-    }
-
-    // One key per casing: the overflow casing is built once, not once per entry, and the cache stays capped.
-    Assert.Equal(max + 1, decisions.KeysBuilt);
-    Assert.Equal(max, decisions.CachedKeys);
+    // One key per content type for the disabled check, however many casings cycle through.
+    Assert.Equal(2, decisions.KeysBuilt);
   }
 
   /// <summary>Counts the membership checks made through <see cref="ISet{T}"/>.</summary>
