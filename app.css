@@ -1227,3 +1227,126 @@ select.input {
     animation-iteration-count: infinite !important;
   }
 }
+
+/* ---------- Duplicates & variants report (read-only sheet) ---------- */
+
+.report-line {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.report-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.report-counts > div {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.report-counts dt {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.report-counts dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-counts dd small {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.report-empty {
+  font-weight: 650;
+  color: var(--ink-2);
+}
+
+.report-heading {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: -10px;
+}
+
+.report-sets,
+.report-set ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-sets {
+  gap: 10px;
+}
+
+.report-set {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.report-set-title {
+  font-weight: 700;
+}
+
+.report-set-groups {
+  font-size: 13px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.report-set ul {
+  margin-top: 6px;
+  gap: 4px;
+}
+
+.report-set li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.report-name {
+  overflow-wrap: anywhere;
+}
+
+.report-set li small {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.report-word {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  background: var(--surface-3);
+  color: var(--ink-2);
+}
+
+@media (max-width: 420px) {
+  .report-counts {
+    grid-template-columns: 1fr;
+  }
+}

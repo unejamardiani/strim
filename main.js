@@ -487,6 +487,9 @@ function closeSheets() {
   if (menuDialog.open) menuDialog.close();
 }
 
+// A report that arrives after its sheet closed must not overwrite whatever the sheet shows next.
+menuDialog.addEventListener('close', () => { reportRequest += 1; });
+
 for (const dialog of [accountDialog, menuDialog]) {
   dialog.addEventListener('click', (e) => {
     // Close on backdrop clicks and on the close button.
@@ -864,6 +867,8 @@ function renderEditor() {
     if (ed.isSample) {
       nodes.push(h('div', { class: 'notice' }, 'This is a sample. Paste your own playlist URL to save it and get a player link.'));
     }
+    nodes.push(h('div', { class: 'report-line' },
+      h('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'aria-haspopup': 'dialog', onclick: () => openReport(ed) }, 'Duplicates & variants')));
     nodes.push(...pickerNodes(ed));
   }
 
@@ -1437,6 +1442,77 @@ async function downloadSelection(ed) {
     ed.busy = false;
     updateActionBar();
   }
+}
+
+// ---------- Duplicates & variants report (read-only) ----------
+
+// Only shows what /playlist/report finds; it never touches ed.disabled, ed.extras or the download.
+let reportRequest = 0;
+
+async function openReport(ed) {
+  const request = ++reportRequest;
+  menuTitle.textContent = 'Duplicates & variants';
+  menuBody.replaceChildren(h('div', { class: 'loading-card' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { class: 'grow', text: 'Checking the playlist…' })));
+  if (!menuDialog.open) menuDialog.showModal();
+  let report;
+  try {
+    report = await api('/playlist/report', {
+      method: 'POST',
+      body: { cacheKey: ed.cacheKey, sourceUrl: ed.isSample ? null : ed.sourceUrl },
+    });
+  } catch (err) {
+    if (request !== reportRequest || !menuDialog.open) return;
+    menuBody.replaceChildren(h('div', { class: 'notice error' }, h('p', { text: err.message || 'Could not check the playlist.' })));
+    return;
+  }
+  if (request !== reportRequest || !menuDialog.open) return;
+  menuBody.replaceChildren(...reportNodes(report));
+}
+
+function reportNodes(report) {
+  const duplicates = report.duplicateSets || [];
+  const variants = report.variantGroups || [];
+  const nodes = [h('p', { class: 'field-hint', text: 'Only a report: nothing is switched off or removed.' }),
+    h('dl', { class: 'report-counts' },
+      reportCount(report.duplicateSetCount, 'Duplicate sets', plural(report.duplicateEntryCount, 'entry', 'entries')),
+      reportCount(report.variantGroupCount, 'Variant groups', plural(report.variantEntryCount, 'entry', 'entries')),
+      reportCount(report.totalEntries, 'Entries checked', ''))];
+
+  if (!report.duplicateSetCount && !report.variantGroupCount) {
+    nodes.push(h('p', { class: 'report-empty', text: 'No duplicates or variants found' }));
+    return nodes;
+  }
+  if (report.truncated) {
+    nodes.push(h('div', { class: 'notice', text: `Showing the first ${fmt(Math.max(duplicates.length, variants.length))} sets of each kind. The counts cover the whole playlist.` }));
+  }
+  if (duplicates.length) {
+    nodes.push(h('h3', { class: 'report-heading', text: 'Duplicates' }),
+      h('p', { class: 'field-hint', text: 'Same tvg-id or same stream address.' }),
+      h('ol', { class: 'report-sets' }, duplicates.map((set) => reportSet(null, set))));
+  }
+  if (variants.length) {
+    nodes.push(h('h3', { class: 'report-heading', text: 'Variants' }),
+      h('p', { class: 'field-hint', text: 'Same name with different quality words.' }),
+      h('ol', { class: 'report-sets' }, variants.map((group) => reportSet(group.baseName, group))));
+  }
+  return nodes;
+}
+
+function reportCount(value, label, sub) {
+  return h('div', null,
+    h('dt', { text: label }),
+    h('dd', { class: 'num' }, fmt(value), sub ? h('small', { text: sub }) : null));
+}
+
+function reportSet(title, set) {
+  const groups = set.groups || [];
+  return h('li', { class: 'report-set' },
+    title ? h('div', { class: 'report-set-title', text: title }) : null,
+    h('div', { class: 'report-set-groups', text: `In ${groups.length === 1 ? groups[0] || 'no group' : plural(groups.length, 'group')}` }),
+    h('ul', null, (set.entries || []).map((entry) => h('li', null,
+      h('span', { class: 'report-name', text: entry.name || 'Untitled' }),
+      ...(entry.qualityWords || []).map((word) => h('span', { class: 'report-word', text: word })),
+      groups.length > 1 ? h('small', { text: entry.group || 'No group' }) : null))));
 }
 
 async function saveEditor(ed) {
