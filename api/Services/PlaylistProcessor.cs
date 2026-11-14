@@ -336,7 +336,8 @@ public static class PlaylistProcessor
   }
 
   public static List<GroupResult> ToGroupResults(IEnumerable<PlaylistGroup> groups) =>
-    groups.Select(g => new GroupResult(g.Key, g.Count, g.GroupTitle, g.ContentType.ToString())).ToList();
+    groups.Select(g => new GroupResult(
+      g.Key, g.Count, g.GroupTitle, g.ContentType.ToString(), AdultGroupRule.IsAdultGroupTitle(g.GroupTitle))).ToList();
 
   /// <summary>
   /// Xtream Codes panels serve VOD as /movie/&lt;user&gt;/&lt;pass&gt;/&lt;id&gt;.&lt;ext&gt; and episodes as

@@ -14,7 +14,8 @@ public record AnalyzePlaylistResponse(
 /// <param name="Name">Filter key sent back in disabledGroups.</param>
 /// <param name="GroupTitle">The provider's group-title; differs from Name when one title is split by content type.</param>
 /// <param name="ContentType">Live, Movies or Series.</param>
-public record GroupResult(string Name, int Count, string GroupTitle, string ContentType);
+/// <param name="IsAdult">The group title looks like adult content (AdultGroupRule); informational, never used for filtering.</param>
+public record GroupResult(string Name, int Count, string GroupTitle, string ContentType, bool IsAdult);
 
 public record GeneratePlaylistRequest(string? SourceUrl, string? CacheKey, List<string>? DisabledGroups);
 
