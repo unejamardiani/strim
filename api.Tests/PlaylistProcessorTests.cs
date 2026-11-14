@@ -504,6 +504,37 @@ public class PlaylistProcessorTests
     Assert.Equal(2 * PlaylistProcessor.GroupDecisions.MaxCachedCasings, decisions.CachedKeys);
   }
 
+  [Fact]
+  public void GenerateFiltered_RepeatedOverflowCasingBuildsKeyOnce()
+  {
+    const string baseTitle = "abcdefghij";
+    var split = new HashSet<string>(new[] { baseTitle }, StringComparer.OrdinalIgnoreCase);
+    var decisions = new PlaylistProcessor.GroupDecisions(
+      new HashSet<string>(StringComparer.OrdinalIgnoreCase), split);
+    var max = PlaylistProcessor.GroupDecisions.MaxCachedCasings;
+
+    // Fill the cache with MaxCachedCasings casings, then repeat one more casing many times.
+    var casings = Enumerable.Range(0, max + 1)
+      .Select(mask => new string(baseTitle.Select((ch, c) => (mask & (1 << c)) != 0 ? char.ToUpperInvariant(ch) : ch).ToArray()))
+      .ToArray();
+    foreach (var casing in casings[..max])
+    {
+      decisions.Decide(casing, PlaylistContentType.Movies);
+    }
+
+    var overflow = casings[max];
+    for (var i = 0; i < 1_000; i++)
+    {
+      var (disabled, output) = decisions.Decide(overflow, PlaylistContentType.Movies);
+      Assert.False(disabled);
+      Assert.Equal(PlaylistProcessor.GroupKey(overflow, PlaylistContentType.Movies), output);
+    }
+
+    // One key per casing: the overflow casing is built once, not once per entry, and the cache stays capped.
+    Assert.Equal(max + 1, decisions.KeysBuilt);
+    Assert.Equal(max, decisions.CachedKeys);
+  }
+
   /// <summary>Counts the membership checks made through <see cref="ISet{T}"/>.</summary>
   private sealed class CountingSet : HashSet<string>, ICollection<string>
   {

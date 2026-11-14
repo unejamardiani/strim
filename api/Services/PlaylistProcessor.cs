@@ -232,7 +232,8 @@ public static class PlaylistProcessor
   /// per exact casing, so every entry keeps its own casing and each key string is built once.
   /// The memo grows with the titles the source holds, which the analysis limits bound; the casings
   /// kept per pair are capped at <see cref="MaxCachedCasings"/>, so a source with endless case
-  /// variants of one title cannot grow it further (later casings build their key per entry).
+  /// variants of one title cannot grow it further. A new casing past the cap replaces the oldest one,
+  /// so a repeated casing builds its key again only after more than that many other casings came in between.
   /// </summary>
   internal sealed class GroupDecisions(ISet<string> disabledGroups, IReadOnlySet<string>? splitGroupTitles)
   {
@@ -240,8 +241,38 @@ public static class PlaylistProcessor
     {
       public bool Disabled { get; } = disabled;
       public bool Split { get; } = split;
-      // Output keys of a split title, one per exact casing seen.
-      public Dictionary<string, string> Keys { get; } = new(StringComparer.Ordinal);
+
+      // Output keys of a split title for the most recent exact casings, replaced oldest first.
+      private readonly string[] casings = split ? new string[MaxCachedCasings] : [];
+      private readonly string[] keys = split ? new string[MaxCachedCasings] : [];
+      private int count;
+      private int next;
+
+      public bool TryGetKey(string casing, out string key)
+      {
+        for (var i = 0; i < count; i++)
+        {
+          if (string.Equals(casings[i], casing, StringComparison.Ordinal))
+          {
+            key = keys[i];
+            return true;
+          }
+        }
+
+        key = string.Empty;
+        return false;
+      }
+
+      /// <summary>Stores a key; returns whether the cache grew (false when it replaced the oldest).</summary>
+      public bool AddKey(string casing, string key)
+      {
+        casings[next] = casing;
+        keys[next] = key;
+        next = (next + 1) % MaxCachedCasings;
+        if (count == MaxCachedCasings) return false;
+        count++;
+        return true;
+      }
     }
 
     /// <summary>Most exact casings whose output key is cached per (title, content type).</summary>
@@ -275,9 +306,8 @@ public static class PlaylistProcessor
           contentType != PlaylistContentType.Live &&
           splitGroupTitles?.Contains(groupTitle) == true;
         decision = new Decision(disabled, split);
-        if (split)
+        if (split && decision.AddKey(groupTitle, key ?? BuildKey(groupTitle, contentType)))
         {
-          decision.Keys[groupTitle] = key ?? BuildKey(groupTitle, contentType);
           CachedKeys++;
         }
         perType[(int)contentType] = decision;
@@ -287,14 +317,10 @@ public static class PlaylistProcessor
       // their own group (e.g. "Germany · Series"), each casing under its own key.
       if (decision.Disabled) return (true, groupTitle);
       if (!decision.Split) return (false, groupTitle);
-      if (!decision.Keys.TryGetValue(groupTitle, out var outputTitle))
+      if (!decision.TryGetKey(groupTitle, out var outputTitle))
       {
         outputTitle = BuildKey(groupTitle, contentType);
-        if (decision.Keys.Count < MaxCachedCasings)
-        {
-          decision.Keys[groupTitle] = outputTitle;
-          CachedKeys++;
-        }
+        if (decision.AddKey(groupTitle, outputTitle)) CachedKeys++;
       }
 
       return (false, outputTitle);
