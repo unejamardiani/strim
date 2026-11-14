@@ -16,7 +16,7 @@
     "implement_per_day": 100,
     "attempts_per_story_per_day": 2,
     "fix_rounds": 2,
-    "requirements_per_day": 5,
+    "requirements_per_day": 100,
     "research_per_day": 2,
     "docs_per_day": 1,
     "budget_usd": {"requirements": 2, "research": 2, "implement": 5, "fix": 3, "docs": 2},
