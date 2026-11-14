@@ -787,7 +787,9 @@ function applyAnalysis(ed, analysis, { sample }) {
   const groups = (analysis.groups || []).map((g, index) => {
     const title = g.groupTitle || g.name;
     const type = CONTENT_TYPES.includes(g.contentType) ? g.contentType : 'Live';
-    return { key: g.name, title, type, count: g.count || 0, index, split: false, search: '', adult: g.isAdult === true };
+    // Whole words of the title (S2); null for an older response or an untitled group, which keeps the substring match.
+    const words = Array.isArray(g.words) && g.words.length ? g.words.map((w) => String(w).toLowerCase()) : null;
+    return { key: g.name, title, type, count: g.count || 0, index, split: false, search: '', words, adult: g.isAdult === true };
   });
 
   const perTitle = new Map();
@@ -1171,6 +1173,12 @@ function groupsInOrder(groups, sort) {
   return bySort[sort];
 }
 
+// A term of up to three characters matches whole words only, so `es` no longer hits `Series`.
+// The content type words (live, movies, series) are longer, so they keep the substring match.
+function matchesTerm(g, term) {
+  return term.length <= 3 && g.words ? g.words.includes(term) : g.search.includes(term);
+}
+
 function updateView(scrollToTop) {
   const ed = picker.ed;
   viewTimer = 0;
@@ -1182,7 +1190,7 @@ function updateView(scrollToTop) {
     if (type !== 'all' && g.type !== type) continue;
     if (show === 'kept' && ed.disabled.has(g.key)) continue;
     if (show === 'hidden' && !ed.disabled.has(g.key)) continue;
-    if (terms.length && !terms.every((t) => g.search.includes(t))) continue;
+    if (terms.length && !terms.every((t) => matchesTerm(g, t))) continue;
     view.push(g);
   }
   ed.view = view;
