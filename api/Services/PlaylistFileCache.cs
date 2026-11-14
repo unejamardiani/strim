@@ -184,7 +184,10 @@ public sealed class PlaylistFileCache
     }
   }
 
-  public PlaylistSourceFile StoreDownloaded(string sourceUrl, DownloadedPlaylistFile downloaded)
+  public PlaylistSourceFile StoreDownloaded(string sourceUrl, DownloadedPlaylistFile downloaded) =>
+    StoreSource(sourceUrl, downloaded, persist: true);
+
+  private PlaylistSourceFile StoreSource(string sourceUrl, DownloadedPlaylistFile downloaded, bool persist)
   {
     var now = _time.GetUtcNow();
     var sourceKey = SourceKeyForUrl(sourceUrl);
@@ -204,6 +207,7 @@ public sealed class PlaylistFileCache
           existing.ExpiresAtUtc = now.Add(_sourceTtl);
           existing.NextRevalidationUtc = now.Add(_revalidationInterval);
           existing.LastAccessedUtc = now;
+          if (persist) WriteSourceSidecarNoLock(existing, now);
           return existing;
         }
 
@@ -235,7 +239,12 @@ public sealed class PlaylistFileCache
 
         if (existing is not null && !string.Equals(existing.FilePath, finalPath, StringComparison.Ordinal))
         {
-          DeleteOrTrackNoLock(existing.FilePath, existing.LengthBytes);
+          DeleteSourceFilesNoLock(existing);
+        }
+
+        if (persist)
+        {
+          WriteSourceSidecarNoLock(source, now);
         }
 
         return source;
@@ -252,7 +261,8 @@ public sealed class PlaylistFileCache
   public PlaylistSourceFile StoreRawText(string cacheIdentity, DownloadedPlaylistFile downloaded)
   {
     // Raw input must not collide with a URL-based source key. The identity is an opaque session id.
-    return StoreDownloaded($"raw://{cacheIdentity}", downloaded);
+    // It gets no sidecar, so it is dropped at restart like the session it belongs to.
+    return StoreSource($"raw://{cacheIdentity}", downloaded, persist: false);
   }
 
   public void TouchNotModified(PlaylistSourceFile source, string? eTag, DateTimeOffset? lastModifiedUtc)
@@ -264,6 +274,10 @@ public sealed class PlaylistFileCache
       source.ExpiresAtUtc = _time.GetUtcNow().Add(_sourceTtl);
       source.NextRevalidationUtc = _time.GetUtcNow().Add(_revalidationInterval);
       source.LastAccessedUtc = _time.GetUtcNow();
+      if (_sources.TryGetValue(source.SourceKey, out var current) && ReferenceEquals(current, source))
+      {
+        WriteSourceSidecarNoLock(source, source.LastAccessedUtc);
+      }
     }
   }
 
@@ -456,7 +470,7 @@ public sealed class PlaylistFileCache
     }
     catch
     {
-      DeleteTemporaryFile(LastGoodSidecarPath(finalPath));
+      DeleteTemporaryFile(SidecarPath(finalPath));
       DeleteTemporaryFile(finalPath, length);
       throw;
     }
@@ -749,6 +763,12 @@ public sealed class PlaylistFileCache
       return false;
     }
 
+    return DeleteSourceFilesNoLock(source);
+  }
+
+  private bool DeleteSourceFilesNoLock(PlaylistSourceFile source)
+  {
+    DeleteOrTrackNoLock(SidecarPath(source.FilePath), 0);
     return DeleteOrTrackNoLock(source.FilePath, source.LengthBytes);
   }
 
@@ -777,7 +797,7 @@ public sealed class PlaylistFileCache
     }
 
     // Without its sidecar the copy is no longer restored after a restart, even while leased.
-    DeleteOrTrackNoLock(LastGoodSidecarPath(entry.FilePath), 0);
+    DeleteOrTrackNoLock(SidecarPath(entry.FilePath), 0);
 
     if (entry.ActiveLeases > 0)
     {
@@ -822,17 +842,37 @@ public sealed class PlaylistFileCache
   {
     try
     {
-      // Source/output metadata is process-local, so those files from a previous process cannot
-      // be safely reused. Restrict deletion to names this service itself generates. Last-good
-      // copies with a matching, unexpired sidecar are restored; every other one is deleted.
+      // Session and output metadata is process-local, so those files from a previous process
+      // cannot be safely reused. Restrict deletion to names this service itself generates.
+      // Sources and last-good copies with a matching, unexpired sidecar are restored; every
+      // other one is deleted. Raw-text sources never get a sidecar, so they are deleted too.
       lock (_sync)
       {
         var restored = new List<LastGoodFile>();
+        var restoredSources = new List<PlaylistSourceFile>();
         foreach (var file in Directory.EnumerateFiles(_directory))
         {
           var name = Path.GetFileName(file);
-          if (name.EndsWith(".partial", StringComparison.Ordinal) ||
-              name.StartsWith("source-", StringComparison.Ordinal) ||
+          if (name.StartsWith("source-", StringComparison.Ordinal) && !name.EndsWith(".partial", StringComparison.Ordinal))
+          {
+            if (name.EndsWith(".m3u", StringComparison.Ordinal))
+            {
+              if (TryReadSource(file) is { } source)
+              {
+                restoredSources.Add(source);
+              }
+              else
+              {
+                DeleteOrTrackNoLock(SidecarPath(file), 0);
+                DeleteOrTrackNoLock(file, _options.MaxDiskBytes);
+              }
+            }
+            else if (!name.EndsWith(".json", StringComparison.Ordinal) || !File.Exists(Path.ChangeExtension(file, ".m3u")))
+            {
+              DeleteOrTrackNoLock(file, _options.MaxDiskBytes);
+            }
+          }
+          else if (name.EndsWith(".partial", StringComparison.Ordinal) ||
               name.StartsWith("output-", StringComparison.Ordinal) ||
               name.StartsWith("raw-", StringComparison.Ordinal))
           {
@@ -850,7 +890,7 @@ public sealed class PlaylistFileCache
               }
               else
               {
-                DeleteOrTrackNoLock(LastGoodSidecarPath(file), 0);
+                DeleteOrTrackNoLock(SidecarPath(file), 0);
                 DeleteOrTrackNoLock(file, _options.MaxDiskBytes);
               }
             }
@@ -860,6 +900,14 @@ public sealed class PlaylistFileCache
               // handled together with that copy.
               DeleteOrTrackNoLock(file, _options.MaxDiskBytes);
             }
+          }
+        }
+
+        foreach (var source in restoredSources.OrderByDescending(x => x.LastAccessedUtc))
+        {
+          if (!_sources.TryAdd(source.SourceKey, source))
+          {
+            DeleteSourceFilesNoLock(source);
           }
         }
 
@@ -889,7 +937,75 @@ public sealed class PlaylistFileCache
   private static string LastGoodKey(Guid playlistId) =>
     Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"lastgood:{playlistId:N}")))[..32].ToLowerInvariant();
 
-  private static string LastGoodSidecarPath(string filePath) => Path.ChangeExtension(filePath, ".json");
+  private static string SidecarPath(string filePath) => Path.ChangeExtension(filePath, ".json");
+
+  /// <summary>
+  /// Writes the restart metadata of a URL source: the hashed URL key, never the URL itself.
+  /// A failed write only costs the reuse after a restart, so it is logged, not thrown.
+  /// </summary>
+  private void WriteSourceSidecarNoLock(PlaylistSourceFile source, DateTimeOffset fetchedAtUtc)
+  {
+    var sidecarPath = SidecarPath(source.FilePath);
+    var temporaryPath = $"{sidecarPath}.partial";
+    try
+    {
+      var sidecar = new SourceSidecar(source.SourceKey, source.ContentHash, source.LengthBytes, source.ETag, source.LastModifiedUtc, fetchedAtUtc);
+      File.WriteAllBytes(temporaryPath, JsonSerializer.SerializeToUtf8Bytes(sidecar));
+      TrySetPrivateFile(temporaryPath);
+      File.Move(temporaryPath, sidecarPath, overwrite: true);
+    }
+    catch (Exception ex)
+    {
+      DeleteOrTrackNoLock(temporaryPath, 0);
+      DeleteOrTrackNoLock(sidecarPath, 0);
+      _logger.LogWarning(ex, "Unable to write the restart metadata of a playlist source");
+    }
+  }
+
+  /// <summary>Returns the restorable source, or null when the file and its sidecar must be deleted.</summary>
+  private PlaylistSourceFile? TryReadSource(string filePath)
+  {
+    try
+    {
+      var sidecarPath = SidecarPath(filePath);
+      var sidecarInfo = new FileInfo(sidecarPath);
+      if (!sidecarInfo.Exists || sidecarInfo.Length > 4096)
+      {
+        return null;
+      }
+
+      var sidecar = JsonSerializer.Deserialize<SourceSidecar>(File.ReadAllBytes(sidecarPath));
+      var length = new FileInfo(filePath).Length;
+      if (sidecar is null ||
+          string.IsNullOrEmpty(sidecar.Key) ||
+          string.IsNullOrEmpty(sidecar.ContentHash) ||
+          !string.Equals(Path.GetFileName(filePath), $"source-{sidecar.Key}-{sidecar.ContentHash[..Math.Min(16, sidecar.ContentHash.Length)]}.m3u", StringComparison.Ordinal) ||
+          sidecar.LengthBytes != length ||
+          sidecar.FetchedAtUtc.Add(_sourceTtl) <= _time.GetUtcNow() ||
+          !string.Equals(sidecar.ContentHash, HashFile(filePath), StringComparison.Ordinal))
+      {
+        return null;
+      }
+
+      // The URL is not stored; lookups go by its hash, the source key.
+      return new PlaylistSourceFile(
+        sidecar.Key,
+        string.Empty,
+        filePath,
+        sidecar.ContentHash,
+        length,
+        sidecar.ETag,
+        sidecar.LastModifiedUtc,
+        sidecar.FetchedAtUtc.Add(_sourceTtl),
+        sidecar.FetchedAtUtc.Add(_revalidationInterval),
+        sidecar.FetchedAtUtc);
+    }
+    catch (Exception ex)
+    {
+      _logger.LogDebug(ex, "Unable to restore a playlist source at startup");
+      return null;
+    }
+  }
 
   private static string HashFile(string path)
   {
@@ -904,7 +1020,7 @@ public sealed class PlaylistFileCache
   private void WriteLastGoodSidecar(string filePath, string key)
   {
     var sidecar = new LastGoodSidecar(key, HashFile(filePath), new FileInfo(filePath).Length, _time.GetUtcNow());
-    var sidecarPath = LastGoodSidecarPath(filePath);
+    var sidecarPath = SidecarPath(filePath);
     var temporaryPath = $"{sidecarPath}.partial";
     try
     {
@@ -924,7 +1040,7 @@ public sealed class PlaylistFileCache
   {
     try
     {
-      var sidecarPath = LastGoodSidecarPath(filePath);
+      var sidecarPath = SidecarPath(filePath);
       var sidecarInfo = new FileInfo(sidecarPath);
       if (!sidecarInfo.Exists || sidecarInfo.Length > 4096)
       {
@@ -1182,6 +1298,14 @@ public sealed class PlaylistDiskReservation : IDisposable
 internal sealed record PlaylistSession(string SourceKey, DateTimeOffset ExpiresAtUtc);
 
 internal sealed record PendingDeleteFile(string FilePath, long LengthBytes);
+
+internal sealed record SourceSidecar(
+  string Key,
+  string ContentHash,
+  long LengthBytes,
+  string? ETag,
+  DateTimeOffset? LastModifiedUtc,
+  DateTimeOffset FetchedAtUtc);
 
 internal sealed record LastGoodSidecar(string Key, string ContentHash, long LengthBytes, DateTimeOffset CreatedAtUtc);
 

@@ -479,6 +479,103 @@ public class PlaylistFileCacheTests
     }
   }
 
+  private const string SourceUrl = "https://example.com/playlist.m3u";
+
+  [Fact]
+  public async Task Source_SurvivesRestart()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 4096);
+    var lastModified = new DateTimeOffset(2025, 12, 31, 12, 0, 0, TimeSpan.Zero);
+    var downloaded = await fixture.Cache.WriteRawTextAsync("#EXTM3U\nsource\n", CancellationToken.None);
+    var stored = fixture.Cache.StoreDownloaded(SourceUrl, downloaded with { ETag = "\"v1\"", LastModifiedUtc = lastModified });
+    var fetchedAt = fixture.Time.GetUtcNow();
+
+    fixture.Time.Advance(TimeSpan.FromMinutes(5));
+    fixture.Restart();
+
+    var restored = fixture.Cache.TryGetFreshSource(SourceUrl);
+    Assert.NotNull(restored);
+    Assert.Equal(stored.FilePath, restored!.FilePath);
+    Assert.Equal(stored.ContentHash, restored.ContentHash);
+    Assert.Equal(stored.LengthBytes, restored.LengthBytes);
+    Assert.Equal("\"v1\"", restored.ETag);
+    Assert.Equal(lastModified, restored.LastModifiedUtc);
+
+    var sidecar = await File.ReadAllTextAsync(Path.ChangeExtension(stored.FilePath, ".json"));
+    using var json = System.Text.Json.JsonDocument.Parse(sidecar);
+    Assert.Equal(
+      new[] { "Key", "ContentHash", "LengthBytes", "ETag", "LastModifiedUtc", "FetchedAtUtc" },
+      json.RootElement.EnumerateObject().Select(x => x.Name).ToArray());
+    Assert.Equal(stored.SourceKey, json.RootElement.GetProperty("Key").GetString());
+    Assert.Equal(fetchedAt, json.RootElement.GetProperty("FetchedAtUtc").GetDateTimeOffset());
+    Assert.DoesNotContain("example.com", sidecar, StringComparison.OrdinalIgnoreCase);
+    Assert.DoesNotContain("playlist.m3u", sidecar, StringComparison.OrdinalIgnoreCase);
+
+    // Past the revalidation interval the restored source is still offered for a conditional GET.
+    fixture.Time.Advance(TimeSpan.FromMinutes(20));
+    Assert.Null(fixture.Cache.TryGetFreshSource(SourceUrl));
+    Assert.NotNull(fixture.Cache.TryGetSource(SourceUrl));
+  }
+
+  [Fact]
+  public async Task Startup_DeletesExpiredOrOrphanedSources()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 8192);
+    var expired = fixture.Cache.StoreDownloaded("https://example.com/old.m3u",
+      await fixture.Cache.WriteRawTextAsync("#EXTM3U\nold\n", CancellationToken.None));
+    fixture.Time.Advance(TimeSpan.FromHours(23));
+    var urls = new[] { "a", "b", "c", "d", "e", "f" }.Select(x => $"https://example.com/{x}.m3u").ToArray();
+    var sources = new List<PlaylistSourceFile>();
+    foreach (var url in urls)
+    {
+      sources.Add(fixture.Cache.StoreDownloaded(url,
+        await fixture.Cache.WriteRawTextAsync($"#EXTM3U\n{url}\n", CancellationToken.None)));
+    }
+
+    File.Delete(Path.ChangeExtension(sources[0].FilePath, ".json"));   // orphaned file
+    File.Delete(sources[1].FilePath);                                  // orphaned sidecar
+    File.AppendAllText(sources[2].FilePath, "x");                      // length mismatch
+    File.WriteAllText(sources[3].FilePath, "#EXTM3U\nX\n".PadRight((int)sources[3].LengthBytes, '#')); // hash mismatch
+    File.WriteAllText(Path.ChangeExtension(sources[4].FilePath, ".json"), "{not json");
+
+    fixture.Time.Advance(TimeSpan.FromHours(2));
+    fixture.Restart();
+
+    Assert.Null(fixture.Cache.TryGetSource("https://example.com/old.m3u"));
+    Assert.False(File.Exists(expired.FilePath));
+    Assert.False(File.Exists(Path.ChangeExtension(expired.FilePath, ".json")));
+    for (var i = 0; i < 5; i++)
+    {
+      Assert.Null(fixture.Cache.TryGetSource(urls[i]));
+      Assert.False(File.Exists(sources[i].FilePath), urls[i]);
+      Assert.False(File.Exists(Path.ChangeExtension(sources[i].FilePath, ".json")), urls[i]);
+    }
+    Assert.Equal(sources[5].FilePath, fixture.Cache.TryGetSource(urls[5])?.FilePath);
+    Assert.Single(Directory.EnumerateFiles(fixture.Directory, "source-*.m3u"));
+    Assert.Single(Directory.EnumerateFiles(fixture.Directory, "source-*.json"));
+  }
+
+  [Fact]
+  public async Task Startup_StillDropsSessionsRawAndOutputs()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 8192);
+    var source = await fixture.StoreSourceAsync("#EXTM3U\nsource\n");
+    var session = fixture.Cache.CreateSession(source);
+    var output = fixture.StoreOutput(source, "News", "#EXTM3U\noutput\n");
+    var outputPath = Assert.Single(Directory.EnumerateFiles(fixture.Directory, "output-*.m3u"));
+    var raw = fixture.Cache.StoreRawText("session-id",
+      await fixture.Cache.WriteRawTextAsync("#EXTM3U\nraw\n", CancellationToken.None));
+    Assert.False(File.Exists(Path.ChangeExtension(raw.FilePath, ".json")));
+
+    fixture.Restart();
+
+    Assert.Null(fixture.Cache.TryGetSessionSource(session));
+    Assert.Null(fixture.Cache.TryLeaseOutput(output.OutputKey));
+    Assert.False(File.Exists(outputPath));
+    Assert.False(File.Exists(raw.FilePath));
+    Assert.NotNull(fixture.Cache.TryGetSource(SourceUrl));
+  }
+
   private sealed class ManualTime : TimeProvider
   {
     private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);

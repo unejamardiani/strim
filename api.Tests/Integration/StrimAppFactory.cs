@@ -34,6 +34,9 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
   /// <summary>Every address the stubbed upstream was asked for, in order.</summary>
   public ConcurrentQueue<string> UpstreamRequests { get; } = new();
 
+  /// <summary>The cache validators (If-None-Match, If-Modified-Since) of every upstream request, in order.</summary>
+  public ConcurrentQueue<(string Url, string IfNoneMatch, DateTimeOffset? IfModifiedSince)> UpstreamValidators { get; } = new();
+
   /// <summary>Formatted log entries (message and exception) written by the app.</summary>
   public ConcurrentQueue<string> LogEntries { get; } = new();
 
@@ -60,7 +63,7 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
     builder.ConfigureTestServices(services =>
     {
       services.AddHttpClient("fetcher").ConfigurePrimaryHttpMessageHandler(
-        () => new StubUpstream(UpstreamPlaylists, UpstreamResponses, UpstreamRequests));
+        () => new StubUpstream(UpstreamPlaylists, UpstreamResponses, UpstreamRequests, UpstreamValidators));
     });
   }
 
@@ -96,12 +99,14 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
   private sealed class StubUpstream(
     Dictionary<string, string> playlists,
     Dictionary<string, Func<HttpResponseMessage>> responses,
-    ConcurrentQueue<string> requests) : HttpMessageHandler
+    ConcurrentQueue<string> requests,
+    ConcurrentQueue<(string, string, DateTimeOffset?)> validators) : HttpMessageHandler
   {
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
       var key = request.RequestUri!.ToString();
       requests.Enqueue(key);
+      validators.Enqueue((key, request.Headers.IfNoneMatch.ToString(), request.Headers.IfModifiedSince));
       if (responses.TryGetValue(key, out var scripted))
       {
         return Task.FromResult(scripted());
