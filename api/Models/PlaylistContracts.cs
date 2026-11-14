@@ -20,4 +20,13 @@ public record GeneratePlaylistRequest(string? SourceUrl, string? CacheKey, List<
 
 public record GeneratePlaylistResponse(string OutputKey, int TotalChannels, int KeptChannels);
 
+public record PlaylistSearchRequest(string? CacheKey, string? Query, List<string>? DisabledGroups);
+
+/// <param name="Group">The group-title the generated file writes for the entry.</param>
+/// <param name="GroupKey">Filter key sent back in disabledGroups.</param>
+/// <param name="Position">1-based position within <paramref name="Group"/> in source order.</param>
+public record PlaylistSearchMatchResult(string Name, string Group, string GroupKey, int Position, string ContentType, bool Enabled);
+
+public record PlaylistSearchResponse(List<PlaylistSearchMatchResult> Matches, bool HasMore);
+
 public record PlaylistFilterResult(string Text, int TotalChannels, int KeptChannels, DateTimeOffset? ExpirationUtc = null);
