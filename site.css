@@ -1,4 +1,4 @@
-/* Strim site: landing, guides, comparison, blog and error pages. Builds on theme.css; see DESIGN.md. */
+/* Strim site: landing, guides, comparison and error pages. Builds on theme.css; see DESIGN.md. */
 
 /* ---------- Frame ---------- */
 
@@ -139,14 +139,19 @@
 
 /* ---------- Text ---------- */
 
+/* Same display heading as the editor's hero (app.css .hero h1). */
 .site-main h1 {
-  font-size: clamp(36px, 6vw, 60px);
+  font-size: clamp(40px, 10vw, 64px);
   font-weight: 800;
-  letter-spacing: -0.045em;
-  line-height: 1.02;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
 }
 
-.site-main h1 em,
+.site-main h1 em {
+  font-style: normal;
+  color: var(--accent);
+}
+
 .site-main h2 em {
   font-style: normal;
   color: var(--accent-ink);
@@ -305,11 +310,6 @@ kbd {
   align-items: center;
   gap: 10px 14px;
   margin-top: 24px;
-}
-
-.cta-row .note {
-  color: var(--ink-3);
-  font-size: 14px;
 }
 
 .btn-lg {
@@ -481,24 +481,44 @@ kbd {
 
 .demo-dock .total {
   flex: 1;
+  min-width: 0;
+  line-height: 1.1;
+}
+
+/* Same figures as the editor's dock (app.css .dock-value, .dock-label). */
+.demo-dock .value {
+  display: block;
   font-family: var(--font-display);
   font-size: 24px;
   font-weight: 800;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.demo-dock .total small {
+.demo-dock .value small {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--dock-ink-2);
+}
+
+.demo-dock .sub {
   display: block;
-  font-family: var(--font-ui);
+  margin-top: 2px;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0;
   color: var(--dock-ink-2);
+  white-space: nowrap;
 }
 
 .demo-dock .btn {
   min-height: 40px;
+}
+
+.demo-dock .btn:not(.btn-primary) {
+  background: rgba(245, 238, 228, 0.1);
+  color: var(--dock-ink);
 }
 
 /* Static switch, same look as the app's. */
@@ -769,234 +789,424 @@ kbd {
   color: var(--dock-ink-2);
 }
 
-/* ---------- Tables (comparison) ---------- */
-
-.table-wrap {
-  overflow-x: auto;
-  padding: 0;
-}
-
-.site-main table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 15px;
-}
-
-.site-main th,
-.site-main td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-
-.site-main thead th {
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-
-.site-main tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.site-main td:first-child {
-  font-weight: 650;
-}
-
-.site-main th:nth-child(2),
-.site-main td:nth-child(2) {
-  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
-}
-
-/* ---------- Article pages (blog, comparison details) ---------- */
-
-/* Converted pages keep a plain wrapper: <main> > <div> > <header>, <section>… */
-.site-main > div > header {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 760px;
-  margin-bottom: 36px;
-}
-
-.site-main > div > header p {
-  color: var(--ink-2);
-  font-size: 18px;
-}
-
-.site-main > div > section + section {
-  margin-top: 48px;
-}
-
-.site-main > div > section > h2 {
-  margin-bottom: 18px;
-}
-
-.prose-page > div {
-  max-width: var(--read-w);
-  margin: 0 auto;
-}
-
-.prose-page article > p,
-.prose-page article > ul,
-.prose-page article > ol {
-  font-size: 17px;
-  line-height: 1.7;
-}
-
-.prose-page article > * + * {
-  margin-top: 16px;
-}
-
-.prose-page article > h2 {
-  margin-top: 40px;
-}
-
-.prose-page article > h3 {
-  margin-top: 28px;
-}
-
-.prose-page article ul,
-.prose-page article ol {
-  padding-left: 22px;
-}
-
-.prose-page li + li {
-  margin-top: 6px;
-}
-
-.prose-page h4 {
-  margin: 0 0 8px;
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 750;
-}
-
-.prose-page .card,
-.prose-page .callout {
-  font-size: 15px;
-}
-
-.prose-page .callout .btn {
-  margin-top: 14px;
-}
-
-.prose-page > div > section {
-  margin-top: 56px;
-}
-
-.back {
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.post-info {
-  display: flex;
-  gap: 16px;
-  color: var(--ink-3);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.prose-page pre {
-  overflow-x: auto;
-  padding: 16px;
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  font-family: var(--font-mono);
-  font-size: 13.5px;
-  line-height: 1.6;
-}
-
-.prose-page pre code {
-  padding: 0;
-  background: none;
-}
-
-.callout {
-  padding: 16px 18px;
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  color: var(--ink);
-}
-
-.callout p + p {
-  margin-top: 8px;
-}
-
-.step-num {
-  font-family: var(--font-display);
-  font-weight: 800;
-  color: var(--accent-ink);
-}
-
-/* Blog index cards are whole-card links. */
-.post-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  color: var(--ink) !important;
-  text-decoration: none !important;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-pop);
-}
-
-.post-card .post-meta {
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--accent-ink);
-}
-
-.post-card .more {
-  margin-top: auto;
-  font-weight: 700;
-  color: var(--accent-ink);
-}
-
 /* ---------- Error pages ---------- */
 
+/* Copy on the left, a small television on the right; on phones the set sits above the copy. */
 .error-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  align-items: center;
+  gap: 28px 64px;
+  max-width: 960px;
+  margin: 6vh auto 0;
+}
+
+.error-page .tv {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.error-copy {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 16px;
-  max-width: 620px;
-  margin: 8vh auto 0;
+  min-width: 0;
 }
 
-.error-code {
+.error-page h1 {
+  font-size: clamp(34px, 7vw, 54px);
+  line-height: 1;
+}
+
+@media (max-width: 760px) {
+  .error-page {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 0;
+  }
+
+  .error-page .tv,
+  .error-copy {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .error-page .tv {
+    width: min(100%, 280px);
+  }
+}
+
+/* ---------- Television (error pages, decorative) ---------- */
+
+/* Drawn in the dock's colours, so it is inverted on paper in light mode and a raised set in dark. */
+.tv {
+  --tv-body: var(--dock-bg);
+  --tv-edge: var(--dock-border);
+  --tv-screen: #0f0d0b;
+  --tv-cream: #f5eee4;
+  --tv-bars: linear-gradient(90deg,
+      var(--tv-cream) 0 14.3%,
+      var(--movies) 0 28.6%,
+      var(--ok) 0 42.9%,
+      var(--accent) 0 57.1%,
+      var(--series) 0 71.4%,
+      #9a9084 0 85.7%,
+      #2b251f 0);
+  position: relative;
+  width: 100%;
+  padding-top: 58px;
+  padding-bottom: 12px;
+}
+
+/* Rabbit-ear antenna; the left tip is the tangerine signal dot. */
+.tv-antenna {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 0;
+  height: 56px;
+}
+
+.tv-antenna i {
+  position: absolute;
+  bottom: 0;
+  left: -1.5px;
+  width: 3px;
+  height: 62px;
+  border-radius: 3px;
+  background: var(--ink-3);
+  transform-origin: 50% 100%;
+  transform: rotate(-32deg);
+}
+
+.tv-antenna i + i {
+  transform: rotate(26deg);
+}
+
+.tv-antenna i::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: -4.5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.tv-antenna i + i::before {
+  background: var(--ink-3);
+}
+
+/* The antenna's foot. */
+.tv-antenna::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: -22px;
+  width: 44px;
+  height: 14px;
+  border-radius: 14px 14px 4px 4px;
+  background: var(--tv-body);
+  border: 1px solid var(--tv-edge);
+}
+
+.tv-set {
+  position: relative;
+  padding: 14px 14px 10px;
+  border-radius: 28px;
+  background: var(--tv-body);
+  border: 1px solid var(--tv-edge);
+  box-shadow: var(--shadow-pop);
+}
+
+/* Feet. */
+.tv-set::before,
+.tv-set::after {
+  content: "";
+  position: absolute;
+  bottom: -11px;
+  left: 18%;
+  width: 16%;
+  height: 12px;
+  border-radius: 0 0 8px 8px;
+  background: var(--tv-body);
+  border: 1px solid var(--tv-edge);
+  border-top: 0;
+}
+
+.tv-set::after {
+  left: auto;
+  right: 18%;
+}
+
+.tv-screen {
+  position: relative;
+  z-index: 0;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--tv-screen);
+  color: var(--tv-cream);
+}
+
+/* Scan lines and a vignette over whatever the screen shows. */
+.tv-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(15, 13, 11, 0.22) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(15, 13, 11, 0.55) 100%);
+  border-radius: inherit;
+}
+
+/* A soft bar that rolls down the picture. */
+.tv-screen::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -30%;
+  z-index: 3;
+  height: 28%;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(245, 238, 228, 0.1) 50%, transparent);
+  animation: tv-roll 5.5s linear infinite;
+}
+
+.tv-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px 0;
+}
+
+.tv-grille {
+  flex: 1;
+  height: 12px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(90deg, rgba(245, 238, 228, 0.16) 0 2px, transparent 2px 7px);
+}
+
+.tv-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px 1px rgba(255, 91, 31, 0.6);
+}
+
+.tv-knob {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background:
+    linear-gradient(90deg, transparent 7px, rgba(245, 238, 228, 0.45) 7px 9px, transparent 9px),
+    rgba(245, 238, 228, 0.14);
+}
+
+.tv-knob + .tv-knob {
+  transform: rotate(60deg);
+}
+
+/* On-screen display: a cream label like the app's toasts, inverted. */
+.tv-osd {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--tv-cream);
+  color: #1d1a16;
   font-family: var(--font-display);
-  font-size: clamp(88px, 18vw, 160px);
+  font-size: 14px;
   font-weight: 800;
-  letter-spacing: -0.06em;
-  line-height: 0.9;
-  color: var(--accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tv-osd::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.tv-osd-center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tv-channel {
+  position: absolute;
+  z-index: 4;
+  top: 9%;
+  right: 7%;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--tv-cream);
+  text-shadow: 0 0 6px rgba(245, 238, 228, 0.5);
+}
+
+/* 404: snow. The noise is twice the screen's size and jumps between offsets. */
+.tv-noise {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  animation: tv-snow 0.6s steps(1, end) infinite;
+}
+
+.tv-searching .tv-antenna i:first-child::before {
+  animation: tv-blink 1.6s steps(1, end) infinite;
+}
+
+/* 500: colour bars with a band of reversed castellations below, and an occasional jolt. */
+.tv-bars {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg,
+      #2b251f 0 14.3%,
+      var(--tv-screen) 0 28.6%,
+      var(--series) 0 42.9%,
+      var(--tv-screen) 0 57.1%,
+      var(--ok) 0 71.4%,
+      var(--tv-screen) 0 85.7%,
+      var(--tv-cream) 0) 0 100% / 100% 22% no-repeat,
+    var(--tv-bars);
+  animation: tv-jolt 7s steps(1, end) infinite;
+}
+
+/* 50x: a test card on a grid with the wordmark in the circle. */
+.tv-grid {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(245, 238, 228, 0.14) 0 1px, transparent 1px 12.5%),
+    repeating-linear-gradient(0deg, rgba(245, 238, 228, 0.14) 0 1px, transparent 1px 16.66%),
+    #29231d;
+}
+
+.tv-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 64%;
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-rows: 1fr 0.5fr 1fr;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 3px solid var(--tv-cream);
+  background: var(--tv-cream);
+  color: #1d1a16;
+  transform: translate(-50%, -50%);
+}
+
+.tv-card .wordmark {
+  align-self: end;
+  justify-self: center;
+  padding-bottom: 6%;
+  font-size: clamp(26px, 9vw, 40px);
+}
+
+.tv-card .wm-dot {
+  animation: on-air 2.4s ease-out 0.4s infinite;
+}
+
+.tv-card-bars {
+  background: var(--tv-bars);
+}
+
+.tv-card-note {
+  align-self: start;
+  justify-self: center;
+  padding-top: 7%;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@keyframes tv-roll {
+  to {
+    transform: translateY(480%);
+  }
+}
+
+@keyframes tv-snow {
+  0% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-31%, -12%);
+  }
+  40% {
+    transform: translate(-8%, -37%);
+  }
+  60% {
+    transform: translate(-44%, -26%);
+  }
+  80% {
+    transform: translate(-19%, -48%);
+  }
+}
+
+@keyframes tv-blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes tv-jolt {
+  0% {
+    transform: none;
+    filter: none;
+  }
+  93% {
+    transform: translateX(3%) skewX(-4deg);
+    filter: brightness(1.25);
+  }
+  95% {
+    transform: translateX(-1%);
+    filter: none;
+  }
+  97% {
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wm-dot {
+  .wm-dot,
+  .tv-card .wm-dot,
+  .tv-noise,
+  .tv-bars,
+  .tv-screen::after,
+  .tv-searching .tv-antenna i:first-child::before {
     animation: none;
   }
 
-  .post-card,
   .faq summary::after {
     transition: none;
   }
-}
-
-/* Code samples sit in a .card in the converted posts; the pre is frame enough. */
-.prose-page .card:has(> pre) {
-  padding: 0;
-  background: none;
-  border: 0;
-  box-shadow: none;
 }

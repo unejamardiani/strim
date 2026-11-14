@@ -685,6 +685,7 @@ select.input {
 .summary {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
   font-size: 13px;
@@ -693,9 +694,18 @@ select.input {
   font-variant-numeric: tabular-nums;
 }
 
+.adult-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
 .bulk {
   display: flex;
   gap: 4px;
+  margin-left: auto;
 }
 
 .bulk .btn {
@@ -822,6 +832,119 @@ select.input {
 .switch.on::after {
   transform: translateX(18px);
   background: #fffcf7;
+}
+
+/* The row an Everything search result jumped to; a static tint, so it also shows with reduced motion. */
+.group-row.flash {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* ---------- Search field with the Groups / Everything switch ---------- */
+
+.search-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.search-row .input-search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.search-results {
+  padding: 0;
+  overflow: hidden;
+}
+
+.search-status,
+.search-more {
+  margin: 0;
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-results .notice {
+  margin: 12px;
+}
+
+.search-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.search-hit {
+  width: 100%;
+  min-height: var(--row-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 8px 18px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.search-hit:hover {
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+}
+
+.search-hit-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-hit-name,
+.search-hit-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-hit-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.search-hit-meta {
+  font-size: 13px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-badge {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.search-badge.off {
+  background: var(--surface-2);
+  color: var(--ink-3);
+}
+
+@media (min-width: 768px) {
+  .search-hit-name {
+    font-size: 15px;
+  }
 }
 
 .list-empty {
@@ -1149,6 +1272,29 @@ select.input {
   background: var(--danger);
 }
 
+.toast-action {
+  flex-shrink: 0;
+  min-height: var(--control-h);
+  margin: -11px -12px -11px 4px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.toast-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .toast.leaving {
   opacity: 0;
   transform: translateY(-6px);
@@ -1192,5 +1338,128 @@ select.input {
   .spinner {
     animation-duration: 1.6s !important;
     animation-iteration-count: infinite !important;
+  }
+}
+
+/* ---------- Duplicates & variants report (read-only sheet) ---------- */
+
+.report-line {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.report-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.report-counts > div {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.report-counts dt {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.report-counts dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-counts dd small {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.report-empty {
+  font-weight: 650;
+  color: var(--ink-2);
+}
+
+.report-heading {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: -10px;
+}
+
+.report-sets,
+.report-set ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-sets {
+  gap: 10px;
+}
+
+.report-set {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.report-set-title {
+  font-weight: 700;
+}
+
+.report-set-groups {
+  font-size: 13px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.report-set ul {
+  margin-top: 6px;
+  gap: 4px;
+}
+
+.report-set li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.report-name {
+  overflow-wrap: anywhere;
+}
+
+.report-set li small {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.report-word {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  background: var(--surface-3);
+  color: var(--ink-2);
+}
+
+@media (max-width: 420px) {
+  .report-counts {
+    grid-template-columns: 1fr;
   }
 }

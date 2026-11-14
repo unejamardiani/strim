@@ -35,6 +35,9 @@ public static class PlaylistServices
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-mpegurl"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*", 0.8));
       })
+      // The default HttpClient logging writes the full request URL, which carries the provider's
+      // username and password; PlaylistSourceFetcher logs the host only.
+      .RemoveAllLoggers()
       .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
       {
         // Redirects are followed by PlaylistSourceFetcher so each target is validated.

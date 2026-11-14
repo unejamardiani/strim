@@ -7,14 +7,17 @@ namespace Api.Tests.Integration;
 
 public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimAppFactory>
 {
-  private async Task<(ApiClient Owner, PlaylistDto Playlist)> CreateSharedAsync(string userName, params string[] disabled)
+  private Task<(ApiClient Owner, PlaylistDto Playlist)> CreateSharedAsync(string userName, params string[] disabled) =>
+    CreateSharedFromAsync(userName, StrimAppFactory.UpstreamUrl, disabled);
+
+  private async Task<(ApiClient Owner, PlaylistDto Playlist)> CreateSharedFromAsync(string userName, string sourceUrl, params string[] disabled)
   {
     var owner = new ApiClient(factory.CreateClient());
     await owner.RegisterAsync(userName);
     var response = await owner.PostAsync("/api/playlists", new
     {
       name = "Shared",
-      sourceUrl = StrimAppFactory.UpstreamUrl,
+      sourceUrl,
       disabledGroups = disabled,
     });
     response.EnsureSuccessStatusCode();
@@ -33,6 +36,19 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
 
     var stats = await owner.Http.GetFromJsonAsync<StatsDto>($"/api/playlists/{playlist.Id}/stats");
     Assert.Equal(1, stats!.ViewCount);
+  }
+
+  [Fact]
+  public async Task Share_KeepsSourceHeaderLine()
+  {
+    var (_, playlist) = await CreateSharedFromAsync("guide-sharer", StrimAppFactory.GuideHeaderUpstreamUrl, "Kids");
+
+    var text = await factory.CreateClient().GetStringAsync($"/api/playlists/{playlist.Id}/share/{playlist.ShareCode}");
+    var lines = text.Replace("\r\n", "\n").Split('\n');
+    Assert.Equal(TestPlaylists.GuideHeader, lines[0]);
+    Assert.Equal("# Created with Strim (https://strim.plis.dev)", lines[1]);
+    Assert.Contains("ARD", text);
+    Assert.DoesNotContain("KiKA", text);
   }
 
   [Fact]
@@ -68,6 +84,16 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
   public async Task UnknownPage_IsNotFound()
   {
     var response = await factory.CreateClient().GetAsync("/no-such-page");
+    Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+  }
+
+  // The blog was removed; its old addresses must end in the normal 404, not in an error.
+  [Theory]
+  [InlineData("/blog/")]
+  [InlineData("/blog/fix-iptv-playlist-not-loading.html")]
+  public async Task RemovedBlogPage_IsNotFound(string path)
+  {
+    var response = await factory.CreateClient().GetAsync(path);
     Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
   }
 
