@@ -74,6 +74,8 @@ public sealed class PlaylistFileCache
 
   public long MaxSearchIndexBytes => Math.Max(0, _options.MaxSearchIndexBytes);
 
+  public long MaxReportBytes => Math.Max(0, _options.MaxReportBytes);
+
   public long MaxGeneratedBytes => _options.MaxSourceBytes > 0
     ? _options.MaxSourceBytes
     : Math.Max(0, _options.MaxDiskBytes);

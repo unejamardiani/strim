@@ -28,6 +28,26 @@ public record GeneratePlaylistRequest(string? SourceUrl, string? CacheKey, List<
 
 public record GeneratePlaylistResponse(string OutputKey, int TotalChannels, int KeptChannels);
 
+public record PlaylistReportRequest(string? SourceUrl, string? CacheKey);
+
+/// <param name="Truncated">True when more sets exist than are listed; the counts always cover the whole list.</param>
+public record PlaylistReportResponse(
+  int TotalEntries,
+  int DuplicateSetCount,
+  int DuplicateEntryCount,
+  int VariantGroupCount,
+  int VariantEntryCount,
+  bool Truncated,
+  List<ReportDuplicateSet> DuplicateSets,
+  List<ReportVariantGroup> VariantGroups);
+
+public record ReportDuplicateSet(IReadOnlyList<string> Groups, List<ReportEntry> Entries);
+
+public record ReportVariantGroup(string BaseName, IReadOnlyList<string> Groups, List<ReportEntry> Entries);
+
+/// <param name="Group">The entry's group-title.</param>
+public record ReportEntry(string Name, string Group, IReadOnlyList<string> QualityWords);
+
 public record PlaylistSearchRequest(string? CacheKey, string? Query, List<string>? DisabledGroups);
 
 /// <param name="Group">The group-title the generated file writes for the entry.</param>
