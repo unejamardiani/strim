@@ -1130,6 +1130,26 @@ function scheduleViewUpdate() {
 
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
+// Sorted copies of a groups array, one per sort mode. Keyed by the array itself, so loading another
+// playlist (which replaces ed.groups) starts a fresh cache. The index tie-break makes each order total,
+// so filtering the sorted array gives the same order as sorting the filtered one.
+const sortedGroups = new WeakMap();
+
+function groupsInOrder(groups, sort) {
+  if (sort !== 'name' && sort !== 'size') return groups;
+  let bySort = sortedGroups.get(groups);
+  if (!bySort) {
+    bySort = {};
+    sortedGroups.set(groups, bySort);
+  }
+  if (!bySort[sort]) {
+    bySort[sort] = sort === 'name'
+      ? groups.slice().sort((a, b) => collator.compare(a.title, b.title) || a.index - b.index)
+      : groups.slice().sort((a, b) => b.count - a.count || a.index - b.index);
+  }
+  return bySort[sort];
+}
+
 function updateView(scrollToTop) {
   const ed = picker.ed;
   viewTimer = 0;
@@ -1137,15 +1157,13 @@ function updateView(scrollToTop) {
   const terms = ed.filter.query.toLowerCase().split(/\s+/).filter(Boolean);
   const { type, show, sort } = ed.filter;
   const view = [];
-  for (const g of ed.groups) {
+  for (const g of groupsInOrder(ed.groups, sort)) {
     if (type !== 'all' && g.type !== type) continue;
     if (show === 'kept' && ed.disabled.has(g.key)) continue;
     if (show === 'hidden' && !ed.disabled.has(g.key)) continue;
     if (terms.length && !terms.every((t) => g.search.includes(t))) continue;
     view.push(g);
   }
-  if (sort === 'name') view.sort((a, b) => collator.compare(a.title, b.title) || a.index - b.index);
-  else if (sort === 'size') view.sort((a, b) => b.count - a.count || a.index - b.index);
   ed.view = view;
 
   picker.list.style.height = view.length ? `${view.length * picker.rowHeight}px` : '';
