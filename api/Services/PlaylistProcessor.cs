@@ -137,6 +137,9 @@ public static class PlaylistProcessor
     await WriteLineAsync(writer, "#EXTM3U", cancellationToken, outputBytes);
     await WriteLineAsync(writer, "# Created with Strim (https://strim.plis.dev)", cancellationToken, outputBytes);
 
+    // Each GroupKey is built at most once per (title, content type), whatever the casing.
+    var decisions = new GroupDecisions(disabledGroups, splitGroupTitles);
+
     while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
     {
       if (!line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase)) continue;
@@ -145,11 +148,11 @@ public static class PlaylistProcessor
       var url = await lines.ReadNextContentLineAsync(cancellationToken) ?? string.Empty;
       var groupTitle = ExtractGroupTitle(line);
       var contentType = DetectContentType(url);
-      if (IsDisabled(disabledGroups, groupTitle, contentType)) continue;
+      var decision = decisions.Decide(groupTitle, contentType);
+      if (decision.Disabled) continue;
 
       kept++;
-      var outputGroupTitle = OutputGroupTitle(groupTitle, contentType, splitGroupTitles);
-      await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, outputGroupTitle), cancellationToken, outputBytes);
+      await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, decision.Suffix), cancellationToken, outputBytes);
       await WriteLineAsync(writer, url, cancellationToken, outputBytes);
     }
 
@@ -223,6 +226,57 @@ public static class PlaylistProcessor
   }
 
   /// <summary>
+  /// Memoises, for one run of <see cref="GenerateFilteredFileAsync"/>, what every entry of one
+  /// (group title, content type) gets. Titles that differ only by case share one decision, like the
+  /// case-insensitive sets the pipeline passes in. A split title is written as the entry's own title
+  /// plus a fixed content-type suffix, so no output key is built for any casing.
+  /// </summary>
+  internal sealed class GroupDecisions(ISet<string> disabledGroups, IReadOnlySet<string>? splitGroupTitles)
+  {
+    private static readonly string[] Suffixes =
+      Enum.GetValues<PlaylistContentType>().Select(type => $"{GroupKeySeparator}{type}").ToArray();
+
+    // Marks a dropped pair; compared by reference, so no suffix can be mistaken for it.
+    private static readonly string DisabledMarker = new('\0', 1);
+
+    // Per content type: null until decided, DisabledMarker, or the output suffix ("" when unsplit).
+    private readonly Dictionary<string, string?[]> decisions = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How many <see cref="GroupKey"/> strings this memo has built.</summary>
+    internal int KeysBuilt { get; private set; }
+
+    /// <summary>Whether the entry is dropped and, if kept, the suffix appended to its group title.</summary>
+    public (bool Disabled, string Suffix) Decide(string groupTitle, PlaylistContentType contentType)
+    {
+      if (!decisions.TryGetValue(groupTitle, out var perType))
+      {
+        perType = new string?[ContentTypeCount];
+        decisions[groupTitle] = perType;
+      }
+
+      var decision = perType[(int)contentType];
+      if (decision is null)
+      {
+        var disabled = disabledGroups.Count > 0 &&
+          (disabledGroups.Contains(groupTitle) || disabledGroups.Contains(BuildKey(groupTitle, contentType)));
+        // Live channels keep the provider's group-title; movies and series of a split title move to
+        // their own group (e.g. "Germany · Series").
+        var split = contentType != PlaylistContentType.Live && splitGroupTitles?.Contains(groupTitle) == true;
+        decision = disabled ? DisabledMarker : split ? Suffixes[(int)contentType] : string.Empty;
+        perType[(int)contentType] = decision;
+      }
+
+      return ReferenceEquals(decision, DisabledMarker) ? (true, string.Empty) : (false, decision);
+    }
+
+    private string BuildKey(string groupTitle, PlaylistContentType contentType)
+    {
+      KeysBuilt++;
+      return GroupKey(groupTitle, contentType);
+    }
+  }
+
+  /// <summary>
   /// A plain group-title disables every entry of that title (unsplit groups and filters saved
   /// before groups were split); a <see cref="GroupKey"/> disables only that content type.
   /// </summary>
@@ -230,18 +284,6 @@ public static class PlaylistProcessor
     disabledGroups.Count > 0 &&
     (disabledGroups.Contains(groupTitle) ||
      disabledGroups.Contains(GroupKey(groupTitle, contentType)));
-
-  /// <summary>
-  /// Live channels keep the provider's group-title; movies and series of a title the provider also
-  /// uses for another content type move to their own group (e.g. "Germany · Series").
-  /// </summary>
-  private static string OutputGroupTitle(
-    string groupTitle,
-    PlaylistContentType contentType,
-    IReadOnlySet<string>? splitGroupTitles) =>
-    contentType != PlaylistContentType.Live && splitGroupTitles?.Contains(groupTitle) == true
-      ? GroupKey(groupTitle, contentType)
-      : groupTitle;
 
   public static DateTimeOffset? TryExtractExpiration(Uri? uri)
   {
@@ -442,23 +484,22 @@ public static class PlaylistProcessor
 
   private static bool IsAttributeCharacter(char value) => char.IsLetterOrDigit(value) || value is '-' or '_';
 
-  private static string WithGroupTitle(string extinf, string groupTitle, string outputGroupTitle)
+  private static string WithGroupTitle(string extinf, string groupTitle, string suffix)
   {
-    if (string.Equals(groupTitle, outputGroupTitle, StringComparison.Ordinal))
-    {
-      return EnsureGroupInExtinf(extinf, groupTitle);
-    }
+    if (suffix.Length == 0) return EnsureGroupInExtinf(extinf, groupTitle);
 
+    // The same bytes as writing GroupKey(groupTitle, type), without building the key per entry.
     return TryFindGroupTitleValue(extinf, out var start, out var end)
-      ? string.Concat(extinf.AsSpan(0, start), outputGroupTitle, extinf.AsSpan(end))
-      : EnsureGroupInExtinf(extinf, outputGroupTitle);
+      ? string.Concat(extinf.AsSpan(0, start), groupTitle, suffix, extinf.AsSpan(end))
+      : EnsureGroupInExtinf(extinf, groupTitle, suffix);
   }
 
-  private static string EnsureGroupInExtinf(string extinf, string groupTitle)
+  private static string EnsureGroupInExtinf(string extinf, string groupTitle, string suffix = "")
   {
     if (HasGroupTitleAttribute(extinf)) return extinf;
 
-    var attribute = $" group-title=\"{groupTitle}\"";
+    // Title and suffix go straight into the attribute, so no output key is built per entry.
+    var attribute = string.Concat(" group-title=\"", groupTitle, suffix, "\"");
     var titleSeparator = extinf.IndexOf(',');
     return titleSeparator >= 0
       ? extinf.Insert(titleSeparator, attribute)
@@ -475,6 +516,7 @@ public static class PlaylistProcessor
     private readonly StreamReader _reader;
     private readonly int _maxLineLengthChars;
     private char[]? _buffer;
+    private StringBuilder? _carry;
     private int _position;
     private int _count;
 
@@ -496,11 +538,13 @@ public static class PlaylistProcessor
       return null;
     }
 
+    /// <summary>
+    /// A line inside the buffer becomes a string straight from its slice; only a line that crosses
+    /// a buffer boundary is collected in the reused <see cref="_carry"/> builder.
+    /// </summary>
     private async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
     {
-      StringBuilder? line = null;
-      var length = 0;
-      var sawCharacter = false;
+      var carried = 0;
 
       while (true)
       {
@@ -511,24 +555,41 @@ public static class PlaylistProcessor
           _position = 0;
           if (_count == 0)
           {
-            return sawCharacter ? line?.ToString() ?? string.Empty : null;
+            return carried > 0 ? _carry!.ToString() : null;
           }
         }
 
-        var character = _buffer![_position++];
-        if (character is '\r' or '\n')
-        {
-          return line?.ToString() ?? string.Empty;
-        }
-
-        sawCharacter = true;
-        if (++length > _maxLineLengthChars)
-        {
-          throw new PlaylistLineTooLongException(_maxLineLengthChars);
-        }
-
-        (line ??= new StringBuilder(Math.Min(256, _maxLineLengthChars))).Append(character);
+        if (TryTakeLine(ref carried) is { } line) return line;
       }
+    }
+
+    /// <summary>Returns the line ending in the buffer, or carries the rest of the buffer over and returns null.</summary>
+    private string? TryTakeLine(ref int carried)
+    {
+      var available = _buffer.AsSpan(_position, _count - _position);
+      var end = available.IndexOfAny('\r', '\n');
+      var segment = end < 0 ? available : available[..end];
+      if (carried + segment.Length > _maxLineLengthChars)
+      {
+        throw new PlaylistLineTooLongException(_maxLineLengthChars);
+      }
+
+      if (end < 0)
+      {
+        if (carried == 0) (_carry ??= new StringBuilder(Math.Min(256, _maxLineLengthChars))).Clear();
+        _carry!.Append(segment);
+        carried += segment.Length;
+        _position = _count;
+        return null;
+      }
+
+      _position += end + 1;
+      if (carried == 0)
+      {
+        return segment.Length == 0 ? string.Empty : new string(segment);
+      }
+
+      return _carry!.Append(segment).ToString();
     }
 
     public void Dispose()
