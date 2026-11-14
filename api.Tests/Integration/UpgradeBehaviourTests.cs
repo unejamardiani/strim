@@ -79,13 +79,20 @@ public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<Stri
       .WithWebHostBuilder(builder => builder.UseWebRoot(RepositoryRoot()))
       .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
+    // Identify the pages by stable markers, not by marketing copy: the landing page is a Strim
+    // page that links to /app; the editor is the page that loads app.css and main.js.
     var landing = await client.GetAsync("/");
     Assert.Equal(HttpStatusCode.OK, landing.StatusCode);
-    Assert.Contains("<title>Strim - Free M3U Playlist Editor for IPTV</title>", await landing.Content.ReadAsStringAsync());
+    var landingHtml = await landing.Content.ReadAsStringAsync();
+    Assert.Matches(@"<title>[^<]*\bStrim\b[^<]*</title>", landingHtml);
+    Assert.Contains("href=\"/app\"", landingHtml);
+    Assert.DoesNotContain("src=\"main.js\"", landingHtml);
 
     var editor = await client.GetAsync("/app");
     Assert.Equal(HttpStatusCode.OK, editor.StatusCode);
-    Assert.Contains("<title>Strim</title>", await editor.Content.ReadAsStringAsync());
+    var editorHtml = await editor.Content.ReadAsStringAsync();
+    Assert.Contains("href=\"app.css\"", editorHtml);
+    Assert.Contains("src=\"main.js\"", editorHtml);
 
     var unknownApi = await client.GetAsync("/api/does-not-exist");
     Assert.Equal(HttpStatusCode.NotFound, unknownApi.StatusCode);
