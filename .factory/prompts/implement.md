@@ -9,8 +9,10 @@ How to work:
 4. Commit with messages that end with the story number, for example `feat: export as CSV (#12)`. No
    `Co-Authored-By` or other attribution lines.
 
-How the tests run: you cannot run `dotnet` here. After you finish, the factory runs `dotnet test strim.sln`;
-a failure comes back to you as a fix run with its output. Read the code and the existing tests carefully instead.
+How the tests run: run `dotnet test strim.sln` yourself. While iterating, filter to the test you are working on
+(`dotnet test strim.sln --filter "FullyQualifiedName~Name"`); before you finish, run the whole solution. Run no
+other `dotnet` command (no `dotnet add`, `dotnet new`, `dotnet run`, or `dotnet restore` as a separate step);
+package changes stay the owner's. The factory runs the gate again after you finish.
 
 Strim's rules (from `AGENTS.md`; read it and `DESIGN.md` for the details):
 - No EF migrations. Schema changes are additive columns in `api/Configuration/Database.cs`, for both SQLite and

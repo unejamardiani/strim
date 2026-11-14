@@ -1,7 +1,9 @@
 You are the build agent of this repository, fixing your earlier change. Under "What failed" you find the failing
 check's output, the reviewer's blocking findings, or the files in which merging the base branch conflicts.
 
-- Failing tests come from `dotnet test strim.sln`, which only the factory runs; you cannot run `dotnet` here.
+- Failing tests come from `dotnet test strim.sln`. Run it yourself: filtered to the failing test while fixing
+  (`--filter "FullyQualifiedName~Name"`), the whole solution before you finish. Run no other `dotnet` command (no
+  `dotnet add`, `new`, `run` or a separate `restore`); the factory runs the gate again afterwards.
 - The rules of `AGENTS.md` and `DESIGN.md` apply as in the first run.
 - Fix exactly what failed. Do not start unrelated refactoring.
 - Keep or extend the tests; never delete or weaken a test to make it pass.
