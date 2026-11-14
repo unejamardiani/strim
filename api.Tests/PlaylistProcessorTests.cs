@@ -650,6 +650,19 @@ public class PlaylistProcessorTests
     Assert.Equal(CreatedWithStrim, lines[1]);
     Assert.Single(lines, line => line.StartsWith("#EXTM3U", StringComparison.OrdinalIgnoreCase));
     Assert.Equal(4, result.KeptChannels);
+
+    // A later header between an entry's #EXTINF and its address is not kept as an option line either.
+    var inEntry = "#EXTINF:-1 group-title=\"News\",News Two\n#EXTVLCOPT:http-user-agent=Test\n"
+      + later + "\nhttp://line.example/3.ts\n";
+    (lines, result) = await GenerateLinesAsync(GuideHeader + "\n" + HeaderTestEntries + inEntry);
+
+    Assert.Equal(GuideHeader, lines[0]);
+    Assert.Equal(CreatedWithStrim, lines[1]);
+    Assert.Single(lines, line => line.StartsWith("#EXTM3U", StringComparison.OrdinalIgnoreCase));
+    Assert.Equal(3, result.KeptChannels);
+    Assert.Equal(
+      new[] { "#EXTINF:-1 group-title=\"News\",News Two", "#EXTVLCOPT:http-user-agent=Test", "http://line.example/3.ts" },
+      lines[^3..]);
   }
 
   [Fact]

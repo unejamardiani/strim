@@ -206,6 +206,8 @@ public static class PlaylistProcessor
     {
       if (IsExtinf(line)) return (null, line, extGrp);
       if (!line.StartsWith('#')) return (line, null, extGrp);
+      // A later #EXTM3U is not part of the entry; only the source's first line is written as the header.
+      if (IsHeader(line)) continue;
 
       if (++optionCount > MaxOptionLinesPerEntry)
       {
