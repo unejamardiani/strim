@@ -491,14 +491,15 @@ public static class PlaylistProcessor
     // The same bytes as writing GroupKey(groupTitle, type), without building the key per entry.
     return TryFindGroupTitleValue(extinf, out var start, out var end)
       ? string.Concat(extinf.AsSpan(0, start), groupTitle, suffix, extinf.AsSpan(end))
-      : EnsureGroupInExtinf(extinf, groupTitle + suffix);
+      : EnsureGroupInExtinf(extinf, groupTitle, suffix);
   }
 
-  private static string EnsureGroupInExtinf(string extinf, string groupTitle)
+  private static string EnsureGroupInExtinf(string extinf, string groupTitle, string suffix = "")
   {
     if (HasGroupTitleAttribute(extinf)) return extinf;
 
-    var attribute = $" group-title=\"{groupTitle}\"";
+    // Title and suffix go straight into the attribute, so no output key is built per entry.
+    var attribute = string.Concat(" group-title=\"", groupTitle, suffix, "\"");
     var titleSeparator = extinf.IndexOf(',');
     return titleSeparator >= 0
       ? extinf.Insert(titleSeparator, attribute)

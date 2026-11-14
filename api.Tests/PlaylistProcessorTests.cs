@@ -451,6 +451,46 @@ public class PlaylistProcessorTests
   }
 
   [Fact]
+  public async Task GenerateFiltered_SplitUngroupedEntriesGetTheirTypedGroup()
+  {
+    var sourcePath = Path.GetTempFileName();
+    var outputPath = Path.Combine(Path.GetTempPath(), $"strim-test-{Guid.NewGuid():N}.m3u");
+    const string source =
+      "#EXTM3U\n" +
+      "#EXTINF:-1,Live One\nhttp://provider.example/user/pass/1\n" +
+      "#EXTINF:-1,Film\nhttp://provider.example/movie/user/pass/2.mp4\n" +
+      "#EXTINF:-1 group-title=\"\",Episode\nhttp://provider.example/series/user/pass/3.mkv\n" +
+      "#EXTINF:-1\nhttp://provider.example/series/user/pass/4.mkv\n";
+    const string expected =
+      "#EXTM3U\n" +
+      "# Created with Strim (https://strim.plis.dev)\n" +
+      "#EXTINF:-1 group-title=\"Ungrouped\",Live One\nhttp://provider.example/user/pass/1\n" +
+      "#EXTINF:-1 group-title=\"Ungrouped · Movies\",Film\nhttp://provider.example/movie/user/pass/2.mp4\n" +
+      "#EXTINF:-1 group-title=\"Ungrouped · Series\",Episode\nhttp://provider.example/series/user/pass/3.mkv\n" +
+      "#EXTINF:-1 group-title=\"Ungrouped · Series\"\nhttp://provider.example/series/user/pass/4.mkv\n";
+    try
+    {
+      await File.WriteAllTextAsync(sourcePath, source);
+      var analysis = await PlaylistProcessor.AnalyzeFileAsync(sourcePath, CancellationToken.None);
+      Assert.Equal("Ungrouped", Assert.Single(analysis.SplitGroupTitles));
+
+      await PlaylistProcessor.GenerateFilteredFileAsync(
+        sourcePath,
+        outputPath,
+        new HashSet<string>(new[] { "Unrelated" }, StringComparer.OrdinalIgnoreCase),
+        CancellationToken.None,
+        splitGroupTitles: analysis.SplitGroupTitles);
+
+      Assert.Equal(expected, await File.ReadAllTextAsync(outputPath));
+    }
+    finally
+    {
+      File.Delete(sourcePath);
+      if (File.Exists(outputPath)) File.Delete(outputPath);
+    }
+  }
+
+  [Fact]
   public void GenerateFiltered_RepeatedSplitCaseVariantsBuildEachKeyOnce()
   {
     var casings = new[] { "News", "NEWS", "news" };
