@@ -113,6 +113,119 @@ public sealed class PlaylistSourceFetcher
     throw new InvalidOperationException("Too many redirects");
   }
 
+  /// <summary>
+  /// Reads a short text answer (for example a provider's account JSON) into memory with the same
+  /// address checks, redirect validation, HTTP client and timeout as <see cref="FetchAsync"/>.
+  /// Bodies above <see cref="SmallTextMaxBytes"/> are refused. Every failure is returned as a result;
+  /// messages and log entries name only the host, never the path or query string.
+  /// </summary>
+  public async Task<SmallTextFetchResult> FetchSmallTextAsync(string sourceUrl, CancellationToken cancellationToken)
+  {
+    Uri currentUri;
+    try
+    {
+      currentUri = ValidateSourceUri(sourceUrl);
+    }
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+    {
+      return SmallTextFetchResult.Failed(ex.Message);
+    }
+
+    var client = _httpClientFactory.CreateClient(Configuration.PlaylistServices.FetcherClient);
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _options.DownloadTimeoutSeconds)));
+
+    try
+    {
+      for (var redirectCount = 0; ; redirectCount++)
+      {
+        using var request = new HttpRequestMessage(HttpMethod.Get, currentUri);
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+
+        if (IsRedirect(response.StatusCode) && response.Headers.Location is not null)
+        {
+          if (redirectCount >= MaxRedirects)
+          {
+            return Fail(currentUri, "Too many redirects");
+          }
+
+          try
+          {
+            currentUri = ValidateRedirectUri(currentUri, response.Headers.Location);
+          }
+          catch (InvalidOperationException ex)
+          {
+            return Fail(currentUri, ex.Message);
+          }
+
+          continue;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+          return Fail(currentUri, $"Upstream returned {(int)response.StatusCode}", (int)response.StatusCode);
+        }
+
+        if (response.Content.Headers.ContentLength > SmallTextMaxBytes)
+        {
+          return Fail(currentUri, "Response is too large");
+        }
+
+        var text = await ReadSmallTextAsync(response, timeout.Token);
+        return text is null
+          ? Fail(currentUri, "Response is too large")
+          : SmallTextFetchResult.Succeeded(text, (int)response.StatusCode);
+      }
+    }
+    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+    {
+      return Fail(currentUri, "The request timed out");
+    }
+    catch (HttpRequestException)
+    {
+      return Fail(currentUri, "Unable to connect");
+    }
+  }
+
+  /// <summary>Upper bound for <see cref="FetchSmallTextAsync"/> bodies.</summary>
+  public const int SmallTextMaxBytes = 64 * 1024;
+
+  private SmallTextFetchResult Fail(Uri uri, string error, int? statusCode = null)
+  {
+    _logger.LogWarning("Small text fetch from {Host} failed: {Error}", uri.Host, error);
+    return SmallTextFetchResult.Failed(error, statusCode);
+  }
+
+  private static async Task<string?> ReadSmallTextAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+  {
+    await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
+    using var buffer = new MemoryStream();
+    var chunk = new byte[8 * 1024];
+    while (true)
+    {
+      var read = await source.ReadAsync(chunk, cancellationToken);
+      if (read == 0) break;
+      if (buffer.Length + read > SmallTextMaxBytes) return null;
+      buffer.Write(chunk, 0, read);
+    }
+
+    var charset = response.Content.Headers.ContentType?.CharSet?.Trim('"');
+    var encoding = System.Text.Encoding.UTF8;
+    if (!string.IsNullOrEmpty(charset))
+    {
+      try
+      {
+        encoding = System.Text.Encoding.GetEncoding(charset);
+      }
+      catch (ArgumentException)
+      {
+        // Unknown charset: fall back to UTF-8.
+      }
+    }
+
+    return encoding.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+  }
+
   public static Uri ValidateSourceUri(string sourceUrl)
   {
     if (string.IsNullOrWhiteSpace(sourceUrl))
@@ -221,6 +334,13 @@ public sealed class PlaylistSourceFetcher
       ArrayPool<byte>.Shared.Return(buffer);
     }
   }
+}
+
+public sealed record SmallTextFetchResult(bool Success, string? Text, int? StatusCode, string? Error)
+{
+  public static SmallTextFetchResult Succeeded(string text, int statusCode) => new(true, text, statusCode, null);
+
+  public static SmallTextFetchResult Failed(string error, int? statusCode = null) => new(false, null, statusCode, error);
 }
 
 public sealed record PlaylistFetchResult(bool NotModified, DownloadedPlaylistFile? DownloadedFile, string? ETag, DateTimeOffset? LastModifiedUtc)
