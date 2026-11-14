@@ -161,6 +161,41 @@ public static class ProcessingEndpoints
       }
     }).RequireRateLimiting(Security.RateLimits.Fetch);
 
+    // Read-only: reports duplicates and quality variants; nothing is stored and no playlist is changed.
+    app.MapPost("/api/playlist/report", async (PlaylistReportRequest input, HttpContext context, PlaylistPipeline pipeline, PlaylistJobGate jobGate) =>
+    {
+      if (string.IsNullOrWhiteSpace(input.CacheKey) && string.IsNullOrWhiteSpace(input.SourceUrl))
+        return Results.BadRequest(new { error = "Provide a cacheKey or sourceUrl." });
+      if (input.SourceUrl?.Length > Limits.MaxUrlLength)
+        return Results.BadRequest(new { error = $"Source URL must be {Limits.MaxUrlLength} characters or less." });
+
+      var job = await jobGate.TryEnterAsync(context.RequestAborted);
+      if (job is null) return EndpointHelpers.Busy();
+
+      await using (job)
+      {
+        try
+        {
+          var source = string.IsNullOrWhiteSpace(input.CacheKey) ? null : pipeline.Cache.TryGetSessionSource(input.CacheKey);
+          if (source is null && !string.IsNullOrWhiteSpace(input.SourceUrl))
+          {
+            source = await pipeline.GetSourceAsync(input.SourceUrl, context.RequestAborted);
+          }
+          if (source is null)
+          {
+            return Results.BadRequest(new { error = "The playlist session expired. Analyze the source again." });
+          }
+
+          var entries = await PlaylistProcessor.ReadEntriesFromFileAsync(source.FilePath, context.RequestAborted, pipeline.Cache.MaxLineLengthChars);
+          return Results.Ok(PlaylistReport.Build(entries));
+        }
+        catch (Exception ex)
+        {
+          return EndpointHelpers.PlaylistFailure(ex, logger, "report");
+        }
+      }
+    }).RequireCsrfToken().RequireRateLimiting(Security.RateLimits.Fetch);
+
     // The random, short-lived output key is a capability issued only after a source was processed,
     // so this stays anonymous and works for editors who are not signed in.
     app.MapGet("/api/playlist/output/{outputKey}", (string outputKey, PlaylistFileCache cache) =>

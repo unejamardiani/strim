@@ -275,14 +275,40 @@ public static class PlaylistProcessor
   public static List<PlaylistEntry> ReadEntries(string text)
   {
     using var lines = InMemoryLines(text);
+    return RunSync(ReadEntriesAsync(lines, CancellationToken.None));
+  }
+
+  /// <summary>
+  /// The entries of a playlist file, read one line at a time with the same rules as <see cref="ReadEntries"/>.
+  /// Only the parsed name, group, tvg-id and address of each entry are kept, not the file's lines.
+  /// </summary>
+  public static async Task<List<PlaylistEntry>> ReadEntriesFromFileAsync(
+    string filePath,
+    CancellationToken cancellationToken,
+    int maxLineLengthChars = DefaultMaxLineLengthChars)
+  {
+    await using var stream = new FileStream(
+      filePath,
+      FileMode.Open,
+      FileAccess.Read,
+      FileShare.Read,
+      128 * 1024,
+      FileOptions.Asynchronous | FileOptions.SequentialScan);
+    using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 128 * 1024, leaveOpen: false);
+    using var lines = new BoundedLineReader(reader, maxLineLengthChars);
+    return await ReadEntriesAsync(lines, cancellationToken);
+  }
+
+  private static async ValueTask<List<PlaylistEntry>> ReadEntriesAsync(BoundedLineReader lines, CancellationToken cancellationToken)
+  {
     var entries = new List<PlaylistEntry>();
     string? pending = null;
-    while ((pending ?? RunSync(lines.ReadNextContentLineAsync(CancellationToken.None))) is { } line)
+    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
     {
       pending = null;
       if (!IsExtinf(line)) continue;
 
-      (var address, pending, var extGrp) = RunSync(ReadEntryTailAsync(lines, optionLines: null, CancellationToken.None));
+      (var address, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
       entries.Add(new PlaylistEntry(
         entries.Count,
         PlaylistSearchText.DisplayName(line),
