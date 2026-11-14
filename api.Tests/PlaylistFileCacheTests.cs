@@ -222,7 +222,8 @@ public class PlaylistFileCacheTests
     Assert.True(fixture.Cache.RememberLastGood(playlistId, second));
 
     Assert.False(File.Exists(firstPath));
-    Assert.Single(Directory.EnumerateFiles(fixture.Directory, "lastgood-*"));
+    Assert.Single(Directory.EnumerateFiles(fixture.Directory, "lastgood-*.m3u"));
+    Assert.Single(Directory.EnumerateFiles(fixture.Directory, "lastgood-*.json"));
     Assert.Equal(new string('2', 100), await File.ReadAllTextAsync(fixture.LastGoodPath(playlistId)));
 
     // Only the newer output and its copy remain tracked (200 of 300 bytes), so a 100-byte
@@ -302,6 +303,122 @@ public class PlaylistFileCacheTests
     Assert.NotNull(fixture.Cache.TryGetOutput(source.ContentHash, new[] { "Sports" }));
   }
 
+  [Fact]
+  public async Task LastGood_SurvivesRestart()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 4096);
+    var playlistId = await fixture.RememberAsync("#EXTM3U\n#EXTINF:-1,Kept\nhttp://example.invalid/kept\n");
+    var path = fixture.LastGoodPath(playlistId);
+
+    fixture.Restart();
+
+    await using var lease = fixture.Cache.TryLeaseLastGood(playlistId, "list.m3u");
+    Assert.NotNull(lease);
+    Assert.Equal(path, lease!.FilePath);
+    Assert.Equal("#EXTM3U\n#EXTINF:-1,Kept\nhttp://example.invalid/kept\n"u8.ToArray(), await File.ReadAllBytesAsync(lease.FilePath));
+
+    var sidecar = await File.ReadAllTextAsync(Path.ChangeExtension(path, ".json"));
+    using var json = System.Text.Json.JsonDocument.Parse(sidecar);
+    var fields = json.RootElement.EnumerateObject().Select(x => x.Name).ToArray();
+    Assert.Equal(new[] { "Key", "ContentHash", "LengthBytes", "CreatedAtUtc" }, fields);
+    Assert.StartsWith($"lastgood-{json.RootElement.GetProperty("Key").GetString()}-", Path.GetFileName(path), StringComparison.Ordinal);
+    Assert.DoesNotContain("example.com", sidecar, StringComparison.OrdinalIgnoreCase);
+    Assert.DoesNotContain(playlistId.ToString("N"), sidecar, StringComparison.OrdinalIgnoreCase);
+    Assert.DoesNotContain(playlistId.ToString("D"), sidecar, StringComparison.OrdinalIgnoreCase);
+  }
+
+  [Fact]
+  public async Task Startup_DeletesExpiredLastGood()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 4096, lastGoodTtlMinutes: 60);
+    var expired = await fixture.RememberAsync("#EXTM3U\nold\n");
+    var expiredPath = fixture.LastGoodPath(expired);
+    fixture.Time.Advance(TimeSpan.FromMinutes(30));
+    var fresh = await fixture.RememberAsync("#EXTM3U\nnew\n");
+
+    fixture.Time.Advance(TimeSpan.FromMinutes(31));
+    fixture.Restart();
+
+    Assert.Null(fixture.Cache.TryLeaseLastGood(expired));
+    Assert.False(File.Exists(expiredPath));
+    Assert.False(File.Exists(Path.ChangeExtension(expiredPath, ".json")));
+    using var lease = fixture.Cache.TryLeaseLastGood(fresh);
+    Assert.NotNull(lease);
+  }
+
+  [Fact]
+  public async Task Startup_DeletesOrphanedOrCorruptLastGood()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 8192);
+    var noSidecar = await fixture.RememberAsync("#EXTM3U\na\n");
+    var noFile = await fixture.RememberAsync("#EXTM3U\nb\n");
+    var wrongLength = await fixture.RememberAsync("#EXTM3U\nc\n");
+    var wrongHash = await fixture.RememberAsync("#EXTM3U\nd\n");
+    var badJson = await fixture.RememberAsync("#EXTM3U\ne\n");
+    var valid = await fixture.RememberAsync("#EXTM3U\nf\n");
+    var paths = new[] { noSidecar, noFile, wrongLength, wrongHash, badJson }.Select(fixture.LastGoodPath).ToArray();
+
+    File.Delete(Path.ChangeExtension(paths[0], ".json"));
+    File.Delete(paths[1]);
+    File.AppendAllText(paths[2], "x");
+    File.WriteAllText(paths[3], "#EXTM3U\nX\n");
+    File.WriteAllText(Path.ChangeExtension(paths[4], ".json"), "{not json");
+
+    fixture.Restart();
+
+    foreach (var id in new[] { noSidecar, noFile, wrongLength, wrongHash, badJson })
+    {
+      Assert.Null(fixture.Cache.TryLeaseLastGood(id));
+    }
+    foreach (var path in paths)
+    {
+      Assert.False(File.Exists(path), path);
+      Assert.False(File.Exists(Path.ChangeExtension(path, ".json")), path);
+    }
+    Assert.Single(Directory.EnumerateFiles(fixture.Directory, "lastgood-*.m3u"));
+    Assert.Single(Directory.EnumerateFiles(fixture.Directory, "lastgood-*.json"));
+    using var lease = fixture.Cache.TryLeaseLastGood(valid);
+    Assert.NotNull(lease);
+  }
+
+  [Fact]
+  public async Task Startup_StillDeletesSessionFiles()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 4096);
+    var playlistId = await fixture.RememberAsync("#EXTM3U\nkept\n");
+    var leftovers = new[] { "source-stale.m3u", "output-stale.m3u", "raw-stale.txt", "anything.partial", "lastgood-abc.json.partial" }
+      .Select(name => Path.Combine(fixture.Directory, name))
+      .ToArray();
+    foreach (var file in leftovers) File.WriteAllText(file, "stale");
+    var unrelated = Path.Combine(fixture.Directory, "unrelated.txt");
+    File.WriteAllText(unrelated, "keep");
+
+    fixture.Restart();
+
+    foreach (var file in leftovers) Assert.False(File.Exists(file), file);
+    Assert.True(File.Exists(unrelated));
+    using var lease = fixture.Cache.TryLeaseLastGood(playlistId);
+    Assert.NotNull(lease);
+  }
+
+  [Fact]
+  public async Task Startup_CountsRestoredLastGoodInBudget()
+  {
+    // The restored 100-byte copy plus a new source and output fill the 300-byte budget, so a
+    // 100-byte reservation must evict the output. An uncounted copy would leave room for it.
+    using var fixture = new LastGoodFixture(maxDiskBytes: 300, maxSourceBytes: 100);
+    var playlistId = await fixture.RememberAsync(new string('o', 100));
+
+    fixture.Restart();
+    var source = await fixture.StoreSourceAsync(new string('s', 100));
+    var output = fixture.StoreOutput(source, "News", new string('n', 100));
+    using var reservation = fixture.Cache.ReserveSourceCapacity(null);
+
+    Assert.Null(fixture.Cache.TryLeaseOutput(output.OutputKey));
+    using var lease = fixture.Cache.TryLeaseLastGood(playlistId);
+    Assert.NotNull(lease);
+  }
+
   private sealed class ManualTime : TimeProvider
   {
     private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -311,24 +428,39 @@ public class PlaylistFileCacheTests
 
   private sealed class LastGoodFixture : IDisposable
   {
-    public LastGoodFixture(long maxDiskBytes, long maxSourceBytes = 1024)
+    private readonly IOptions<PlaylistCacheOptions> _options;
+
+    public LastGoodFixture(long maxDiskBytes, long maxSourceBytes = 1024, int lastGoodTtlMinutes = 60 * 24)
     {
       Directory = Path.Combine(Path.GetTempPath(), $"strim-cache-test-{Guid.NewGuid():N}");
-      Cache = new PlaylistFileCache(
-        Options.Create(new PlaylistCacheOptions
-        {
-          Directory = Directory,
-          MaxSourceBytes = maxSourceBytes,
-          MaxDiskBytes = maxDiskBytes,
-        }),
-        NullLogger<PlaylistFileCache>.Instance,
-        PlaylistFileCache.TryDelete,
-        Time);
+      _options = Options.Create(new PlaylistCacheOptions
+      {
+        Directory = Directory,
+        MaxSourceBytes = maxSourceBytes,
+        MaxDiskBytes = maxDiskBytes,
+        LastGoodTtlMinutes = lastGoodTtlMinutes,
+      });
+      Cache = CreateCache();
     }
 
     public string Directory { get; }
     public ManualTime Time { get; } = new();
-    public PlaylistFileCache Cache { get; }
+    public PlaylistFileCache Cache { get; private set; }
+
+    /// <summary>A second instance on the same directory, as after a restart or deploy.</summary>
+    public void Restart() => Cache = CreateCache();
+
+    private PlaylistFileCache CreateCache() =>
+      new(_options, NullLogger<PlaylistFileCache>.Instance, PlaylistFileCache.TryDelete, Time);
+
+    public async Task<Guid> RememberAsync(string content)
+    {
+      var source = await StoreSourceAsync(new string('s', 10));
+      var output = StoreOutput(source, Guid.NewGuid().ToString("N"), content);
+      var playlistId = Guid.NewGuid();
+      Assert.True(Cache.RememberLastGood(playlistId, output));
+      return playlistId;
+    }
 
     public async Task<PlaylistSourceFile> StoreSourceAsync(string text)
     {

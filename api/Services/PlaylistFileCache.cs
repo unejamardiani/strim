@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 
 namespace Api.Services;
@@ -29,7 +30,10 @@ public sealed class PlaylistFileCache
   private readonly TimeProvider _time;
   // Pinned last-good output per player link, independent of the output TTL. Superseded or
   // forgotten copies that are still leased stay accounted until their last lease is released.
-  private readonly Dictionary<Guid, LastGoodFile> _lastGood = new();
+  // Keyed by the hashed playlist key, so copies restored after a restart (whose sidecar holds
+  // only that hash) are found again by playlist id.
+  private readonly Dictionary<string, LastGoodFile> _lastGood = new(StringComparer.Ordinal);
+  private readonly TimeSpan _lastGoodTtl;
   private readonly List<LastGoodFile> _retiredLastGood = new();
   private long _reservedBytes;
 
@@ -59,6 +63,7 @@ public sealed class PlaylistFileCache
     _entryTtl = TimeSpan.FromMinutes(Math.Max(1, _options.EntryTtlMinutes));
     _sourceTtl = TimeSpan.FromMinutes(Math.Max(1, _options.SourceTtlMinutes));
     _revalidationInterval = TimeSpan.FromMinutes(Math.Max(0, _options.RevalidationIntervalMinutes));
+    _lastGoodTtl = TimeSpan.FromMinutes(Math.Max(1, _options.LastGoodTtlMinutes));
     _directory = string.IsNullOrWhiteSpace(_options.Directory)
       ? Path.Combine(Path.GetTempPath(), "strim-playlists")
       : Path.GetFullPath(_options.Directory);
@@ -441,26 +446,29 @@ public sealed class PlaylistFileCache
 
     var length = GetTrackedLength(outputLease.FilePath, output.LengthBytes);
     using var reservation = ReserveCapacity(length, "last good playlist", new[] { outputLease.FilePath });
-    var finalPath = Path.Combine(_directory, $"lastgood-{LastGoodKey(playlistId)}-{Guid.NewGuid():N}.m3u");
+    var key = LastGoodKey(playlistId);
+    var finalPath = Path.Combine(_directory, $"lastgood-{key}-{Guid.NewGuid():N}.m3u");
     try
     {
       File.Copy(outputLease.FilePath, finalPath);
       TrySetPrivateFile(finalPath);
+      WriteLastGoodSidecar(finalPath, key);
     }
     catch
     {
+      DeleteTemporaryFile(LastGoodSidecarPath(finalPath));
       DeleteTemporaryFile(finalPath, length);
       throw;
     }
 
     lock (_sync)
     {
-      if (_lastGood.TryGetValue(playlistId, out var previous))
+      if (_lastGood.TryGetValue(key, out var previous))
       {
         RemoveLastGoodNoLock(previous);
       }
 
-      _lastGood[playlistId] = new LastGoodFile(playlistId, finalPath, length);
+      _lastGood[key] = new LastGoodFile(key, finalPath, length, _time.GetUtcNow());
       _pendingDeletes.Remove(finalPath);
       // Hand the reserved bytes over to the tracked copy in the same critical section, so a
       // concurrent Cleanup never counts the copy twice (Monitor locks are re-entrant).
@@ -474,7 +482,7 @@ public sealed class PlaylistFileCache
   {
     lock (_sync)
     {
-      if (!_lastGood.TryGetValue(playlistId, out var entry))
+      if (!_lastGood.TryGetValue(LastGoodKey(playlistId), out var entry))
       {
         return null;
       }
@@ -497,7 +505,7 @@ public sealed class PlaylistFileCache
   {
     lock (_sync)
     {
-      if (_lastGood.TryGetValue(playlistId, out var entry))
+      if (_lastGood.TryGetValue(LastGoodKey(playlistId), out var entry))
       {
         RemoveLastGoodNoLock(entry);
       }
@@ -734,10 +742,13 @@ public sealed class PlaylistFileCache
 
   private bool RemoveLastGoodNoLock(LastGoodFile entry)
   {
-    if (_lastGood.TryGetValue(entry.PlaylistId, out var current) && ReferenceEquals(current, entry))
+    if (_lastGood.TryGetValue(entry.Key, out var current) && ReferenceEquals(current, entry))
     {
-      _lastGood.Remove(entry.PlaylistId);
+      _lastGood.Remove(entry.Key);
     }
+
+    // Without its sidecar the copy is no longer restored after a restart, even while leased.
+    DeleteOrTrackNoLock(LastGoodSidecarPath(entry.FilePath), 0);
 
     if (entry.ActiveLeases > 0)
     {
@@ -782,22 +793,56 @@ public sealed class PlaylistFileCache
   {
     try
     {
-      // Cache metadata is process-local, so source/output files from a previous process cannot
-      // be safely reused. Restrict deletion to names this service itself generates.
+      // Source/output metadata is process-local, so those files from a previous process cannot
+      // be safely reused. Restrict deletion to names this service itself generates. Last-good
+      // copies with a matching, unexpired sidecar are restored; every other one is deleted.
       lock (_sync)
       {
+        var restored = new List<LastGoodFile>();
         foreach (var file in Directory.EnumerateFiles(_directory))
         {
           var name = Path.GetFileName(file);
           if (name.EndsWith(".partial", StringComparison.Ordinal) ||
               name.StartsWith("source-", StringComparison.Ordinal) ||
               name.StartsWith("output-", StringComparison.Ordinal) ||
-              name.StartsWith("lastgood-", StringComparison.Ordinal) ||
               name.StartsWith("raw-", StringComparison.Ordinal))
           {
             // A stat failure at startup must not make a left-over cache file invisible to the
             // new process. The whole cache budget is the safe fallback until retry succeeds.
             DeleteOrTrackNoLock(file, _options.MaxDiskBytes);
+          }
+          else if (name.StartsWith("lastgood-", StringComparison.Ordinal))
+          {
+            if (name.EndsWith(".m3u", StringComparison.Ordinal))
+            {
+              if (TryReadLastGood(file) is { } entry)
+              {
+                restored.Add(entry);
+              }
+              else
+              {
+                DeleteOrTrackNoLock(LastGoodSidecarPath(file), 0);
+                DeleteOrTrackNoLock(file, _options.MaxDiskBytes);
+              }
+            }
+            else if (!name.EndsWith(".json", StringComparison.Ordinal) || !File.Exists(Path.ChangeExtension(file, ".m3u")))
+            {
+              // Unknown names and sidecars without their copy. A sidecar next to a copy is
+              // handled together with that copy.
+              DeleteOrTrackNoLock(file, _options.MaxDiskBytes);
+            }
+          }
+        }
+
+        foreach (var entry in restored.OrderByDescending(x => x.CreatedAtUtc))
+        {
+          if (_lastGood.ContainsKey(entry.Key))
+          {
+            RemoveLastGoodNoLock(entry);
+          }
+          else
+          {
+            _lastGood[entry.Key] = entry;
           }
         }
       }
@@ -814,6 +859,70 @@ public sealed class PlaylistFileCache
   // The on-disk name must not reveal the playlist id.
   private static string LastGoodKey(Guid playlistId) =>
     Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"lastgood:{playlistId:N}")))[..32].ToLowerInvariant();
+
+  private static string LastGoodSidecarPath(string filePath) => Path.ChangeExtension(filePath, ".json");
+
+  private static string HashFile(string path)
+  {
+    using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
+    return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+  }
+
+  /// <summary>
+  /// Writes the restart metadata of a last-good copy. It holds only the hashed playlist key,
+  /// never the playlist id, source URL or share code.
+  /// </summary>
+  private void WriteLastGoodSidecar(string filePath, string key)
+  {
+    var sidecar = new LastGoodSidecar(key, HashFile(filePath), new FileInfo(filePath).Length, _time.GetUtcNow());
+    var sidecarPath = LastGoodSidecarPath(filePath);
+    var temporaryPath = $"{sidecarPath}.partial";
+    try
+    {
+      File.WriteAllBytes(temporaryPath, JsonSerializer.SerializeToUtf8Bytes(sidecar));
+      TrySetPrivateFile(temporaryPath);
+      File.Move(temporaryPath, sidecarPath);
+    }
+    catch
+    {
+      DeleteTemporaryFile(temporaryPath);
+      throw;
+    }
+  }
+
+  /// <summary>Returns the restorable entry of a last-good copy, or null when it must be deleted.</summary>
+  private LastGoodFile? TryReadLastGood(string filePath)
+  {
+    try
+    {
+      var sidecarPath = LastGoodSidecarPath(filePath);
+      var sidecarInfo = new FileInfo(sidecarPath);
+      if (!sidecarInfo.Exists || sidecarInfo.Length > 4096)
+      {
+        return null;
+      }
+
+      var sidecar = JsonSerializer.Deserialize<LastGoodSidecar>(File.ReadAllBytes(sidecarPath));
+      var name = Path.GetFileName(filePath);
+      var length = new FileInfo(filePath).Length;
+      if (sidecar is null ||
+          string.IsNullOrEmpty(sidecar.Key) ||
+          !name.StartsWith($"lastgood-{sidecar.Key}-", StringComparison.Ordinal) ||
+          sidecar.LengthBytes != length ||
+          sidecar.CreatedAtUtc.Add(_lastGoodTtl) <= _time.GetUtcNow() ||
+          !string.Equals(sidecar.ContentHash, HashFile(filePath), StringComparison.Ordinal))
+      {
+        return null;
+      }
+
+      return new LastGoodFile(sidecar.Key, filePath, length, sidecar.CreatedAtUtc);
+    }
+    catch (Exception ex)
+    {
+      _logger.LogDebug(ex, "Unable to restore a last good playlist copy at startup");
+      return null;
+    }
+  }
 
   private static string OutputVariantKey(string sourceHash, IReadOnlyCollection<string> disabledGroups)
   {
@@ -1045,16 +1154,20 @@ internal sealed record PlaylistSession(string SourceKey, DateTimeOffset ExpiresA
 
 internal sealed record PendingDeleteFile(string FilePath, long LengthBytes);
 
+internal sealed record LastGoodSidecar(string Key, string ContentHash, long LengthBytes, DateTimeOffset CreatedAtUtc);
+
 internal sealed class LastGoodFile
 {
-  internal LastGoodFile(Guid playlistId, string filePath, long lengthBytes)
+  internal LastGoodFile(string key, string filePath, long lengthBytes, DateTimeOffset createdAtUtc = default)
   {
-    PlaylistId = playlistId;
+    Key = key;
     FilePath = filePath;
     LengthBytes = lengthBytes;
+    CreatedAtUtc = createdAtUtc;
   }
 
-  internal Guid PlaylistId { get; }
+  internal string Key { get; }
+  internal DateTimeOffset CreatedAtUtc { get; }
   internal string FilePath { get; }
   internal long LengthBytes { get; }
   internal int ActiveLeases { get; set; }
