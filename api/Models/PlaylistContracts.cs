@@ -22,7 +22,8 @@ public record AnalyzePlaylistResponse(
 /// <param name="GroupTitle">The provider's group-title; differs from Name when one title is split by content type.</param>
 /// <param name="ContentType">Live, Movies or Series.</param>
 /// <param name="IsAdult">The group title looks like adult content (AdultGroupRule); informational, never used for filtering.</param>
-public record GroupResult(string Name, int Count, string GroupTitle, string ContentType, bool IsAdult);
+/// <param name="Words">Search words of the group title (see GroupSearchWords); empty for entries without a group-title.</param>
+public record GroupResult(string Name, int Count, string GroupTitle, string ContentType, bool IsAdult, IReadOnlyList<string> Words);
 
 public record GeneratePlaylistRequest(string? SourceUrl, string? CacheKey, List<string>? DisabledGroups);
 
