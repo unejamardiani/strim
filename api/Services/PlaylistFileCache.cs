@@ -12,6 +12,13 @@ namespace Api.Services;
 /// </summary>
 public sealed class PlaylistFileCache
 {
+  /// <summary>
+  /// Upper bound of a source sidecar, shared by write and read. It sits well above the response
+  /// headers the HTTP client accepts (64 KiB by default) even after JSON escaping, so any validator
+  /// the upstream sends is stored in full rather than truncated.
+  /// </summary>
+  internal const int MaxSourceSidecarBytes = 1024 * 1024;
+
   private readonly object _sync = new();
   private readonly Dictionary<string, PlaylistSourceFile> _sources = new(StringComparer.Ordinal);
   private readonly Dictionary<string, PlaylistSession> _sessions = new(StringComparer.Ordinal);
@@ -950,7 +957,16 @@ public sealed class PlaylistFileCache
     try
     {
       var sidecar = new SourceSidecar(source.SourceKey, source.ContentHash, source.LengthBytes, source.ETag, source.LastModifiedUtc, fetchedAtUtc);
-      File.WriteAllBytes(temporaryPath, JsonSerializer.SerializeToUtf8Bytes(sidecar));
+      var bytes = JsonSerializer.SerializeToUtf8Bytes(sidecar);
+      if (bytes.Length > MaxSourceSidecarBytes)
+      {
+        // The reader would reject it; drop a stale sidecar instead of writing one that cannot be restored.
+        DeleteOrTrackNoLock(sidecarPath, 0);
+        _logger.LogWarning("Restart metadata of a playlist source exceeds {MaxBytes} bytes and is not kept", MaxSourceSidecarBytes);
+        return;
+      }
+
+      File.WriteAllBytes(temporaryPath, bytes);
       TrySetPrivateFile(temporaryPath);
       File.Move(temporaryPath, sidecarPath, overwrite: true);
     }
@@ -969,7 +985,7 @@ public sealed class PlaylistFileCache
     {
       var sidecarPath = SidecarPath(filePath);
       var sidecarInfo = new FileInfo(sidecarPath);
-      if (!sidecarInfo.Exists || sidecarInfo.Length > 4096)
+      if (!sidecarInfo.Exists || sidecarInfo.Length > MaxSourceSidecarBytes)
       {
         return null;
       }

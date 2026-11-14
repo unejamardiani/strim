@@ -518,6 +518,24 @@ public class PlaylistFileCacheTests
   }
 
   [Fact]
+  public async Task Source_WithLargeETag_SurvivesRestart()
+  {
+    using var fixture = new LastGoodFixture(maxDiskBytes: 4096);
+    var eTag = $"\"{new string('a', 5000)}\"";
+    var downloaded = await fixture.Cache.WriteRawTextAsync("#EXTM3U\nsource\n", CancellationToken.None);
+    var stored = fixture.Cache.StoreDownloaded(SourceUrl, downloaded with { ETag = eTag });
+
+    fixture.Time.Advance(TimeSpan.FromMinutes(5));
+    fixture.Restart();
+
+    var restored = fixture.Cache.TryGetFreshSource(SourceUrl);
+    Assert.NotNull(restored);
+    Assert.Equal(stored.FilePath, restored!.FilePath);
+    Assert.Equal(eTag, restored.ETag);
+    Assert.True(File.Exists(stored.FilePath));
+  }
+
+  [Fact]
   public async Task Startup_DeletesExpiredOrOrphanedSources()
   {
     using var fixture = new LastGoodFixture(maxDiskBytes: 8192);
