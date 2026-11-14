@@ -114,8 +114,13 @@ Below 720px the nav moves to a horizontally scrollable row under the bar.
 - **Steps** (`.steps`): numbered ink circles. **Guide** (`.guide`): long-form numbered steps with a
   connecting line, tangerine numbers.
 - **FAQ**: `<details class="card">` with a rotating plus.
-- **Error pages**: big tangerine status code, one sentence, Open Strim / Home. All asset paths are
-  absolute because these pages are served at any URL.
+- **Error pages**: a small television (`.tv`, decorative, `aria-hidden`) in the dock's colours
+  next to the copy (above it on phones): eyebrow with the status code, a heading with the one
+  joke, one plain sentence, Open Strim / Home (plus Try again on 5xx). The screen tells the pages
+  apart: 404 snow with "No signal" (inline SVG `feTurbulence`), 500 colour bars in the content
+  type colours with "Please stand by", 50x a test card with the wordmark. Motion (rolling bar,
+  drifting snow, a jolt, the pulsing dot) is CSS only and stops with reduced motion. All asset
+  paths are absolute because these pages are served at any URL.
 
 ---
 
