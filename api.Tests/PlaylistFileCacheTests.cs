@@ -289,6 +289,41 @@ public class PlaylistFileCacheTests
   }
 
   [Fact]
+  public async Task LastGood_RememberDoesNotCountTheCopyTwiceForConcurrentCleanup()
+  {
+    // Source, output and copy fill the budget exactly. If the copy's reservation were still held
+    // after the copy was registered, a concurrent Cleanup would see 400 of 300 bytes and evict.
+    using var fixture = new LastGoodFixture(maxDiskBytes: 300, maxSourceBytes: 100);
+    var source = await fixture.StoreSourceAsync(new string('s', 100));
+    var output = fixture.StoreOutput(source, "Sports", new string('o', 100));
+    var playlistId = Guid.NewGuid();
+    using var stop = new CancellationTokenSource();
+    var cleaner = Task.Run(() =>
+    {
+      while (!stop.IsCancellationRequested) fixture.Cache.Cleanup();
+    });
+
+    try
+    {
+      for (var i = 0; i < 100; i++)
+      {
+        Assert.True(fixture.Cache.RememberLastGood(playlistId, output));
+        Assert.True(File.Exists(source.FilePath), $"Source evicted in iteration {i}.");
+        Assert.True(File.Exists(fixture.LastGoodPath(playlistId)), $"Copy evicted in iteration {i}.");
+        fixture.Cache.ForgetLastGood(playlistId);
+      }
+    }
+    finally
+    {
+      stop.Cancel();
+      await cleaner;
+    }
+
+    using var outputLease = fixture.Cache.TryLeaseOutput(output.OutputKey);
+    Assert.NotNull(outputLease);
+  }
+
+  [Fact]
   public async Task LastGood_ForgetDeletesTheFile()
   {
     using var fixture = new LastGoodFixture(maxDiskBytes: 4096);

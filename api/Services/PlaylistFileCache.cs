@@ -459,6 +459,9 @@ public sealed class PlaylistFileCache
 
       _lastGood[playlistId] = new LastGoodFile(playlistId, finalPath, length, _time.GetUtcNow());
       _pendingDeletes.Remove(finalPath);
+      // Hand the reserved bytes over to the tracked copy in the same critical section, so a
+      // concurrent Cleanup never counts the copy twice (Monitor locks are re-entrant).
+      reservation.Dispose();
     }
 
     return true;
