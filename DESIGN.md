@@ -1,7 +1,7 @@
 # Strim Design System: Signal Paper
 
 Every page uses this system: the editor (`app.html`, `app.css`, `main.js`) and the site (landing
-`index.html`, guides, comparison, blog and error pages, styled by `site.css`). Shared fonts, tokens,
+`index.html`, guides, comparison and error pages, styled by `site.css`). Shared fonts, tokens,
 buttons and cards live in `theme.css`.
 
 Idea: a calm, warm reading surface (paper) with one loud signal colour. Strim is used on the sofa
@@ -88,7 +88,7 @@ Short, plain, second person. "Switch off the groups you never watch", "All on / 
 └──────────────────────────────┘
 ```
 
-### Site (`/`, guides, blog: site.css)
+### Site (`/`, guides: site.css)
 
 ```
 ┌─────────────────────────────────────────┐
@@ -98,7 +98,7 @@ Short, plain, second person. "Switch off the groups you never watch", "All on / 
 │  .page-head   eyebrow · h1 · lead       │
 │  .section     .section-head + .grid     │  cards, features, steps, FAQ
 │  .cta-band    inverted dock colours     │  closes most pages
-│ Articles: .prose-page (700px column)    │
+│ Guide: .guide (700px column)            │
 ├─────────────────────────────────────────┤
 │ Footer                                  │  wordmark · line · links
 └─────────────────────────────────────────┘
@@ -114,8 +114,13 @@ Below 720px the nav moves to a horizontally scrollable row under the bar.
 - **Steps** (`.steps`): numbered ink circles. **Guide** (`.guide`): long-form numbered steps with a
   connecting line, tangerine numbers.
 - **FAQ**: `<details class="card">` with a rotating plus.
-- **Error pages**: big tangerine status code, one sentence, Open Strim / Home. All asset paths are
-  absolute because these pages are served at any URL.
+- **Error pages**: a small television (`.tv`, decorative, `aria-hidden`) in the dock's colours
+  next to the copy (above it on phones): eyebrow with the status code, a heading with the one
+  joke, one plain sentence, Open Strim / Home (plus Try again on 5xx). The screen tells the pages
+  apart: 404 snow with "No signal" (inline SVG `feTurbulence`), 500 colour bars in the content
+  type colours with "Please stand by", 50x a test card with the wordmark. Motion (rolling bar,
+  drifting snow, a jolt, the pulsing dot) is CSS only and stops with reduced motion. All asset
+  paths are absolute because these pages are served at any URL.
 
 ---
 
@@ -126,9 +131,9 @@ index.html          Landing page (public)
 app.html            Editor shell, served at /app
 theme.css           Fonts, tokens, base, wordmark, buttons, cards (shared)
 app.css             Editor components
-site.css            Landing, guides, blog and error pages
+site.css            Landing, guides and error pages
 main.js             Editor logic (router, playlists, group picker, sheets)
-features.html, how-to-use.html, comparison.html, blog/
+features.html, how-to-use.html, comparison.html
 404.html, 500.html, 50x.html
 fonts/              Self-hosted Bricolage Grotesque and Figtree (woff2, OFL)
 logo-icon.svg, logo-wordmark.svg

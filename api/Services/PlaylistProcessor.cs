@@ -13,6 +13,8 @@ public static class PlaylistProcessor
   // Approximate dictionary + string overhead for one distinct group. This is intentionally
   // conservative: the cap protects the JSON response and process heap, not just raw text.
   private const int EstimatedGroupEntryOverheadBytes = 128;
+  /// <summary>Most #EXTVLCOPT/#KODIPROP/other '#' lines kept between one #EXTINF and its address.</summary>
+  public const int MaxOptionLinesPerEntry = 32;
   private const string GroupKeySeparator = " \u00B7 ";
   private static readonly int ContentTypeCount = Enum.GetValues<PlaylistContentType>().Length;
   private static readonly int MaxGroupKeySuffixLength =
@@ -75,15 +77,17 @@ public static class PlaylistProcessor
       FileOptions.Asynchronous | FileOptions.SequentialScan);
     using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 128 * 1024, leaveOpen: false);
     using var lines = new BoundedLineReader(reader, maxLineLengthChars);
+    string? pending = null;
 
-    while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
+    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
     {
-      if (!line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase)) continue;
+      pending = null;
+      if (!IsExtinf(line)) continue;
 
       total++;
-      var groupTitle = ExtractGroupTitle(line);
+      (var url, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
+      var groupTitle = ExtractGroupTitle(line, extGrp);
       EnsureGroupTitleWithinLimit(groupTitle, maxGroupTitleLengthChars);
-      var url = await lines.ReadNextContentLineAsync(cancellationToken);
       IncrementGroup(
         groups,
         groupTitle,
@@ -134,28 +138,92 @@ public static class PlaylistProcessor
     PlaylistFileCache.TrySetPrivateFile(outputPath);
     await using var writer = new StreamWriter(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 128 * 1024, leaveOpen: false);
 
-    await WriteLineAsync(writer, "#EXTM3U", cancellationToken, outputBytes);
+    // The source's header carries the programme-guide address (url-tvg, x-tvg-url, ...), so it is passed
+    // through as is; any other first line is processed as content.
+    string? pending = await lines.ReadNextContentLineAsync(cancellationToken);
+    var header = "#EXTM3U";
+    if (pending is not null && IsHeader(pending))
+    {
+      if (pending.Length > header.Length) header = pending;
+      pending = null;
+    }
+
+    await WriteLineAsync(writer, header, cancellationToken, outputBytes);
     await WriteLineAsync(writer, "# Created with Strim (https://strim.plis.dev)", cancellationToken, outputBytes);
 
-    while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
+    // Each GroupKey is built at most once per (title, content type), whatever the casing.
+    var decisions = new GroupDecisions(disabledGroups, splitGroupTitles);
+
+    var optionLines = new List<string>();
+    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
     {
-      if (!line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase)) continue;
+      pending = null;
+      if (!IsExtinf(line)) continue;
 
       total++;
-      var url = await lines.ReadNextContentLineAsync(cancellationToken) ?? string.Empty;
-      var groupTitle = ExtractGroupTitle(line);
+      (var address, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines, cancellationToken);
+      var url = address ?? string.Empty;
+      var groupTitle = ExtractGroupTitle(line, extGrp);
       var contentType = DetectContentType(url);
-      if (IsDisabled(disabledGroups, groupTitle, contentType)) continue;
+      var decision = decisions.Decide(groupTitle, contentType);
+      if (decision.Disabled) continue;
 
       kept++;
-      var outputGroupTitle = OutputGroupTitle(groupTitle, contentType, splitGroupTitles);
-      await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, outputGroupTitle), cancellationToken, outputBytes);
+      await WriteLineAsync(writer, WithGroupTitle(line, groupTitle, decision.Suffix), cancellationToken, outputBytes);
+      foreach (var optionLine in optionLines)
+      {
+        await WriteLineAsync(writer, optionLine, cancellationToken, outputBytes);
+      }
       await WriteLineAsync(writer, url, cancellationToken, outputBytes);
     }
 
     await writer.FlushAsync(cancellationToken);
     return new PlaylistGenerationResult(total, kept, outputBytes.WrittenBytes);
   }
+
+  /// <summary>#EXTM3U followed by the end of the line or whitespace; "#EXTM3U8foo" is not a header.</summary>
+  private static bool IsHeader(string line) =>
+    line.StartsWith("#EXTM3U", StringComparison.OrdinalIgnoreCase)
+    && (line.Length == 7 || char.IsWhiteSpace(line[7]));
+
+  private static bool IsExtinf(string line) => line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase);
+
+  /// <summary>
+  /// Reads the lines after an #EXTINF: every '#' line (#EXTVLCOPT, #KODIPROP, ...) belongs to the entry,
+  /// the first other line is its address. A following #EXTINF ends the entry without an address and is
+  /// returned as <c>Next</c> so the caller starts a new entry with it. Only this entry's lines are buffered.
+  /// <c>ExtGrp</c> is the value of the entry's first #EXTGRP line, if it has one.
+  /// </summary>
+  private static async ValueTask<(string? Address, string? Next, string? ExtGrp)> ReadEntryTailAsync(
+    BoundedLineReader lines,
+    List<string>? optionLines,
+    CancellationToken cancellationToken)
+  {
+    optionLines?.Clear();
+    var optionCount = 0;
+    string? extGrp = null;
+    while (await lines.ReadNextContentLineAsync(cancellationToken) is { } line)
+    {
+      if (IsExtinf(line)) return (null, line, extGrp);
+      if (!line.StartsWith('#')) return (line, null, extGrp);
+      // A later #EXTM3U is not part of the entry; only the source's first line is written as the header.
+      if (IsHeader(line)) continue;
+
+      if (++optionCount > MaxOptionLinesPerEntry)
+      {
+        throw new PlaylistEntryOptionLinesLimitExceededException(MaxOptionLinesPerEntry);
+      }
+      if (extGrp is null && line.StartsWith(ExtGrpPrefix, StringComparison.OrdinalIgnoreCase))
+      {
+        extGrp = line[ExtGrpPrefix.Length..];
+      }
+      optionLines?.Add(line);
+    }
+
+    return (null, null, extGrp);
+  }
+
+  private const string ExtGrpPrefix = "#EXTGRP:";
 
   public static PlaylistFilterResult GenerateFiltered(string text, HashSet<string> disabledGroups)
   {
@@ -223,6 +291,57 @@ public static class PlaylistProcessor
   }
 
   /// <summary>
+  /// Memoises, for one run of <see cref="GenerateFilteredFileAsync"/>, what every entry of one
+  /// (group title, content type) gets. Titles that differ only by case share one decision, like the
+  /// case-insensitive sets the pipeline passes in. A split title is written as the entry's own title
+  /// plus a fixed content-type suffix, so no output key is built for any casing.
+  /// </summary>
+  internal sealed class GroupDecisions(ISet<string> disabledGroups, IReadOnlySet<string>? splitGroupTitles)
+  {
+    private static readonly string[] Suffixes =
+      Enum.GetValues<PlaylistContentType>().Select(type => $"{GroupKeySeparator}{type}").ToArray();
+
+    // Marks a dropped pair; compared by reference, so no suffix can be mistaken for it.
+    private static readonly string DisabledMarker = new('\0', 1);
+
+    // Per content type: null until decided, DisabledMarker, or the output suffix ("" when unsplit).
+    private readonly Dictionary<string, string?[]> decisions = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How many <see cref="GroupKey"/> strings this memo has built.</summary>
+    internal int KeysBuilt { get; private set; }
+
+    /// <summary>Whether the entry is dropped and, if kept, the suffix appended to its group title.</summary>
+    public (bool Disabled, string Suffix) Decide(string groupTitle, PlaylistContentType contentType)
+    {
+      if (!decisions.TryGetValue(groupTitle, out var perType))
+      {
+        perType = new string?[ContentTypeCount];
+        decisions[groupTitle] = perType;
+      }
+
+      var decision = perType[(int)contentType];
+      if (decision is null)
+      {
+        var disabled = disabledGroups.Count > 0 &&
+          (disabledGroups.Contains(groupTitle) || disabledGroups.Contains(BuildKey(groupTitle, contentType)));
+        // Live channels keep the provider's group-title; movies and series of a split title move to
+        // their own group (e.g. "Germany · Series").
+        var split = contentType != PlaylistContentType.Live && splitGroupTitles?.Contains(groupTitle) == true;
+        decision = disabled ? DisabledMarker : split ? Suffixes[(int)contentType] : string.Empty;
+        perType[(int)contentType] = decision;
+      }
+
+      return ReferenceEquals(decision, DisabledMarker) ? (true, string.Empty) : (false, decision);
+    }
+
+    private string BuildKey(string groupTitle, PlaylistContentType contentType)
+    {
+      KeysBuilt++;
+      return GroupKey(groupTitle, contentType);
+    }
+  }
+
+  /// <summary>
   /// A plain group-title disables every entry of that title (unsplit groups and filters saved
   /// before groups were split); a <see cref="GroupKey"/> disables only that content type.
   /// </summary>
@@ -230,18 +349,6 @@ public static class PlaylistProcessor
     disabledGroups.Count > 0 &&
     (disabledGroups.Contains(groupTitle) ||
      disabledGroups.Contains(GroupKey(groupTitle, contentType)));
-
-  /// <summary>
-  /// Live channels keep the provider's group-title; movies and series of a title the provider also
-  /// uses for another content type move to their own group (e.g. "Germany · Series").
-  /// </summary>
-  private static string OutputGroupTitle(
-    string groupTitle,
-    PlaylistContentType contentType,
-    IReadOnlySet<string>? splitGroupTitles) =>
-    contentType != PlaylistContentType.Live && splitGroupTitles?.Contains(groupTitle) == true
-      ? GroupKey(groupTitle, contentType)
-      : groupTitle;
 
   public static DateTimeOffset? TryExtractExpiration(Uri? uri)
   {
@@ -367,12 +474,17 @@ public static class PlaylistProcessor
     }
   }
 
-  private static string ExtractGroupTitle(string extinf)
+  /// <summary>The group-title value; without one, the entry's #EXTGRP value; otherwise "Ungrouped".</summary>
+  private static string ExtractGroupTitle(string extinf, string? extGrp = null)
   {
-    if (!TryFindGroupTitleValue(extinf, out var start, out var end)) return "Ungrouped";
+    if (TryFindGroupTitleValue(extinf, out var start, out var end))
+    {
+      var value = extinf[start..end].Trim();
+      if (value.Length > 0) return value;
+    }
 
-    var value = extinf[start..end].Trim();
-    return string.IsNullOrWhiteSpace(value) ? "Ungrouped" : value;
+    var group = extGrp?.Trim();
+    return string.IsNullOrEmpty(group) ? "Ungrouped" : group;
   }
 
   /// <summary>Finds the quoted value of the first group-title attribute as [start, end).</summary>
@@ -442,23 +554,22 @@ public static class PlaylistProcessor
 
   private static bool IsAttributeCharacter(char value) => char.IsLetterOrDigit(value) || value is '-' or '_';
 
-  private static string WithGroupTitle(string extinf, string groupTitle, string outputGroupTitle)
+  private static string WithGroupTitle(string extinf, string groupTitle, string suffix)
   {
-    if (string.Equals(groupTitle, outputGroupTitle, StringComparison.Ordinal))
-    {
-      return EnsureGroupInExtinf(extinf, groupTitle);
-    }
+    if (suffix.Length == 0) return EnsureGroupInExtinf(extinf, groupTitle);
 
+    // The same bytes as writing GroupKey(groupTitle, type), without building the key per entry.
     return TryFindGroupTitleValue(extinf, out var start, out var end)
-      ? string.Concat(extinf.AsSpan(0, start), outputGroupTitle, extinf.AsSpan(end))
-      : EnsureGroupInExtinf(extinf, outputGroupTitle);
+      ? string.Concat(extinf.AsSpan(0, start), groupTitle, suffix, extinf.AsSpan(end))
+      : EnsureGroupInExtinf(extinf, groupTitle, suffix);
   }
 
-  private static string EnsureGroupInExtinf(string extinf, string groupTitle)
+  private static string EnsureGroupInExtinf(string extinf, string groupTitle, string suffix = "")
   {
     if (HasGroupTitleAttribute(extinf)) return extinf;
 
-    var attribute = $" group-title=\"{groupTitle}\"";
+    // Title and suffix go straight into the attribute, so no output key is built per entry.
+    var attribute = string.Concat(" group-title=\"", groupTitle, suffix, "\"");
     var titleSeparator = extinf.IndexOf(',');
     return titleSeparator >= 0
       ? extinf.Insert(titleSeparator, attribute)
@@ -475,6 +586,7 @@ public static class PlaylistProcessor
     private readonly StreamReader _reader;
     private readonly int _maxLineLengthChars;
     private char[]? _buffer;
+    private StringBuilder? _carry;
     private int _position;
     private int _count;
 
@@ -496,11 +608,13 @@ public static class PlaylistProcessor
       return null;
     }
 
+    /// <summary>
+    /// A line inside the buffer becomes a string straight from its slice; only a line that crosses
+    /// a buffer boundary is collected in the reused <see cref="_carry"/> builder.
+    /// </summary>
     private async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
     {
-      StringBuilder? line = null;
-      var length = 0;
-      var sawCharacter = false;
+      var carried = 0;
 
       while (true)
       {
@@ -511,24 +625,41 @@ public static class PlaylistProcessor
           _position = 0;
           if (_count == 0)
           {
-            return sawCharacter ? line?.ToString() ?? string.Empty : null;
+            return carried > 0 ? _carry!.ToString() : null;
           }
         }
 
-        var character = _buffer![_position++];
-        if (character is '\r' or '\n')
-        {
-          return line?.ToString() ?? string.Empty;
-        }
-
-        sawCharacter = true;
-        if (++length > _maxLineLengthChars)
-        {
-          throw new PlaylistLineTooLongException(_maxLineLengthChars);
-        }
-
-        (line ??= new StringBuilder(Math.Min(256, _maxLineLengthChars))).Append(character);
+        if (TryTakeLine(ref carried) is { } line) return line;
       }
+    }
+
+    /// <summary>Returns the line ending in the buffer, or carries the rest of the buffer over and returns null.</summary>
+    private string? TryTakeLine(ref int carried)
+    {
+      var available = _buffer.AsSpan(_position, _count - _position);
+      var end = available.IndexOfAny('\r', '\n');
+      var segment = end < 0 ? available : available[..end];
+      if (carried + segment.Length > _maxLineLengthChars)
+      {
+        throw new PlaylistLineTooLongException(_maxLineLengthChars);
+      }
+
+      if (end < 0)
+      {
+        if (carried == 0) (_carry ??= new StringBuilder(Math.Min(256, _maxLineLengthChars))).Clear();
+        _carry!.Append(segment);
+        carried += segment.Length;
+        _position = _count;
+        return null;
+      }
+
+      _position += end + 1;
+      if (carried == 0)
+      {
+        return segment.Length == 0 ? string.Empty : new string(segment);
+      }
+
+      return _carry!.Append(segment).ToString();
     }
 
     public void Dispose()
@@ -620,6 +751,14 @@ public sealed class PlaylistGeneratedSizeExceededException : InvalidOperationExc
 {
   public PlaylistGeneratedSizeExceededException(long maxOutputBytes)
     : base($"Generated playlist exceeds the configured {maxOutputBytes / (1024 * 1024)} MiB output limit. Increase PlaylistCache__MaxSourceBytes and PlaylistCache__MaxDiskBytes together to support it.")
+  {
+  }
+}
+
+public sealed class PlaylistEntryOptionLinesLimitExceededException : InvalidOperationException
+{
+  public PlaylistEntryOptionLinesLimitExceededException(int maxOptionLines)
+    : base($"Playlist contains a channel with more than {maxOptionLines:N0} option lines (such as #EXTVLCOPT or #KODIPROP) between #EXTINF and its address.")
   {
   }
 }
