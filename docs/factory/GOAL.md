@@ -1,7 +1,7 @@
 # Goal
 
-> **DRAFT, awaiting the owner's approval.** Agents read this file before every run and may not change it
-> (`docs/factory/*` is protected). It takes effect only once the owner has approved and merged it.
+> Agents read this file before every run and may not change it (`docs/factory/*` is protected). The owner
+> stated this goal on 14 Nov 2026; it replaces the first draft.
 
 ## Product
 
@@ -12,9 +12,23 @@ hosts, stores or proxies streams; it only edits the playlist.
 
 ## Current target
 
-Small, self-contained improvements to the editor (`/app`) and the API that make cleaning up a playlist quicker:
-fewer taps to find and switch off groups, clearer feedback while a large list loads, better handling of the
-playlists people actually paste. Each improvement fits in one pull request and comes with its tests.
+Strim should be good enough that one would pay for it, without anyone being asked to: the best possible experience
+for the owner's own daily use. It stays free. There is no business model, no billing and no pricing.
+
+The owner manages his playlist from a phone or laptop and watches on an LG television (webOS) with the Smart IPTV
+app and on an Apple TV with IPTV apps. In that order of importance:
+
+1. **What Strim hands to the players is correct and dependable.** The playlist keeps everything a player needs
+   (the header with the programme-guide address, option lines of an entry, attributes, order), and the player link
+   answers with the last good list when the provider or Strim has a problem.
+2. **Strim is a companion to the television apps.** It answers what the apps do not: in which group a title is,
+   when the provider subscription expires, whether the link still works and when it was last fetched, what changed
+   in the provider's list.
+3. **Cleaning up is quick and safe.** Few taps to find and switch groups, no accidental bulk changes, and a way back.
+4. **Smart cleaning comes last:** duplicates, best variants, language and country preferences. Report first, remove
+   later, because wrong removals are worse than none.
+
+Each improvement fits in one pull request and comes with its tests.
 
 ## Out of scope
 
@@ -24,7 +38,7 @@ Never touched without the owner deciding first; a story that needs one of these 
 - the security of player (share) links: their codes, lifetime, access and the anonymous share route;
 - the database schema beyond additive columns (no EF migrations, no renamed or dropped columns or tables);
 - hosting, Docker, Docker Compose, CI workflows and anything in `tools/`;
-- the marketing copy of the landing page, guides, comparison and blog pages;
+- the marketing copy of the landing page, guides and comparison page;
 - licences, including the font licences in `fonts/`;
 - anything that stores, caches, relays or proxies streams, or plays them;
 - new NuGet packages or other dependencies.
@@ -41,9 +55,24 @@ Never touched without the owner deciding first; a story that needs one of these 
 ## Quality bar
 
 - Every behaviour change has a test in `api.Tests` that fails without it.
-- A frontend-only change still comes with a test wherever the API is involved. Where it truly is not, the story
-  says so and asks the owner before it is built.
+- A frontend-only change still comes with a test wherever the API is involved. A change to the editor files alone
+  (`main.js`, `app.html`, `app.css`, `theme.css`), which have no test harness, may come without a test file when the
+  build agent writes manual check steps; the reviewer checks them and they appear in the pull request.
 - `dotnet test strim.sln` passes (the factory's gate and the CI workflow run it).
 - The reviewer finds no blocking issue against the story's acceptance criteria, `AGENTS.md` or `DESIGN.md`.
-- A story is done when its pull request is merged by the owner with every acceptance criterion covered by a
-  passing test, and nothing outside the story's scope changed.
+- A story is done when its pull request is merged with every acceptance criterion covered by a passing test (or, for
+  an editor-only change, by manual check steps), and nothing outside the story's scope changed.
+
+## Decisions and merges
+
+The owner delegated on 14 Nov 2026: "It is nothing business critical and i would like to give you some autonomy."
+
+- Questions that are not critical are decided by the factory's advisor (or by the assistant) and recorded on the
+  story. The owner can overrule any of them with a comment.
+- Pull requests merge automatically once the gate, the review and the checks are green, unless they touch a guarded
+  area; those wait for the owner's approval.
+- Critical questions stay with the owner: security, authentication, the data model, dependencies, deployment, legal
+  matters and licences, money, and anything beyond this goal.
+- Guarded areas: sign-in, CSRF and the security helpers, the fetching of provider links, the database schema and the
+  data models, the middleware order in `Program.cs`, the file with the public player-link route, CI, Docker,
+  dependencies and the factory's own configuration.
