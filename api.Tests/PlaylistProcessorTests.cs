@@ -474,6 +474,36 @@ public class PlaylistProcessorTests
     Assert.Equal(3 + 2 * (casings.Length - 1), decisions.KeysBuilt);
   }
 
+  [Fact]
+  public void GenerateFiltered_SplitCasingCacheIsBounded()
+  {
+    // Every one of the 2^10 casings of a 10-letter title is distinct under ordinal comparison.
+    const string baseTitle = "abcdefghij";
+    var split = new HashSet<string>(new[] { baseTitle }, StringComparer.OrdinalIgnoreCase);
+    var decisions = new PlaylistProcessor.GroupDecisions(
+      new HashSet<string>(StringComparer.OrdinalIgnoreCase), split);
+
+    for (var mask = 0; mask < 1 << baseTitle.Length; mask++)
+    {
+      var chars = baseTitle.ToCharArray();
+      for (var c = 0; c < chars.Length; c++)
+      {
+        if ((mask & (1 << c)) != 0) chars[c] = char.ToUpperInvariant(chars[c]);
+      }
+
+      var title = new string(chars);
+      foreach (var type in new[] { PlaylistContentType.Movies, PlaylistContentType.Series })
+      {
+        var (disabled, output) = decisions.Decide(title, type);
+        Assert.False(disabled);
+        Assert.Equal(PlaylistProcessor.GroupKey(title, type), output);
+      }
+    }
+
+    // Two content types, each holding at most MaxCachedCasings keys however many casings arrive.
+    Assert.Equal(2 * PlaylistProcessor.GroupDecisions.MaxCachedCasings, decisions.CachedKeys);
+  }
+
   /// <summary>Counts the membership checks made through <see cref="ISet{T}"/>.</summary>
   private sealed class CountingSet : HashSet<string>, ICollection<string>
   {

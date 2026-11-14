@@ -230,7 +230,9 @@ public static class PlaylistProcessor
   /// (group title, content type) gets. Titles that differ only by case share one filtering decision,
   /// like the case-insensitive sets the pipeline passes in; the output key of a split title is cached
   /// per exact casing, so every entry keeps its own casing and each key string is built once.
-  /// The memo grows with the titles the source holds, which its size limit already bounds.
+  /// The memo grows with the titles the source holds, which the analysis limits bound; the casings
+  /// kept per pair are capped at <see cref="MaxCachedCasings"/>, so a source with endless case
+  /// variants of one title cannot grow it further (later casings build their key per entry).
   /// </summary>
   internal sealed class GroupDecisions(ISet<string> disabledGroups, IReadOnlySet<string>? splitGroupTitles)
   {
@@ -242,10 +244,16 @@ public static class PlaylistProcessor
       public Dictionary<string, string> Keys { get; } = new(StringComparer.Ordinal);
     }
 
+    /// <summary>Most exact casings whose output key is cached per (title, content type).</summary>
+    internal const int MaxCachedCasings = 8;
+
     private readonly Dictionary<string, Decision?[]> decisions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>How many <see cref="GroupKey"/> strings this memo has built.</summary>
     internal int KeysBuilt { get; private set; }
+
+    /// <summary>How many output keys this memo holds across all pairs.</summary>
+    internal int CachedKeys { get; private set; }
 
     public (bool Disabled, string OutputGroupTitle) Decide(string groupTitle, PlaylistContentType contentType)
     {
@@ -267,7 +275,11 @@ public static class PlaylistProcessor
           contentType != PlaylistContentType.Live &&
           splitGroupTitles?.Contains(groupTitle) == true;
         decision = new Decision(disabled, split);
-        if (split) decision.Keys[groupTitle] = key ?? BuildKey(groupTitle, contentType);
+        if (split)
+        {
+          decision.Keys[groupTitle] = key ?? BuildKey(groupTitle, contentType);
+          CachedKeys++;
+        }
         perType[(int)contentType] = decision;
       }
 
@@ -278,7 +290,11 @@ public static class PlaylistProcessor
       if (!decision.Keys.TryGetValue(groupTitle, out var outputTitle))
       {
         outputTitle = BuildKey(groupTitle, contentType);
-        decision.Keys[groupTitle] = outputTitle;
+        if (decision.Keys.Count < MaxCachedCasings)
+        {
+          decision.Keys[groupTitle] = outputTitle;
+          CachedKeys++;
+        }
       }
 
       return (false, outputTitle);
