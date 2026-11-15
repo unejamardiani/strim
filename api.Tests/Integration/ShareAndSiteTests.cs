@@ -133,7 +133,8 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
       {
         builder
           .UseSetting("PlaylistCache:RevalidationIntervalMinutes", "0")
-          .UseSetting("PlaylistCache:HeaderTimeoutSeconds", "1");
+          .UseSetting("PlaylistCache:HeaderTimeoutSeconds", "1")
+          .UseSetting("PlaylistCache:QueueTimeoutSeconds", "1");
         if (cacheTime is not null)
         {
           builder.UseSetting("PlaylistCache:EntryTtlMinutes", "1");
@@ -331,6 +332,80 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
     var response = await owner.PostAsync("/api/playlist/analyze", new { sourceUrl = StrimAppFactory.UpstreamUrl });
 
     Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+    Assert.False(response.Headers.Contains("X-Strim-Stale"));
+  }
+
+  // ---- Busy job gate (#110) ----
+
+  /// <summary>Takes the app's only job permit, so every gated request waits out the one-second queue timeout.</summary>
+  private static async Task<PlaylistJobLease> HoldGateAsync(FallbackApp fallback) =>
+    (await fallback.App.Services.GetRequiredService<PlaylistJobGate>().TryEnterAsync(CancellationToken.None))!;
+
+  [Fact]
+  public async Task Share_GateBusy_ServesLastGood()
+  {
+    using var fallback = new FallbackApp();
+    var (_, playlist) = await fallback.CreateSharedAsync("busy");
+    var anonymous = fallback.App.CreateClient();
+    var good = await anonymous.GetStringAsync(FallbackApp.SharePath(playlist));
+
+    HttpResponseMessage response;
+    await using (await HoldGateAsync(fallback))
+    {
+      response = await anonymous.GetAsync(FallbackApp.SharePath(playlist));
+    }
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    Assert.Equal("1", Assert.Single(response.Headers.GetValues("X-Strim-Stale")));
+    Assert.Equal(good, await response.Content.ReadAsStringAsync());
+  }
+
+  [Fact]
+  public async Task Share_GateBusy_WithoutLastGood_Returns429()
+  {
+    using var fallback = new FallbackApp();
+    var (_, playlist) = await fallback.CreateSharedAsync("busy429");
+
+    HttpResponseMessage response;
+    await using (await HoldGateAsync(fallback))
+    {
+      response = await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist));
+    }
+
+    Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+    Assert.False(response.Headers.Contains("X-Strim-Stale"));
+  }
+
+  [Fact]
+  public async Task Share_GateBusy_WrongCodeOrInactive_IsNotFound()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await fallback.CreateSharedAsync("busy404");
+    var anonymous = fallback.App.CreateClient();
+    (await anonymous.GetAsync(FallbackApp.SharePath(playlist))).EnsureSuccessStatusCode();
+    (await owner.SendAsync(HttpMethod.Patch, $"/api/playlists/{playlist.Id}/toggle-active")).EnsureSuccessStatusCode();
+
+    await using (await HoldGateAsync(fallback))
+    {
+      Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/playlists/{playlist.Id}/share/wrong")).StatusCode);
+      Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync(FallbackApp.SharePath(playlist))).StatusCode);
+    }
+  }
+
+  [Fact]
+  public async Task Generate_GateBusy_StillReturns429()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await fallback.CreateSharedAsync("busyeditor");
+    (await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist))).EnsureSuccessStatusCode();
+
+    HttpResponseMessage response;
+    await using (await HoldGateAsync(fallback))
+    {
+      response = await owner.PostAsync("/api/playlist/generate", new { sourceUrl = StrimAppFactory.UpstreamUrl });
+    }
+
+    Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
     Assert.False(response.Headers.Contains("X-Strim-Stale"));
   }
 

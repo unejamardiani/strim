@@ -253,8 +253,13 @@ public static class ProcessingEndpoints
         return Results.BadRequest(new { error = "Playlist is missing sourceUrl." });
       }
 
+      // Runs after the access check above, so a busy gate never turns a 404 into a copy.
       var job = await jobGate.TryEnterAsync(context.RequestAborted);
-      if (job is null) return EndpointHelpers.Busy();
+      if (job is null)
+      {
+        return LastGoodOrNull(context, pipeline.Cache, playlist, logger, "job gate busy")
+          ?? EndpointHelpers.Busy();
+      }
 
       await using (job)
       {
@@ -330,7 +335,7 @@ public static class ProcessingEndpoints
       return null;
     }
 
-    logger.LogWarning("Serving the last good copy of playlist {PlaylistId} after a failed refresh ({Reason})", playlist.Id, reason);
+    logger.LogWarning("Serving the last good copy of playlist {PlaylistId} instead of a fresh one ({Reason})", playlist.Id, reason);
     context.Response.Headers["X-Strim-Stale"] = "1";
     return new PlaylistFileResult(lease, M3uContentType);
   }
