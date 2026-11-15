@@ -11,16 +11,24 @@ public static class PlaylistReport
 {
   public const int MaxListedSetsPerKind = 500;
 
-  public static PlaylistReportResponse Build(IReadOnlyList<PlaylistEntry> entries, int maxListedSetsPerKind = MaxListedSetsPerKind)
+  public static PlaylistReportResponse Build(
+    IReadOnlyList<PlaylistEntry> entries,
+    int maxListedSetsPerKind = MaxListedSetsPerKind,
+    CancellationToken cancellationToken = default)
   {
+    cancellationToken.ThrowIfCancellationRequested();
     var duplicates = DuplicateFinder.Find(entries);
-    var variants = VariantFinder.Find(entries);
+    var variants = VariantFinder.Find(entries, cancellationToken);
 
     var duplicateSets = duplicates
       .Take(maxListedSetsPerKind)
       .Select(set => new ReportDuplicateSet(
         set.Groups,
-        set.Entries.Select(e => new ReportEntry(e.Name, e.GroupTitle, VariantFinder.Detect(e.Name).QualityWords)).ToList()))
+        set.Entries.Select(e =>
+        {
+          cancellationToken.ThrowIfCancellationRequested();
+          return new ReportEntry(e.Name, e.GroupTitle, VariantFinder.Detect(e.Name).QualityWords);
+        }).ToList()))
       .ToList();
     var variantGroups = variants
       .Take(maxListedSetsPerKind)

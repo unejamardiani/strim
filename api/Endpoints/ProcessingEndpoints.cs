@@ -193,7 +193,7 @@ public static class ProcessingEndpoints
 
           var entries = await PlaylistProcessor.ReadEntriesFromFileAsync(
             source.FilePath, pipeline.Cache.MaxReportBytes, context.RequestAborted, pipeline.Cache.MaxLineLengthChars);
-          return Results.Ok(PlaylistReport.Build(entries));
+          return Results.Ok(PlaylistReport.Build(entries, cancellationToken: context.RequestAborted));
         }
         catch (Exception ex)
         {
