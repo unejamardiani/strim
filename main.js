@@ -797,8 +797,9 @@ function applyAnalysis(ed, analysis, { sample }) {
   const groups = (analysis.groups || []).map((g, index) => {
     const title = g.groupTitle || g.name;
     const type = CONTENT_TYPES.includes(g.contentType) ? g.contentType : 'Live';
-    // Whole words of the title (S2); null for an older response or an untitled group, which keeps the substring match.
-    const words = Array.isArray(g.words) && g.words.length ? g.words.map((w) => String(w).toLowerCase()) : null;
+    // Whole words of the title (S2); null only for an older response without `words`, which keeps the substring match.
+    // An untitled group arrives with `words: []` and so matches no short term.
+    const words = Array.isArray(g.words) ? g.words.map((w) => String(w).toLowerCase()) : null;
     return { key: g.name, title, type, count: g.count || 0, index, split: false, search: '', words, adult: g.isAdult === true };
   });
 
