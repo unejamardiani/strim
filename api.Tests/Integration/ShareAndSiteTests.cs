@@ -376,20 +376,93 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
     Assert.False(response.Headers.Contains("X-Strim-Stale"));
   }
 
+  /// <summary>Creates a shared playlist and fetches it once, so its last good copy is pinned.</summary>
+  private static async Task<(ApiClient Owner, PlaylistDto Playlist)> CreateWithLastGoodAsync(FallbackApp fallback, string userName)
+  {
+    var (owner, playlist) = await fallback.CreateSharedAsync(userName);
+    (await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist))).EnsureSuccessStatusCode();
+    AssertHasLastGood(fallback, playlist);
+    return (owner, playlist);
+  }
+
+  private static void AssertHasLastGood(FallbackApp fallback, PlaylistDto playlist)
+  {
+    using var lease = fallback.App.Services.GetRequiredService<PlaylistFileCache>().TryLeaseLastGood(playlist.Id);
+    Assert.NotNull(lease);
+  }
+
+  private static async Task AssertNotFoundWithoutCopy(HttpResponseMessage response)
+  {
+    Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    Assert.False(response.Headers.Contains("X-Strim-Stale"));
+    Assert.DoesNotContain("#EXTM3U", await response.Content.ReadAsStringAsync());
+  }
+
+  // Each request below would reach the busy-gate fallback (and get the last good copy, or a 429)
+  // if the access check ran after the gate; only the check in front of it gives these 404s.
+
   [Fact]
-  public async Task Share_GateBusy_WrongCodeOrInactive_IsNotFound()
+  public async Task Share_GateBusy_ActiveWithWrongCode_IsNotFound()
   {
     using var fallback = new FallbackApp();
-    var (owner, playlist) = await fallback.CreateSharedAsync("busy404");
-    var anonymous = fallback.App.CreateClient();
-    (await anonymous.GetAsync(FallbackApp.SharePath(playlist))).EnsureSuccessStatusCode();
-    (await owner.SendAsync(HttpMethod.Patch, $"/api/playlists/{playlist.Id}/toggle-active")).EnsureSuccessStatusCode();
+    var (_, playlist) = await CreateWithLastGoodAsync(fallback, "busywrongcode");
 
+    HttpResponseMessage response;
     await using (await HoldGateAsync(fallback))
     {
-      Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/playlists/{playlist.Id}/share/wrong")).StatusCode);
-      Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync(FallbackApp.SharePath(playlist))).StatusCode);
+      response = await fallback.App.CreateClient().GetAsync($"/api/playlists/{playlist.Id}/share/wrong");
     }
+
+    await AssertNotFoundWithoutCopy(response);
+    AssertHasLastGood(fallback, playlist);
+  }
+
+  [Fact]
+  public async Task Share_GateBusy_InactiveWithCorrectCode_IsNotFound()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await CreateWithLastGoodAsync(fallback, "busyinactive");
+    (await owner.SendAsync(HttpMethod.Patch, $"/api/playlists/{playlist.Id}/toggle-active")).EnsureSuccessStatusCode();
+    AssertHasLastGood(fallback, playlist);
+
+    HttpResponseMessage response;
+    await using (await HoldGateAsync(fallback))
+    {
+      response = await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist));
+    }
+
+    await AssertNotFoundWithoutCopy(response);
+  }
+
+  [Fact]
+  public async Task Share_GateBusy_UnknownId_IsNotFound()
+  {
+    using var fallback = new FallbackApp();
+    var (_, playlist) = await CreateWithLastGoodAsync(fallback, "busyunknown");
+
+    HttpResponseMessage response;
+    await using (await HoldGateAsync(fallback))
+    {
+      response = await fallback.App.CreateClient().GetAsync($"/api/playlists/{Guid.NewGuid()}/share/{playlist.ShareCode}");
+    }
+
+    await AssertNotFoundWithoutCopy(response);
+  }
+
+  [Fact]
+  public async Task Share_GateBusy_DeletedPlaylist_IsNotFound()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await CreateWithLastGoodAsync(fallback, "busydeleted");
+    (await owner.SendAsync(HttpMethod.Delete, $"/api/playlists/{playlist.Id}")).EnsureSuccessStatusCode();
+
+    HttpResponseMessage response;
+    await using (await HoldGateAsync(fallback))
+    {
+      response = await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist));
+    }
+
+    await AssertNotFoundWithoutCopy(response);
   }
 
   [Fact]
