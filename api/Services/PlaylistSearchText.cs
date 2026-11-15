@@ -111,25 +111,32 @@ public static class PlaylistSearchText
     return folded.ToString().Normalize(NormalizationForm.FormC);
   }
 
-  /// <summary>The double-quoted value of the first attribute with this name, or null.</summary>
+  /// <summary>
+  /// The double-quoted value of the first attribute with this name, or null. Names are matched
+  /// only outside quoted values, so text inside another attribute's value is never taken as one.
+  /// </summary>
   internal static string? AttributeValue(string extinf, string attribute)
   {
-    var searchAt = 0;
-    while (searchAt < extinf.Length)
+    var i = 0;
+    while (i < extinf.Length)
     {
-      var at = extinf.IndexOf(attribute, searchAt, StringComparison.OrdinalIgnoreCase);
-      if (at < 0)
+      if (extinf[i] == '"')
       {
-        return null;
+        var closingQuote = extinf.IndexOf('"', i + 1);
+        if (closingQuote < 0) return null;
+        i = closingQuote + 1;
+        continue;
       }
 
-      var cursor = at + attribute.Length;
-      searchAt = cursor;
-      if (at > 0 && (char.IsLetterOrDigit(extinf[at - 1]) || extinf[at - 1] is '-' or '_'))
+      var at = i++;
+      if (at + attribute.Length > extinf.Length
+          || !extinf.AsSpan(at, attribute.Length).Equals(attribute, StringComparison.OrdinalIgnoreCase)
+          || (at > 0 && (char.IsLetterOrDigit(extinf[at - 1]) || extinf[at - 1] is '-' or '_')))
       {
         continue;
       }
 
+      var cursor = at + attribute.Length;
       while (cursor < extinf.Length && char.IsWhiteSpace(extinf[cursor])) cursor++;
       if (cursor >= extinf.Length || extinf[cursor] != '=') continue;
       cursor++;
