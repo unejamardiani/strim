@@ -274,19 +274,9 @@ public static class PlaylistProcessor
   }
 
   /// <summary>
-  /// The entries of an in-memory playlist in their order, read with the same rules as filtering:
+  /// The entries of a playlist file in their order, read one line at a time with the same rules as filtering:
   /// option lines (#EXTVLCOPT, #KODIPROP, ...) belong to the entry, the first other line is its address,
-  /// and #EXTGRP is the group of an entry without group-title. Only reads; meant for small texts and tests.
-  /// </summary>
-  public static List<PlaylistEntry> ReadEntries(string text)
-  {
-    using var lines = InMemoryLines(text);
-    return RunSync(ReadEntriesAsync(lines, long.MaxValue, CancellationToken.None));
-  }
-
-  /// <summary>
-  /// The entries of a playlist file, read one line at a time with the same rules as <see cref="ReadEntries"/>.
-  /// Only the parsed name, group, tvg-id and address of each entry are kept, not the file's lines; reading
+  /// and #EXTGRP is the group of an entry without group-title. Only the parsed name, group, tvg-id and address of each entry are kept, not the file's lines; reading
   /// stops with <see cref="PlaylistReportTooLargeException"/> once their estimated heap size passes
   /// <paramref name="maxBytes"/>.
   /// </summary>
