@@ -54,6 +54,44 @@ public class VariantFinderTests
     Assert.Equal(new[] { "HD", "backup" }, group.Entries[4].QualityWords);
   }
 
+  [Fact]
+  public void QualityWordsInTheMiddle_GroupVariants()
+  {
+    var groups = VariantFinder.Find(Entries(("Sport (HD) 1", "A"), ("Sport [FHD] 1", "A"), ("Sport 1", "A")));
+
+    var group = Assert.Single(groups);
+    Assert.Equal("Sport 1", group.BaseName);
+    Assert.Equal(new[] { 0, 1, 2 }, group.Entries.Select(v => v.Entry.Index));
+    Assert.Equal(new[] { "HD" }, group.Entries[0].QualityWords);
+    Assert.Equal(new[] { "FHD" }, group.Entries[1].QualityWords);
+    Assert.Empty(group.Entries[2].QualityWords);
+  }
+
+  [Theory]
+  [InlineData("Sport HD 1", new[] { "HD" })]
+  [InlineData("Sport (hd) 1", new[] { "HD" })]
+  [InlineData("Sport [4k] 1", new[] { "4K" })]
+  [InlineData("Sport UHD 1 raw", new[] { "UHD", "raw" })]
+  [InlineData("Sport (H.265) 1 [backup]", new[] { "H265", "backup" })]
+  [InlineData("Sport HEVC FHD 1", new[] { "HEVC", "FHD" })]
+  public void QualityWords_AreRecognisedInAnyPosition(string name, string[] words)
+  {
+    var (baseName, found) = VariantFinder.Detect(name);
+    Assert.Equal("Sport 1", baseName);
+    Assert.Equal(words, found);
+  }
+
+  [Theory]
+  [InlineData("Sport1HDPlus")]
+  [InlineData("Sport HDPlus 1")]
+  [InlineData("Sport (HDPlus) 1")]
+  public void QualityWordInsideAWord_IsNotRecognised(string name)
+  {
+    var (baseName, words) = VariantFinder.Detect(name);
+    Assert.Equal(name, baseName);
+    Assert.Empty(words);
+  }
+
   [Theory]
   [InlineData("HDTV Classics")]
   [InlineData("Shadow")]
