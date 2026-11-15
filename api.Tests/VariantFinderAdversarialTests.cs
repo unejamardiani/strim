@@ -43,16 +43,73 @@ public class VariantFinderAdversarialTests
   }
 
   [Fact]
-  public void Report_ObservesCancellation()
+  public void Detect_KeepsTheCaseEquivalenceOfTheEarlierRegex()
   {
-    var entries = new List<PlaylistEntry>
-    {
-      new(0, "Sport 1 HD", "A", null, "http://example.invalid/live/0.ts"),
-      new(1, "Sport 1", "A", null, "http://example.invalid/live/1.ts"),
-    };
-    using var cancelled = new CancellationTokenSource();
-    cancelled.Cancel();
+    // The long s (U+017F) upper-cases to S, but the earlier regex did not treat it as an s.
+    AssertDetects("Sport ſD", "Sport ſD");
+    AssertDetects("Sport hd", "Sport", "HD");
+    AssertDetects("Sport h.265", "Sport", "H265");
+  }
 
-    Assert.ThrowsAny<OperationCanceledException>(() => PlaylistReport.Build(entries, cancellationToken: cancelled.Token));
+  private static void AssertDetects(string name, string baseName, params string[] words)
+  {
+    var result = VariantFinder.Detect(name);
+    Assert.Equal(baseName, result.BaseName);
+    Assert.Equal(words, result.QualityWords);
+  }
+
+  [Fact]
+  public void Report_ObservesCancellationBetweenEntries()
+  {
+    using var source = new CancellationTokenSource();
+    // No duplicates, so only the variant pass reads the entries after the duplicate pass cancelled.
+    var entries = new CancellingList(Names(4), cancelAt: 2, source);
+
+    Assert.ThrowsAny<OperationCanceledException>(() => PlaylistReport.Build(entries, cancellationToken: source.Token));
+    Assert.True(entries.CancelledWhileReading);
+  }
+
+  [Fact]
+  public void ReportEndpoint_PassesTheRequestAbortToken()
+  {
+    using var source = new CancellationTokenSource();
+    var entries = new CancellingList(Names(4), cancelAt: 2, source);
+    var context = new Microsoft.AspNetCore.Http.DefaultHttpContext { RequestAborted = source.Token };
+
+    Assert.ThrowsAny<OperationCanceledException>(() => Api.Endpoints.ProcessingEndpoints.BuildReport(entries, context));
+    Assert.True(entries.CancelledWhileReading);
+  }
+
+  private static List<PlaylistEntry> Names(int count) => Enumerable.Range(0, count)
+    .Select(i => new PlaylistEntry(i, i % 2 == 0 ? $"Sport {i} HD" : $"Sport {i - 1}", "A", null, $"http://example.invalid/live/{i}.ts"))
+    .ToList();
+
+  /// <summary>Cancels the source when an entry at or after <c>cancelAt</c> is read, that is while Build is running.</summary>
+  private sealed class CancellingList(List<PlaylistEntry> entries, int cancelAt, CancellationTokenSource source)
+    : IReadOnlyList<PlaylistEntry>
+  {
+    public bool CancelledWhileReading { get; private set; }
+
+    public int Count => entries.Count;
+
+    public PlaylistEntry this[int index]
+    {
+      get
+      {
+        if (index >= cancelAt && !source.IsCancellationRequested)
+        {
+          source.Cancel();
+          CancelledWhileReading = true;
+        }
+        return entries[index];
+      }
+    }
+
+    public IEnumerator<PlaylistEntry> GetEnumerator()
+    {
+      for (var i = 0; i < entries.Count; i++) yield return this[i];
+    }
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
   }
 }

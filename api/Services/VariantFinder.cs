@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Api.Services;
 
@@ -21,8 +22,11 @@ public sealed record VariantGroup(string BaseName, IReadOnlyList<VariantEntry> E
 /// </summary>
 public static class VariantFinder
 {
-  // The quality words, matched case-insensitively; "H.265" is matched as "H265" with an optional dot.
-  private static readonly string[] Words = ["SD", "HD", "FHD", "4K", "UHD", "HEVC", "H265", "BACKUP", "RAW"];
+  // The quality words, anchored at the start of the span. The regex engine keeps the case equivalence of the
+  // earlier whole-name regex (#170); for example it does not treat the long s (U+017F) as an s.
+  private static readonly Regex WordAtStart = new(
+    @"^(?:SD|HD|FHD|4K|UHD|HEVC|H\.?265|backup|raw)",
+    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
   /// <summary>
   /// Splits a name into its base name and the quality words in it, in name order. One pass over the name
@@ -81,29 +85,10 @@ public static class VariantFinder
   /// <summary>Returns the end of the quality word at <paramref name="start"/>, or -1 when none starts there.</summary>
   private static int MatchWordAt(string name, int start)
   {
-    foreach (var word in Words)
-    {
-      var position = start;
-      var matched = true;
-      foreach (var expected in word)
-      {
-        if (word == "H265" && expected == '2' && position < name.Length && name[position] == '.') position++;
-        if (position >= name.Length || !SameLetter(name[position], expected))
-        {
-          matched = false;
-          break;
-        }
-        position++;
-      }
-      if (matched) return position;
-    }
+    // Anchored, so the engine reads at most the length of the longest word: each call is bounded.
+    foreach (var match in WordAtStart.EnumerateMatches(name.AsSpan(start))) return start + match.Length;
     return -1;
   }
-
-  private static bool SameLetter(char actual, char upper) =>
-    actual == upper
-    || (char.IsAsciiLetterUpper(upper) && actual == (char)(upper | 0x20))
-    || (!char.IsAscii(actual) && (char.ToUpperInvariant(actual) == upper || char.ToLowerInvariant(actual) == char.ToLowerInvariant(upper)));
 
   private static bool IsSeparator(char c) => char.IsWhiteSpace(c) || c is '|' or '-';
 
