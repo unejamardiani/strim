@@ -854,6 +854,11 @@ select.input {
   min-width: 0;
 }
 
+/* The switch sits next to the search field, so its buttons take the standard control height. */
+.search-modes button {
+  min-height: var(--control-h);
+}
+
 .search-results {
   padding: 0;
   overflow: hidden;
