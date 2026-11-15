@@ -6,7 +6,7 @@ namespace Api.Tests;
 public class DuplicateFinderTests
 {
   private static IReadOnlyList<DuplicateSet> Find(string playlist) =>
-    DuplicateFinder.Find(PlaylistProcessor.ReadEntries(playlist));
+    DuplicateFinder.Find(PlaylistEntryFixture.Read(playlist));
 
   [Fact]
   public void SameTvgId_FormsOneSet()
@@ -144,9 +144,23 @@ public class DuplicateFinderTests
   }
 
   [Fact]
+  public void TvgIdTextInDisplayName_IsNotAnAttribute()
+  {
+    var sets = Find("""
+      #EXTM3U
+      #EXTINF:-1 group-title="A",One tvg-id="a.de"
+      http://example.invalid/live/1.ts
+      #EXTINF:-1 group-title="A",Two tvg-id="a.de"
+      http://example.invalid/live/2.ts
+      """);
+
+    Assert.Empty(sets);
+  }
+
+  [Fact]
   public void UniqueEntries_YieldEmptyResult()
   {
-    var entries = PlaylistProcessor.ReadEntries("""
+    var entries = PlaylistEntryFixture.Read("""
       #EXTM3U
       #EXTINF:-1 tvg-id="a.de" group-title="A",One
       http://example.invalid/live/1.ts
@@ -162,7 +176,7 @@ public class DuplicateFinderTests
   [Fact]
   public void Find_DoesNotModifyInput()
   {
-    var entries = PlaylistProcessor.ReadEntries("""
+    var entries = PlaylistEntryFixture.Read("""
       #EXTM3U
       #EXTINF:-1 tvg-id="a.de " group-title="A",One
       http://example.invalid/live/1.ts

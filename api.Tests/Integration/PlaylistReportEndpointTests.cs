@@ -134,7 +134,7 @@ public class PlaylistReportEndpointTests : IClassFixture<StrimAppFactory>
     try
     {
       await File.WriteAllTextAsync(path, Fixture);
-      var budget = PlaylistProcessor.ReadEntries(Fixture).Sum(PlaylistProcessor.EstimatedEntryBytes);
+      var budget = (await PlaylistProcessor.ReadEntriesFromFileAsync(path, long.MaxValue, CancellationToken.None)).Sum(PlaylistProcessor.EstimatedEntryBytes);
 
       Assert.Equal(6, (await PlaylistProcessor.ReadEntriesFromFileAsync(path, budget, CancellationToken.None)).Count);
       await Assert.ThrowsAsync<PlaylistReportTooLargeException>(
