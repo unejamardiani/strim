@@ -11,18 +11,30 @@ public class VariantFinderAdversarialTests
 
   private static string Repeat(string part, int count) => string.Concat(Enumerable.Repeat(part, count));
 
-  public static TheoryData<string, string> AdversarialNames => new()
+  // Adversarial name shapes, each built with a given number of quality tokens.
+  private static readonly Func<int, string>[] Shapes =
+  [
+    tokens => "Sport 1" + Repeat(" HD", tokens),
+    tokens => Repeat(" ", tokens) + "Sport 1" + Repeat(" HD", tokens),
+    tokens => "Sport 1" + Repeat(" HD", tokens) + " x",
+    tokens => "Sport 1" + Repeat(" (HD)", tokens / 2) + Repeat("-", tokens),
+  ];
+
+  public static TheoryData<int, string> AdversarialNames => new()
   {
-    { "Sport 1" + Repeat(" HD", Tokens), "Sport 1 HD" },
-    { Repeat(" ", Tokens) + "Sport 1" + Repeat(" HD", Tokens), " Sport 1 HD" },
-    { "Sport 1" + Repeat(" HD", Tokens) + " x", "Sport 1 HD x" },
-    { "Sport 1" + Repeat(" (HD)", Tokens / 2) + Repeat("-", Tokens), "Sport 1 (HD)-" },
+    { 0, "Sport 1 HD" },
+    { 1, " Sport 1 HD" },
+    { 2, "Sport 1 HD x" },
+    { 3, "Sport 1 (HD)-" },
   };
+
+  public static TheoryData<int> ShapeIndexes => new() { 0, 1, 2, 3 };
 
   [Theory]
   [MemberData(nameof(AdversarialNames))]
-  public void Report_OnManyQualityTokens_IsFastAndMatchesSmallInput(string longName, string shortName)
+  public void Report_OnManyQualityTokens_FinishesAndMatchesSmallInput(int shape, string shortName)
   {
+    var longName = Shapes[shape](Tokens);
     var entries = Enumerable.Range(0, EntryCount)
       .Select(i => new PlaylistEntry(i, i == 0 ? shortName : longName, "A", null, $"http://example.invalid/live/{i}.ts"))
       .ToList();
@@ -31,7 +43,8 @@ public class VariantFinderAdversarialTests
     var report = PlaylistReport.Build(entries);
     watch.Stop();
 
-    Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), $"The report took {watch.Elapsed}.");
+    // Only a very generous guard against a stall; linearity is proven by the scaling test below.
+    Assert.True(watch.Elapsed < TimeSpan.FromSeconds(60), $"The report took {watch.Elapsed}.");
     var (longBase, longWords) = VariantFinder.Detect(longName);
     var (shortBase, shortWords) = VariantFinder.Detect(shortName);
     Assert.Equal(shortBase, longBase);
@@ -40,6 +53,47 @@ public class VariantFinderAdversarialTests
     var group = Assert.Single(report.VariantGroups);
     Assert.Equal(shortBase, group.BaseName);
     Assert.Equal(EntryCount, group.Entries.Count);
+  }
+
+  [Theory]
+  [MemberData(nameof(ShapeIndexes))]
+  public void Report_WorkGrowsLinearlyWithTheNameLength(int shape)
+  {
+    // Compares the report on names four times as long instead of an absolute time, so the machine's speed
+    // cancels out. Linear work grows about four times, the earlier quadratic parsing about sixteen times.
+    const int SmallTokens = 10_000;
+    const int Factor = 4;
+    const int Entries = 20;
+    var small = SameNames(Shapes[shape](SmallTokens), Entries);
+    var large = SameNames(Shapes[shape](SmallTokens * Factor), Entries);
+
+    PlaylistReport.Build(small);
+    var smallTime = Fastest(small);
+    var largeTime = Fastest(large);
+
+    var ratio = largeTime.TotalMilliseconds / Math.Max(smallTime.TotalMilliseconds, 1);
+    Assert.True(ratio < Factor * 2.5,
+      $"Names {Factor} times as long took {ratio:F1} times as long ({smallTime} against {largeTime}).");
+  }
+
+  private static List<PlaylistEntry> SameNames(string name, int count) => Enumerable.Range(0, count)
+    .Select(i => new PlaylistEntry(i, name, "A", null, $"http://example.invalid/live/{i}.ts"))
+    .ToList();
+
+  /// <summary>The fastest of a few runs, so a pause of the machine or the collector does not count.</summary>
+  private static TimeSpan Fastest(List<PlaylistEntry> entries)
+  {
+    var best = TimeSpan.MaxValue;
+    for (var run = 0; run < 5; run++)
+    {
+      var watch = Stopwatch.StartNew();
+      PlaylistReport.Build(entries);
+      watch.Stop();
+      if (watch.Elapsed < best) best = watch.Elapsed;
+      if (best > TimeSpan.FromSeconds(60)) break;
+    }
+    Assert.True(best < TimeSpan.FromSeconds(60), $"The report took {best}.");
+    return best;
   }
 
   [Fact]
