@@ -117,7 +117,7 @@ public class PlaylistRefreshService(
       var account = await ProviderAccountLookup.LookUpAsync(fetcher, playlist.SourceUrl, cancellationToken);
       if (account is null) return;
 
-      playlist.ExpirationUtc = account.ExpiresAt ?? playlist.ExpirationUtc;
+      playlist.ExpirationUtc = account.NeverExpires ? null : account.ExpiresAt ?? playlist.ExpirationUtc;
       playlist.AccountStatus = account.Status is { Length: <= 32 } status ? status : playlist.AccountStatus;
       playlist.AccountMaxConnections = account.MaxConnections ?? playlist.AccountMaxConnections;
       playlist.AccountActiveConnections = account.ActiveConnections ?? playlist.AccountActiveConnections;

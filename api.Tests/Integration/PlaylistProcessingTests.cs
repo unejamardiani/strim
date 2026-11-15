@@ -314,7 +314,8 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
   public async Task Analyze_WithNullExpiry_ReturnsStatusWithoutExpiration()
   {
     var link = StubAccount("exp-null", Answer(HttpStatusCode.OK,
-      """{"user_info":{"auth":1,"status":"Active","exp_date":null,"max_connections":"1","active_cons":"0"}}"""));
+      """{"user_info":{"auth":1,"status":"Active","exp_date":null,"max_connections":"1","active_cons":"0"}}""")) + "&exp=1700000000";
+    factory.UpstreamPlaylists[link] = TestPlaylists.Mixed;
 
     var json = await AnalyzeUrlAsync(link);
 
@@ -322,6 +323,20 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
     Assert.Equal("Active", json.GetProperty("accountStatus").GetString());
     Assert.Equal(1, json.GetProperty("maxConnections").GetInt32());
     Assert.Equal(0, json.GetProperty("activeConnections").GetInt32());
+  }
+
+  [Theory]
+  [InlineData("fallback-missing", null)]
+  [InlineData("fallback-bad", "not json")]
+  [InlineData("fallback-noexp", """{"user_info":{"auth":1,"status":"Active"}}""")]
+  public async Task Analyze_WithoutAccountExpiry_FallsBackToUrlExpiry(string name, string? body)
+  {
+    var link = StubAccount(name, body is null ? null : Answer(HttpStatusCode.OK, body)) + "&exp=1700000000";
+    factory.UpstreamPlaylists[link] = TestPlaylists.Mixed;
+
+    var json = await AnalyzeUrlAsync(link);
+
+    Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1700000000), json.GetProperty("expirationUtc").GetDateTimeOffset());
   }
 
   public static TheoryData<string, HttpStatusCode, string, string> FailingAccountAnswers => new()
