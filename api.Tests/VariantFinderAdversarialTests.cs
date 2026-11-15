@@ -124,6 +124,54 @@ public class VariantFinderAdversarialTests
   }
 
   [Fact]
+  public void Report_CancelledDuringTheVariantPass_StopsBeforeTheRemainingEntries()
+  {
+    using var source = new CancellationTokenSource();
+    // The duplicate pass reads by index and never cancels; the variant pass enumerates and cancels on entry 3.
+    var entries = new VariantPassCancellingList(Names(10), cancelAt: 3, source);
+
+    Assert.ThrowsAny<OperationCanceledException>(() => PlaylistReport.Build(entries, cancellationToken: source.Token));
+    // The duplicate pass read every entry before the variant pass began; the variant pass stopped after entry 3.
+    Assert.True(entries.IndexedReads >= entries.Count, $"The duplicate pass read {entries.IndexedReads} entries.");
+    Assert.Equal(4, entries.EnumeratedReads);
+  }
+
+  /// <summary>
+  /// Counts the entries the variant pass enumerates and cancels the source once entry <c>cancelAt</c> has been
+  /// handed out. Reads by index (the duplicate pass) are only counted, so cancelling starts inside the variant loop.
+  /// </summary>
+  private sealed class VariantPassCancellingList(List<PlaylistEntry> entries, int cancelAt, CancellationTokenSource source)
+    : IReadOnlyList<PlaylistEntry>
+  {
+    public int IndexedReads { get; private set; }
+
+    public int EnumeratedReads { get; private set; }
+
+    public int Count => entries.Count;
+
+    public PlaylistEntry this[int index]
+    {
+      get
+      {
+        IndexedReads++;
+        return entries[index];
+      }
+    }
+
+    public IEnumerator<PlaylistEntry> GetEnumerator()
+    {
+      for (var i = 0; i < entries.Count; i++)
+      {
+        EnumeratedReads++;
+        if (i == cancelAt) source.Cancel();
+        yield return entries[i];
+      }
+    }
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+  }
+
+  [Fact]
   public void ReportEndpoint_PassesTheRequestAbortToken()
   {
     using var source = new CancellationTokenSource();
