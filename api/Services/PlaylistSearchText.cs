@@ -113,7 +113,8 @@ public static class PlaylistSearchText
 
   /// <summary>
   /// The double-quoted value of the first attribute with this name, or null. Names are matched
-  /// only outside quoted values, so text inside another attribute's value is never taken as one.
+  /// only outside quoted values and before the name delimiter (the first comma outside quotes), so
+  /// text inside another attribute's value or in the display name is never taken as one.
   /// </summary>
   internal static string? AttributeValue(string extinf, string attribute)
   {
@@ -127,6 +128,8 @@ public static class PlaylistSearchText
         i = closingQuote + 1;
         continue;
       }
+
+      if (extinf[i] == ',') return null;
 
       var at = i++;
       if (at + attribute.Length > extinf.Length
