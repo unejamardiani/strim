@@ -1050,6 +1050,7 @@ const picker = {
   typeButtons: null,
   showButtons: null,
   results: null,
+  modes: null,
   highlight: null,
 };
 
@@ -1121,6 +1122,8 @@ function pickerNodes(ed) {
       updateView(true);
     });
   modes.setAttribute('aria-label', 'Search in');
+  modes.classList.add('search-modes');
+  picker.modes = modes;
   const rows = [h('div', { class: 'search-row' }, search, modes)];
 
   const types = CONTENT_TYPES.filter((t) => ed.typeCounts[t]);
@@ -1511,7 +1514,9 @@ function renderSearchResults(ed) {
     panel.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
       h('p', { text: s.message }),
       h('div', { class: 'row-actions' },
-        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadGroups(ed, ed.sourceUrl, { sample: ed.isSample }) }, 'Analyse again'))));
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadGroups(ed, ed.sourceUrl, { sample: ed.isSample }) }, 'Analyse again'),
+        // A list too large for the index stays too large after a new analysis; the group search still works.
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => picker.modes?.querySelector('[data-value="groups"]')?.click() }, 'Search groups'))));
     return;
   }
   const matches = s.matches.slice(0, MAX_SEARCH_RESULTS);
