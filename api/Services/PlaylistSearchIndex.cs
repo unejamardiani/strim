@@ -28,7 +28,10 @@ public sealed class PlaylistSearchIndex
 
   internal PlaylistSearchIndex(long maxBytes) => _maxBytes = maxBytes;
   public int Count { get; private set; }
-  /// <summary>Approximate heap size, as counted against <c>PlaylistCache:MaxSearchIndexBytes</c>.</summary>
+  /// <summary>
+  /// Approximate heap size including the unused capacity of allocated chunks and blocks, as counted
+  /// against <c>PlaylistCache:MaxSearchIndexBytes</c>.
+  /// </summary>
   public long EstimatedBytes { get; private set; }
 
   /// <summary>
@@ -76,8 +79,12 @@ public sealed class PlaylistSearchIndex
     PlaylistSearchText.AppendFolded(_folded, name);
     var length = _folded.Length + name.Length + 2;
     var known = _slotIds.TryGetValue((groupTitle, contentType), out var slotId);
+    var newChunk = _chunks.Count == 0 || _chunkUsed[^1] + length > _chunks[^1].Length;
+    var newBlock = Count % BlockEntries == 0;
+    // Counts what is allocated, whole chunks and blocks, not only the characters and fields in use.
     // A new slot keeps the title, its output group and its group key.
-    EstimatedBytes += Fields * sizeof(int) + (length * sizeof(char))
+    EstimatedBytes += (newChunk ? (long)Math.Max(ChunkChars, length) * sizeof(char) : 0)
+      + (newBlock ? BlockEntries * Fields * sizeof(int) : 0)
       + (known ? 0 : SlotOverheadBytes + ((long)groupTitle.Length * sizeof(char) * 3));
     if (_maxBytes <= 0 || EstimatedBytes > _maxBytes) return false;
 
@@ -88,13 +95,13 @@ public sealed class PlaylistSearchIndex
       _slotIds[(groupTitle, contentType)] = slotId;
     }
 
-    if (_chunks.Count == 0 || _chunkUsed[^1] + length > _chunks[^1].Length)
+    if (newChunk)
     {
       _chunks.Add(new char[Math.Max(ChunkChars, length)]);
       _chunkUsed.Add(0);
       _chunkFirstEntry.Add(Count);
     }
-    if (Count % BlockEntries == 0) _blocks.Add(new int[BlockEntries * Fields]);
+    if (newBlock) _blocks.Add(new int[BlockEntries * Fields]);
     var field = Count % BlockEntries * Fields;
     var used = _chunkUsed[^1];
     // Entries count 1, 2, 3 ... per (exact title, content type), the group a player shows; an
