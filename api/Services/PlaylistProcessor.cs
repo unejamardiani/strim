@@ -599,6 +599,23 @@ public static class PlaylistProcessor
     return UngroupedTitle;
   }
 
+  /// <summary>
+  /// The group-title <see cref="GenerateFilteredFileAsync"/> writes for an unsplit entry: a quoted
+  /// group-title value is kept as it stands, untrimmed and even when empty; otherwise the inserted
+  /// <paramref name="groupTitle"/>. <paramref name="keepsLine"/> is true when the line has a group-title
+  /// attribute without a quoted value, which is written unchanged even for a split title.
+  /// </summary>
+  internal static string WrittenGroupTitle(string extinf, string groupTitle, out bool keepsLine)
+  {
+    keepsLine = false;
+    if (TryFindGroupTitleValue(extinf, out var start, out var end))
+    {
+      return extinf.AsSpan(start, end - start).SequenceEqual(groupTitle) ? groupTitle : extinf[start..end];
+    }
+    keepsLine = HasGroupTitleAttribute(extinf);
+    return groupTitle;
+  }
+
   private static bool IsUngroupedTitle(string groupTitle) =>
     string.Equals(groupTitle, UngroupedTitle, StringComparison.OrdinalIgnoreCase);
 

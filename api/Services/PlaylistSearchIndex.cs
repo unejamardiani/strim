@@ -5,7 +5,7 @@ namespace Api.Services;
 /// <summary>
 /// A compact index of every entry, recorded while the source is analysed, so a search never reads
 /// the playlist again. Each entry is one record "folded name \t display name \n" in fixed-size text
-/// chunks plus three ints; group data is shared per (group title, content type). Nothing is copied
+/// chunks plus three ints; group data is shared per (group title, content type, written title). Nothing is copied
 /// or resized as the index grows.
 /// </summary>
 public sealed class PlaylistSearchIndex
@@ -23,7 +23,7 @@ public sealed class PlaylistSearchIndex
   private readonly List<int> _chunkFirstEntry = new();
   private readonly List<int[]> _blocks = new();
   private readonly List<Slot> _slots = new();
-  private readonly Dictionary<(string, PlaylistContentType), int> _slotIds = new();
+  private readonly Dictionary<(string, PlaylistContentType, string, bool), int> _slotIds = new();
   private readonly StringBuilder _folded = new();
 
   internal PlaylistSearchIndex(long maxBytes) => _maxBytes = maxBytes;
@@ -78,21 +78,24 @@ public sealed class PlaylistSearchIndex
     _folded.Clear();
     PlaylistSearchText.AppendFolded(_folded, name);
     var length = _folded.Length + name.Length + 2;
-    var known = _slotIds.TryGetValue((groupTitle, contentType), out var slotId);
+    var written = PlaylistProcessor.WrittenGroupTitle(extinfLine, groupTitle, out var keepsLine);
+    var slotKey = (groupTitle, contentType, written, keepsLine);
+    var known = _slotIds.TryGetValue(slotKey, out var slotId);
     var newChunk = _chunks.Count == 0 || _chunkUsed[^1] + length > _chunks[^1].Length;
     var newBlock = Count % BlockEntries == 0;
     // Counts what is allocated, whole chunks and blocks, not only the characters and fields in use.
-    // A new slot keeps the title, its output group and its group key.
+    // A new slot keeps the title, its output group, its group key and a written title that differs.
+    var writtenChars = ReferenceEquals(written, groupTitle) ? 0 : written.Length;
     EstimatedBytes += (newChunk ? (long)Math.Max(ChunkChars, length) * sizeof(char) : 0)
       + (newBlock ? BlockEntries * Fields * sizeof(int) : 0)
-      + (known ? 0 : SlotOverheadBytes + ((long)groupTitle.Length * sizeof(char) * 3));
+      + (known ? 0 : SlotOverheadBytes + (((long)groupTitle.Length * 3) + writtenChars) * sizeof(char));
     if (_maxBytes <= 0 || EstimatedBytes > _maxBytes) return false;
 
     if (!known)
     {
       slotId = _slots.Count;
-      _slots.Add(new Slot(groupTitle, contentType));
-      _slotIds[(groupTitle, contentType)] = slotId;
+      _slots.Add(new Slot(groupTitle, contentType, written, keepsLine));
+      _slotIds[slotKey] = slotId;
     }
 
     if (newChunk)
@@ -104,9 +107,8 @@ public sealed class PlaylistSearchIndex
     if (newBlock) _blocks.Add(new int[BlockEntries * Fields]);
     var field = Count % BlockEntries * Fields;
     var used = _chunkUsed[^1];
-    // Entries count 1, 2, 3 ... per (exact title, content type), the group a player shows; an
-    // unsplit title has a single content type, so this equals counting per output group.
-    (_blocks[^1][field], _blocks[^1][field + 1], _blocks[^1][field + 2]) = (used, slotId, ++_slots[slotId].Entries);
+    // The position is set by Complete, once the output groups are known.
+    (_blocks[^1][field], _blocks[^1][field + 1]) = (used, slotId);
     Count++;
 
     var chunk = _chunks[^1].AsSpan(used);
@@ -118,20 +120,34 @@ public sealed class PlaylistSearchIndex
     return true;
   }
 
-  /// <summary>Sets output groups and group keys from the finished analysis.</summary>
+  /// <summary>Sets output groups, group keys and positions from the finished analysis.</summary>
   internal PlaylistSearchIndex Complete(IReadOnlyList<PlaylistGroup> groups, IReadOnlySet<string> splitGroupTitles)
   {
     // Analysis groups titles case-insensitively, under the casing seen first.
     var keys = groups.GroupBy(g => g.GroupTitle, StringComparer.OrdinalIgnoreCase)
       .ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.OrdinalIgnoreCase);
+    var outputIds = new Dictionary<string, int>(StringComparer.Ordinal);
     foreach (var slot in _slots)
     {
       // GenerateFilteredFileAsync writes the entry's own title, plus a suffix for movies and series of a split title.
-      if (slot.ContentType != PlaylistContentType.Live && splitGroupTitles.Contains(slot.GroupTitle))
-      {
-        slot.OutputGroup = PlaylistProcessor.GroupKey(slot.GroupTitle, slot.ContentType);
-      }
+      var split = slot.ContentType != PlaylistContentType.Live && splitGroupTitles.Contains(slot.GroupTitle);
+      slot.OutputGroup = split && !slot.KeepsLine
+        ? PlaylistProcessor.GroupKey(slot.GroupTitle, slot.ContentType)
+        : slot.WrittenTitle;
       slot.GroupKey = keys[slot.GroupTitle].First(g => g.ContentType == slot.ContentType).Key;
+      if (!outputIds.TryGetValue(slot.OutputGroup, out var outputId))
+      {
+        outputId = outputIds.Count;
+        outputIds[slot.OutputGroup] = outputId;
+      }
+      slot.OutputId = outputId;
+    }
+
+    // Entries count 1, 2, 3 ... in source order across every entry the file writes under the same group.
+    var positions = new int[outputIds.Count];
+    for (var entry = 0; entry < Count; entry++)
+    {
+      _blocks[entry / BlockEntries][(entry % BlockEntries * Fields) + 2] = ++positions[_slots[Field(entry, 1)].OutputId];
     }
     return this;
   }
@@ -151,11 +167,13 @@ public sealed class PlaylistSearchIndex
     return low;
   }
 
-  private sealed record Slot(string GroupTitle, PlaylistContentType ContentType)
+  /// <param name="WrittenTitle">The group-title the generated file writes when the title is not split.</param>
+  /// <param name="KeepsLine">The line is written unchanged even when the title is split.</param>
+  private sealed record Slot(string GroupTitle, PlaylistContentType ContentType, string WrittenTitle, bool KeepsLine)
   {
-    public string OutputGroup { get; set; } = GroupTitle;
+    public string OutputGroup { get; set; } = WrittenTitle;
     public string GroupKey { get; set; } = GroupTitle;
-    public int Entries { get; set; }
+    public int OutputId { get; set; }
   }
 }
 
