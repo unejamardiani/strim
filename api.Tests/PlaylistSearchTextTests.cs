@@ -36,6 +36,27 @@ public class PlaylistSearchTextTests
   }
 
   [Theory]
+  [InlineData("#EXTINF:-1 group-title=\"tvg-name=\" tvg-name=\"Actual\",", "Actual")]
+  [InlineData("#EXTINF:-1 group-title=\"tvg-name=\",", "")]
+  [InlineData("#EXTINF:-1 group-title=\"a tvg-name=\" tvg-id=\"b\",", "")]
+  public void DisplayName_IgnoresTvgNameInsideAnotherValue(string line, string expected)
+  {
+    Assert.Equal(expected, PlaylistSearchText.DisplayName(line));
+  }
+
+  [Theory]
+  [InlineData("#EXTINF:-1 tvg-name=\"group-title=\" group-title=\"Kino\",X", "group-title", "Kino")]
+  [InlineData("#EXTINF:-1 tvg-name=\"group-title=\",X", "group-title", null)]
+  [InlineData("#EXTINF:-1 tvg-name=\"a group-title=\" tvg-id=\"b\",X", "group-title", null)]
+  [InlineData("#EXTINF:-1 group-title=\"tvg-name=\" tvg-name=\"Actual\",X", "tvg-name", "Actual")]
+  [InlineData("#EXTINF:-1 tvg-id=\"x.de\" group-title=\"DE | Kino\",X", "group-title", "DE | Kino")]
+  [InlineData("#EXTINF:-1 TVG-ID = \"x.de\",X", "tvg-id", "x.de")]
+  public void AttributeValue_MatchesNamesOnlyOutsideQuotedValues(string line, string attribute, string? expected)
+  {
+    Assert.Equal(expected, PlaylistSearchText.AttributeValue(line, attribute));
+  }
+
+  [Theory]
   [InlineData("Amélie", "amelie")]
   [InlineData("Ñandú", "nandu")]
   [InlineData("AMÉLIE", "amelie")]
