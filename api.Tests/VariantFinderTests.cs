@@ -82,6 +82,65 @@ public class VariantFinderTests
   }
 
   [Theory]
+  [InlineData("HD Sport 1", "HD")]
+  [InlineData("(HD) Sport 1", "HD")]
+  [InlineData("[FHD] Sport 1", "FHD")]
+  public void LeadingQualityWords_GroupVariants(string name, string word)
+  {
+    var (baseName, words) = VariantFinder.Detect(name);
+    Assert.Equal("Sport 1", baseName);
+    Assert.Equal(new[] { word }, words);
+
+    var group = Assert.Single(VariantFinder.Find(Entries(("Sport 1", "A"), (name, "A"))));
+    Assert.Equal("Sport 1", group.BaseName);
+    Assert.Equal(new[] { 0, 1 }, group.Entries.Select(v => v.Entry.Index));
+  }
+
+  [Theory]
+  [InlineData("Sport(HD)", "HD")]
+  [InlineData("Sport[FHD]", "FHD")]
+  public void BracketWithoutSpace_IsConsumedWithTheWord(string name, string word)
+  {
+    var (baseName, words) = VariantFinder.Detect(name);
+    Assert.Equal("Sport", baseName);
+    Assert.Equal(new[] { word }, words);
+
+    var group = Assert.Single(VariantFinder.Find(Entries(("Sport", "A"), (name, "A"))));
+    Assert.Equal("Sport", group.BaseName);
+    Assert.Equal(2, group.Entries.Count);
+  }
+
+  [Theory]
+  [InlineData("Sport -")]
+  [InlineData("Sport |")]
+  [InlineData("HD")]
+  [InlineData("(HD)")]
+  public void NameWithoutQualityTokenOrName_IsUnchanged(string name)
+  {
+    var (baseName, words) = VariantFinder.Detect(name);
+    Assert.Equal(name, baseName);
+    Assert.Empty(words);
+  }
+
+  [Fact]
+  public void TrailingSeparatorWithoutToken_DoesNotJoinTheVariantGroup()
+  {
+    var group = Assert.Single(VariantFinder.Find(Entries(("Sport HD", "A"), ("Sport -", "A"), ("Sport", "A"))));
+
+    Assert.Equal("Sport", group.BaseName);
+    Assert.Equal(new[] { 0, 2 }, group.Entries.Select(v => v.Entry.Index));
+  }
+
+  [Fact]
+  public void LeadingTitleWords_AreNotQualityWords()
+  {
+    var (baseName, words) = VariantFinder.Detect("Raw Power");
+    Assert.Equal("Raw Power", baseName);
+    Assert.Empty(words);
+    Assert.Empty(VariantFinder.Find(Entries(("Raw Power", "A"), ("Power", "A"))));
+  }
+
+  [Theory]
   [InlineData("Sport1HDPlus")]
   [InlineData("Sport HDPlus 1")]
   [InlineData("Sport (HDPlus) 1")]

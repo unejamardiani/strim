@@ -11,13 +11,15 @@ public sealed record VariantGroup(string BaseName, IReadOnlyList<VariantEntry> E
 
 /// <summary>
 /// Finds quality variants of one channel by the quality words SD, HD, FHD, 4K, UHD, HEVC, H265 (also H.265),
-/// backup and raw. A word counts only as a whole token, in any position after some name text: it stands between
-/// the start of a token (a space, <c>|</c>, <c>-</c> or an opening bracket) and its end (the same separators, a
-/// closing bracket or the end of the name), optionally in round or square brackets. So <c>Sport (HD) 1</c> and
-/// <c>Sport 1 [FHD]</c> are variants of <c>Sport 1</c>, while <c>HDTV Classics</c>, <c>4Kids</c>,
-/// <c>Sport1HDPlus</c> or <c>Backup Plan Movie</c> keep their names. The rest is the base name (trailing
-/// separators removed, trimmed, spaces collapsed, compared case-sensitively). Entries with the same base name form
-/// a group when there are at least two and at least one carries a quality word.
+/// backup and raw. A word counts only as a whole token: it stands between the start of a token (the name start, a
+/// space, <c>|</c>, <c>-</c> or an opening bracket) and its end (the same separators, a closing bracket or the end
+/// of the name), optionally in round or square brackets, which are removed with it. backup and raw count only after
+/// some name text; the other words in any position. So <c>HD Sport 1</c>, <c>Sport (HD) 1</c>, <c>Sport(HD)</c> and
+/// <c>Sport 1 [FHD]</c> are variants of <c>Sport 1</c> or <c>Sport</c>, while <c>HDTV Classics</c>, <c>4Kids</c>,
+/// <c>Sport1HDPlus</c> or <c>Backup Plan Movie</c> keep their names. The rest is the base name (separators behind
+/// the last token removed, trimmed, spaces collapsed, compared case-sensitively); a name without a quality token
+/// stays unchanged, so <c>Sport -</c> stays <c>Sport -</c>. Entries with the same base name form a group when there
+/// are at least two and at least one carries a quality word.
 /// Only reads: no entry and not the input list is changed.
 /// </summary>
 public static class VariantFinder
@@ -35,9 +37,12 @@ public static class VariantFinder
   public static (string BaseName, IReadOnlyList<string> QualityWords) Detect(string name)
   {
     var words = new List<string>();
-    // A quality word counts only after some name text, that is after a character other than these.
+    // backup and raw count only after some name text, that is after a character other than these, so titles
+    // such as "Backup Plan Movie" keep their names. The technical words also count before the name (#199).
     var firstText = name.AsSpan().IndexOfAnyExcept(" \t|-([");
     var rest = new StringBuilder(name.Length);
+    // The length of the rest right after the last removed token: separators are removed only behind a token.
+    var afterLastToken = -1;
     var i = 0;
     while (i < name.Length)
     {
@@ -46,10 +51,12 @@ public static class VariantFinder
         rest.Append(name[i++]);
         continue;
       }
-      if (firstText >= 0 && firstText < i)
+      var word = Canonical(name.AsSpan(wordStart, wordEnd - wordStart));
+      if ((firstText >= 0 && firstText < i) || !IsTitleWord(word))
       {
-        words.Add(Canonical(name.AsSpan(wordStart, wordEnd - wordStart)));
+        words.Add(word);
         rest.Append(' ');
+        afterLastToken = rest.Length;
       }
       else
       {
@@ -57,8 +64,14 @@ public static class VariantFinder
       }
       i = end;
     }
-    return (BaseName(rest), words);
+    // A name without a quality token is returned unchanged, and so is a name that is nothing but quality tokens.
+    if (words.Count == 0) return (name, words);
+    var baseName = BaseName(rest, afterLastToken);
+    return baseName.Length == 0 ? (name, []) : (baseName, words);
   }
+
+  /// <summary>Quality words that are also common words in titles, so they count only after some name text.</summary>
+  private static bool IsTitleWord(string word) => word is "backup" or "raw";
 
   /// <summary>
   /// Matches an optionally bracketed quality word that starts at <paramref name="start"/>: after the name start or
@@ -67,8 +80,11 @@ public static class VariantFinder
   private static bool TryMatchWord(string name, int start, out int end, out int wordStart, out int wordEnd)
   {
     end = wordStart = wordEnd = 0;
-    if (start > 0 && !IsSeparator(name[start - 1]) && name[start - 1] is not ('(' or '[')) return false;
-    wordStart = name[start] is '(' or '[' ? start + 1 : start;
+    var bracketed = name[start] is '(' or '[';
+    // An opening bracket starts a token even right after name text, as in Sport(HD) (#199).
+    if (!bracketed && start > 0 && !IsSeparator(name[start - 1]) && name[start - 1] is not ('(' or '[')) return false;
+    wordStart = bracketed ? start + 1 : start;
+    if (wordStart >= name.Length) return false;
     wordEnd = MatchWordAt(name, wordStart);
     if (wordEnd < 0) return false;
 
@@ -94,11 +110,16 @@ public static class VariantFinder
 
   private static bool IsTokenEnd(char c) => IsSeparator(c) || c is ')' or ']';
 
-  /// <summary>Removes trailing separators, collapses white space to single spaces and trims.</summary>
-  private static string BaseName(StringBuilder rest)
+  /// <summary>
+  /// Removes trailing separators when only separators follow the last removed token (at
+  /// <paramref name="afterLastToken"/> in the rest), collapses white space to single spaces and trims.
+  /// </summary>
+  private static string BaseName(StringBuilder rest, int afterLastToken)
   {
     var end = rest.Length;
-    while (end > 0 && IsSeparator(rest[end - 1])) end--;
+    var trailing = end;
+    while (trailing > 0 && IsSeparator(rest[trailing - 1])) trailing--;
+    if (trailing < afterLastToken) end = trailing;
     var result = new StringBuilder(end);
     var inSpace = false;
     for (var i = 0; i < end; i++)
