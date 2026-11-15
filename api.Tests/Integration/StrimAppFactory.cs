@@ -31,6 +31,9 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
   /// <summary>Scripted upstream answers (status codes, redirects, bodies); checked before <see cref="UpstreamPlaylists"/>.</summary>
   public Dictionary<string, Func<HttpResponseMessage>> UpstreamResponses { get; } = new();
 
+  /// <summary>Test-only switch: makes every upstream request fail in the chosen way until reset to None.</summary>
+  public UpstreamFault Fault { get; set; }
+
   /// <summary>Every address the stubbed upstream was asked for, in order.</summary>
   public ConcurrentQueue<string> UpstreamRequests { get; } = new();
 
@@ -39,6 +42,9 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
 
   /// <summary>Formatted log entries (message and exception) written by the app.</summary>
   public ConcurrentQueue<string> LogEntries { get; } = new();
+
+  /// <summary>The same entries as <see cref="LogEntries"/> with their level.</summary>
+  public ConcurrentQueue<(LogLevel Level, string Entry)> LogRecords { get; } = new();
 
   /// <summary>Web root for the app; null keeps the default. Set it to <see cref="RepositoryRoot"/> to serve the real pages.</summary>
   public string? WebRoot { get; init; }
@@ -59,15 +65,17 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
     if (WebRoot is not null) builder.UseWebRoot(WebRoot);
     builder.UseSetting("SQLITE_PATH", Path.Combine(_root, "strim.db"));
     builder.UseSetting("PlaylistCache:Directory", Path.Combine(_root, "cache"));
-    builder.ConfigureLogging(logging => logging.AddProvider(new CapturingLoggerProvider(LogEntries)));
+    builder.ConfigureLogging(logging => logging.AddProvider(new CapturingLoggerProvider(LogEntries, LogRecords)));
     builder.ConfigureTestServices(services =>
     {
       services.AddHttpClient("fetcher").ConfigurePrimaryHttpMessageHandler(
-        () => new StubUpstream(UpstreamPlaylists, UpstreamResponses, UpstreamRequests, UpstreamValidators));
+        () => new StubUpstream(UpstreamPlaylists, UpstreamResponses, UpstreamRequests, UpstreamValidators, () => Fault));
     });
   }
 
-  private sealed class CapturingLoggerProvider(ConcurrentQueue<string> entries) : ILoggerProvider, ILogger
+  private sealed class CapturingLoggerProvider(
+    ConcurrentQueue<string> entries,
+    ConcurrentQueue<(LogLevel, string)> records) : ILoggerProvider, ILogger
   {
     public ILogger CreateLogger(string categoryName) => this;
 
@@ -75,8 +83,12 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
 
     public bool IsEnabled(LogLevel logLevel) => true;
 
-    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-      entries.Enqueue(formatter(state, exception) + " " + exception);
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+      var entry = formatter(state, exception) + " " + exception;
+      entries.Enqueue(entry);
+      records.Enqueue((logLevel, entry));
+    }
 
     public void Dispose()
     {
@@ -100,24 +112,44 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
     Dictionary<string, string> playlists,
     Dictionary<string, Func<HttpResponseMessage>> responses,
     ConcurrentQueue<string> requests,
-    ConcurrentQueue<(string, string, DateTimeOffset?)> validators) : HttpMessageHandler
+    ConcurrentQueue<(string, string, DateTimeOffset?)> validators,
+    Func<UpstreamFault> fault) : HttpMessageHandler
   {
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
       var key = request.RequestUri!.ToString();
       requests.Enqueue(key);
       validators.Enqueue((key, request.Headers.IfNoneMatch.ToString(), request.Headers.IfModifiedSince));
-      if (responses.TryGetValue(key, out var scripted))
+      switch (fault())
       {
-        return Task.FromResult(scripted());
+        case UpstreamFault.ServerError:
+          return new HttpResponseMessage(HttpStatusCode.BadGateway);
+        case UpstreamFault.NetworkError:
+          throw new HttpRequestException("Stubbed network failure");
+        case UpstreamFault.Timeout:
+          // Waits until the fetcher's header timeout cancels the request.
+          await Task.Delay(Timeout.Infinite, cancellationToken);
+          break;
       }
 
-      var response = playlists.TryGetValue(key, out var body)
+      if (responses.TryGetValue(key, out var scripted))
+      {
+        return scripted();
+      }
+
+      return playlists.TryGetValue(key, out var body)
         ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/x-mpegurl") }
         : new HttpResponseMessage(HttpStatusCode.NotFound);
-      return Task.FromResult(response);
     }
   }
+}
+
+public enum UpstreamFault
+{
+  None,
+  ServerError,
+  NetworkError,
+  Timeout,
 }
 
 public static class TestPlaylists
