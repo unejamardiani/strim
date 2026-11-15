@@ -105,6 +105,32 @@ public class PlaylistSearchIndexTests
   }
 
   [Fact]
+  public void TryAdd_CountsAllocatedChunksAndBlocks()
+  {
+    // One short entry still allocates a whole text chunk and a whole block of fields.
+    var index = new PlaylistSearchIndex(1_000);
+
+    Assert.False(index.TryAdd("#EXTINF:-1 group-title=\"News\",News 24", "News", PlaylistContentType.Live));
+    Assert.True(index.EstimatedBytes >= AllocatedArrayBytes(new PlaylistSearchIndex(long.MaxValue), 1));
+  }
+
+  [Fact]
+  public void TryAdd_LongNames_AccountAtLeastAllocatedStorage()
+  {
+    var line = $"#EXTINF:-1 group-title=\"Films\",{new string('a', 8_192)}";
+    var index = new PlaylistSearchIndex(long.MaxValue);
+    for (var i = 0; i < 2_000; i++) Assert.True(index.TryAdd(line, "Films", PlaylistContentType.Live));
+
+    var allocated = ArrayBytes(index);
+    Assert.True(allocated > 125L * 1024 * 1024, $"{allocated} bytes");
+    Assert.True(index.EstimatedBytes >= allocated, $"{index.EstimatedBytes} < {allocated} bytes");
+
+    // At the default budget, such a list no longer counts as searchable.
+    var bounded = new PlaylistSearchIndex(new PlaylistCacheOptions().MaxSearchIndexBytes);
+    Assert.False(Enumerable.Range(0, 2_000).All(_ => bounded.TryAdd(line, "Films", PlaylistContentType.Live)));
+  }
+
+  [Fact]
   public async Task Search_LargeFixture_StaysFastAndBounded()
   {
     const int count = 150_000;
@@ -138,6 +164,21 @@ public class PlaylistSearchIndexTests
     Assert.True(common.HasMore);
     Assert.Empty(none.Matches);
     Assert.True(stopwatch.ElapsedMilliseconds < 500, $"{stopwatch.ElapsedMilliseconds} ms");
+  }
+
+  private static long AllocatedArrayBytes(PlaylistSearchIndex index, int entries)
+  {
+    for (var i = 0; i < entries; i++) index.TryAdd("#EXTINF:-1 group-title=\"News\",News 24", "News", PlaylistContentType.Live);
+    return ArrayBytes(index);
+  }
+
+  /// <summary>The payload of every text chunk and field block the index holds, read from its private lists.</summary>
+  private static long ArrayBytes(PlaylistSearchIndex index)
+  {
+    static T Get<T>(PlaylistSearchIndex index, string name) => (T)typeof(PlaylistSearchIndex)
+      .GetField(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(index)!;
+    return Get<List<char[]>>(index, "_chunks").Sum(c => (long)c.Length * sizeof(char))
+      + Get<List<int[]>>(index, "_blocks").Sum(b => (long)b.Length * sizeof(int));
   }
 
   private static HashSet<string> Set(params string[] groups) => new(groups, StringComparer.OrdinalIgnoreCase);
