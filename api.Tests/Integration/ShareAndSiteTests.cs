@@ -454,7 +454,16 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
   {
     using var fallback = new FallbackApp();
     var (owner, playlist) = await CreateWithLastGoodAsync(fallback, "busydeleted");
+    var cache = fallback.App.Services.GetRequiredService<PlaylistFileCache>();
+    var source = cache.TryGetSource(StrimAppFactory.UpstreamUrl);
+    Assert.NotNull(source);
+    var output = cache.TryGetOutput(source.ContentHash, new[] { "Kids" });
+    Assert.NotNull(output);
     (await owner.SendAsync(HttpMethod.Delete, $"/api/playlists/{playlist.Id}")).EnsureSuccessStatusCode();
+    // DELETE forgets the last good copy; pin it again so the deleted row, not a missing copy, is
+    // what keeps the busy-gate fallback from answering.
+    Assert.True(cache.RememberLastGood(playlist.Id, output));
+    AssertHasLastGood(fallback, playlist);
 
     HttpResponseMessage response;
     await using (await HoldGateAsync(fallback))
