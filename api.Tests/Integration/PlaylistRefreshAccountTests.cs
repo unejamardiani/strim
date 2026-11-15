@@ -43,6 +43,24 @@ public class PlaylistRefreshAccountTests
     AssertNoPasswordInLogs(factory);
   }
 
+  [Fact]
+  public async Task AccountAnswerWithNullExpiry_ClearsStoredExpiry_AndUpdatesStatus()
+  {
+    using var factory = new StrimAppFactory();
+    factory.UpstreamPlaylists[PlaylistUrl] = TestPlaylists.Mixed;
+    factory.UpstreamPlaylists[AccountUrl] =
+      """{"user_info":{"auth":1,"status":"Active","exp_date":null,"max_connections":"2","active_cons":"1"}}""";
+    var id = await SeedAsync(factory);
+
+    var playlist = await RunPassAsync(factory, id);
+
+    Assert.Null(playlist.ExpirationUtc);
+    Assert.Equal("Active", playlist.AccountStatus);
+    Assert.Equal(2, playlist.AccountMaxConnections);
+    Assert.Equal(1, playlist.AccountActiveConnections);
+    Assert.True(playlist.AccountCheckedUtc > StoredCheck);
+  }
+
   [Theory]
   [InlineData(HttpStatusCode.InternalServerError, GoodAccount)]
   [InlineData(HttpStatusCode.OK, "<html>not json</html>")]

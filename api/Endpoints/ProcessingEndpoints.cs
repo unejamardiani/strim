@@ -117,7 +117,7 @@ public static class ProcessingEndpoints
             friendlyName,
             analysis.TotalChannels,
             analysis.Groups.Count,
-            account?.ExpiresAt ?? expiration,
+            account is { NeverExpires: true } ? null : account?.ExpiresAt ?? expiration,
             PlaylistProcessor.ToGroupResults(analysis.Groups),
             account?.Status,
             account?.MaxConnections,

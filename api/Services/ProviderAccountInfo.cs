@@ -6,13 +6,16 @@ namespace Api.Services;
 /// <summary>
 /// Account facts from a provider's <c>player_api.php</c> answer. Never carries the username or
 /// password. <see cref="IsKnown"/> is false when the answer could not be used.
+/// <see cref="NeverExpires"/> is true when the answer states <c>exp_date: null</c>; callers then
+/// show no expiry instead of falling back to another source.
 /// </summary>
 public sealed record ProviderAccountResult(
   bool IsKnown,
   string? Status,
   DateTimeOffset? ExpiresAt,
   int? MaxConnections,
-  int? ActiveConnections)
+  int? ActiveConnections,
+  bool NeverExpires = false)
 {
   public static readonly ProviderAccountResult Unknown = new(false, null, null, null, null);
 }
@@ -126,7 +129,8 @@ public static class ProviderAccountInfo
         Status: ReadText(info, "status"),
         ExpiresAt: ReadUnixTime(info, "exp_date"),
         MaxConnections: ReadInt(info, "max_connections"),
-        ActiveConnections: ReadInt(info, "active_cons"));
+        ActiveConnections: ReadInt(info, "active_cons"),
+        NeverExpires: info.TryGetProperty("exp_date", out var expiry) && expiry.ValueKind == JsonValueKind.Null);
     }
     catch (JsonException)
     {
