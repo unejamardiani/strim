@@ -1,4 +1,11 @@
+using Api.Services;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using Xunit;
@@ -107,4 +114,301 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
   }
 
   private sealed record StatsDto(long ViewCount);
+
+  // ---- Last good copy of a share link (#109) ----
+
+  /// <summary>
+  /// A fresh app that revalidates the source on every share fetch and gives up on a silent upstream
+  /// after one second, so each request reaches the (faulty) stub.
+  /// </summary>
+  private sealed class FallbackApp : IDisposable
+  {
+    public StrimAppFactory Upstream { get; } = new();
+    public WebApplicationFactory<Program> App { get; }
+
+    /// <param name="cacheTime">Optional clock for the playlist cache; it also shortens the output TTL to one minute.</param>
+    public FallbackApp(TimeProvider? cacheTime = null)
+    {
+      App = Upstream.WithWebHostBuilder(builder =>
+      {
+        builder
+          .UseSetting("PlaylistCache:RevalidationIntervalMinutes", "0")
+          .UseSetting("PlaylistCache:HeaderTimeoutSeconds", "1")
+          .UseSetting("PlaylistCache:QueueTimeoutSeconds", "1");
+        if (cacheTime is not null)
+        {
+          builder.UseSetting("PlaylistCache:EntryTtlMinutes", "1");
+          builder.ConfigureTestServices(services => services.AddSingleton(sp => new PlaylistFileCache(
+            sp.GetRequiredService<IOptions<PlaylistCacheOptions>>(),
+            sp.GetRequiredService<ILogger<PlaylistFileCache>>(),
+            PlaylistFileCache.TryDelete,
+            cacheTime)));
+        }
+      });
+    }
+
+    public async Task<(ApiClient Owner, PlaylistDto Playlist)> CreateSharedAsync(string userName)
+    {
+      var owner = new ApiClient(App.CreateClient());
+      await owner.RegisterAsync(userName);
+      var response = await owner.PostAsync("/api/playlists", new
+      {
+        name = "Shared",
+        sourceUrl = StrimAppFactory.UpstreamUrl,
+        disabledGroups = new[] { "Kids" },
+      });
+      response.EnsureSuccessStatusCode();
+      return (owner, (await response.Content.ReadFromJsonAsync<PlaylistDto>())!);
+    }
+
+    public static string SharePath(PlaylistDto playlist) => $"/api/playlists/{playlist.Id}/share/{playlist.ShareCode}";
+
+    public void Dispose()
+    {
+      App.Dispose();
+      Upstream.Dispose();
+    }
+  }
+
+  [Fact]
+  public Task Share_UpstreamError_ServesLastGood() => AssertServesLastGood(UpstreamFault.ServerError);
+
+  [Fact]
+  public Task Share_UpstreamNetworkError_ServesLastGood() => AssertServesLastGood(UpstreamFault.NetworkError);
+
+  [Fact]
+  public Task Share_UpstreamTimeout_ServesLastGood() => AssertServesLastGood(UpstreamFault.Timeout);
+
+  private static async Task AssertServesLastGood(UpstreamFault fault)
+  {
+    using var fallback = new FallbackApp();
+    var (_, playlist) = await fallback.CreateSharedAsync("lastgood");
+    var anonymous = fallback.App.CreateClient();
+    var good = await anonymous.GetStringAsync(FallbackApp.SharePath(playlist));
+    var requestsBefore = fallback.Upstream.UpstreamRequests.Count;
+
+    fallback.Upstream.Fault = fault;
+    var response = await anonymous.GetAsync(FallbackApp.SharePath(playlist));
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    Assert.Equal(good, await response.Content.ReadAsStringAsync());
+    Assert.True(fallback.Upstream.UpstreamRequests.Count > requestsBefore, "The second fetch must revalidate upstream.");
+  }
+
+  [Theory]
+  [InlineData(UpstreamFault.ServerError, HttpStatusCode.BadGateway)]
+  [InlineData(UpstreamFault.NetworkError, HttpStatusCode.BadGateway)]
+  [InlineData(UpstreamFault.Timeout, HttpStatusCode.GatewayTimeout)]
+  public async Task Share_UpstreamError_WithoutLastGood_ReturnsError(UpstreamFault fault, HttpStatusCode expected)
+  {
+    using var fallback = new FallbackApp();
+    var (_, playlist) = await fallback.CreateSharedAsync("nolastgood");
+
+    fallback.Upstream.Fault = fault;
+    var response = await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist));
+
+    Assert.Equal(expected, response.StatusCode);
+    Assert.False(response.Headers.Contains("X-Strim-Stale"));
+  }
+
+  [Fact]
+  public async Task Share_Fallback_MarksResponseStale_AndKeepsMetadata()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await fallback.CreateSharedAsync("stale");
+    var anonymous = fallback.App.CreateClient();
+
+    var normal = await anonymous.GetAsync(FallbackApp.SharePath(playlist));
+    normal.EnsureSuccessStatusCode();
+    Assert.False(normal.Headers.Contains("X-Strim-Stale"));
+    var before = await owner.Http.GetFromJsonAsync<SourceMetadataDto>($"/api/playlists/{playlist.Id}");
+    Assert.NotNull(before!.SourceCheckedUtc);
+
+    fallback.Upstream.Fault = UpstreamFault.ServerError;
+    var stale = await anonymous.GetAsync(FallbackApp.SharePath(playlist));
+
+    Assert.Equal(HttpStatusCode.OK, stale.StatusCode);
+    Assert.Equal("1", Assert.Single(stale.Headers.GetValues("X-Strim-Stale")));
+    Assert.Equal(normal.Content.Headers.ContentType, stale.Content.Headers.ContentType);
+    Assert.Equal(normal.Content.Headers.ContentDisposition, stale.Content.Headers.ContentDisposition);
+    Assert.Equal(before, await owner.Http.GetFromJsonAsync<SourceMetadataDto>($"/api/playlists/{playlist.Id}"));
+
+    var (level, warning) = Assert.Single(fallback.Upstream.LogRecords, r => r.Entry.Contains("last good copy of playlist"));
+    Assert.Equal(LogLevel.Warning, level);
+    Assert.Contains(playlist.Id.ToString(), warning);
+    Assert.DoesNotContain(playlist.ShareCode!, warning);
+    Assert.DoesNotContain("93.184.215.14", warning);
+  }
+
+  [Fact]
+  public async Task Share_OutputExpiredBeforeLease_ServesLastGood_AndKeepsMetadata()
+  {
+    var time = new ExpireBeforeLeaseTime();
+    using var fallback = new FallbackApp(time);
+    var (owner, playlist) = await fallback.CreateSharedAsync("expired");
+    var anonymous = fallback.App.CreateClient();
+    var good = await anonymous.GetStringAsync(FallbackApp.SharePath(playlist));
+    var before = await owner.Http.GetFromJsonAsync<SourceMetadataDto>($"/api/playlists/{playlist.Id}");
+    var viewsBefore = (await owner.Http.GetFromJsonAsync<StatsDto>($"/api/playlists/{playlist.Id}/stats"))!.ViewCount;
+
+    // The upstream still answers; only the cached output expires between its lookup and its lease.
+    time.Armed = true;
+    var stale = await anonymous.GetAsync(FallbackApp.SharePath(playlist));
+    time.Armed = false;
+
+    Assert.Equal(HttpStatusCode.OK, stale.StatusCode);
+    Assert.Equal("1", Assert.Single(stale.Headers.GetValues("X-Strim-Stale")));
+    Assert.Equal(good, await stale.Content.ReadAsStringAsync());
+    Assert.Equal(before, await owner.Http.GetFromJsonAsync<SourceMetadataDto>($"/api/playlists/{playlist.Id}"));
+    Assert.Equal(viewsBefore, (await owner.Http.GetFromJsonAsync<StatsDto>($"/api/playlists/{playlist.Id}/stats"))!.ViewCount);
+  }
+
+  /// <summary>
+  /// Once armed, the cache's clock runs two minutes ahead (past the one-minute output TTL) only
+  /// inside TryLeaseOutput, so the output is found and then expires before it can be leased.
+  /// </summary>
+  private sealed class ExpireBeforeLeaseTime : TimeProvider
+  {
+    public volatile bool Armed;
+
+    public override DateTimeOffset GetUtcNow()
+    {
+      var now = System.GetUtcNow();
+      return Armed && new StackTrace().GetFrames().Any(f => f.GetMethod()?.Name == nameof(PlaylistFileCache.TryLeaseOutput))
+        ? now.AddMinutes(2)
+        : now;
+    }
+  }
+
+  [Fact]
+  public async Task Share_WrongCodeOrInactive_IsNotFound_EvenWithLastGood()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await fallback.CreateSharedAsync("lastgood404");
+    var anonymous = fallback.App.CreateClient();
+    (await anonymous.GetAsync(FallbackApp.SharePath(playlist))).EnsureSuccessStatusCode();
+    fallback.Upstream.Fault = UpstreamFault.ServerError;
+
+    Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/playlists/{playlist.Id}/share/wrong")).StatusCode);
+
+    (await owner.SendAsync(HttpMethod.Patch, $"/api/playlists/{playlist.Id}/toggle-active")).EnsureSuccessStatusCode();
+    Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync(FallbackApp.SharePath(playlist))).StatusCode);
+
+    (await owner.SendAsync(HttpMethod.Patch, $"/api/playlists/{playlist.Id}/toggle-active")).EnsureSuccessStatusCode();
+    (await owner.SendAsync(HttpMethod.Delete, $"/api/playlists/{playlist.Id}")).EnsureSuccessStatusCode();
+    Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync(FallbackApp.SharePath(playlist))).StatusCode);
+  }
+
+  [Fact]
+  public async Task DeletePlaylist_ForgetsLastGood()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await fallback.CreateSharedAsync("forget");
+    (await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist))).EnsureSuccessStatusCode();
+    var cache = fallback.App.Services.GetRequiredService<PlaylistFileCache>();
+    await using (var lease = cache.TryLeaseLastGood(playlist.Id))
+    {
+      Assert.NotNull(lease);
+    }
+
+    (await owner.SendAsync(HttpMethod.Delete, $"/api/playlists/{playlist.Id}")).EnsureSuccessStatusCode();
+
+    Assert.Null(cache.TryLeaseLastGood(playlist.Id));
+  }
+
+  [Fact]
+  public async Task Analyze_UpstreamError_StillReturnsError()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await fallback.CreateSharedAsync("editor");
+    (await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist))).EnsureSuccessStatusCode();
+    var cache = fallback.App.Services.GetRequiredService<PlaylistFileCache>();
+    await using (var lease = cache.TryLeaseLastGood(playlist.Id))
+    {
+      Assert.NotNull(lease);
+    }
+
+    fallback.Upstream.Fault = UpstreamFault.ServerError;
+    var response = await owner.PostAsync("/api/playlist/analyze", new { sourceUrl = StrimAppFactory.UpstreamUrl });
+
+    Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+    Assert.False(response.Headers.Contains("X-Strim-Stale"));
+  }
+
+  // ---- Busy job gate (#110) ----
+
+  /// <summary>Takes the app's only job permit, so every gated request waits out the one-second queue timeout.</summary>
+  private static async Task<PlaylistJobLease> HoldGateAsync(FallbackApp fallback) =>
+    (await fallback.App.Services.GetRequiredService<PlaylistJobGate>().TryEnterAsync(CancellationToken.None))!;
+
+  [Fact]
+  public async Task Share_GateBusy_ServesLastGood()
+  {
+    using var fallback = new FallbackApp();
+    var (_, playlist) = await fallback.CreateSharedAsync("busy");
+    var anonymous = fallback.App.CreateClient();
+    var good = await anonymous.GetStringAsync(FallbackApp.SharePath(playlist));
+
+    HttpResponseMessage response;
+    await using (await HoldGateAsync(fallback))
+    {
+      response = await anonymous.GetAsync(FallbackApp.SharePath(playlist));
+    }
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    Assert.Equal("1", Assert.Single(response.Headers.GetValues("X-Strim-Stale")));
+    Assert.Equal(good, await response.Content.ReadAsStringAsync());
+  }
+
+  [Fact]
+  public async Task Share_GateBusy_WithoutLastGood_Returns429()
+  {
+    using var fallback = new FallbackApp();
+    var (_, playlist) = await fallback.CreateSharedAsync("busy429");
+
+    HttpResponseMessage response;
+    await using (await HoldGateAsync(fallback))
+    {
+      response = await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist));
+    }
+
+    Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+    Assert.False(response.Headers.Contains("X-Strim-Stale"));
+  }
+
+  [Fact]
+  public async Task Share_GateBusy_WrongCodeOrInactive_IsNotFound()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await fallback.CreateSharedAsync("busy404");
+    var anonymous = fallback.App.CreateClient();
+    (await anonymous.GetAsync(FallbackApp.SharePath(playlist))).EnsureSuccessStatusCode();
+    (await owner.SendAsync(HttpMethod.Patch, $"/api/playlists/{playlist.Id}/toggle-active")).EnsureSuccessStatusCode();
+
+    await using (await HoldGateAsync(fallback))
+    {
+      Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/playlists/{playlist.Id}/share/wrong")).StatusCode);
+      Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync(FallbackApp.SharePath(playlist))).StatusCode);
+    }
+  }
+
+  [Fact]
+  public async Task Generate_GateBusy_StillReturns429()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await fallback.CreateSharedAsync("busyeditor");
+    (await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist))).EnsureSuccessStatusCode();
+
+    HttpResponseMessage response;
+    await using (await HoldGateAsync(fallback))
+    {
+      response = await owner.PostAsync("/api/playlist/generate", new { sourceUrl = StrimAppFactory.UpstreamUrl });
+    }
+
+    Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+    Assert.False(response.Headers.Contains("X-Strim-Stale"));
+  }
+
+  private sealed record SourceMetadataDto(
+    string? SourceHash, string? SourceETag, DateTimeOffset? SourceLastModifiedUtc, long? SourceLengthBytes, DateTimeOffset? SourceCheckedUtc);
 }

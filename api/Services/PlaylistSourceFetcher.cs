@@ -185,6 +185,10 @@ public sealed class PlaylistSourceFetcher
     {
       return Fail(currentUri, "Unable to connect");
     }
+    catch (IOException)
+    {
+      return Fail(currentUri, "Reading the response failed");
+    }
   }
 
   /// <summary>Upper bound for <see cref="FetchSmallTextAsync"/> bodies.</summary>

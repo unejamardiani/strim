@@ -106,12 +106,13 @@ public static class PlaylistEndpoints
       return Results.Ok(playlist);
     });
 
-    mutations.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
+    mutations.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db, PlaylistFileCache cache) =>
     {
       var playlist = await FindOwnedAsync(db, id, user);
       if (playlist is null) return Results.NotFound();
       db.Playlists.Remove(playlist);
       await db.SaveChangesAsync();
+      cache.ForgetLastGood(id);
       return Results.NoContent();
     });
 

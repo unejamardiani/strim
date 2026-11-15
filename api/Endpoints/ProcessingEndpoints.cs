@@ -124,7 +124,7 @@ public static class ProcessingEndpoints
             friendlyName,
             analysis.TotalChannels,
             analysis.Groups.Count,
-            account?.ExpiresAt ?? expiration,
+            account is { NeverExpires: true } ? null : account?.ExpiresAt ?? expiration,
             PlaylistProcessor.ToGroupResults(analysis.Groups),
             account?.Status,
             account?.MaxConnections,
@@ -260,8 +260,13 @@ public static class ProcessingEndpoints
         return Results.BadRequest(new { error = "Playlist is missing sourceUrl." });
       }
 
+      // Runs after the access check above, so a busy gate never turns a 404 into a copy.
       var job = await jobGate.TryEnterAsync(context.RequestAborted);
-      if (job is null) return EndpointHelpers.Busy();
+      if (job is null)
+      {
+        return LastGoodOrNull(context, pipeline.Cache, playlist, logger, "job gate busy")
+          ?? EndpointHelpers.Busy();
+      }
 
       await using (job)
       {
@@ -270,15 +275,35 @@ public static class ProcessingEndpoints
           var source = await pipeline.GetSourceAsync(playlist.SourceUrl, context.RequestAborted);
           var output = await pipeline.GetOutputAsync(source, playlist.DisabledGroups ?? new List<string>(), context.RequestAborted);
 
-          PlaylistPipeline.CopySourceMetadata(playlist, source);
-          playlist.ViewCount++;
-          playlist.LastViewedUtc = DateTimeOffset.UtcNow;
-          await db.SaveChangesAsync(context.RequestAborted);
+          // Lease the output before persisting anything, so an output that expired in between
+          // falls back without having touched the playlist's metadata.
+          var lease = pipeline.Cache.TryLeaseOutput(output.OutputKey, ShareFileName(playlist));
+          if (lease is null)
+          {
+            return LastGoodOrNull(context, pipeline.Cache, playlist, logger, "output expired")
+              ?? Results.Problem("The generated playlist expired before it could be downloaded.", statusCode: StatusCodes.Status503ServiceUnavailable);
+          }
 
-          var fileName = $"{playlist.SourceName ?? playlist.Name ?? "playlist"}-filtered.m3u";
-          return pipeline.Cache.TryLeaseOutput(output.OutputKey, fileName) is { } lease
-            ? new PlaylistFileResult(lease, M3uContentType)
-            : Results.Problem("The generated playlist expired before it could be downloaded.", statusCode: StatusCodes.Status503ServiceUnavailable);
+          try
+          {
+            PlaylistPipeline.CopySourceMetadata(playlist, source);
+            playlist.ViewCount++;
+            playlist.LastViewedUtc = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(context.RequestAborted);
+          }
+          catch
+          {
+            await lease.DisposeAsync();
+            throw;
+          }
+
+          RememberLastGood(pipeline.Cache, playlist.Id, output, logger);
+          return new PlaylistFileResult(lease, M3uContentType);
+        }
+        catch (Exception ex) when (!context.RequestAborted.IsCancellationRequested)
+        {
+          return LastGoodOrNull(context, pipeline.Cache, playlist, logger, ex.GetType().Name)
+            ?? EndpointHelpers.PlaylistFailure(ex, logger, "serve");
         }
         catch (Exception ex)
         {
@@ -288,6 +313,38 @@ public static class ProcessingEndpoints
     }).RequireRateLimiting(Security.RateLimits.Share);
 
     return app;
+  }
+
+  private static string ShareFileName(Playlist playlist) =>
+    $"{playlist.SourceName ?? playlist.Name ?? "playlist"}-filtered.m3u";
+
+  /// <summary>Pins a served share output as the link's last good copy; a failure here never fails the answer.</summary>
+  private static void RememberLastGood(PlaylistFileCache cache, Guid playlistId, PlaylistOutputFile output, ILogger logger)
+  {
+    try
+    {
+      cache.RememberLastGood(playlistId, output);
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning("Could not keep a last good copy of playlist {PlaylistId} ({Error})", playlistId, ex.GetType().Name);
+    }
+  }
+
+  /// <summary>
+  /// The share link's last good copy, marked stale, or null when there is none. It leaves the
+  /// playlist's source metadata untouched and logs the playlist id only, never the URL or code.
+  /// </summary>
+  private static IResult? LastGoodOrNull(HttpContext context, PlaylistFileCache cache, Playlist playlist, ILogger logger, string reason)
+  {
+    if (cache.TryLeaseLastGood(playlist.Id, ShareFileName(playlist)) is not { } lease)
+    {
+      return null;
+    }
+
+    logger.LogWarning("Serving the last good copy of playlist {PlaylistId} instead of a fresh one ({Reason})", playlist.Id, reason);
+    context.Response.Headers["X-Strim-Stale"] = "1";
+    return new PlaylistFileResult(lease, M3uContentType);
   }
 
   /// <summary>The disabledGroups limits shared by generate and search.</summary>

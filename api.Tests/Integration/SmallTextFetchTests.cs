@@ -109,6 +109,20 @@ public sealed class SmallTextFetchTests : IDisposable
     Assert.Equal(0, stream.BytesRead);
   }
 
+  [Fact]
+  public async Task IOExceptionWhileReadingBody_ReturnsFailureResult()
+  {
+    _factory.UpstreamResponses[$"{Base}/broken?username=u&password=secret"] =
+      () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new BrokenStream()) };
+
+    var result = await _fetcher.FetchSmallTextAsync($"{Base}/broken?username=u&password=secret", default);
+
+    Assert.False(result.Success);
+    Assert.Null(result.Text);
+    Assert.Equal("Reading the response failed", result.Error);
+    Assert.All(_logger.Entries, entry => Assert.DoesNotContain("secret", entry));
+  }
+
   [Theory]
   [InlineData(HttpStatusCode.NotFound)]
   [InlineData(HttpStatusCode.Forbidden)]
@@ -184,7 +198,21 @@ public sealed class SmallTextFetchTests : IDisposable
     }
   }
 
-  private sealed class CapturingLogger : ILogger<PlaylistSourceFetcher>
+  private sealed class BrokenStream : Stream
+  {
+    public override bool CanRead => true;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotSupportedException();
+    public override long Position { get => 0; set => throw new NotSupportedException(); }
+    public override void Flush() { }
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override int Read(byte[] buffer, int offset, int count) => throw new IOException("connection reset");
+  }
+
+  private sealed class CapturingLogger: ILogger<PlaylistSourceFetcher>
   {
     public List<string> Entries { get; } = [];
 
