@@ -890,7 +890,7 @@ function renderEditor() {
       nodes.push(h('div', { class: 'notice' }, 'This is a sample. Paste your own playlist URL to save it and get a player link.'));
     }
     nodes.push(h('div', { class: 'report-line' },
-      h('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'aria-haspopup': 'dialog', onclick: () => openReport(ed) }, 'Duplicates & variants')));
+      h('button', { class: 'btn btn-ghost', type: 'button', 'aria-haspopup': 'dialog', onclick: () => openReport(ed) }, 'Duplicates & variants')));
     nodes.push(...pickerNodes(ed));
   }
 
