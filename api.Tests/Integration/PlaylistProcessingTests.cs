@@ -93,6 +93,8 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
       Assert.Equal(name, group.GetProperty("groupTitle").GetString());
       Assert.Equal(1, group.GetProperty("count").GetInt32());
       Assert.Equal("Live", group.GetProperty("contentType").GetString());
+      Assert.True(group.TryGetProperty("isAdult", out var isAdult), $"Group '{name}' has no isAdult field.");
+      Assert.Equal(JsonValueKind.False, isAdult.ValueKind);
       var wordsElement = group.GetProperty("words");
       Assert.Equal(JsonValueKind.Array, wordsElement.ValueKind);
       Assert.Equal(words, wordsElement.EnumerateArray().Select(w => w.GetString()!).ToArray());
