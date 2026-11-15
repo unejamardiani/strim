@@ -48,6 +48,56 @@ public class PlaylistSearchIndexTests
 
     var names = new[] { "Das Erste", "ZDF", "Amélie", "Amelie Returns", "Dark S01E01", "News 24" };
     Assert.Equal(new[] { 1, 2, 1, 2, 1, 1 }, names.Select(name => Find(index, name).Position));
+
+    // A live entry titled "Germany · Movies" lands in the same output group as the split movies of "Germany".
+    const string collision = """
+      #EXTM3U
+      #EXTINF:-1 group-title="Germany",Das Erste
+      https://example.com/live/u/p/1.ts
+      #EXTINF:-1 group-title="Germany",Amélie
+      https://example.com/movie/u/p/2.mkv
+      #EXTINF:-1 group-title="Germany · Movies",Kino Live
+      https://example.com/live/u/p/3.ts
+      """;
+    var (merged, written) = await AnalyzeAndGenerate(collision, Set());
+    Assert.Equal(new[] { "Amélie", "Kino Live" }, written.Where(w => w.GroupTitle == "Germany · Movies").Select(w => w.Name));
+    Assert.Equal(("Germany · Movies", 1), (Find(merged, "Amélie").OutputGroup, Find(merged, "Amélie").Position));
+    Assert.Equal(("Germany · Movies", 2), (Find(merged, "Kino Live").OutputGroup, Find(merged, "Kino Live").Position));
+    Assert.Equal(1, Find(merged, "Das Erste").Position);
+  }
+
+  [Fact]
+  public async Task Index_GroupMatchesGeneratedOutput_SpacesAndExtGrp()
+  {
+    const string source = """
+      #EXTM3U
+      #EXTINF:-1 group-title=" News ",News 24
+      https://example.com/live/u/p/1.ts
+      #EXTINF:-1 group-title="",Sport 1
+      #EXTGRP:Sport
+      https://example.com/live/u/p/2.ts
+      #EXTINF:-1,Sport 2
+      #EXTGRP:Sport
+      https://example.com/live/u/p/3.ts
+      #EXTINF:-1 group-title=" Mixed ",Mixed Live
+      https://example.com/live/u/p/4.ts
+      #EXTINF:-1 group-title="",Mixed Film
+      #EXTGRP:Mixed
+      https://example.com/movie/u/p/5.mkv
+      """;
+    var (index, written) = await AnalyzeAndGenerate(source, Set());
+
+    Assert.Equal(5, written.Count);
+    foreach (var (name, groupTitle) in written)
+    {
+      Assert.Equal(groupTitle, Find(index, name).OutputGroup);
+    }
+    Assert.Equal(" News ", Find(index, "News 24").OutputGroup);
+    Assert.Equal(("", 1), (Find(index, "Sport 1").OutputGroup, Find(index, "Sport 1").Position));
+    Assert.Equal(("Sport", 1), (Find(index, "Sport 2").OutputGroup, Find(index, "Sport 2").Position));
+    Assert.Equal(" Mixed ", Find(index, "Mixed Live").OutputGroup);
+    Assert.Equal("Mixed · Movies", Find(index, "Mixed Film").OutputGroup);
+    Assert.Equal("Sport", Find(index, "Sport 1").GroupKey);
   }
 
   [Fact]
