@@ -19,6 +19,13 @@ public static class ProcessingEndpoints
   private const string SessionExpired = "The playlist session expired. Analyze the source again.";
 
   /// <summary>
+  /// Builds the report of the report endpoint. It observes the request's abort token, so a client that gives up
+  /// releases the shared job gate between entries (story #183).
+  /// </summary>
+  public static PlaylistReportResponse BuildReport(IReadOnlyList<PlaylistEntry> entries, HttpContext context) =>
+    PlaylistReport.Build(entries, cancellationToken: context.RequestAborted);
+
+  /// <summary>
   /// Model binding turns RawText JSON into a managed string before the handler and its job gate
   /// run. Bound the body first and admit one analyze request at a time, so a burst of uploads
   /// cannot allocate several 50 MiB strings at once. Remote URL sources stream to disk instead.
@@ -193,7 +200,7 @@ public static class ProcessingEndpoints
 
           var entries = await PlaylistProcessor.ReadEntriesFromFileAsync(
             source.FilePath, pipeline.Cache.MaxReportBytes, context.RequestAborted, pipeline.Cache.MaxLineLengthChars);
-          return Results.Ok(PlaylistReport.Build(entries));
+          return Results.Ok(BuildReport(entries, context));
         }
         catch (Exception ex)
         {
