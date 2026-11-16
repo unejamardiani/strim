@@ -1051,13 +1051,39 @@ const picker = {
   showButtons: null,
   results: null,
   modes: null,
+  everything: null,
   highlight: null,
 };
 
 function searchLabels(ed) {
   return ed.searchMode === 'everything'
     ? { placeholder: 'Search all entries', label: 'Search all entries' }
-    : { placeholder: `Search ${plural(ed.groups.length, 'group')}`, label: 'Search groups' };
+    : { placeholder: 'Filter groups · titles: Everything', label: 'Filter groups. Find titles with Everything' };
+}
+
+// The action that takes a Groups query to the entry search. The query goes in as text, never markup.
+function everythingButton(query, className = '') {
+  const shown = query.trim();
+  return h('button', {
+    class: `btn search-everything ${className}`.trim(),
+    type: 'button',
+    onclick: switchToEverything,
+  }, 'Search all entries for ', h('span', { class: 'search-everything-query', text: `“${shown}”` }));
+}
+
+// Acts as a press on the Everything button, then keeps focus in the field (the action disappears).
+function switchToEverything() {
+  picker.modes?.querySelector('[data-value="everything"]')?.click();
+  document.getElementById('group-search')?.focus();
+}
+
+function updateEverythingAction(ed) {
+  const slot = picker.everything;
+  if (!slot) return;
+  const query = ed.searchMode === 'everything' ? '' : ed.filter.query.trim();
+  slot.hidden = !query;
+  if (query && slot.dataset.query !== query) slot.replaceChildren(everythingButton(query));
+  slot.dataset.query = query;
 }
 
 function pickerNodes(ed) {
@@ -1124,7 +1150,8 @@ function pickerNodes(ed) {
   modes.setAttribute('aria-label', 'Search in');
   modes.classList.add('search-modes');
   picker.modes = modes;
-  const rows = [h('div', { class: 'search-row' }, search, modes)];
+  picker.everything = h('div', { class: 'search-everything-row', hidden: true });
+  const rows = [h('div', { class: 'search-row' }, search, modes), picker.everything];
 
   const types = CONTENT_TYPES.filter((t) => ed.typeCounts[t]);
   picker.typeButtons = null;
@@ -1189,6 +1216,7 @@ function teardownPicker() {
   picker.rows = [];
   picker.adultSwitch = null;
   picker.results = null;
+  picker.everything = null;
   picker.highlight = null;
   cancelAnimationFrame(picker.frame);
 }
@@ -1269,10 +1297,19 @@ function updateView(scrollToTop) {
       empty = h('div', { class: 'list-empty' });
       picker.list.append(empty);
     }
-    empty.textContent = terms.length ? 'No groups match your search.' : 'No groups here.';
+    // With a query, the empty state leads on to the entry search instead of ending here.
+    const query = terms.length ? ed.filter.query.trim() : '';
+    if (empty.dataset.query !== query || !empty.firstChild) {
+      empty.dataset.query = query;
+      empty.replaceChildren(query
+        ? h('p', { class: 'list-empty-text', text: 'No groups match. Films, series and channels are found under Everything.' })
+        : 'No groups here.');
+      if (query) empty.append(everythingButton(query, 'btn-primary'));
+    }
   } else if (empty) {
     empty.remove();
   }
+  updateEverythingAction(ed);
 
   if (scrollToTop) {
     const listTop = picker.list.getBoundingClientRect().top + window.scrollY;

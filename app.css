@@ -859,6 +859,27 @@ select.input {
   min-height: var(--control-h);
 }
 
+/* Groups mode: the action under the search row that runs the same query over every entry. */
+.search-everything-row {
+  display: flex;
+}
+
+.search-everything {
+  max-width: 100%;
+  min-width: 0;
+  gap: 0.3em;
+}
+
+.search-everything-query {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list-empty-text {
+  margin: 0 0 14px;
+}
+
 .search-results {
   padding: 0;
   overflow: hidden;
