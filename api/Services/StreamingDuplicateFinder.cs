@@ -27,8 +27,9 @@ public static class StreamingDuplicateFinder
   private const long PerEntryBytes = 10;      // parent index (4) and flags (1), doubled for list growth
   private const long PerKeyBytes = 64;        // one fingerprint dictionary slot (about 32), doubled for growth
   private const long PerValueBytes = 96;      // bucket list, value tuple and string overhead
-  private const long PerMemberBytes = 8;      // one index in a result set, doubled for list growth
-  private const long PerSetBytes = 64;        // one result set list
+  private const long PerGroupBytes = 128;     // a root's member list with its array, dictionary slot and order slot
+  private const long PerMemberBytes = 8;      // one index in a member list, doubled for list growth
+  private const long PerSetBytes = 16;        // one slot in the result list, doubled for growth
 
   public static async Task<DuplicateIndexSets> FindAsync(
     Func<CancellationToken, IAsyncEnumerable<PlaylistEntry>> source,
@@ -78,8 +79,10 @@ public static class StreamingDuplicateFinder
       {
         members[root] = list = new List<int>();
         order.Add(root);
+        counter.Add(PerGroupBytes); // counted even when it stays a singleton and is dropped below
       }
       list.Add(i);
+      counter.Add(PerMemberBytes);
     }
 
     var sets = new List<IReadOnlyList<int>>();
@@ -90,7 +93,7 @@ public static class StreamingDuplicateFinder
       if (list.Count < 2) continue;
       sets.Add(list);
       entryCount += list.Count;
-      counter.Add(PerSetBytes + PerMemberBytes * list.Count);
+      counter.Add(PerSetBytes);
     }
     return new DuplicateIndexSets(sets, sets.Count, entryCount);
   }

@@ -114,6 +114,27 @@ public class StreamingDuplicateFinderTests
   }
 
   [Fact]
+  public async Task HeldBytes_CountCollisionOnlySingletons()
+  {
+    // Unique addresses, no tvg-id and a fingerprint that collides for every key: every entry is flagged and grouped
+    // on its own, so none ends in a set, yet each one's member list and confirmed value were held.
+    const int count = 2_000;
+    var text = "#EXTM3U\n" + string.Concat(Enumerable.Range(0, count)
+      .Select(i => $"#EXTINF:-1 group-title=\"G\",N{i}\nhttp://example.invalid/live/{i}.ts\n"));
+    var entries = PlaylistEntryFixture.Read(text);
+    var counter = new HeldBytesCounter();
+
+    var result = await StreamingDuplicateFinder.FindAsync(
+      new CountingSource(entries).Read, CancellationToken.None, fingerprint: _ => 7UL, counter: counter);
+
+    Assert.Empty(result.Sets);
+    // Lower bound per entry on 64-bit: its parent index and flags (5), its confirmed address string (22 + 2 per
+    // char), a List<int> with a one-slot array (64) and its dictionary entry (24).
+    var minimum = entries.Sum(e => 5L + 22 + 2L * e.Address.Length + 64 + 24);
+    Assert.True(counter.Bytes >= minimum, $"{counter.Bytes} < {minimum}");
+  }
+
+  [Fact]
   public async Task Cancellation_BetweenEntries_StopsReading()
   {
     var entries = Generated(9, 1_000);
