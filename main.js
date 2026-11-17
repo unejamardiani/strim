@@ -1570,9 +1570,12 @@ function loadMoreIfNeeded(ed) {
 // (.entry-scroll has overflow-anchor: none, so the browser does not adjust it as well).
 function dropEntries(n, fromTop) {
   const s = pane.scroller;
+  // Read scrollTop before removing: the browser may clamp it to the reduced range at once,
+  // and subtracting the removed height from the clamped value would jump backwards.
+  const top = s.scrollTop;
   const before = s.scrollHeight;
   for (let i = 0; i < n; i++) (fromTop ? pane.list.firstElementChild : pane.list.lastElementChild)?.remove();
-  if (fromTop) s.scrollTop -= before - s.scrollHeight;
+  if (fromTop) s.scrollTop = Math.max(0, top - (before - s.scrollHeight));
 }
 
 // Never more than one request at a time; a late response for a group no longer shown is discarded.
