@@ -83,6 +83,7 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
 };
 
 function icon(name) {
@@ -891,11 +892,11 @@ function renderEditor() {
     }
     nodes.push(h('div', { class: 'report-line' },
       h('button', { class: 'btn btn-ghost', type: 'button', 'aria-haspopup': 'dialog', onclick: () => openReport(ed) }, 'Duplicates & variants')));
-    // Below 1100px both wrappers are display: contents, so the narrow layout is unchanged.
-    // The pane is reserved for the entries of a group and stays empty for now.
+    // Below 1100px both wrappers are display: contents and the pane is not shown, so the narrow
+    // layout is unchanged. From 1100px the pane shows the entries of the selected group.
     nodes.push(h('div', { class: 'editor-split' },
       h('div', { class: 'editor-groups' }, ...pickerNodes(ed)),
-      h('aside', { class: 'entry-pane', 'aria-hidden': 'true' })));
+      h('aside', { class: 'entry-pane', 'aria-label': 'Group entries', 'aria-hidden': 'true' })));
   }
 
   app.replaceChildren(...nodes);
@@ -1206,8 +1207,15 @@ function mountPicker(ed) {
   picker.list = document.getElementById('group-list');
   picker.rows = [];
   picker.list.addEventListener('change', onRowToggle);
+  picker.list.addEventListener('click', onRowSelect);
+  picker.list.addEventListener('keydown', onSwitchEnter);
+  pane.el = document.querySelector('.entry-pane');
   measureRowHeight();
   updateView(false);
+  // A re-render (new analysis, save) shows the selected group again if it still exists.
+  const selected = ed.paneGroup && ed.groups.find((g) => g.key === ed.paneGroup);
+  if (selected && WIDE_EDITOR.matches) openPane(ed, selected);
+  else ed.paneGroup = null;
   // A new analysis clears the results, so an Everything search runs again on the new index.
   if (ed.searchMode === 'everything' && !ed.search) runSearch(ed);
   else renderSearchResults(ed);
@@ -1215,6 +1223,8 @@ function mountPicker(ed) {
 
 function teardownPicker() {
   discardBulkUndo();
+  resetPane();
+  pane.el = null;
   picker.ed = null;
   picker.list = null;
   picker.rows = [];
@@ -1381,6 +1391,7 @@ function paintRows() {
     row._parts.check.setAttribute('aria-label', `${g.title}${g.type !== 'Live' || g.split ? ` (${g.type})` : ''}, ${plural(g.count, 'channel')}`);
     row.classList.toggle('off', off);
     row.classList.toggle('flash', g.key === picker.highlight);
+    row.classList.toggle('selected', g.key === ed.paneGroup);
   }
 }
 
@@ -1481,6 +1492,170 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   document.getElementById('group-search')?.focus();
 });
+
+// ---------- Entry pane (wide editor, #217) ----------
+// One page of the selected group's names at a time from /playlist/group-entries, so the browser
+// never holds the whole playlist. At most ENTRY_PANE_PAGES pages stay rendered: scrolling down
+// drops the top page, scrolling back up fetches it again. Names are inserted as text, never as HTML.
+
+const WIDE_EDITOR = window.matchMedia('(min-width: 1100px)');
+const ENTRY_PANE_PAGES = 3;
+const pane = { el: null };
+
+// The row is a <label>: on wide screens a click outside the switch selects the group instead of
+// toggling it. The switch itself (click, Space) toggles as before; below 1100px nothing changes.
+function onRowSelect(e) {
+  if (!WIDE_EDITOR.matches || e.target.closest('.toggle')) return;
+  const ed = picker.ed;
+  const g = ed?.view[Number(e.target.closest('.group-row')?.dataset.index)];
+  if (!g) return;
+  e.preventDefault();
+  openPane(ed, g);
+}
+
+// A native checkbox toggles on Space only; Enter on the switch toggles it too and never opens the pane.
+function onSwitchEnter(e) {
+  if (e.key !== 'Enter' || e.repeat || !e.target.classList?.contains('toggle')) return;
+  e.preventDefault();
+  e.target.click();
+}
+
+function resetPane() {
+  pane.controller?.abort();
+  Object.assign(pane, { ed: null, group: null, list: null, count: null, status: null, scroller: null, start: 0, end: 0, pages: [], done: false, failed: null, controller: null });
+}
+
+function paneCount(total, g) {
+  return `${plural(total, 'entry', 'entries')}${g.type !== 'Live' || g.split ? ` · ${g.type}` : ''}`;
+}
+
+function openPane(ed, g) {
+  if (!pane.el) return;
+  resetPane();
+  ed.paneGroup = g.key;
+  pane.ed = ed;
+  pane.group = g;
+  pane.count = h('p', { class: 'entry-pane-count', text: paneCount(g.count, g) });
+  pane.list = h('ol', { class: 'entry-list' });
+  pane.status = h('div', { class: 'entry-pane-status', role: 'status' });
+  pane.scroller = h('div', { class: 'entry-scroll', onscroll: () => loadMoreIfNeeded(ed) }, pane.list, pane.status);
+  pane.el.replaceChildren(
+    h('div', { class: 'entry-pane-head' },
+      h('div', { class: 'entry-pane-title' }, h('h2', { text: g.title }), pane.count),
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close entries', onclick: () => closePane(ed) }, icon('close'))),
+    pane.scroller);
+  pane.el.classList.add('open');
+  pane.el.removeAttribute('aria-hidden');
+  paintRows();
+  loadEntryPage(ed, 'next');
+}
+
+function closePane(ed) {
+  resetPane();
+  ed.paneGroup = null;
+  pane.el?.replaceChildren();
+  pane.el?.classList.remove('open');
+  pane.el?.setAttribute('aria-hidden', 'true');
+  paintRows();
+}
+
+// Paging is suspended while the pane is hidden: below the breakpoint the scroller has no size,
+// so every page would look like the end of the list and fetch the next one.
+function paneVisible() {
+  return WIDE_EDITOR.matches && pane.scroller?.clientHeight > 0;
+}
+
+// Narrowing the window aborts a pending page; widening it again resumes paging where it stopped.
+WIDE_EDITOR.addEventListener('change', () => {
+  if (!pane.ed) return;
+  if (!WIDE_EDITOR.matches) {
+    // Only a pending page is aborted and its loading indicator cleared; an error and its
+    // "Try again" button stay, because pane.failed still blocks paging until the retry.
+    const c = pane.controller;
+    if (!c) return;
+    pane.controller = null;
+    c.abort();
+    pane.status?.replaceChildren('');
+  } else if (!pane.end && !pane.done) {
+    loadEntryPage(pane.ed, 'next');
+  } else {
+    loadMoreIfNeeded(pane.ed);
+  }
+});
+
+function loadMoreIfNeeded(ed) {
+  const s = pane.scroller;
+  if (!s || !paneVisible()) return;
+  if (s.scrollTop + s.clientHeight >= s.scrollHeight - 240) loadEntryPage(ed, 'next');
+  else if (s.scrollTop < 240 && pane.start > 0) loadEntryPage(ed, 'prev');
+}
+
+// Removes the first or last `n` rendered entries and keeps the scroll position by hand
+// (.entry-scroll has overflow-anchor: none, so the browser does not adjust it as well).
+function dropEntries(n, fromTop) {
+  const s = pane.scroller;
+  // Read scrollTop before removing: the browser may clamp it to the reduced range at once,
+  // and subtracting the removed height from the clamped value would jump backwards.
+  const top = s.scrollTop;
+  const before = s.scrollHeight;
+  for (let i = 0; i < n; i++) (fromTop ? pane.list.firstElementChild : pane.list.lastElementChild)?.remove();
+  if (fromTop) s.scrollTop = Math.max(0, top - (before - s.scrollHeight));
+}
+
+// Never more than one request at a time; a late response for a group no longer shown is discarded.
+async function loadEntryPage(ed, direction) {
+  if (pane.ed !== ed || pane.controller || pane.failed) return;
+  if (!WIDE_EDITOR.matches) return;
+  const prev = direction === 'prev';
+  if (prev ? pane.start === 0 : pane.done) return;
+  const offset = prev ? Math.max(0, pane.start - MAX_SEARCH_RESULTS) : pane.end;
+  const limit = prev ? pane.start - offset : MAX_SEARCH_RESULTS;
+  const controller = new AbortController();
+  pane.controller = controller;
+  pane.status.replaceChildren(h('p', { class: 'search-status', text: pane.end ? 'Loading more…' : 'Loading entries…' }));
+  try {
+    const query = new URLSearchParams({ cacheKey: ed.cacheKey, group: pane.group.key, offset: String(offset), limit: String(limit) });
+    const page = await api(`/playlist/group-entries?${query}`, { signal: controller.signal });
+    if (pane.controller !== controller) return;
+    pane.controller = null;
+    const items = (page.names || []).map((name) => h('li', { text: name }));
+    const s = pane.scroller;
+    if (prev) {
+      const before = s.scrollHeight;
+      pane.list.prepend(...items);
+      s.scrollTop += s.scrollHeight - before;
+      pane.pages.unshift(items.length);
+      pane.start = offset;
+      if (pane.pages.length > ENTRY_PANE_PAGES) {
+        const n = pane.pages.pop();
+        dropEntries(n, false);
+        pane.end -= n;
+        pane.done = false;
+      }
+    } else {
+      pane.list.append(...items);
+      pane.pages.push(items.length);
+      pane.end = offset + items.length;
+      pane.done = items.length === 0 || pane.end >= page.total;
+      if (pane.pages.length > ENTRY_PANE_PAGES) {
+        const n = pane.pages.shift();
+        dropEntries(n, true);
+        pane.start += n;
+      }
+    }
+    pane.count.textContent = paneCount(page.total, pane.group);
+    pane.status.replaceChildren(page.total === 0 ? h('p', { class: 'search-status', text: 'No entries in this group.' }) : '');
+    loadMoreIfNeeded(ed);
+  } catch (err) {
+    if (isAbort(err) || pane.controller !== controller) return;
+    pane.controller = null;
+    pane.failed = direction;
+    pane.status.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+      h('p', { text: err.message || 'The entries could not be loaded.' }),
+      h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { const d = pane.failed; pane.failed = null; loadEntryPage(ed, d); } }, 'Try again'))));
+  }
+}
 
 // ---------- Everything search ----------
 
