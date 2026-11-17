@@ -5,21 +5,122 @@ namespace Api.Tests;
 
 public class DuplicateFinderTests
 {
+  /// <summary>The playlist of every case below; the streaming finder must agree with this finder on each.</summary>
+  internal static readonly string[] AllCases =
+  [
+    SameTvgIdCase, SameAddressCase, EmptyTvgIdCase, TvgIdExactCase, NearMissAddressCase,
+    OptionLinesCase, BothRulesCase, TvgIdInNameCase, UniqueCase, UntrimmedCase,
+  ];
+
+  internal const string SameTvgIdCase = """
+    #EXTM3U
+    #EXTINF:-1 tvg-id="a.de" group-title="DE",Alpha
+    http://example.invalid/live/1.ts
+    #EXTINF:-1 tvg-id="b.de" group-title="DE",Beta
+    http://example.invalid/live/2.ts
+    #EXTINF:-1 tvg-id="a.de" group-title="DE HD",Alpha HD
+    http://example.invalid/live/3.ts
+    """;
+
+  internal const string SameAddressCase = """
+    #EXTM3U
+    #EXTINF:-1 group-title="News",News One
+    http://example.invalid/live/7.ts
+    #EXTINF:-1 group-title="News",Other
+    http://example.invalid/live/8.ts
+    #EXTINF:-1 group-title="News",News 1
+    http://example.invalid/live/7.ts
+    """;
+
+  internal const string EmptyTvgIdCase = """
+    #EXTM3U
+    #EXTINF:-1 tvg-id="" group-title="A",One
+    http://example.invalid/live/1.ts
+    #EXTINF:-1 tvg-id="" group-title="A",Two
+    http://example.invalid/live/2.ts
+    #EXTINF:-1 tvg-id="  " group-title="A",Three
+    http://example.invalid/live/3.ts
+    #EXTINF:-1 group-title="A",Four
+    http://example.invalid/live/4.ts
+    #EXTINF:-1 group-title="A",Five
+    http://example.invalid/live/5.ts
+    """;
+
+  internal const string TvgIdExactCase = """
+    #EXTM3U
+    #EXTINF:-1 tvg-id="a.de" group-title="A",One
+    http://example.invalid/live/1.ts
+    #EXTINF:-1 tvg-id="a.de " group-title="A",Two
+    http://example.invalid/live/2.ts
+    #EXTINF:-1 tvg-id="A.de" group-title="A",Three
+    http://example.invalid/live/3.ts
+    """;
+
+  internal const string NearMissAddressCase = """
+    #EXTM3U
+    #EXTINF:-1 group-title="A",One
+    http://example.invalid/live/user/pass/1001.ts
+    #EXTINF:-1 group-title="A",Two
+    http://example.invalid/live/user/pass/10010.ts
+    #EXTINF:-1 group-title="A",Three
+    http://example.invalid/play?id=5&q=hd
+    #EXTINF:-1 group-title="A",Four
+    http://example.invalid/play?id=5&q=sd
+    """;
+
+  internal const string OptionLinesCase = """
+    #EXTM3U
+    #EXTINF:-1 group-title="A",One
+    #EXTVLCOPT:http-user-agent=X
+    #EXTVLCOPT:http-referrer=http://example.invalid/
+    http://example.invalid/live/9.ts
+    #EXTINF:-1 group-title="B",Two
+    http://example.invalid/live/9.ts
+    """;
+
+  internal const string BothRulesCase = """
+    #EXTM3U
+    #EXTINF:-1 tvg-id="a.de" group-title="A",One
+    http://example.invalid/live/1.ts
+    #EXTINF:-1 tvg-id="a.de" group-title="B",Two
+    http://example.invalid/live/1.ts
+    #EXTINF:-1 group-title="C",Three
+    http://example.invalid/live/1.ts
+    #EXTINF:-1 tvg-id="a.de" group-title="D",Four
+    http://example.invalid/live/4.ts
+    """;
+
+  internal const string TvgIdInNameCase = """
+    #EXTM3U
+    #EXTINF:-1 group-title="A",One tvg-id="a.de"
+    http://example.invalid/live/1.ts
+    #EXTINF:-1 group-title="A",Two tvg-id="a.de"
+    http://example.invalid/live/2.ts
+    """;
+
+  internal const string UniqueCase = """
+    #EXTM3U
+    #EXTINF:-1 tvg-id="a.de" group-title="A",One
+    http://example.invalid/live/1.ts
+    #EXTINF:-1 tvg-id="b.de" group-title="A",Two
+    http://example.invalid/live/2.ts
+    """;
+
+  internal const string UntrimmedCase = """
+    #EXTM3U
+    #EXTINF:-1 tvg-id="a.de " group-title="A",One
+    http://example.invalid/live/1.ts
+    #EXTINF:-1 tvg-id="a.de" group-title="B",Two
+    http://example.invalid/live/1.ts
+    """;
+
   private static IReadOnlyList<DuplicateSet> Find(string playlist) =>
     DuplicateFinder.Find(PlaylistEntryFixture.Read(playlist));
 
   [Fact]
   public void SameTvgId_FormsOneSet()
   {
-    var sets = Find("""
-      #EXTM3U
-      #EXTINF:-1 tvg-id="a.de" group-title="DE",Alpha
-      http://example.invalid/live/1.ts
-      #EXTINF:-1 tvg-id="b.de" group-title="DE",Beta
-      http://example.invalid/live/2.ts
-      #EXTINF:-1 tvg-id="a.de" group-title="DE HD",Alpha HD
-      http://example.invalid/live/3.ts
-      """);
+    var sets = Find(SameTvgIdCase);
 
     var set = Assert.Single(sets);
     Assert.Equal(new[] { 0, 2 }, set.Entries.Select(e => e.Index));
@@ -30,15 +131,7 @@ public class DuplicateFinderTests
   [Fact]
   public void SameAddress_FormsOneSet()
   {
-    var sets = Find("""
-      #EXTM3U
-      #EXTINF:-1 group-title="News",News One
-      http://example.invalid/live/7.ts
-      #EXTINF:-1 group-title="News",Other
-      http://example.invalid/live/8.ts
-      #EXTINF:-1 group-title="News",News 1
-      http://example.invalid/live/7.ts
-      """);
+    var sets = Find(SameAddressCase);
 
     var set = Assert.Single(sets);
     Assert.Equal(new[] { "News One", "News 1" }, set.Entries.Select(e => e.Name));
@@ -48,19 +141,7 @@ public class DuplicateFinderTests
   [Fact]
   public void EmptyOrMissingTvgId_IsNotADuplicate()
   {
-    var sets = Find("""
-      #EXTM3U
-      #EXTINF:-1 tvg-id="" group-title="A",One
-      http://example.invalid/live/1.ts
-      #EXTINF:-1 tvg-id="" group-title="A",Two
-      http://example.invalid/live/2.ts
-      #EXTINF:-1 tvg-id="  " group-title="A",Three
-      http://example.invalid/live/3.ts
-      #EXTINF:-1 group-title="A",Four
-      http://example.invalid/live/4.ts
-      #EXTINF:-1 group-title="A",Five
-      http://example.invalid/live/5.ts
-      """);
+    var sets = Find(EmptyTvgIdCase);
 
     Assert.Empty(sets);
   }
@@ -72,15 +153,7 @@ public class DuplicateFinderTests
   [Fact]
   public void TvgIdComparison_IsExact()
   {
-    var sets = Find("""
-      #EXTM3U
-      #EXTINF:-1 tvg-id="a.de" group-title="A",One
-      http://example.invalid/live/1.ts
-      #EXTINF:-1 tvg-id="a.de " group-title="A",Two
-      http://example.invalid/live/2.ts
-      #EXTINF:-1 tvg-id="A.de" group-title="A",Three
-      http://example.invalid/live/3.ts
-      """);
+    var sets = Find(TvgIdExactCase);
 
     var set = Assert.Single(sets);
     Assert.Equal(new[] { "One", "Two" }, set.Entries.Select(e => e.Name));
@@ -89,17 +162,7 @@ public class DuplicateFinderTests
   [Fact]
   public void NearMissAddresses_AreNotDuplicates()
   {
-    var sets = Find("""
-      #EXTM3U
-      #EXTINF:-1 group-title="A",One
-      http://example.invalid/live/user/pass/1001.ts
-      #EXTINF:-1 group-title="A",Two
-      http://example.invalid/live/user/pass/10010.ts
-      #EXTINF:-1 group-title="A",Three
-      http://example.invalid/play?id=5&q=hd
-      #EXTINF:-1 group-title="A",Four
-      http://example.invalid/play?id=5&q=sd
-      """);
+    var sets = Find(NearMissAddressCase);
 
     Assert.Empty(sets);
   }
@@ -107,15 +170,7 @@ public class DuplicateFinderTests
   [Fact]
   public void AddressAfterOptionLines_IsUsed()
   {
-    var sets = Find("""
-      #EXTM3U
-      #EXTINF:-1 group-title="A",One
-      #EXTVLCOPT:http-user-agent=X
-      #EXTVLCOPT:http-referrer=http://example.invalid/
-      http://example.invalid/live/9.ts
-      #EXTINF:-1 group-title="B",Two
-      http://example.invalid/live/9.ts
-      """);
+    var sets = Find(OptionLinesCase);
 
     var set = Assert.Single(sets);
     Assert.Equal(new[] { "One", "Two" }, set.Entries.Select(e => e.Name));
@@ -126,17 +181,7 @@ public class DuplicateFinderTests
   [Fact]
   public void EntryInBothRules_AppearsInOneSetOnly()
   {
-    var sets = Find("""
-      #EXTM3U
-      #EXTINF:-1 tvg-id="a.de" group-title="A",One
-      http://example.invalid/live/1.ts
-      #EXTINF:-1 tvg-id="a.de" group-title="B",Two
-      http://example.invalid/live/1.ts
-      #EXTINF:-1 group-title="C",Three
-      http://example.invalid/live/1.ts
-      #EXTINF:-1 tvg-id="a.de" group-title="D",Four
-      http://example.invalid/live/4.ts
-      """);
+    var sets = Find(BothRulesCase);
 
     var set = Assert.Single(sets);
     Assert.Equal(new[] { 0, 1, 2, 3 }, set.Entries.Select(e => e.Index));
@@ -146,13 +191,7 @@ public class DuplicateFinderTests
   [Fact]
   public void TvgIdTextInDisplayName_IsNotAnAttribute()
   {
-    var sets = Find("""
-      #EXTM3U
-      #EXTINF:-1 group-title="A",One tvg-id="a.de"
-      http://example.invalid/live/1.ts
-      #EXTINF:-1 group-title="A",Two tvg-id="a.de"
-      http://example.invalid/live/2.ts
-      """);
+    var sets = Find(TvgIdInNameCase);
 
     Assert.Empty(sets);
   }
@@ -160,13 +199,7 @@ public class DuplicateFinderTests
   [Fact]
   public void UniqueEntries_YieldEmptyResult()
   {
-    var entries = PlaylistEntryFixture.Read("""
-      #EXTM3U
-      #EXTINF:-1 tvg-id="a.de" group-title="A",One
-      http://example.invalid/live/1.ts
-      #EXTINF:-1 tvg-id="b.de" group-title="A",Two
-      http://example.invalid/live/2.ts
-      """);
+    var entries = PlaylistEntryFixture.Read(UniqueCase);
     var before = entries.ToList();
 
     Assert.Empty(DuplicateFinder.Find(entries));
@@ -176,13 +209,7 @@ public class DuplicateFinderTests
   [Fact]
   public void Find_DoesNotModifyInput()
   {
-    var entries = PlaylistEntryFixture.Read("""
-      #EXTM3U
-      #EXTINF:-1 tvg-id="a.de " group-title="A",One
-      http://example.invalid/live/1.ts
-      #EXTINF:-1 tvg-id="a.de" group-title="B",Two
-      http://example.invalid/live/1.ts
-      """);
+    var entries = PlaylistEntryFixture.Read(UntrimmedCase);
     var before = entries.ToList();
 
     Assert.Single(DuplicateFinder.Find(entries));
