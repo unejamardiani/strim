@@ -41,6 +41,30 @@ public static class PlaylistEndpoints
       return Results.Ok(items.OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.CreatedAt));
     });
 
+    // Read-only facts for the playlist list, from stored values only. The source address is reduced
+    // to its host; the address itself and the share code never leave this route.
+    playlists.MapGet("/overview", async (ClaimsPrincipal user, AppDbContext db) =>
+    {
+      var userId = user.UserId();
+      var items = await db.Playlists.Where(p => p.OwnerId == userId).ToListAsync();
+      return Results.Ok(items
+        .OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.CreatedAt)
+        .Select(p => new
+        {
+          id = p.Id,
+          name = p.Name,
+          groupCount = p.GroupCount > 0 ? p.GroupCount : (int?)null,
+          groupsOn = p.GroupCount > 0
+            ? Math.Max(0, p.GroupCount - p.DisabledGroups.Distinct(StringComparer.Ordinal).Count())
+            : (int?)null,
+          totalChannels = p.TotalChannels > 0 ? p.TotalChannels : (int?)null,
+          updatedAt = p.UpdatedAt,
+          lastViewedUtc = p.LastViewedUtc,
+          lastRefreshedUtc = p.LastRefreshedUtc,
+          sourceHost = SourceHost.FromAddress(p.SourceUrl),
+        }));
+    });
+
     playlists.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
       await FindOwnedAsync(db, id, user) is { } playlist ? Results.Ok(playlist) : Results.NotFound());
 
