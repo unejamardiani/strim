@@ -138,7 +138,10 @@ public class EditorWideLayoutTests
     Assert.DoesNotContain("insertAdjacentHTML", pane);
     Assert.Contains("h('h2', { text: g.title })", pane);
     Assert.Contains("'Loading entries…'", pane);
-    Assert.Contains("'No entries in this group.'", pane);
+    // The empty state follows the server's total (names: [], total: 0), not the group's count in the list.
+    Assert.Contains("pane.status.replaceChildren(page.total === 0 ? h('p', { class: 'search-status', text: 'No entries in this group.' }) : '');", pane);
+    Assert.Contains("pane.done = items.length === 0 || pane.end >= page.total;", pane);
+    Assert.Contains("pane.count.textContent = paneCount(page.total, pane.group);", pane);
     Assert.Contains("h('div', { class: 'notice error', role: 'alert' }", pane);
     Assert.Contains("'aria-label': 'Close entries', onclick: () => closePane(ed)", pane);
   }
