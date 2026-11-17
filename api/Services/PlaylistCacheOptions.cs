@@ -60,7 +60,11 @@ public sealed class PlaylistCacheOptions
   /// <summary>Approximate heap budget for one analysis's search index; above it (or at 0) there is none.</summary>
   public long MaxSearchIndexBytes { get; set; } = 64L * 1024 * 1024;
 
-  /// <summary>Approximate heap budget for the entries of one duplicates and variants report; above it the report is refused.</summary>
+  /// <summary>
+  /// Approximate heap budget for one duplicates and variants report: the keys and indexes the duplicate and variant
+  /// passes hold plus the name, group and quality words of the listed entries, not the entries themselves. Above it
+  /// the report is refused.
+  /// </summary>
   public long MaxReportBytes { get; set; } = 128L * 1024 * 1024;
 
   /// <summary>Maximum number of expensive fetch/parse/generate jobs in this process.</summary>

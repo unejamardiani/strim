@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using Api.Services;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Api.Tests.Integration;
@@ -125,6 +126,80 @@ public class PlaylistReportEndpointTests : IClassFixture<StrimAppFactory>
 
     Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     Assert.Contains("too large for a duplicates and variants report", await response.Content.ReadAsStringAsync());
+  }
+
+  private const string LargeUpstreamUrl = "http://93.184.215.14/get.php?username=u&password=p&type=huge";
+  private const int LargeChannels = 300_000;
+  private const int LargePairs = LargeChannels / 1000;
+
+  /// <summary>
+  /// 300,300 entries: 300,000 channels with their own tvg-id and address; every 1000th channel also has an SD entry
+  /// that shares its tvg-id, so it forms one duplicate set and one variant group.
+  /// </summary>
+  private static string LargePlaylist(int padding = 0)
+  {
+    var pad = padding > 0 ? $" x-note=\"{new string('n', padding)}\"" : "";
+    var text = new StringBuilder("#EXTM3U\n", 40 * 1024 * 1024);
+    for (var i = 0; i < LargeChannels; i++)
+    {
+      var paired = i % 1000 == 0;
+      text.Append($"#EXTINF:-1 tvg-id=\"c{i}\"{pad} group-title=\"Group {i % 40}\",Channel {i}{(paired ? " HD" : "")}\nhttp://line.example/live/u/p/{i}.ts\n");
+      if (paired) text.Append($"#EXTINF:-1 tvg-id=\"c{i}\" group-title=\"Backup\",Channel {i} SD\nhttp://line.example/live/u/p/{i}b.ts\n");
+    }
+    return text.ToString();
+  }
+
+  [Fact]
+  public async Task Report_LargePlaylist_IsReportedWithDefaultBudget()
+  {
+    using var own = new StrimAppFactory();
+    own.UpstreamPlaylists[LargeUpstreamUrl] = LargePlaylist();
+    Assert.Equal(128L * 1024 * 1024, own.Services.GetRequiredService<PlaylistFileCache>().MaxReportBytes);
+
+    var response = await new ApiClient(own.CreateClient()).PostAsync("/api/playlist/report", new { sourceUrl = LargeUpstreamUrl });
+    var body = await response.Content.ReadAsStringAsync();
+
+    Assert.True(response.StatusCode == HttpStatusCode.OK, body);
+    var report = (await response.Content.ReadFromJsonAsync<ReportDto>())!;
+    Assert.Equal(LargeChannels + LargePairs, report.TotalEntries);
+    Assert.Equal(LargePairs, report.DuplicateSetCount);
+    Assert.Equal(2 * LargePairs, report.DuplicateEntryCount);
+    Assert.Equal(LargePairs, report.VariantGroupCount);
+    Assert.Equal(2 * LargePairs, report.VariantEntryCount);
+    Assert.False(report.Truncated);
+    Assert.Equal(LargePairs, report.DuplicateSets.Count);
+    Assert.Equal(LargePairs, report.VariantGroups.Count);
+    var last = report.DuplicateSets[^1];
+    Assert.Equal(new[] { "Channel 299000 HD", "Channel 299000 SD" }, last.Entries.Select(e => e.Name));
+    Assert.Equal(new[] { "Group 0", "Backup" }, last.Groups);
+
+    // Neither the entries' addresses nor the source address and its credentials reach the response or the log
+    // (the fetcher logs the bare host on purpose).
+    Assert.Contains(own.LogEntries, entry => entry.Contains("Downloaded playlist source", StringComparison.Ordinal));
+    foreach (var address in new[] { "line.example", LargeUpstreamUrl, "get.php", "password=" })
+    {
+      Assert.DoesNotContain(address, body, StringComparison.OrdinalIgnoreCase);
+      Assert.DoesNotContain(own.LogEntries, entry => entry.Contains(address, StringComparison.OrdinalIgnoreCase));
+    }
+  }
+
+  [Fact]
+  public async Task Report_SecondRequestDuringRunningReport_GetsBusyAnswer()
+  {
+    using var own = new StrimAppFactory();
+    using var app = own.WithWebHostBuilder(builder => builder.UseSetting("PlaylistCache:QueueTimeoutSeconds", "1"));
+    // Padded entries make each of the report's passes slow enough to outlast the second request's 1 s queue wait.
+    own.UpstreamPlaylists[LargeUpstreamUrl] = LargePlaylist(padding: 300);
+    var client = new ApiClient(app.CreateClient());
+
+    var first = client.PostAsync("/api/playlist/report", new { sourceUrl = LargeUpstreamUrl });
+    // The upstream is fetched inside the job gate, so once it is asked the first report holds the gate.
+    while (!own.UpstreamRequests.Contains(LargeUpstreamUrl) && !first.IsCompleted) await Task.Delay(5);
+    var second = await client.PostAsync("/api/playlist/report", new { sourceUrl = ReportUpstreamUrl });
+
+    Assert.Equal(HttpStatusCode.TooManyRequests, second.StatusCode);
+    Assert.Contains("busy", await second.Content.ReadAsStringAsync());
+    Assert.Equal(HttpStatusCode.OK, (await first).StatusCode);
   }
 
   [Fact]

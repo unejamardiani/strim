@@ -146,7 +146,11 @@ public static class PlaylistReport
   }
 }
 
-/// <summary>The entries of a playlist pass <c>PlaylistCache:MaxReportBytes</c>; the message is safe to show.</summary>
+/// <summary>
+/// What a report holds passes <c>PlaylistCache:MaxReportBytes</c>: in the endpoint's multi-pass build the finder data
+/// and the details of the listed entries, in <see cref="PlaylistProcessor.ReadEntriesFromFileAsync"/> the entries
+/// read. The message is safe to show.
+/// </summary>
 public sealed class PlaylistReportTooLargeException : InvalidOperationException
 {
   public PlaylistReportTooLargeException()
