@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Api.Models;
 
@@ -286,6 +287,28 @@ public static class PlaylistProcessor
     CancellationToken cancellationToken,
     int maxLineLengthChars = DefaultMaxLineLengthChars)
   {
+    var entries = new List<PlaylistEntry>();
+    long estimatedBytes = 0;
+    await foreach (var entry in StreamEntriesFromFileAsync(filePath, cancellationToken, maxLineLengthChars))
+    {
+      estimatedBytes += EstimatedEntryBytes(entry);
+      if (estimatedBytes > maxBytes) throw new PlaylistReportTooLargeException();
+      entries.Add(entry);
+    }
+    return entries;
+  }
+
+  /// <summary>
+  /// Yields the entries of a playlist file one by one with the rules of <see cref="ReadEntriesFromFileAsync"/>,
+  /// without a memory budget and without collecting them, so a caller can read the same file several times.
+  /// <c>Index</c> is the 0-based position of the entry in the file.
+  /// </summary>
+  public static async IAsyncEnumerable<PlaylistEntry> StreamEntriesFromFileAsync(
+    string filePath,
+    [EnumeratorCancellation] CancellationToken cancellationToken,
+    int maxLineLengthChars = DefaultMaxLineLengthChars)
+  {
+    cancellationToken.ThrowIfCancellationRequested();
     await using var stream = new FileStream(
       filePath,
       FileMode.Open,
@@ -295,7 +318,23 @@ public static class PlaylistProcessor
       FileOptions.Asynchronous | FileOptions.SequentialScan);
     using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 128 * 1024, leaveOpen: false);
     using var lines = new BoundedLineReader(reader, maxLineLengthChars);
-    return await ReadEntriesAsync(lines, maxBytes, cancellationToken);
+    var index = 0;
+    string? pending = null;
+    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
+    {
+      pending = null;
+      if (!IsExtinf(line)) continue;
+
+      (var address, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
+      yield return new PlaylistEntry(
+        index++,
+        PlaylistSearchText.DisplayName(line),
+        ExtractGroupTitle(line, extGrp),
+        PlaylistSearchText.AttributeValue(line, "tvg-id"),
+        address ?? string.Empty);
+      // A buffered read does not look at the token, so a cancelled caller gets no further entry.
+      cancellationToken.ThrowIfCancellationRequested();
+    }
   }
 
   /// <summary>
@@ -306,30 +345,6 @@ public static class PlaylistProcessor
     2 * (EntryOverheadBytes + 2L * (entry.Name.Length + entry.GroupTitle.Length + (entry.TvgId?.Length ?? 0) + entry.Address.Length));
 
   private const int EntryOverheadBytes = 160;
-
-  private static async ValueTask<List<PlaylistEntry>> ReadEntriesAsync(BoundedLineReader lines, long maxBytes, CancellationToken cancellationToken)
-  {
-    var entries = new List<PlaylistEntry>();
-    long estimatedBytes = 0;
-    string? pending = null;
-    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
-    {
-      pending = null;
-      if (!IsExtinf(line)) continue;
-
-      (var address, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
-      var entry = new PlaylistEntry(
-        entries.Count,
-        PlaylistSearchText.DisplayName(line),
-        ExtractGroupTitle(line, extGrp),
-        PlaylistSearchText.AttributeValue(line, "tvg-id"),
-        address ?? string.Empty);
-      estimatedBytes += EstimatedEntryBytes(entry);
-      if (estimatedBytes > maxBytes) throw new PlaylistReportTooLargeException();
-      entries.Add(entry);
-    }
-    return entries;
-  }
 
   public static string DeriveNameFromUrl(string? url)
   {
