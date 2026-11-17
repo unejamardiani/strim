@@ -715,6 +715,48 @@ select.input {
   font-size: 13px;
 }
 
+/* Editor split: below 1100px the wrappers produce no box, so the single 760px column is unchanged.
+   From 1100px the editor page widens to 1440px: the group column (toolbar, results, list) on the
+   left, the reserved entry pane on the right. */
+.editor-split,
+.editor-groups {
+  display: contents;
+}
+
+.entry-pane {
+  display: none;
+}
+
+@media (min-width: 1100px) {
+  .page:has(> .editor-split) {
+    max-width: 1440px;
+  }
+
+  .editor-split {
+    display: grid;
+    grid-template-columns: minmax(0, 560px) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  .editor-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+  }
+
+  .entry-pane {
+    display: block;
+    position: sticky;
+    top: calc(var(--topbar-h) + 8px);
+    height: calc(100vh - var(--topbar-h) - var(--dock-h) - 52px - var(--safe-bottom));
+    min-height: 240px;
+    border: 1px dashed var(--line);
+    border-radius: 22px;
+  }
+}
+
 /* Virtualised group list inside one card: the page scrolls, rows are absolutely positioned. */
 .group-list {
   position: relative;

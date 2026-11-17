@@ -891,7 +891,11 @@ function renderEditor() {
     }
     nodes.push(h('div', { class: 'report-line' },
       h('button', { class: 'btn btn-ghost', type: 'button', 'aria-haspopup': 'dialog', onclick: () => openReport(ed) }, 'Duplicates & variants')));
-    nodes.push(...pickerNodes(ed));
+    // Below 1100px both wrappers are display: contents, so the narrow layout is unchanged.
+    // The pane is reserved for the entries of a group and stays empty for now.
+    nodes.push(h('div', { class: 'editor-split' },
+      h('div', { class: 'editor-groups' }, ...pickerNodes(ed)),
+      h('aside', { class: 'entry-pane', 'aria-hidden': 'true' })));
   }
 
   app.replaceChildren(...nodes);

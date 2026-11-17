@@ -88,6 +88,16 @@ Short, plain, second person. "Switch off the groups you never watch", "All on / 
 └──────────────────────────────┘
 ```
 
+Wide editor (from 1100px, CSS only): once the groups are loaded, the editor page widens to a
+1440px maximum (same 18px padding) and the picker becomes two columns with a 24px gap. Left, up
+to 560px: sticky filters, search results and the group list, so search, filters and All on/off
+stay reachable above the list. Right, the rest: the entry pane, a sticky area reserved for the
+entries of a group (a dashed 22px outline while it is empty). The head, player link card and
+source line span both columns; the dock stays centred at 736px. Below 1100px, and on every other
+editor route (playlists, new playlist), the 760px page applies unchanged and the entry pane is not
+shown. Only the editor changes: the site pages keep their 1080px main column and the guides their
+700px column.
+
 ### Site (`/`, guides: site.css)
 
 ```
