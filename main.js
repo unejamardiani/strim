@@ -1569,9 +1569,12 @@ function paneVisible() {
 WIDE_EDITOR.addEventListener('change', () => {
   if (!pane.ed) return;
   if (!WIDE_EDITOR.matches) {
+    // Only a pending page is aborted and its loading indicator cleared; an error and its
+    // "Try again" button stay, because pane.failed still blocks paging until the retry.
     const c = pane.controller;
+    if (!c) return;
     pane.controller = null;
-    c?.abort();
+    c.abort();
     pane.status?.replaceChildren('');
   } else if (!pane.end && !pane.done) {
     loadEntryPage(pane.ed, 'next');
