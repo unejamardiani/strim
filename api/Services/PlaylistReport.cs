@@ -48,6 +48,102 @@ public static class PlaylistReport
       duplicateSets,
       variantGroups);
   }
+
+  /// <summary>
+  /// How often <see cref="BuildStreamingAsync"/> reads its source: twice for the duplicates, twice for the variants
+  /// and once to collect the details of the listed entries.
+  /// </summary>
+  public const int StreamingPassCount = StreamingDuplicateFinder.PassCount + StreamingVariantFinder.PassCount + 1;
+
+  // Estimates of the heap the final pass holds, with room for growth slack.
+  private const long PerWantedBytes = 48;   // one slot of the wanted-index dictionary, doubled for growth
+  private const long PerDetailBytes = 160;  // a report entry, its two string headers and its quality-word list
+  private const long PerListedBytes = 96;   // a listed set or group, its entry list and its group list
+  private const long PerSlotBytes = 16;     // one slot in an entry, group or word list, doubled for growth
+
+  /// <summary>
+  /// Builds the same report as <see cref="Build"/> from a source that is read <see cref="StreamingPassCount"/> times
+  /// and must yield the same entries each time, without holding the entries. Only the name, group and quality words
+  /// of the entries of the listed sets are kept; addresses never are. The bytes held (finder data and collected
+  /// details) are added to <paramref name="counter"/>; once they pass <paramref name="maxBytes"/> the build stops with
+  /// <see cref="PlaylistReportTooLargeException"/>.
+  /// </summary>
+  public static async Task<PlaylistReportResponse> BuildStreamingAsync(
+    Func<CancellationToken, IAsyncEnumerable<PlaylistEntry>> source,
+    long maxBytes,
+    int maxListedSetsPerKind,
+    CancellationToken cancellationToken,
+    HeldBytesCounter? counter = null)
+  {
+    counter ??= new HeldBytesCounter();
+    void Hold(long bytes)
+    {
+      counter.Add(bytes);
+      if (counter.Bytes > maxBytes) throw new PlaylistReportTooLargeException();
+    }
+
+    cancellationToken.ThrowIfCancellationRequested();
+    var duplicates = await StreamingDuplicateFinder.FindAsync(source, cancellationToken, counter: counter);
+    Hold(0);
+    var variants = await StreamingVariantFinder.FindAsync(source, cancellationToken);
+    Hold(variants.HeldBytes);
+
+    var listedSets = duplicates.Sets.Take(maxListedSetsPerKind).ToList();
+    var listedGroups = variants.Groups.Take(maxListedSetsPerKind).ToList();
+    var wanted = new Dictionary<int, ReportEntry?>();
+    foreach (var index in listedSets.SelectMany(set => set).Concat(listedGroups.SelectMany(group => group.Members)))
+    {
+      if (wanted.TryAdd(index, null)) Hold(PerWantedBytes);
+    }
+
+    var entryCount = 0;
+    await foreach (var entry in source(cancellationToken).WithCancellation(cancellationToken))
+    {
+      cancellationToken.ThrowIfCancellationRequested();
+      if (wanted.ContainsKey(entryCount))
+      {
+        var words = VariantFinder.Detect(entry.Name).QualityWords;
+        Hold(PerDetailBytes + 2L * (entry.Name.Length + entry.GroupTitle.Length) + PerSlotBytes * words.Count);
+        wanted[entryCount] = new ReportEntry(entry.Name, entry.GroupTitle, words);
+      }
+      entryCount++;
+    }
+
+    List<ReportEntry> Details(IReadOnlyList<int> members)
+    {
+      var details = members.Select(index => wanted[index]
+        ?? throw new InvalidOperationException("The source yielded fewer entries than in the first pass.")).ToList();
+      Hold(PerListedBytes + PerSlotBytes * members.Count);
+      return details;
+    }
+    List<string> Groups(List<ReportEntry> details)
+    {
+      var groups = details.Select(e => e.Group).Distinct(StringComparer.Ordinal).ToList();
+      Hold(PerSlotBytes * groups.Count);
+      return groups;
+    }
+
+    var duplicateSets = listedSets.Select(set =>
+    {
+      var details = Details(set);
+      return new ReportDuplicateSet(Groups(details), details);
+    }).ToList();
+    var variantGroups = listedGroups.Select(group =>
+    {
+      var details = Details(group.Members);
+      return new ReportVariantGroup(group.BaseName, Groups(details), details);
+    }).ToList();
+
+    return new PlaylistReportResponse(
+      entryCount,
+      duplicates.SetCount,
+      duplicates.EntryCount,
+      variants.GroupCount,
+      variants.EntryCount,
+      duplicates.SetCount > duplicateSets.Count || variants.GroupCount > variantGroups.Count,
+      duplicateSets,
+      variantGroups);
+  }
 }
 
 /// <summary>The entries of a playlist pass <c>PlaylistCache:MaxReportBytes</c>; the message is safe to show.</summary>
