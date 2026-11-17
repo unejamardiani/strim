@@ -96,6 +96,11 @@ entries of a group (a dashed 22px outline while it is empty). The head, player l
 source line span both columns; the dock stays centred at 736px. Below 1100px, and on the new playlist
 route, the 760px page applies unchanged and the entry pane is not shown.
 
+Playlist card facts (from 768px): below the status line a quiet line in `--ink-3` (numbers in
+`--ink-2`, tabular figures) shows the stored facts from `/api/playlists/overview`: "12 of 40 groups
+on", "8,214 entries", "Changed 2 d ago", "Player fetched 3 h ago" and the source host. A fact that
+is not stored is left out. Below 768px the line is hidden, so the phone card is unchanged.
+
 Wide playlist list (from 1024px, CSS only): when the list (`#/`) has playlists, its page widens to
 a 1200px maximum (same 18px padding) and the playlist cards form a grid,
 `repeat(auto-fill, minmax(340px, 1fr))` with the list's 14px gap: two cards per row at 1024px,

@@ -480,6 +480,31 @@ select.input {
   font-variant-numeric: tabular-nums;
 }
 
+/* Stored facts (#234): hidden on phones so the phone card stays as it is; one quiet line from 768px. */
+.facts {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .facts:not(:empty) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .facts .num {
+    color: var(--ink-2);
+  }
+
+  .facts-host {
+    overflow-wrap: anywhere;
+  }
+}
+
 .meta .warn {
   color: var(--warn-ink);
   font-weight: 650;
