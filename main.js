@@ -36,6 +36,7 @@ const state = {
   user: null,
   providers: [],
   playlists: [],
+  overview: new Map(),
   shareBase: '',
   editor: null,
 };
@@ -396,6 +397,7 @@ async function signOut() {
   csrfToken = null;
   state.user = null;
   state.playlists = [];
+  state.overview = new Map();
   if (state.editor?.id) closeEditor();
   accountDialog.close();
   toast('Signed out');
@@ -531,6 +533,36 @@ function showHome() {
   }
 
   app.replaceChildren(head, h('div', { class: 'playlist-list' }, playlists.map(playlistCard)));
+  loadOverview();
+}
+
+// Stored facts per playlist from /playlists/overview. If the call fails the cards stay as they are.
+async function loadOverview() {
+  try {
+    const data = await api('/playlists/overview');
+    if (!Array.isArray(data)) return;
+    state.overview = new Map(data.map((item) => [item.id, item]));
+  } catch {
+    return;
+  }
+  for (const node of app.querySelectorAll('.playlist-card .facts')) {
+    node.replaceWith(playlistFacts(node.dataset.id));
+  }
+}
+
+// Only stored values: a null fact is left out. The source is shown by host only.
+function playlistFacts(id) {
+  const item = state.overview.get(id);
+  const parts = [];
+  const count = (value, label) => h('span', null, h('span', { class: 'num', text: fmt(value) }), label);
+  if (item) {
+    if (item.groupCount != null && item.groupsOn != null) parts.push(count(item.groupsOn, ` of ${plural(item.groupCount, 'group')} on`));
+    if (item.totalChannels != null) parts.push(count(item.totalChannels, item.totalChannels === 1 ? ' entry' : ' entries'));
+    if (item.updatedAt) parts.push(h('span', { text: `Changed ${relativeTime(item.updatedAt)}` }));
+    if (item.lastViewedUtc) parts.push(h('span', { text: `Player fetched ${relativeTime(item.lastViewedUtc)}` }));
+    if (item.sourceHost) parts.push(h('span', { class: 'facts-host', text: item.sourceHost }));
+  }
+  return h('div', { class: 'facts', dataset: { id } }, parts);
 }
 
 function playlistMeta(playlist) {
@@ -582,7 +614,8 @@ function playlistCard(playlist) {
     h('div', { class: 'playlist-card-head' },
       h('div', null,
         h('h2', { class: 'playlist-title' }, h('a', { href: `#/p/${playlist.id}`, text: playlist.name || 'Untitled' })),
-        playlistMeta(playlist)),
+        playlistMeta(playlist),
+        playlistFacts(playlist.id)),
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Actions for ${playlist.name}`, onclick: () => openPlaylistMenu(playlist.id) }, icon('more'))),
     linkBox(playlist),
     h('div', { class: 'row-actions' },
