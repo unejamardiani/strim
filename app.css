@@ -422,6 +422,24 @@ select.input {
   gap: 14px;
 }
 
+/* Wide playlist list: from 1024px the list route widens to 1200px and the cards form a grid in
+   DOM order (so tab order follows the rows). auto-fill keeps empty tracks, so one or two cards
+   stay one column wide instead of stretching. Below 1024px the 760px single column is unchanged. */
+@media (min-width: 1024px) {
+  .page:has(> .playlist-list) {
+    max-width: 1200px;
+  }
+
+  .playlist-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  }
+
+  .playlist-card > .row-actions {
+    margin-top: auto;
+  }
+}
+
 .playlist-card {
   display: flex;
   flex-direction: column;
