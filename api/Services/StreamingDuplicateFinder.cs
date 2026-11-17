@@ -3,14 +3,6 @@ namespace Api.Services;
 /// <summary>Duplicate sets as entry indices, in the order of each set's first entry, and their counts.</summary>
 public sealed record DuplicateIndexSets(IReadOnlyList<IReadOnlyList<int>> Sets, int SetCount, int EntryCount);
 
-/// <summary>Counts the bytes the streaming finder holds, so a caller can compare them with its budget.</summary>
-public sealed class HeldBytesCounter
-{
-  public long Bytes { get; private set; }
-
-  internal void Add(long bytes) => Bytes += bytes;
-}
-
 /// <summary>
 /// Finds the same duplicate sets as <see cref="DuplicateFinder.Find"/> without holding the entries. The first pass
 /// keeps a fingerprint per distinct trimmed tvg-id and address and flags entries whose fingerprint occurs more than
@@ -23,22 +15,13 @@ public static class StreamingDuplicateFinder
 
   private const byte TvgIdFlag = 1;
   private const byte AddressFlag = 2;
-  // Estimates of the heap held, with room for the growth slack of lists and dictionaries.
-  private const long PerEntryBytes = 10;      // parent index (4) and flags (1), doubled for list growth
-  private const long PerKeyBytes = 64;        // one fingerprint dictionary slot (about 32), doubled for growth
-  private const long PerValueBytes = 96;      // bucket list, value tuple and string overhead
-  private const long PerGroupBytes = 128;     // a root's member list with its array, dictionary slot and order slot
-  private const long PerMemberBytes = 8;      // one index in a member list, doubled for list growth
-  private const long PerSetBytes = 16;        // one slot in the result list, doubled for growth
 
   public static async Task<DuplicateIndexSets> FindAsync(
     Func<CancellationToken, IAsyncEnumerable<PlaylistEntry>> source,
     CancellationToken cancellationToken,
-    Func<string, ulong>? fingerprint = null,
-    HeldBytesCounter? counter = null)
+    Func<string, ulong>? fingerprint = null)
   {
     fingerprint ??= Fnv1a64;
-    counter ??= new HeldBytesCounter();
 
     var parent = new List<int>();
     var flags = new List<byte>();
@@ -50,9 +33,8 @@ public static class StreamingDuplicateFinder
       var index = parent.Count;
       parent.Add(index);
       flags.Add(0);
-      counter.Add(PerEntryBytes);
-      Flag(firstByTvgId, entry.TvgId, TvgIdFlag, index, flags, fingerprint, counter);
-      Flag(firstByAddress, entry.Address, AddressFlag, index, flags, fingerprint, counter);
+      Flag(firstByTvgId, entry.TvgId, TvgIdFlag, index, flags, fingerprint);
+      Flag(firstByAddress, entry.Address, AddressFlag, index, flags, fingerprint);
     }
     firstByTvgId = firstByAddress = null; // Pass 2 confirms the flagged entries on their real values.
 
@@ -63,8 +45,8 @@ public static class StreamingDuplicateFinder
     {
       cancellationToken.ThrowIfCancellationRequested();
       if (position >= parent.Count) throw new InvalidOperationException("The source yielded more entries than in the first pass.");
-      if ((flags[position] & TvgIdFlag) != 0) Confirm(tvgIdValues, entry.TvgId!.Trim(), position, parent, fingerprint, counter);
-      if ((flags[position] & AddressFlag) != 0) Confirm(addressValues, entry.Address.Trim(), position, parent, fingerprint, counter);
+      if ((flags[position] & TvgIdFlag) != 0) Confirm(tvgIdValues, entry.TvgId!.Trim(), position, parent, fingerprint);
+      if ((flags[position] & AddressFlag) != 0) Confirm(addressValues, entry.Address.Trim(), position, parent, fingerprint);
       position++;
     }
     if (position != parent.Count) throw new InvalidOperationException("The source yielded fewer entries than in the first pass.");
@@ -79,10 +61,8 @@ public static class StreamingDuplicateFinder
       {
         members[root] = list = new List<int>();
         order.Add(root);
-        counter.Add(PerGroupBytes); // counted even when it stays a singleton and is dropped below
       }
       list.Add(i);
-      counter.Add(PerMemberBytes);
     }
 
     var sets = new List<IReadOnlyList<int>>();
@@ -93,12 +73,11 @@ public static class StreamingDuplicateFinder
       if (list.Count < 2) continue;
       sets.Add(list);
       entryCount += list.Count;
-      counter.Add(PerSetBytes);
     }
     return new DuplicateIndexSets(sets, sets.Count, entryCount);
   }
 
-  private static void Flag(Dictionary<ulong, int> firstByKey, string? value, byte flag, int index, List<byte> flags, Func<string, ulong> fingerprint, HeldBytesCounter counter)
+  private static void Flag(Dictionary<ulong, int> firstByKey, string? value, byte flag, int index, List<byte> flags, Func<string, ulong> fingerprint)
   {
     var key = value?.Trim();
     if (string.IsNullOrEmpty(key)) return;
@@ -111,11 +90,10 @@ public static class StreamingDuplicateFinder
     else
     {
       firstByKey[print] = index;
-      counter.Add(PerKeyBytes);
     }
   }
 
-  private static void Confirm(Dictionary<ulong, List<(string Value, int First)>> valuesByPrint, string value, int index, List<int> parent, Func<string, ulong> fingerprint, HeldBytesCounter counter)
+  private static void Confirm(Dictionary<ulong, List<(string Value, int First)>> valuesByPrint, string value, int index, List<int> parent, Func<string, ulong> fingerprint)
   {
     var print = fingerprint(value);
     if (!valuesByPrint.TryGetValue(print, out var values)) valuesByPrint[print] = values = new List<(string, int)>();
@@ -128,7 +106,6 @@ public static class StreamingDuplicateFinder
       }
     }
     values.Add((value, index));
-    counter.Add(PerValueBytes + 2L * value.Length);
   }
 
   private static int Root(List<int> parent, int index)
