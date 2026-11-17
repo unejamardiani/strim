@@ -98,8 +98,10 @@ public class EditorWideLayoutTests
     Assert.Contains("if (!WIDE_EDITOR.matches) return;", pane);
     Assert.Contains("return WIDE_EDITOR.matches && pane.scroller?.clientHeight > 0;", pane);
     Assert.Contains("if (!s || !paneVisible()) return;", pane);
-    Assert.Contains("WIDE_EDITOR.addEventListener('change',", pane);
-    Assert.Contains("c?.abort();", pane);
+    var onWidth = pane[pane.IndexOf("WIDE_EDITOR.addEventListener('change',", StringComparison.Ordinal)..];
+    // Narrowing aborts only a pending page; an error and its "Try again" button stay.
+    Assert.Contains("if (!c) return;", onWidth);
+    Assert.Contains("c.abort();", onWidth);
   }
 
   [Fact]
