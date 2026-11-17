@@ -1208,6 +1208,7 @@ function mountPicker(ed) {
   picker.rows = [];
   picker.list.addEventListener('change', onRowToggle);
   picker.list.addEventListener('click', onRowSelect);
+  picker.list.addEventListener('keydown', onSwitchEnter);
   pane.el = document.querySelector('.entry-pane');
   measureRowHeight();
   updateView(false);
@@ -1494,9 +1495,11 @@ document.addEventListener('keydown', (e) => {
 
 // ---------- Entry pane (wide editor, #217) ----------
 // One page of the selected group's names at a time from /playlist/group-entries, so the browser
-// never holds the whole playlist. Names are inserted as text, never as HTML.
+// never holds the whole playlist. At most ENTRY_PANE_PAGES pages stay rendered: scrolling down
+// drops the top page, scrolling back up fetches it again. Names are inserted as text, never as HTML.
 
 const WIDE_EDITOR = window.matchMedia('(min-width: 1100px)');
+const ENTRY_PANE_PAGES = 3;
 const pane = { el: null };
 
 // The row is a <label>: on wide screens a click outside the switch selects the group instead of
@@ -1510,9 +1513,16 @@ function onRowSelect(e) {
   openPane(ed, g);
 }
 
+// A native checkbox toggles on Space only; Enter on the switch toggles it too and never opens the pane.
+function onSwitchEnter(e) {
+  if (e.key !== 'Enter' || e.repeat || !e.target.classList?.contains('toggle')) return;
+  e.preventDefault();
+  e.target.click();
+}
+
 function resetPane() {
   pane.controller?.abort();
-  Object.assign(pane, { ed: null, group: null, list: null, count: null, status: null, scroller: null, offset: 0, done: false, failed: false, controller: null });
+  Object.assign(pane, { ed: null, group: null, list: null, count: null, status: null, scroller: null, start: 0, end: 0, pages: [], done: false, failed: null, controller: null });
 }
 
 function paneCount(total, g) {
@@ -1537,7 +1547,7 @@ function openPane(ed, g) {
   pane.el.classList.add('open');
   pane.el.removeAttribute('aria-hidden');
   paintRows();
-  loadEntryPage(ed);
+  loadEntryPage(ed, 'next');
 }
 
 function closePane(ed) {
@@ -1551,36 +1561,71 @@ function closePane(ed) {
 
 function loadMoreIfNeeded(ed) {
   const s = pane.scroller;
-  if (s && s.scrollTop + s.clientHeight >= s.scrollHeight - 240) loadEntryPage(ed);
+  if (!s) return;
+  if (s.scrollTop + s.clientHeight >= s.scrollHeight - 240) loadEntryPage(ed, 'next');
+  else if (s.scrollTop < 240 && pane.start > 0) loadEntryPage(ed, 'prev');
+}
+
+// Removes the first or last `n` rendered entries and keeps the scroll position by hand
+// (.entry-scroll has overflow-anchor: none, so the browser does not adjust it as well).
+function dropEntries(n, fromTop) {
+  const s = pane.scroller;
+  const before = s.scrollHeight;
+  for (let i = 0; i < n; i++) (fromTop ? pane.list.firstElementChild : pane.list.lastElementChild)?.remove();
+  if (fromTop) s.scrollTop -= before - s.scrollHeight;
 }
 
 // Never more than one request at a time; a late response for a group no longer shown is discarded.
-async function loadEntryPage(ed) {
-  if (pane.ed !== ed || pane.controller || pane.done || pane.failed) return;
+async function loadEntryPage(ed, direction) {
+  if (pane.ed !== ed || pane.controller || pane.failed) return;
+  const prev = direction === 'prev';
+  if (prev ? pane.start === 0 : pane.done) return;
+  const offset = prev ? Math.max(0, pane.start - MAX_SEARCH_RESULTS) : pane.end;
+  const limit = prev ? pane.start - offset : MAX_SEARCH_RESULTS;
   const controller = new AbortController();
   pane.controller = controller;
-  const offset = pane.offset;
-  pane.status.replaceChildren(h('p', { class: 'search-status', text: offset ? 'Loading more…' : 'Loading entries…' }));
+  pane.status.replaceChildren(h('p', { class: 'search-status', text: pane.end ? 'Loading more…' : 'Loading entries…' }));
   try {
-    const query = new URLSearchParams({ cacheKey: ed.cacheKey, group: pane.group.key, offset: String(offset), limit: String(MAX_SEARCH_RESULTS) });
+    const query = new URLSearchParams({ cacheKey: ed.cacheKey, group: pane.group.key, offset: String(offset), limit: String(limit) });
     const page = await api(`/playlist/group-entries?${query}`, { signal: controller.signal });
     if (pane.controller !== controller) return;
     pane.controller = null;
-    const names = page.names || [];
-    pane.offset = offset + names.length;
-    pane.done = names.length === 0 || pane.offset >= page.total;
-    pane.list.append(...names.map((name) => h('li', { text: name })));
+    const items = (page.names || []).map((name) => h('li', { text: name }));
+    const s = pane.scroller;
+    if (prev) {
+      const before = s.scrollHeight;
+      pane.list.prepend(...items);
+      s.scrollTop += s.scrollHeight - before;
+      pane.pages.unshift(items.length);
+      pane.start = offset;
+      if (pane.pages.length > ENTRY_PANE_PAGES) {
+        const n = pane.pages.pop();
+        dropEntries(n, false);
+        pane.end -= n;
+        pane.done = false;
+      }
+    } else {
+      pane.list.append(...items);
+      pane.pages.push(items.length);
+      pane.end = offset + items.length;
+      pane.done = items.length === 0 || pane.end >= page.total;
+      if (pane.pages.length > ENTRY_PANE_PAGES) {
+        const n = pane.pages.shift();
+        dropEntries(n, true);
+        pane.start += n;
+      }
+    }
     pane.count.textContent = paneCount(page.total, pane.group);
     pane.status.replaceChildren(page.total === 0 ? h('p', { class: 'search-status', text: 'No entries in this group.' }) : '');
     loadMoreIfNeeded(ed);
   } catch (err) {
     if (isAbort(err) || pane.controller !== controller) return;
     pane.controller = null;
-    pane.failed = true;
+    pane.failed = direction;
     pane.status.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
       h('p', { text: err.message || 'The entries could not be loaded.' }),
       h('div', { class: 'row-actions' },
-        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { pane.failed = false; loadEntryPage(ed); } }, 'Try again'))));
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { const d = pane.failed; pane.failed = null; loadEntryPage(ed, d); } }, 'Try again'))));
   }
 }
 

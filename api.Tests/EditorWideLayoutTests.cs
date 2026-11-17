@@ -87,11 +87,39 @@ public class EditorWideLayoutTests
     // Only the existing read-only endpoint from #215; no new API.
     Assert.Single(Regex.Matches(pane, @"api\(`/playlist/"));
     Assert.Contains("api(`/playlist/group-entries?${query}`, { signal: controller.signal })", pane);
-    Assert.Contains("limit: String(MAX_SEARCH_RESULTS)", pane);
-    Assert.Contains("if (pane.ed !== ed || pane.controller || pane.done || pane.failed) return;", pane);
+    Assert.Contains("const limit = prev ? pane.start - offset : MAX_SEARCH_RESULTS;", pane);
+    Assert.Contains("limit: String(limit)", pane);
+    Assert.Contains("if (pane.ed !== ed || pane.controller || pane.failed) return;", pane);
+    Assert.Contains("if (prev ? pane.start === 0 : pane.done) return;", pane);
     Assert.Contains("if (pane.controller !== controller) return;", pane);
     Assert.Contains("pane.controller?.abort();", pane);
-    Assert.Contains("pane.list.append(...names.map((name) => h('li', { text: name })));", pane);
+    Assert.Contains("const items = (page.names || []).map((name) => h('li', { text: name }));", pane);
+  }
+
+  [Fact]
+  public void EntryPane_KeepsAtMostThreePagesRendered_AndRefetchesEvictedPages()
+  {
+    var pane = PaneJs();
+    Assert.Contains("const ENTRY_PANE_PAGES = 3;", pane);
+    // Scrolling down drops the top page; scrolling up fetches it again and drops the bottom page.
+    Assert.Equal(2, Regex.Matches(pane, @"if \(pane\.pages\.length > ENTRY_PANE_PAGES\)").Count);
+    Assert.Contains("dropEntries(n, true);", pane);
+    Assert.Contains("dropEntries(n, false);", pane);
+    Assert.Contains("else if (s.scrollTop < 240 && pane.start > 0) loadEntryPage(ed, 'prev');", pane);
+    Assert.Contains("const offset = prev ? Math.max(0, pane.start - MAX_SEARCH_RESULTS) : pane.end;", pane);
+    // The browser's own scroll anchoring would double the manual scroll correction.
+    Assert.Matches(@"\.entry-scroll\s*\{[^}]*overflow-anchor:\s*none;", Read("app.css"));
+  }
+
+  [Fact]
+  public void EntryPane_EnterOnTheSwitchTogglesIt_WithoutOpeningThePane()
+  {
+    var pane = PaneJs();
+    Assert.Contains("picker.list.addEventListener('keydown', onSwitchEnter);", Read("main.js"));
+    var handler = pane[pane.IndexOf("function onSwitchEnter", StringComparison.Ordinal)..pane.IndexOf("function resetPane", StringComparison.Ordinal)];
+    Assert.Contains("if (e.key !== 'Enter' || e.repeat || !e.target.classList?.contains('toggle')) return;", handler);
+    Assert.Contains("e.target.click();", handler);
+    Assert.DoesNotContain("openPane", handler);
   }
 
   [Fact]
