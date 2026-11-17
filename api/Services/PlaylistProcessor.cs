@@ -18,6 +18,8 @@ public static class PlaylistProcessor
   // Approximate dictionary + string overhead for one distinct group. This is intentionally
   // conservative: the cap protects the JSON response and process heap, not just raw text.
   private const int EstimatedGroupEntryOverheadBytes = 128;
+  /// <summary>Entry titles kept per group for the analysis response; the store never grows past this.</summary>
+  public const int SampleTitlesPerGroup = 3;
   /// <summary>Most #EXTVLCOPT/#KODIPROP/other '#' lines kept between one #EXTINF and its address.</summary>
   public const int MaxOptionLinesPerEntry = 32;
   private const string GroupKeySeparator = " \u00B7 ";
@@ -77,6 +79,9 @@ public static class PlaylistProcessor
     long groupMetadataBytes = 0;
     // Per content type: true once an entry carries a real group title that equals the fallback title.
     var explicitUngrouped = new bool[ContentTypeCount];
+    // The first titles per group-title and content type, at most SampleTitlesPerGroup each.
+    var samples = new Dictionary<string, List<string>?[]>(StringComparer.OrdinalIgnoreCase);
+    long sampleBytes = 0;
     PlaylistSearchIndex? searchIndex = new(maxSearchIndexBytes);
 
     await using var stream = new FileStream(
@@ -110,9 +115,10 @@ public static class PlaylistProcessor
         ref groupVariantCount,
         ref groupMetadataBytes,
         maxGroupMetadataBytes);
+      AddSampleTitle(samples, groupTitle, contentType, line, ref sampleBytes, maxGroupMetadataBytes);
     }
 
-    var analysis = new PlaylistAnalysisResult(BuildGroups(groups, explicitUngrouped), total);
+    var analysis = new PlaylistAnalysisResult(BuildGroups(groups, explicitUngrouped, samples), total);
     return analysis with { SearchIndex = searchIndex?.Complete(analysis.Groups, analysis.SplitGroupTitles) };
   }
 
@@ -394,7 +400,8 @@ public static class PlaylistProcessor
       g.GroupTitle,
       g.ContentType.ToString(),
       AdultGroupRule.IsAdultGroupTitle(g.GroupTitle),
-      GroupSearchWords.From(g.HasTitle ? g.GroupTitle : null))).ToList();
+      GroupSearchWords.From(g.HasTitle ? g.GroupTitle : null),
+      g.SampleTitles ?? [])).ToList();
 
   /// <summary>
   /// Xtream Codes panels serve VOD as /movie/&lt;user&gt;/&lt;pass&gt;/&lt;id&gt;.&lt;ext&gt; and episodes as
@@ -571,7 +578,42 @@ public static class PlaylistProcessor
     counts[typeIndex] = 1;
   }
 
-  private static List<PlaylistGroup> BuildGroups(Dictionary<string, int[]> groups, bool[] explicitUngrouped)
+  /// <summary>
+  /// Keeps the entry's display name as a sample of its group while the group has fewer than
+  /// <see cref="SampleTitlesPerGroup"/>. Entries without a name are skipped. All samples share a byte
+  /// budget of <paramref name="maxSampleBytes"/>; past it, further samples are dropped, never the analysis.
+  /// </summary>
+  private static void AddSampleTitle(
+    Dictionary<string, List<string>?[]> samples,
+    string groupTitle,
+    PlaylistContentType contentType,
+    string extinfLine,
+    ref long sampleBytes,
+    long maxSampleBytes)
+  {
+    if (!samples.TryGetValue(groupTitle, out var perType))
+    {
+      perType = new List<string>?[ContentTypeCount];
+      samples[groupTitle] = perType;
+    }
+
+    var titles = perType[(int)contentType] ??= new List<string>(SampleTitlesPerGroup);
+    if (titles.Count >= SampleTitlesPerGroup) return;
+
+    var name = PlaylistSearchText.DisplayNameSpan(extinfLine);
+    if (name.IsEmpty) return;
+
+    var bytes = (long)name.Length * sizeof(char);
+    if (maxSampleBytes > 0 && sampleBytes > maxSampleBytes - bytes) return;
+
+    sampleBytes += bytes;
+    titles.Add(name.ToString());
+  }
+
+  private static List<PlaylistGroup> BuildGroups(
+    Dictionary<string, int[]> groups,
+    bool[] explicitUngrouped,
+    Dictionary<string, List<string>?[]> samples)
   {
     var result = new List<PlaylistGroup>(groups.Count);
     foreach (var (groupTitle, counts) in groups)
@@ -588,7 +630,8 @@ public static class PlaylistProcessor
 
         var contentType = (PlaylistContentType)i;
         var key = split ? GroupKey(groupTitle, contentType) : groupTitle;
-        result.Add(new PlaylistGroup(key, groupTitle, contentType, counts[i], hasTitle));
+        var sampleTitles = samples.TryGetValue(groupTitle, out var perType) ? perType[i] : null;
+        result.Add(new PlaylistGroup(key, groupTitle, contentType, counts[i], hasTitle, sampleTitles));
       }
     }
 
@@ -881,7 +924,27 @@ public enum PlaylistContentType
 /// <see cref="PlaylistProcessor.GroupKey"/> when the provider reuses the title across content types.
 /// </summary>
 /// <param name="HasTitle">False for the fallback group of entries without a group title.</param>
-public sealed record PlaylistGroup(string Key, string GroupTitle, PlaylistContentType ContentType, int Count, bool HasTitle = true);
+/// <param name="SampleTitles">The group's first entry display names in playlist order, at most <see cref="PlaylistProcessor.SampleTitlesPerGroup"/>.</param>
+public sealed record PlaylistGroup(
+  string Key,
+  string GroupTitle,
+  PlaylistContentType ContentType,
+  int Count,
+  bool HasTitle = true,
+  IReadOnlyList<string>? SampleTitles = null)
+{
+  /// <summary>Compares the sample titles by content, so two analyses of one playlist yield equal groups.</summary>
+  public bool Equals(PlaylistGroup? other) =>
+    other is not null
+    && Key == other.Key
+    && GroupTitle == other.GroupTitle
+    && ContentType == other.ContentType
+    && Count == other.Count
+    && HasTitle == other.HasTitle
+    && (SampleTitles ?? []).SequenceEqual(other.SampleTitles ?? []);
+
+  public override int GetHashCode() => HashCode.Combine(Key, GroupTitle, ContentType, Count, HasTitle);
+}
 
 public sealed class PlaylistLineTooLongException : InvalidOperationException
 {

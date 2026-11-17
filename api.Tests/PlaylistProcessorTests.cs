@@ -21,6 +21,115 @@ public class PlaylistProcessorTests
     Assert.Equal("Live", results[1].ContentType);
   }
 
+  private static async Task<(PlaylistAnalysisResult Analysis, List<Api.Models.GroupResult> Groups)> AnalyzeTextAsync(string source)
+  {
+    var path = Path.GetTempFileName();
+    try
+    {
+      await File.WriteAllTextAsync(path, source);
+      var analysis = await PlaylistProcessor.AnalyzeFileAsync(path, CancellationToken.None);
+      return (analysis, PlaylistProcessor.ToGroupResults(analysis.Groups));
+    }
+    finally
+    {
+      File.Delete(path);
+    }
+  }
+
+  [Fact]
+  public async Task ToGroupResults_ReturnsFirstThreeTitlesInPlaylistOrder()
+  {
+    const string source = """
+      #EXTM3U
+      #EXTINF:-1 group-title="News",News Four
+      https://example.com/live/1.ts
+      #EXTINF:-1 group-title="Kids",Kids One
+      https://example.com/live/2.ts
+      #EXTINF:-1 tvg-name="News Two" group-title="News",
+      https://example.com/live/3.ts
+      #EXTINF:-1 group-title="News",  News Three
+      https://example.com/live/4.ts
+      #EXTINF:-1 group-title="News",News One
+      https://example.com/live/5.ts
+      #EXTINF:-1 group-title="Kids",Kids Two
+      https://example.com/live/6.ts
+      """;
+
+    var (analysis, groups) = await AnalyzeTextAsync(source);
+
+    var news = Assert.Single(groups, g => g.Name == "News");
+    Assert.Equal(new[] { "News Four", "News Two", "News Three" }, news.SampleTitles);
+    Assert.Equal(4, news.Count);
+    Assert.Equal(new[] { "Kids One", "Kids Two" }, Assert.Single(groups, g => g.Name == "Kids").SampleTitles);
+
+    // The same display names the group-entries endpoint returns for the group.
+    Assert.NotNull(analysis.SearchIndex);
+    foreach (var group in groups)
+    {
+      var names = analysis.SearchIndex!.GroupEntries(group.Name, 0, PlaylistProcessor.SampleTitlesPerGroup).Names;
+      Assert.Equal(names, group.SampleTitles);
+    }
+  }
+
+  [Fact]
+  public async Task ToGroupResults_SkipsEntriesWithoutTitle()
+  {
+    const string source = """
+      #EXTM3U
+      #EXTINF:-1 group-title="News",
+      https://example.com/live/1.ts
+      #EXTINF:-1 group-title="News",News One
+      https://example.com/live/2.ts
+      #EXTINF:-1 group-title="Blank",
+      https://example.com/live/3.ts
+      #EXTINF:-1 tvg-name="" group-title="Blank",
+      https://example.com/live/4.ts
+      """;
+
+    var (_, groups) = await AnalyzeTextAsync(source);
+
+    Assert.Equal(new[] { "News One" }, Assert.Single(groups, g => g.Name == "News").SampleTitles);
+    var blank = Assert.Single(groups, g => g.Name == "Blank");
+    Assert.Equal(2, blank.Count);
+    Assert.Empty(blank.SampleTitles);
+  }
+
+  [Fact]
+  public async Task ToGroupResults_SampleTitlesFollowSplitGroups()
+  {
+    const string source = """
+      #EXTM3U
+      #EXTINF:-1 group-title="Germany",Live One
+      https://example.com/live/user/pass/1.ts
+      #EXTINF:-1 group-title="Germany",Episode One
+      https://example.com/series/user/pass/2.mkv
+      #EXTINF:-1 group-title="Germany",Live Two
+      https://example.com/live/user/pass/3.ts
+      #EXTINF:-1 group-title="Germany",Episode Two
+      https://example.com/series/user/pass/4.mkv
+      """;
+
+    var (_, groups) = await AnalyzeTextAsync(source);
+
+    var live = Assert.Single(groups, g => g.GroupTitle == "Germany" && g.ContentType == "Live");
+    var series = Assert.Single(groups, g => g.GroupTitle == "Germany" && g.ContentType == "Series");
+    Assert.NotEqual("Germany", live.Name);
+    Assert.Equal(new[] { "Live One", "Live Two" }, live.SampleTitles);
+    Assert.Equal(new[] { "Episode One", "Episode Two" }, series.SampleTitles);
+  }
+
+  [Fact]
+  public void ToGroupResults_WithoutSamples_ReturnsEmptyList()
+  {
+    var result = Assert.Single(PlaylistProcessor.ToGroupResults(new[]
+    {
+      new PlaylistGroup("News", "News", PlaylistContentType.Live, 1),
+    }));
+
+    Assert.NotNull(result.SampleTitles);
+    Assert.Empty(result.SampleTitles);
+  }
+
   [Fact]
   public async Task FileProcessing_AnalyzesAndFiltersWithoutMaterializingThePlaylistResult()
   {

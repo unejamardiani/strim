@@ -157,6 +157,48 @@ public class PlaylistProcessingTests(StrimAppFactory factory) : IClassFixture<St
     Assert.Empty(group.GetProperty("words").EnumerateArray());
   }
 
+  [Fact]
+  public async Task Analyze_ReturnsSampleTitlesPerGroup()
+  {
+    const string playlist = """
+      #EXTM3U
+      #EXTINF:-1 group-title="Sport",Match A
+      http://provider.example/live/4001.ts
+      #EXTINF:-1 group-title="Sport",Match B
+      http://provider.example/live/4002.ts
+      #EXTINF:-1 group-title="Sport",Match C
+      http://provider.example/live/4003.ts
+      #EXTINF:-1 group-title="Sport",Match D
+      http://provider.example/live/4004.ts
+      #EXTINF:-1 group-title="Quiet",
+      http://provider.example/live/4005.ts
+      #EXTINF:-1 group-title="Germany",Live One
+      http://provider.example/live/4006.ts
+      #EXTINF:-1 group-title="Germany",Episode One
+      http://provider.example/series/user/pass/4007.mkv
+      """;
+    var response = await NewClient().PostAsync("/api/playlist/analyze", new { rawText = playlist });
+    response.EnsureSuccessStatusCode();
+    using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    var groups = json.RootElement.GetProperty("groups").EnumerateArray().ToList();
+
+    string[] SamplesOf(string groupTitle, string contentType)
+    {
+      var group = Assert.Single(groups, g =>
+        g.GetProperty("groupTitle").GetString() == groupTitle && g.GetProperty("contentType").GetString() == contentType);
+      var samples = group.GetProperty("sampleTitles");
+      Assert.Equal(JsonValueKind.Array, samples.ValueKind);
+      return samples.EnumerateArray().Select(s => s.GetString()!).ToArray();
+    }
+
+    Assert.Equal(4, groups.Count);
+    Assert.All(groups, g => Assert.Equal(JsonValueKind.Array, g.GetProperty("sampleTitles").ValueKind));
+    Assert.Equal(new[] { "Match A", "Match B", "Match C" }, SamplesOf("Sport", "Live"));
+    Assert.Empty(SamplesOf("Quiet", "Live"));
+    Assert.Equal(new[] { "Live One" }, SamplesOf("Germany", "Live"));
+    Assert.Equal(new[] { "Episode One" }, SamplesOf("Germany", "Series"));
+  }
+
   private const string AdultMix = """
     #EXTM3U
     #EXTINF:-1 tvg-name="Daily Brief" group-title="News",Daily Brief
