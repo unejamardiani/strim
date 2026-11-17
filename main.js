@@ -83,6 +83,7 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
 };
 
 function icon(name) {
@@ -891,11 +892,11 @@ function renderEditor() {
     }
     nodes.push(h('div', { class: 'report-line' },
       h('button', { class: 'btn btn-ghost', type: 'button', 'aria-haspopup': 'dialog', onclick: () => openReport(ed) }, 'Duplicates & variants')));
-    // Below 1100px both wrappers are display: contents, so the narrow layout is unchanged.
-    // The pane is reserved for the entries of a group and stays empty for now.
+    // Below 1100px both wrappers are display: contents and the pane is not shown, so the narrow
+    // layout is unchanged. From 1100px the pane shows the entries of the selected group.
     nodes.push(h('div', { class: 'editor-split' },
       h('div', { class: 'editor-groups' }, ...pickerNodes(ed)),
-      h('aside', { class: 'entry-pane', 'aria-hidden': 'true' })));
+      h('aside', { class: 'entry-pane', 'aria-label': 'Group entries', 'aria-hidden': 'true' })));
   }
 
   app.replaceChildren(...nodes);
@@ -1206,8 +1207,14 @@ function mountPicker(ed) {
   picker.list = document.getElementById('group-list');
   picker.rows = [];
   picker.list.addEventListener('change', onRowToggle);
+  picker.list.addEventListener('click', onRowSelect);
+  pane.el = document.querySelector('.entry-pane');
   measureRowHeight();
   updateView(false);
+  // A re-render (new analysis, save) shows the selected group again if it still exists.
+  const selected = ed.paneGroup && ed.groups.find((g) => g.key === ed.paneGroup);
+  if (selected && WIDE_EDITOR.matches) openPane(ed, selected);
+  else ed.paneGroup = null;
   // A new analysis clears the results, so an Everything search runs again on the new index.
   if (ed.searchMode === 'everything' && !ed.search) runSearch(ed);
   else renderSearchResults(ed);
@@ -1215,6 +1222,8 @@ function mountPicker(ed) {
 
 function teardownPicker() {
   discardBulkUndo();
+  resetPane();
+  pane.el = null;
   picker.ed = null;
   picker.list = null;
   picker.rows = [];
@@ -1381,6 +1390,7 @@ function paintRows() {
     row._parts.check.setAttribute('aria-label', `${g.title}${g.type !== 'Live' || g.split ? ` (${g.type})` : ''}, ${plural(g.count, 'channel')}`);
     row.classList.toggle('off', off);
     row.classList.toggle('flash', g.key === picker.highlight);
+    row.classList.toggle('selected', g.key === ed.paneGroup);
   }
 }
 
@@ -1481,6 +1491,98 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   document.getElementById('group-search')?.focus();
 });
+
+// ---------- Entry pane (wide editor, #217) ----------
+// One page of the selected group's names at a time from /playlist/group-entries, so the browser
+// never holds the whole playlist. Names are inserted as text, never as HTML.
+
+const WIDE_EDITOR = window.matchMedia('(min-width: 1100px)');
+const pane = { el: null };
+
+// The row is a <label>: on wide screens a click outside the switch selects the group instead of
+// toggling it. The switch itself (click, Space) toggles as before; below 1100px nothing changes.
+function onRowSelect(e) {
+  if (!WIDE_EDITOR.matches || e.target.closest('.toggle')) return;
+  const ed = picker.ed;
+  const g = ed?.view[Number(e.target.closest('.group-row')?.dataset.index)];
+  if (!g) return;
+  e.preventDefault();
+  openPane(ed, g);
+}
+
+function resetPane() {
+  pane.controller?.abort();
+  Object.assign(pane, { ed: null, group: null, list: null, count: null, status: null, scroller: null, offset: 0, done: false, failed: false, controller: null });
+}
+
+function paneCount(total, g) {
+  return `${plural(total, 'entry', 'entries')}${g.type !== 'Live' || g.split ? ` · ${g.type}` : ''}`;
+}
+
+function openPane(ed, g) {
+  if (!pane.el) return;
+  resetPane();
+  ed.paneGroup = g.key;
+  pane.ed = ed;
+  pane.group = g;
+  pane.count = h('p', { class: 'entry-pane-count', text: paneCount(g.count, g) });
+  pane.list = h('ol', { class: 'entry-list' });
+  pane.status = h('div', { class: 'entry-pane-status', role: 'status' });
+  pane.scroller = h('div', { class: 'entry-scroll', onscroll: () => loadMoreIfNeeded(ed) }, pane.list, pane.status);
+  pane.el.replaceChildren(
+    h('div', { class: 'entry-pane-head' },
+      h('div', { class: 'entry-pane-title' }, h('h2', { text: g.title }), pane.count),
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close entries', onclick: () => closePane(ed) }, icon('close'))),
+    pane.scroller);
+  pane.el.classList.add('open');
+  pane.el.removeAttribute('aria-hidden');
+  paintRows();
+  loadEntryPage(ed);
+}
+
+function closePane(ed) {
+  resetPane();
+  ed.paneGroup = null;
+  pane.el?.replaceChildren();
+  pane.el?.classList.remove('open');
+  pane.el?.setAttribute('aria-hidden', 'true');
+  paintRows();
+}
+
+function loadMoreIfNeeded(ed) {
+  const s = pane.scroller;
+  if (s && s.scrollTop + s.clientHeight >= s.scrollHeight - 240) loadEntryPage(ed);
+}
+
+// Never more than one request at a time; a late response for a group no longer shown is discarded.
+async function loadEntryPage(ed) {
+  if (pane.ed !== ed || pane.controller || pane.done || pane.failed) return;
+  const controller = new AbortController();
+  pane.controller = controller;
+  const offset = pane.offset;
+  pane.status.replaceChildren(h('p', { class: 'search-status', text: offset ? 'Loading more…' : 'Loading entries…' }));
+  try {
+    const query = new URLSearchParams({ cacheKey: ed.cacheKey, group: pane.group.key, offset: String(offset), limit: String(MAX_SEARCH_RESULTS) });
+    const page = await api(`/playlist/group-entries?${query}`, { signal: controller.signal });
+    if (pane.controller !== controller) return;
+    pane.controller = null;
+    const names = page.names || [];
+    pane.offset = offset + names.length;
+    pane.done = names.length === 0 || pane.offset >= page.total;
+    pane.list.append(...names.map((name) => h('li', { text: name })));
+    pane.count.textContent = paneCount(page.total, pane.group);
+    pane.status.replaceChildren(page.total === 0 ? h('p', { class: 'search-status', text: 'No entries in this group.' }) : '');
+    loadMoreIfNeeded(ed);
+  } catch (err) {
+    if (isAbort(err) || pane.controller !== controller) return;
+    pane.controller = null;
+    pane.failed = true;
+    pane.status.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+      h('p', { text: err.message || 'The entries could not be loaded.' }),
+      h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { pane.failed = false; loadEntryPage(ed); } }, 'Try again'))));
+  }
+}
 
 // ---------- Everything search ----------
 

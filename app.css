@@ -755,6 +755,75 @@ select.input {
     border: 1px dashed var(--line);
     border-radius: 22px;
   }
+
+  /* An open pane is a card: head with name, count and close; only the entry list scrolls. */
+  .entry-pane.open {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--shadow-card);
+  }
+
+  .entry-pane-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 18px 14px 14px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .entry-pane-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .entry-pane-title h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    overflow-wrap: anywhere;
+  }
+
+  .entry-pane-count {
+    margin: 4px 0 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .entry-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .entry-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .entry-list li {
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .entry-pane-status .notice {
+    margin: 12px;
+  }
+
+  .group-row.selected {
+    background: var(--surface-2);
+  }
 }
 
 /* Virtualised group list inside one card: the page scrolls, rows are absolutely positioned. */
