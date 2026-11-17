@@ -1559,9 +1559,30 @@ function closePane(ed) {
   paintRows();
 }
 
+// Paging is suspended while the pane is hidden: below the breakpoint the scroller has no size,
+// so every page would look like the end of the list and fetch the next one.
+function paneVisible() {
+  return WIDE_EDITOR.matches && pane.scroller?.clientHeight > 0;
+}
+
+// Narrowing the window aborts a pending page; widening it again resumes paging where it stopped.
+WIDE_EDITOR.addEventListener('change', () => {
+  if (!pane.ed) return;
+  if (!WIDE_EDITOR.matches) {
+    const c = pane.controller;
+    pane.controller = null;
+    c?.abort();
+    pane.status?.replaceChildren('');
+  } else if (!pane.end && !pane.done) {
+    loadEntryPage(pane.ed, 'next');
+  } else {
+    loadMoreIfNeeded(pane.ed);
+  }
+});
+
 function loadMoreIfNeeded(ed) {
   const s = pane.scroller;
-  if (!s) return;
+  if (!s || !paneVisible()) return;
   if (s.scrollTop + s.clientHeight >= s.scrollHeight - 240) loadEntryPage(ed, 'next');
   else if (s.scrollTop < 240 && pane.start > 0) loadEntryPage(ed, 'prev');
 }
@@ -1581,6 +1602,7 @@ function dropEntries(n, fromTop) {
 // Never more than one request at a time; a late response for a group no longer shown is discarded.
 async function loadEntryPage(ed, direction) {
   if (pane.ed !== ed || pane.controller || pane.failed) return;
+  if (!WIDE_EDITOR.matches) return;
   const prev = direction === 'prev';
   if (prev ? pane.start === 0 : pane.done) return;
   const offset = prev ? Math.max(0, pane.start - MAX_SEARCH_RESULTS) : pane.end;

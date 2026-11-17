@@ -94,6 +94,12 @@ public class EditorWideLayoutTests
     Assert.Contains("if (pane.controller !== controller) return;", pane);
     Assert.Contains("pane.controller?.abort();", pane);
     Assert.Contains("const items = (page.names || []).map((name) => h('li', { text: name }));", pane);
+    // Below the breakpoint the hidden scroller has no size; paging must stop instead of fetching every page.
+    Assert.Contains("if (!WIDE_EDITOR.matches) return;", pane);
+    Assert.Contains("return WIDE_EDITOR.matches && pane.scroller?.clientHeight > 0;", pane);
+    Assert.Contains("if (!s || !paneVisible()) return;", pane);
+    Assert.Contains("WIDE_EDITOR.addEventListener('change',", pane);
+    Assert.Contains("c?.abort();", pane);
   }
 
   [Fact]
