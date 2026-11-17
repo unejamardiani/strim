@@ -9,8 +9,8 @@ namespace Api.Endpoints;
 /// <summary>
 /// Reading, filtering and serving playlists: the editor's analyze/generate calls, the generated
 /// download and the public share link. All of them run through <see cref="PlaylistPipeline"/>
-/// and the single-job <see cref="PlaylistJobGate"/>, except the entry search, which only reads the
-/// analysis's in-memory index.
+/// and the single-job <see cref="PlaylistJobGate"/>, except the entry search and the group entries,
+/// which only read the analysis's in-memory index.
 /// </summary>
 public static class ProcessingEndpoints
 {
@@ -233,6 +233,30 @@ public static class ProcessingEndpoints
         result.Matches.Select(m => new PlaylistSearchMatchResult(
           m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled)).ToList(),
         result.HasMore));
+    }).RequireRateLimiting(Security.RateLimits.Fetch);
+
+    // Read-only like the search: one page of a group's display names from the same index, so the
+    // browser never receives the whole playlist. A limit above the search's page size is clamped.
+    app.MapGet("/api/playlist/group-entries", (string? cacheKey, string? group, int? offset, int? limit, PlaylistPipeline pipeline) =>
+    {
+      if (string.IsNullOrWhiteSpace(cacheKey))
+        return Results.BadRequest(new { error = "Provide a cacheKey." });
+      var maxGroupKeyLength = PlaylistProcessor.MaxGroupKeyLength(pipeline.Cache.MaxGroupTitleLengthChars);
+      if (string.IsNullOrWhiteSpace(group) || group.Length > maxGroupKeyLength)
+        return Results.BadRequest(new { error = $"The group must be between 1 and {maxGroupKeyLength} characters." });
+      if (offset < 0 || limit < 1)
+        return Results.BadRequest(new { error = "Offset must be 0 or more and limit 1 or more." });
+
+      var source = pipeline.Cache.TryGetSessionSource(cacheKey);
+      var analysis = source is null ? null : pipeline.Cache.TryGetAnalysis(source);
+      if (analysis is null)
+        return Results.BadRequest(new { error = SessionExpired });
+      if (analysis.SearchIndex is not { } index)
+        return Results.BadRequest(new { error = "Search is not available for this playlist because it is too large." });
+
+      var page = Math.Min(limit ?? Limits.MaxSearchResults, Limits.MaxSearchResults);
+      var result = index.GroupEntries(group, offset ?? 0, page);
+      return Results.Ok(new PlaylistGroupEntriesResponse(group, offset ?? 0, page, result.Names, result.Total));
     }).RequireRateLimiting(Security.RateLimits.Fetch);
 
     // The random, short-lived output key is a capability issued only after a source was processed,

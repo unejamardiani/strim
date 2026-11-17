@@ -71,6 +71,36 @@ public sealed class PlaylistSearchIndex
     return new PlaylistSearchResult(matches, false);
   }
 
+  /// <summary>
+  /// The display names of the entries under <paramref name="groupKey"/> in source order, skipping
+  /// <paramref name="offset"/> and returning at most <paramref name="limit"/>, with the group's total.
+  /// Only the page's names are copied; the rest of the group is counted.
+  /// </summary>
+  public PlaylistGroupEntriesResult GroupEntries(string groupKey, int offset, int limit)
+  {
+    var names = new List<string>();
+    var inGroup = _slots.Select(s => string.Equals(s.GroupKey, groupKey, StringComparison.OrdinalIgnoreCase)).ToArray();
+    if (!inGroup.Contains(true)) return new PlaylistGroupEntriesResult(names, 0);
+
+    var total = 0;
+    for (var c = 0; c < _chunks.Count; c++)
+    {
+      var end = c + 1 < _chunks.Count ? _chunkFirstEntry[c + 1] : Count;
+      for (var entry = _chunkFirstEntry[c]; entry < end; entry++)
+      {
+        if (!inGroup[Field(entry, 1)]) continue;
+        if (total++ < offset || names.Count >= limit) continue;
+
+        var text = _chunks[c].AsSpan(0, _chunkUsed[c]);
+        var start = Field(entry, 0);
+        var name = text[(start + text[start..].IndexOf('\t') + 1)..];
+        names.Add(new string(name[..name.IndexOf('\n')]));
+      }
+    }
+
+    return new PlaylistGroupEntriesResult(names, total);
+  }
+
   /// <summary>Records one entry; false once the index exceeds its budget and should be dropped.</summary>
   internal bool TryAdd(string extinfLine, string groupTitle, PlaylistContentType contentType)
   {
@@ -178,6 +208,10 @@ public sealed class PlaylistSearchIndex
 }
 
 public sealed record PlaylistSearchResult(IReadOnlyList<PlaylistSearchMatch> Matches, bool HasMore);
+
+/// <param name="Names">The display names of one page of the group's entries, in source order.</param>
+/// <param name="Total">The number of entries in the whole group.</param>
+public sealed record PlaylistGroupEntriesResult(IReadOnlyList<string> Names, int Total);
 
 /// <param name="Name">The entry's display name.</param>
 /// <param name="OutputGroup">The group-title the generated file writes for the entry.</param>
