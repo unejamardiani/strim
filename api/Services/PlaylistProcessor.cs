@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Api.Models;
 
@@ -329,6 +330,45 @@ public static class PlaylistProcessor
       entries.Add(entry);
     }
     return entries;
+  }
+
+  /// <summary>
+  /// Yields the entries of a playlist file one by one with the rules of <see cref="ReadEntriesFromFileAsync"/>,
+  /// without a memory budget and without collecting them, so a caller can read the same file several times.
+  /// <c>Index</c> is the 0-based position of the entry in the file.
+  /// </summary>
+  public static async IAsyncEnumerable<PlaylistEntry> StreamEntriesFromFileAsync(
+    string filePath,
+    [EnumeratorCancellation] CancellationToken cancellationToken,
+    int maxLineLengthChars = DefaultMaxLineLengthChars)
+  {
+    cancellationToken.ThrowIfCancellationRequested();
+    await using var stream = new FileStream(
+      filePath,
+      FileMode.Open,
+      FileAccess.Read,
+      FileShare.Read,
+      128 * 1024,
+      FileOptions.Asynchronous | FileOptions.SequentialScan);
+    using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 128 * 1024, leaveOpen: false);
+    using var lines = new BoundedLineReader(reader, maxLineLengthChars);
+    var index = 0;
+    string? pending = null;
+    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
+    {
+      pending = null;
+      if (!IsExtinf(line)) continue;
+
+      (var address, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
+      yield return new PlaylistEntry(
+        index++,
+        PlaylistSearchText.DisplayName(line),
+        ExtractGroupTitle(line, extGrp),
+        PlaylistSearchText.AttributeValue(line, "tvg-id"),
+        address ?? string.Empty);
+      // A buffered read does not look at the token, so a cancelled caller gets no further entry.
+      cancellationToken.ThrowIfCancellationRequested();
+    }
   }
 
   public static string DeriveNameFromUrl(string? url)

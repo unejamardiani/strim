@@ -58,4 +58,8 @@ public record PlaylistSearchMatchResult(string Name, string Group, string GroupK
 
 public record PlaylistSearchResponse(List<PlaylistSearchMatchResult> Matches, bool HasMore);
 
+/// <param name="Names">Display names of one page of the group's entries, in playlist order.</param>
+/// <param name="Total">Number of entries in the whole group.</param>
+public record PlaylistGroupEntriesResponse(string GroupKey, int Offset, int Limit, IReadOnlyList<string> Names, int Total);
+
 public record PlaylistFilterResult(string Text, int TotalChannels, int KeptChannels, DateTimeOffset? ExpirationUtc = null);
