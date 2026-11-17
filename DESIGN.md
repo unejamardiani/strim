@@ -94,8 +94,9 @@ to 560px: sticky filters, search results and the group list, so search, filters 
 stay reachable above the list. Right, the rest: the entry pane, a sticky area reserved for the
 entries of a group (a dashed 22px outline while it is empty). The head, player link card and
 source line span both columns; the dock stays centred at 736px. Below 1100px, and on every other
-editor route (playlists, new playlist) and on the site pages, the 760px page applies unchanged and
-the entry pane is not shown.
+editor route (playlists, new playlist), the 760px page applies unchanged and the entry pane is not
+shown. Only the editor changes: the site pages keep their 1080px main column and the guides their
+700px column.
 
 ### Site (`/`, guides: site.css)
 

@@ -21,6 +21,8 @@ public class EditorWideLayoutTests
     Assert.Contains("up\nto 560px", design.Replace("\r\n", "\n"));
     Assert.Contains("entry pane", design);
     Assert.Contains("the 760px page applies unchanged", design);
+    var flat = design.Replace("\r\n", "\n").Replace("\n", " ");
+    Assert.Contains("the site pages keep their 1080px main column and the guides their 700px column", flat);
   }
 
   [Fact]
