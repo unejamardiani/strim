@@ -287,10 +287,44 @@ public static class PlaylistProcessor
     CancellationToken cancellationToken,
     int maxLineLengthChars = DefaultMaxLineLengthChars)
   {
+    await using var stream = new FileStream(
+      filePath,
+      FileMode.Open,
+      FileAccess.Read,
+      FileShare.Read,
+      128 * 1024,
+      FileOptions.Asynchronous | FileOptions.SequentialScan);
+    using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 128 * 1024, leaveOpen: false);
+    using var lines = new BoundedLineReader(reader, maxLineLengthChars);
+    return await ReadEntriesAsync(lines, maxBytes, cancellationToken);
+  }
+
+  /// <summary>
+  /// Approximate heap of one kept entry: the record and its four strings (two bytes per char), counted twice
+  /// for the keys and lists the duplicate and variant rules build from it.
+  /// </summary>
+  internal static long EstimatedEntryBytes(PlaylistEntry entry) =>
+    2 * (EntryOverheadBytes + 2L * (entry.Name.Length + entry.GroupTitle.Length + (entry.TvgId?.Length ?? 0) + entry.Address.Length));
+
+  private const int EntryOverheadBytes = 160;
+
+  private static async ValueTask<List<PlaylistEntry>> ReadEntriesAsync(BoundedLineReader lines, long maxBytes, CancellationToken cancellationToken)
+  {
     var entries = new List<PlaylistEntry>();
     long estimatedBytes = 0;
-    await foreach (var entry in StreamEntriesFromFileAsync(filePath, cancellationToken, maxLineLengthChars))
+    string? pending = null;
+    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
     {
+      pending = null;
+      if (!IsExtinf(line)) continue;
+
+      (var address, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines: null, cancellationToken);
+      var entry = new PlaylistEntry(
+        entries.Count,
+        PlaylistSearchText.DisplayName(line),
+        ExtractGroupTitle(line, extGrp),
+        PlaylistSearchText.AttributeValue(line, "tvg-id"),
+        address ?? string.Empty);
       estimatedBytes += EstimatedEntryBytes(entry);
       if (estimatedBytes > maxBytes) throw new PlaylistReportTooLargeException();
       entries.Add(entry);
@@ -336,15 +370,6 @@ public static class PlaylistProcessor
       cancellationToken.ThrowIfCancellationRequested();
     }
   }
-
-  /// <summary>
-  /// Approximate heap of one kept entry: the record and its four strings (two bytes per char), counted twice
-  /// for the keys and lists the duplicate and variant rules build from it.
-  /// </summary>
-  internal static long EstimatedEntryBytes(PlaylistEntry entry) =>
-    2 * (EntryOverheadBytes + 2L * (entry.Name.Length + entry.GroupTitle.Length + (entry.TvgId?.Length ?? 0) + entry.Address.Length));
-
-  private const int EntryOverheadBytes = 160;
 
   public static string DeriveNameFromUrl(string? url)
   {
