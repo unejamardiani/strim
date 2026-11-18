@@ -21,7 +21,6 @@ public class LanguageTagParserTests
     Assert.Equal(new[] { expected }, Sorted(result.AudioLanguages));
     Assert.Empty(result.SubtitleLanguages);
     Assert.Empty(result.Markers);
-    Assert.Empty(result.PrefixTags);
   }
 
   [Fact]
@@ -42,7 +41,6 @@ public class LanguageTagParserTests
     var result = LanguageTagParser.Parse(name, null);
 
     Assert.Equal(new[] { expected }, Sorted(result.AudioLanguages));
-    Assert.Empty(result.PrefixTags);
   }
 
   [Theory]
@@ -56,7 +54,6 @@ public class LanguageTagParserTests
     Assert.Equal(new[] { LanguageTagParser.Multi }, Sorted(result.Markers));
     Assert.Empty(result.AudioLanguages);
     Assert.Empty(result.SubtitleLanguages);
-    Assert.Empty(result.PrefixTags);
   }
 
   [Theory]
@@ -68,7 +65,6 @@ public class LanguageTagParserTests
 
     Assert.Equal(new[] { "fr" }, Sorted(result.SubtitleLanguages));
     Assert.Empty(result.AudioLanguages);
-    Assert.Empty(result.PrefixTags);
   }
 
   [Theory]
@@ -82,7 +78,6 @@ public class LanguageTagParserTests
 
     Assert.Equal(new[] { "de" }, Sorted(result.SubtitleLanguages));
     Assert.Empty(result.AudioLanguages);
-    Assert.Empty(result.PrefixTags);
   }
 
   [Theory]
@@ -111,19 +106,13 @@ public class LanguageTagParserTests
   }
 
   [Theory]
-  [InlineData("UK: Film", "UK")]
-  [InlineData("US | Film", "US")]
-  [InlineData("EX-YU: Film", "EX-YU")]
-  [InlineData("TR - Film", "TR")]
-  [InlineData("[UK] Film", "UK")]
-  [InlineData("Film [UK]", "UK")]
-  [InlineData("Film (EX-YU)", "EX-YU")]
-  public void CountryPrefix_GivesTagAsWrittenAndNoLanguage(string name, string expected)
+  [InlineData("UK: Film")]
+  [InlineData("US | Film")]
+  [InlineData("EX-YU: Film")]
+  public void CountryPrefix_GivesNoLanguage(string name)
   {
     var result = LanguageTagParser.Parse(name, null);
 
-    Assert.Equal(new[] { expected }, Sorted(result.PrefixTags));
-    Assert.Equal(LanguageTagSource.Name, result.PrefixTags[expected]);
     Assert.Empty(result.AudioLanguages);
     Assert.Empty(result.SubtitleLanguages);
   }
@@ -135,16 +124,6 @@ public class LanguageTagParserTests
 
     Assert.Equal(new[] { "de" }, Sorted(result.AudioLanguages));
     Assert.Empty(result.SubtitleLanguages);
-  }
-
-  [Fact]
-  public void GroupCountryPrefix_GivesTagFromGroup()
-  {
-    var result = LanguageTagParser.Parse("Filma e Sajuar", "AL | Filma");
-
-    Assert.Equal(new[] { "AL" }, Sorted(result.PrefixTags));
-    Assert.Equal(LanguageTagSource.Group, result.PrefixTags["AL"]);
-    Assert.Empty(result.AudioLanguages);
   }
 
   [Fact]
@@ -180,7 +159,7 @@ public class LanguageTagParserTests
       Assert.Matches("^[A-Z]{2,3}$", pair.Key);
       Assert.Matches("^[a-z]{2}$", pair.Value);
     });
-    // Country prefixes stay tags, never languages (owner decision on #261).
+    // Country-only prefixes are never languages (decision on #261).
     Assert.DoesNotContain("UK", LanguageTagParser.LanguageCodes.Keys);
     Assert.DoesNotContain("US", LanguageTagParser.LanguageCodes.Keys);
     Assert.DoesNotContain("TR", LanguageTagParser.LanguageCodes.Keys);

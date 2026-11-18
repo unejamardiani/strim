@@ -1,6 +1,6 @@
 namespace Api.Services;
 
-/// <summary>Where a language, marker or tag was read: the entry name, the group title or both.</summary>
+/// <summary>Where a language or marker was read: the entry name, the group title or both.</summary>
 [Flags]
 public enum LanguageTagSource
 {
@@ -11,18 +11,15 @@ public enum LanguageTagSource
 
 /// <summary>
 /// The tags read from one entry; each set maps a value to where it was read. Audio and subtitle languages are
-/// lower-case ISO 639-1 codes; markers and prefix tags stay upper-case as written. <see cref="PrefixTags"/> holds
-/// leading codes that are not a known language or marker (UK, US, EX-YU). An empty result means "unknown",
-/// never a default language.
+/// lower-case ISO 639-1 codes; markers stay upper-case as written. An empty result means "unknown", never a
+/// default language.
 /// </summary>
 public sealed record LanguageTags(
   IReadOnlyDictionary<string, LanguageTagSource> AudioLanguages,
   IReadOnlyDictionary<string, LanguageTagSource> SubtitleLanguages,
-  IReadOnlyDictionary<string, LanguageTagSource> Markers,
-  IReadOnlyDictionary<string, LanguageTagSource> PrefixTags)
+  IReadOnlyDictionary<string, LanguageTagSource> Markers)
 {
-  public bool IsEmpty =>
-    AudioLanguages.Count == 0 && SubtitleLanguages.Count == 0 && Markers.Count == 0 && PrefixTags.Count == 0;
+  public bool IsEmpty => AudioLanguages.Count == 0 && SubtitleLanguages.Count == 0 && Markers.Count == 0;
 }
 
 /// <summary>
@@ -32,11 +29,8 @@ public sealed record LanguageTags(
 /// <item>A leading code followed by <c>:</c>, <c>|</c> or <c> - </c> (<c>DE: Film</c>, <c>FR - Film</c>).</item>
 /// <item>A code alone in square brackets or parentheses (<c>Film [EN]</c>, <c>Film (DE)</c>).</item>
 /// <item>The markers <c>MULTI</c> and <c>VOSTFR</c> (subtitles fr), and <c>&lt;code&gt; SUB</c> (subtitles).</item>
-/// <item>A leading code (2 to 5 upper-case letters, at most one inner hyphen) that is not a known language or
-/// marker becomes a prefix tag as written (<c>UK: Film</c> gives the tag UK, not English), and so does such a
-/// code alone in brackets anywhere (<c>Film [UK]</c>). Quality labels (<c>Film (HD)</c>) give nothing.</item>
 /// </list>
-/// Codes outside <see cref="LanguageCodes"/> are never read as a language.
+/// Codes outside <see cref="LanguageCodes"/> are ignored, so country-only prefixes (<c>UK: Film</c>) give nothing.
 /// </summary>
 public static class LanguageTagParser
 {
@@ -45,7 +39,7 @@ public static class LanguageTagParser
 
   /// <summary>
   /// The fixed list of recognised language codes and the ISO 639-1 language each one means. Codes that are
-  /// also common country prefixes in playlists (UK, AR, TR, AL) are left out on purpose and become tags.
+  /// also common country prefixes in playlists (UK, US, AR, TR, AL) are left out on purpose.
   /// </summary>
   public static readonly IReadOnlyDictionary<string, string> LanguageCodes = new Dictionary<string, string>(StringComparer.Ordinal)
   {
@@ -70,15 +64,9 @@ public static class LanguageTagParser
     ["HI"] = "hi", ["HIN"] = "hi",
   };
 
-  /// <summary>Picture-quality labels that are never prefix tags, so <c>Film (HD)</c> gives nothing.</summary>
-  private static readonly HashSet<string> QualityLabels = new(StringComparer.Ordinal)
-  {
-    "SD", "HD", "FHD", "UHD", "HDR", "HEVC",
-  };
-
   public static LanguageTags Parse(string? entryName, string? groupTitle)
   {
-    var result = new LanguageTags(NewSet(), NewSet(), NewSet(), NewSet());
+    var result = new LanguageTags(NewSet(), NewSet(), NewSet());
     Read(entryName, LanguageTagSource.Name, result);
     Read(groupTitle, LanguageTagSource.Group, result);
     return result;
@@ -126,10 +114,6 @@ public static class LanguageTagParser
       {
         Add(result.AudioLanguages, language, source);
       }
-      else if ((bracketed || leading) && !QualityLabels.Contains(token))
-      {
-        Add(result.PrefixTags, token, source);
-      }
     }
   }
 
@@ -160,30 +144,9 @@ public static class LanguageTagParser
     return tokens;
   }
 
-  // 2 to 5 upper-case ASCII letters, with at most one hyphen between letters (EX-YU), or the marker VOSTFR.
-  private static bool IsCode(string token)
-  {
-    var letters = 0;
-    var hyphens = 0;
-    for (var i = 0; i < token.Length; i++)
-    {
-      var c = token[i];
-      if (c is >= 'A' and <= 'Z')
-      {
-        letters++;
-      }
-      else if (c == '-' && i > 0 && i < token.Length - 1 && hyphens++ == 0)
-      {
-        continue;
-      }
-      else
-      {
-        return false;
-      }
-    }
-
-    return token == Vostfr || letters is >= 2 and <= 5;
-  }
+  // 2 to 6 upper-case ASCII letters (the longest code or marker is VOSTFR).
+  private static bool IsCode(string token) =>
+    token.Length is >= 2 and <= 6 && token.All(c => c is >= 'A' and <= 'Z');
 
   // "DE SUB" is one marker only when nothing but spaces stands between the code and SUB ("DE: SUB" is not).
   private static bool OnlySpacesBetween(string text, int from, int to)
@@ -223,7 +186,7 @@ public static class LanguageTagParser
   }
 
   // ':' or '|' after the leading code (spaces allowed before it), or a hyphen with a space on both sides, so
-  // "EX-YU" and "Spider-Man" are never split.
+  // "Spider-Man" is never split.
   private static bool HasSeparatorAfter(string text, int position)
   {
     var spaces = 0;
