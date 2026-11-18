@@ -53,19 +53,42 @@ public class EditorWideLayoutTests
   {
     var css = Read("app.css");
     var outsideMedia = Regex.Replace(css, @"@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", "");
-    Assert.Matches(@"\.group-samples,\s*\.group-adult,\s*\.group-origin\s*\{\s*display:\s*none;", outsideMedia);
+    Assert.Matches(@"\.group-samples,\s*\.group-adult,\s*\.group-origin,\s*\.group-dups,\s*\.group-variants\s*\{\s*display:\s*none;", outsideMedia);
     Assert.Matches(@"\.group-row\s*\{[^}]*display:\s*flex;", outsideMedia);
     Assert.Matches(@"\.group-row\s*\{[^}]*height:\s*var\(--row-h\);", outsideMedia);
     var rowMedia = Regex.Matches(css, @"@media \(min-width: 1100px\)\s*\{((?:[^{}]*\{[^{}]*\})*)[^{}]*\}")
       .Select(m => m.Groups[1].Value)
       .Single(b => b.Contains(".group-samples"));
-    Assert.Matches(@"\.group-row\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*10px minmax\(340px, 1fr\) 64px minmax\(0, 1fr\) 36px minmax\(0, 0\.6fr\) 56px 46px;\s*\}", rowMedia);
-    var order = new[] { ".dot", ".group-name", ".tag", ".group-samples", ".group-adult", ".group-origin", ".group-count", ".toggle" };
+    Assert.Matches(@"\.group-row\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*10px minmax\(260px, 1fr\) 64px minmax\(0, 1fr\) 36px minmax\(0, 0\.6fr\) 48px 48px 56px 46px;\s*\}", rowMedia);
+    var order = new[] { ".dot", ".group-name", ".tag", ".group-samples", ".group-adult", ".group-origin", ".group-dups", ".group-variants", ".group-count", ".toggle" };
     for (var i = 0; i < order.Length; i++)
       Assert.Matches($@"\.group-row > {Regex.Escape(order[i])} \{{ grid-column: {i + 1};", rowMedia);
     Assert.DoesNotContain("height", Regex.Match(rowMedia, @"\.group-row\s*\{[^}]*\}").Value);
     Assert.Matches(@"\.group-samples,\s*\.group-origin\s*\{[^}]*text-overflow:\s*ellipsis;\s*white-space:\s*nowrap;", rowMedia);
+    Assert.Matches(@"\.group-dups,\s*\.group-variants\s*\{[^}]*white-space:\s*nowrap;[^}]*text-align:\s*right;", rowMedia);
     Assert.Contains("Desktop group row (from 1100px)", Read("DESIGN.md"));
+  }
+
+  [Fact]
+  public void Editor_ReportCounts_FillRowsOnlyAfterReport_AndClearOnLoad()
+  {
+    var js = Read("main.js");
+    Assert.Contains("h('label', { class: 'group-row', role: 'listitem' }, dot, name, badge, samples, adult, origin, dups, variants, count, check);", js);
+    // Null until the report ran; a fresh analysis (another playlist) clears it.
+    Assert.Contains("reportCounts: null,", js);
+    var analysis = js[js.IndexOf("function applyAnalysis", StringComparison.Ordinal)..];
+    Assert.Contains("ed.reportCounts = null;", analysis[..analysis.IndexOf("\n}", StringComparison.Ordinal)]);
+    // Filled from groupCounts by group key, only for the list the report checked.
+    Assert.Contains("ed.reportCounts = new Map((groupCounts || []).map((c) => [c.group, c]));", js);
+    Assert.Contains("if (ed.cacheKey === cacheKey) applyReportCounts(ed, report.groupCounts);", js);
+    var paint = js[js.IndexOf("function paintRows", StringComparison.Ordinal)..js.IndexOf("function onRowToggle", StringComparison.Ordinal)];
+    Assert.Contains("const found = ed.reportCounts?.get(g.key);", paint);
+    // A missing group or a zero count leaves the cell empty, never "0".
+    Assert.Contains("dups.textContent = dupCount ? `${fmt(dupCount)} dup` : '';", paint);
+    Assert.Contains("variants.textContent = variantCount ? `${fmt(variantCount)} var` : '';", paint);
+    var design = Read("DESIGN.md").Replace("\r\n", "\n").Replace("\n", " ");
+    Assert.Contains("duplicates and variants (48px each", design);
+    Assert.Contains("so they never show 0", design);
   }
 
   [Fact]
@@ -73,7 +96,7 @@ public class EditorWideLayoutTests
   {
     var js = Read("main.js");
     Assert.Contains("const samples = Array.isArray(g.sampleTitles) ? g.sampleTitles.filter(Boolean).join(', ') : '';", js);
-    Assert.Contains("h('label', { class: 'group-row', role: 'listitem' }, dot, name, badge, samples, adult, origin, count, check);", js);
+    Assert.Contains("h('label', { class: 'group-row', role: 'listitem' }, dot, name, badge, samples, adult, origin, dups, variants, count, check);", js);
     var paint = js[js.IndexOf("function paintRows", StringComparison.Ordinal)..js.IndexOf("function onRowToggle", StringComparison.Ordinal)];
     Assert.Contains("samples.textContent = g.samples;", paint);
     Assert.Contains("adult.textContent = g.adult ? '18+' : '';", paint);

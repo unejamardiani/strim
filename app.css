@@ -967,30 +967,34 @@ select.input {
 /* Desktop row columns: below 1100px they produce no box, so the phone and tablet row is unchanged. */
 .group-samples,
 .group-adult,
-.group-origin {
+.group-origin,
+.group-dups,
+.group-variants {
   display: none;
 }
 
 /* From 1100px each row is a grid with fixed tracks, so the cells line up down the list and the row
    stays one line. Every part has its own column, so an empty or hidden cell never shifts the others.
-   The name keeps at least the 340px it had in the 560px column of #216; the new cells share the rest. */
+   The name keeps at least 260px, so the duplicate and variant tracks of #229 still fit at 1100px. */
 @media (min-width: 1100px) {
   .group-row {
     display: grid;
-    grid-template-columns: 10px minmax(340px, 1fr) 64px minmax(0, 1fr) 36px minmax(0, 0.6fr) 56px 46px;
+    grid-template-columns: 10px minmax(260px, 1fr) 64px minmax(0, 1fr) 36px minmax(0, 0.6fr) 48px 48px 56px 46px;
   }
 
   .group-row > .dot { grid-column: 1; }
   .group-row > .group-name { grid-column: 2; }
   .group-row > .tag { grid-column: 3; justify-self: start; }
-  /* Unsplit Live rows hide their tag: the name takes the tag track too (about 416px), as it did before. */
+  /* Unsplit Live rows hide their tag: the name takes the tag track too (at least about 336px). */
   .group-row > .tag[hidden] { display: none; }
   .group-row:has(> .tag[hidden]) > .group-name { grid-column: 2 / 4; }
   .group-row > .group-samples { grid-column: 4; }
   .group-row > .group-adult { grid-column: 5; justify-self: start; }
   .group-row > .group-origin { grid-column: 6; }
-  .group-row > .group-count { grid-column: 7; justify-self: end; }
-  .group-row > .toggle { grid-column: 8; }
+  .group-row > .group-dups { grid-column: 7; }
+  .group-row > .group-variants { grid-column: 8; }
+  .group-row > .group-count { grid-column: 9; justify-self: end; }
+  .group-row > .toggle { grid-column: 10; }
 
   .group-samples,
   .group-origin {
@@ -1001,6 +1005,26 @@ select.input {
     white-space: nowrap;
     font-size: 13px;
     font-weight: 450;
+    color: var(--ink-3);
+  }
+
+  /* Report counts: empty until the report ran for this list, and for a group without findings. */
+  .group-dups,
+  .group-variants {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+    font-size: 12px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+  }
+
+  .group-row.off .group-dups,
+  .group-row.off .group-variants {
     color: var(--ink-3);
   }
 
