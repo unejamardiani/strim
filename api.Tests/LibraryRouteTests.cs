@@ -112,16 +112,19 @@ public class LibraryRouteTests
     // Both routes go through one shared request per source; another source waits for the previous one.
     Assert.Contains("if (!sample) return sharedAnalysis(url, { sourceUrl: url }, signal);", fetch);
     Assert.Contains("let entry = pendingAnalyses.get(key);", fetch);
-    Assert.Contains("entry.promise = lastAnalysis.then(() => api('/playlist/analyze', { method: 'POST', body, signal: controller.signal }));", fetch);
+    Assert.Contains("entry = { promise: lastAnalysis.then(() => api('/playlist/analyze', { method: 'POST', body })) };", fetch);
     Assert.Contains("lastAnalysis = entry.promise.catch(() => {});", fetch);
 
-    // A caller that leaves stops waiting; the request is cancelled only when nobody joined it a turn later.
+    // An aborted fetch settles before the server releases its gate, so the next analysis would start too early
+    // and get a 429. The analyze request therefore carries no signal and is never aborted; the queue advances
+    // only once the server answered, and a caller that leaves only stops waiting.
+    var queue = fetch[fetch.IndexOf("const pendingAnalyses", StringComparison.Ordinal)..];
+    Assert.DoesNotContain("signal: controller.signal", queue);
+    Assert.DoesNotContain("AbortController", queue);
+    Assert.DoesNotContain(".abort()", queue);
     var join = fetch[fetch.IndexOf("function joinAnalysis(", StringComparison.Ordinal)..];
-    Assert.Contains("entry.waiting += 1;", join);
-    Assert.Contains("entry.waiting -= 1;", join);
-    Assert.Contains("if (entry.waiting > 0) return;", join);
-    Assert.Contains("entry.controller.abort();", join);
-    Assert.True(join.IndexOf("setTimeout(", StringComparison.Ordinal) < join.IndexOf("entry.controller.abort();", StringComparison.Ordinal));
+    Assert.Contains("const leave = () => reject(new DOMException('The analysis was cancelled.', 'AbortError'));", join);
+    Assert.Contains("signal?.addEventListener('abort', leave, { once: true });", join);
 
     // Leaving the Library cancels its wait before the next route joins; the Library uses main.js's controller.
     var route = Between(js, "function route()", "function closeSheets()");

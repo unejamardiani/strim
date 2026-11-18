@@ -860,38 +860,28 @@ async function fetchAnalysis(url, { sample = false, signal } = {}) {
 }
 
 // The server admits one analyze request at a time (UseAnalyzeBodyGate) and answers a second one with 429.
-// So the editor and the Library share the pending analysis of a source URL, an analysis of another source
-// waits until the previous one settled, and a request nobody waits for any more is cancelled.
+// So the editor and the Library share the pending analysis of a source URL, and an analysis of another source
+// waits until the previous one settled. A caller that leaves only stops waiting: the request itself is never
+// aborted, because the browser settles an aborted fetch before the server has released its gate, and the next
+// analysis would then start too early and get the 429.
 const pendingAnalyses = new Map();
 let lastAnalysis = Promise.resolve();
 
 function sharedAnalysis(key, body, signal) {
   let entry = pendingAnalyses.get(key);
   if (!entry) {
-    const controller = new AbortController();
-    entry = { controller, waiting: 0 };
-    entry.promise = lastAnalysis.then(() => api('/playlist/analyze', { method: 'POST', body, signal: controller.signal }));
+    entry = { promise: lastAnalysis.then(() => api('/playlist/analyze', { method: 'POST', body })) };
     lastAnalysis = entry.promise.catch(() => {});
     const done = entry;
     lastAnalysis.then(() => { if (pendingAnalyses.get(key) === done) pendingAnalyses.delete(key); });
     pendingAnalyses.set(key, entry);
   }
-  return joinAnalysis(key, entry, signal);
+  return joinAnalysis(entry, signal);
 }
 
-function joinAnalysis(key, entry, signal) {
-  entry.waiting += 1;
+function joinAnalysis(entry, signal) {
   return new Promise((resolve, reject) => {
-    const leave = () => {
-      entry.waiting -= 1;
-      // Checked a turn later, so the route that takes over (Library to editor) can join the request first.
-      setTimeout(() => {
-        if (entry.waiting > 0) return;
-        entry.controller.abort();
-        if (pendingAnalyses.get(key) === entry) pendingAnalyses.delete(key);
-      }, 0);
-      reject(new DOMException('The analysis was cancelled.', 'AbortError'));
-    };
+    const leave = () => reject(new DOMException('The analysis was cancelled.', 'AbortError'));
     if (signal?.aborted) return leave();
     signal?.addEventListener('abort', leave, { once: true });
     entry.promise.then(resolve, reject).finally(() => signal?.removeEventListener('abort', leave));
