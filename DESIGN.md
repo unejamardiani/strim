@@ -97,7 +97,8 @@ entries of a group (a dashed 22px outline while it is empty).
 
 Desktop group row (from 1100px): each row is a one-line grid with fixed tracks, so the columns
 line up down the list. In order: marker (10px), name (1fr but at least 340px, the room it
-had in the 560px column, so the new cells never shrink it), type tag (64px), sample titles
+had in the 560px column, so the new cells never shrink it), type tag (64px; an unsplit Live row
+hides its tag and its name spans the tag track as well, about 416px), sample titles
 (1fr: the first entry titles of the group, comma-joined and cut off with an ellipsis), adult
 mark (36px: an "18+" tag on `--surface-2` in `--ink-2`), split origin (0.6fr: "from" and the
 provider's group title when Strim split that title by content type), count (56px, right-aligned)

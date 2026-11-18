@@ -955,6 +955,9 @@ select.input {
   .group-row > .dot { grid-column: 1; }
   .group-row > .group-name { grid-column: 2; }
   .group-row > .tag { grid-column: 3; justify-self: start; }
+  /* Unsplit Live rows hide their tag: the name takes the tag track too (about 416px), as it did before. */
+  .group-row > .tag[hidden] { display: none; }
+  .group-row:has(> .tag[hidden]) > .group-name { grid-column: 2 / 4; }
   .group-row > .group-samples { grid-column: 4; }
   .group-row > .group-adult { grid-column: 5; justify-self: start; }
   .group-row > .group-origin { grid-column: 6; }
