@@ -69,28 +69,65 @@ public class LibraryBrowseTests
     Assert.Contains("if (state.open && !includeOff && list.disabled.has(state.open.group.key)) close();", refresh);
   }
 
+  private const string PinnedOpenAndLoadPage = """
+        const open = (g) => {
+          const view = {
+            group: g, offset: 0,
+            count: h('p', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') }),
+            list: h('ol', { class: 'search-list library-entries' }),
+            foot: h('div', { class: 'library-foot' }),
+          };
+          state.open = view;
+          entriesEl.replaceChildren(
+            h('div', { class: 'library-entries-head' },
+              h('button', { class: 'btn btn-sm', type: 'button', onclick: close }, icon('back'), 'All groups'),
+              h('div', { class: 'grow' }, h('h3', { class: 'library-group-title', text: g.title || 'Untitled group' }), view.count),
+              offBadge(g)),
+            h('div', { class: 'card' }, view.list, view.foot));
+          groupsEl.hidden = true;
+          entriesEl.hidden = false;
+          el.scrollIntoView({ block: 'start' });
+          loadPage(view);
+        };
+
+        // A failed page shows its error below the entries already shown, which stay.
+        const loadPage = async (view) => {
+          view.foot.replaceChildren(status(view.offset ? 'Loading more…' : 'Loading entries…'));
+          let page;
+          try {
+            page = await ctx.groupEntries({ cacheKey: list.cacheKey, group: view.group.key, offset: view.offset, limit: PAGE_SIZE }, ctx.controller.signal);
+          } catch (err) {
+            if (view !== state.open || ctx.controller.signal.aborted) return;
+            view.foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+              h('p', { text: err.message || 'The entries could not be loaded.' }),
+              h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'Try again')));
+            return;
+          }
+          if (view !== state.open || !ctx.isCurrent()) return;
+          const names = page.names || [];
+          view.list.append(...names.map((name) => h('li', { class: 'library-hit' }, h('span', { class: 'search-hit-name', text: name }))));
+          view.offset += names.length;
+          view.count.textContent = plural(page.total, 'entry', 'entries');
+          const done = names.length === 0 || view.offset >= page.total;
+          if (!done) view.foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'More'));
+          else view.foot.replaceChildren(status(page.total === 0 ? 'No entries in this group.' : `All ${fmt(page.total)} shown`));
+        };
+    """;
+
   [Fact]
   public void OpeningAGroup_PagesWithOffsetAndLimit_UntilTotal_AndAFailedPageKeepsTheEntries()
   {
     var browse = Browse();
-    var load = Between(browse, "const loadPage = async (view) => {", "const refresh = () => {");
-    Assert.Contains("page = await ctx.groupEntries({ cacheKey: list.cacheKey, group: view.group.key, offset: view.offset, limit: PAGE_SIZE }, ctx.controller.signal);", load);
-    Assert.Contains("view.offset += names.length;", load);
-    Assert.Contains("const done = names.length === 0 || view.offset >= page.total;", load);
-    Assert.Contains("if (!done) view.foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'More'));", load);
-    // Names are text; new names are appended, so earlier pages stay.
-    Assert.Contains("view.list.append(...names.map((name) => h('li', { class: 'library-hit' }, h('span', { class: 'search-hit-name', text: name }))));", load);
+    // Opening (first page at once), each request with offset/limit, 'More' until total, and a failure that
+    // only replaces the footer are pinned to the exact source: clearing the list, skipping the first page or
+    // another offset step fails here. api.Tests has no JS engine (no new dependency); the test below walks
+    // the real endpoint with the same steps.
+    Assert.Equal(PinnedOpenAndLoadPage.ReplaceLineEndings("\n"), Between(browse, "    const open = (g) => {", "\n\n    // The shared toggle"));
+    // The entries list is only placed in the view and appended to; nothing else clears or replaces it.
+    Assert.Equal(2, Regex.Matches(browse, Regex.Escape("view.list")).Count);
     Assert.DoesNotContain("innerHTML", Read("library.js"));
 
-    // A failure replaces only the footer with the error and a retry; the list is not touched.
-    var failure = Between(load, "} catch (err) {", "return;\n      }");
-    Assert.Contains("view.foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },", failure);
-    Assert.Contains("'Try again'", failure);
-    Assert.DoesNotContain("view.list", failure);
-    Assert.Contains("if (view !== state.open || ctx.controller.signal.aborted) return;", failure);
-
-    // A page of a group no longer open is dropped; the page size is the server's limit.
-    Assert.Contains("if (view !== state.open || !ctx.isCurrent()) return;", load);
+    // The page size is the server's limit.
     Assert.Contains("const PAGE_SIZE = 50;", browse);
     Assert.Contains("public const int MaxSearchResults = 50;", Read("api/Endpoints/EndpointSupport.cs"));
 
@@ -99,26 +136,19 @@ public class LibraryBrowseTests
     Assert.Contains("groupEntries: (params, signal) => api(`/playlist/group-entries?${new URLSearchParams(params)}`, { signal }),", show);
     Assert.DoesNotContain("/playlist/group-entries", Read("library.js"));
 
-    // 'All groups' goes back to the list.
-    var open = Between(browse, "const open = (g) => {", "const loadPage =");
-    Assert.Contains("h('button', { class: 'btn btn-sm', type: 'button', onclick: close }, icon('back'), 'All groups'),", open);
+    // 'All groups' (pinned in open) goes back to the list.
     var close = Between(browse, "const close = () => {", "const open = (g) => {");
     Assert.Contains("groupsEl.hidden = false;", close);
   }
 
   /// <summary>
-  /// Walks a 120-entry group through the real app the way loadPage does: the first page on opening, then
+  /// Walks a 120-entry group through the real endpoint with the steps of the loadPage pinned above: the first page on opening, then
   /// 'More' with offset += names until total. A failed page leaves the shown names and 'Try again' resumes.
   /// </summary>
   [Fact]
   public async Task PagingAGroup_ThroughTheRealEndpoint_RequestsSuccessivePagesUntilTotal()
   {
     var browse = Browse();
-    // Opening a group loads its first page at once; 'More' and 'Try again' load the next one.
-    var open = Between(browse, "const open = (g) => {", "const loadPage =");
-    Assert.EndsWith("el.scrollIntoView({ block: 'start' });\n      loadPage(view);\n    };\n\n    // A failed page shows its error below the entries already shown, which stay.\n    ", open);
-    Assert.Contains("view = {\n        group: g, offset: 0,", open);
-    Assert.Equal(2, Regex.Matches(browse, Regex.Escape("onclick: () => loadPage(view) }")).Count);
     var pageSize = int.Parse(Regex.Match(browse, @"const PAGE_SIZE = (\d+);").Groups[1].Value);
 
     using var app = new StrimAppFactory();
