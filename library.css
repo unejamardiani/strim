@@ -92,3 +92,35 @@
 .library-foot .notice {
   margin: 12px 18px;
 }
+
+/* Wide Library (#288, the editor's 1100px breakpoint): once the groups are loaded the page widens to
+   1440px, and an open group shows its entries next to the group list instead of replacing it. */
+@media (min-width: 1100px) {
+  .page:has(.library-browse) {
+    max-width: 1440px;
+  }
+
+  .library-browse:has(> .library-open:not([hidden])) {
+    display: grid;
+    grid-template-columns: minmax(300px, 0.4fr) minmax(0, 1fr);
+    gap: 12px 24px;
+    align-items: start;
+  }
+
+  .library-browse > .library-title {
+    grid-column: 1 / -1;
+  }
+
+  /* theme.css hides every [hidden] element with !important, so only an !important override (later in the
+     cascade, scoped to the wide breakpoint) keeps the group list shown next to the open group. */
+  .library-browse > .library-groups[hidden] {
+    display: flex !important;
+  }
+
+  .library-browse > .library-open {
+    position: sticky;
+    top: calc(var(--topbar-h) + 8px);
+    max-height: calc(100vh - var(--topbar-h) - 24px);
+    overflow-y: auto;
+  }
+}
