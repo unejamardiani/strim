@@ -22,7 +22,8 @@ builder.Services
   .AddStrimRateLimits()
   .AddStrimAntiforgery(environment)
   .AddStrimAuthentication(configuration, environment)
-  .AddStrimPlaylistServices(configuration);
+  .AddStrimPlaylistServices(configuration)
+  .AddStrimTmdb();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");
