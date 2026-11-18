@@ -198,9 +198,12 @@ public static class ProcessingEndpoints
             return Results.BadRequest(new { error = SessionExpired });
           }
 
-          var entries = await PlaylistProcessor.ReadEntriesFromFileAsync(
-            source.FilePath, pipeline.Cache.MaxReportBytes, context.RequestAborted, pipeline.Cache.MaxLineLengthChars);
-          return Results.Ok(BuildReport(entries, context));
+          // Reads the file once per pass (PlaylistReport.StreamingPassCount) while the job gate stays held.
+          var filePath = source.FilePath;
+          var maxLineLengthChars = pipeline.Cache.MaxLineLengthChars;
+          return Results.Ok(await PlaylistReport.BuildStreamingAsync(
+            ct => PlaylistProcessor.StreamEntriesFromFileAsync(filePath, ct, maxLineLengthChars),
+            pipeline.Cache.MaxReportBytes, PlaylistReport.MaxListedSetsPerKind, context.RequestAborted));
         }
         catch (Exception ex)
         {
