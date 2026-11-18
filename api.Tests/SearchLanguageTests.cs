@@ -89,6 +89,64 @@ public class SearchLanguageTests
   }
 
   [Fact]
+  public async Task Search_CarriesHyphenatedTagsWithoutAdjacentCapitals()
+  {
+    var index = await Analyze("""
+      #EXTM3U
+      #EXTINF:-1 group-title="Films",A-B: Example
+      https://example.com/movie/u/p/1.mp4
+      #EXTINF:-1 group-title="Films",Example [A-B]
+      https://example.com/movie/u/p/2.mp4
+      """);
+
+    foreach (var name in new[] { "A-B: Example", "Example [A-B]" })
+    {
+      var tags = Find(index, name).Languages;
+      Assert.Equal(new[] { "A-B" }, tags.PrefixTags);
+      Assert.Equal("title", tags.Source);
+    }
+  }
+
+  // Each tag keeps at least a string object (about 32 bytes for five letters) and an array reference.
+  private const int RetainedBytesPerTag = 40;
+
+  [Theory]
+  [InlineData(false)]
+  [InlineData(true)]
+  public void LanguageTable_CountsEveryDistinctTag(bool inGroupTitle)
+  {
+    const int count = 200;
+    const int tagsPerEntry = 10;
+    var tagged = new PlaylistSearchIndex(long.MaxValue);
+    var plain = new PlaylistSearchIndex(long.MaxValue);
+    for (var i = 0; i < count; i++)
+    {
+      // Distinct bracketed tags per entry; the plain twin has the same lengths in lower case, which hold no tag.
+      var tags = string.Join(' ', Enumerable.Range(i * tagsPerEntry, tagsPerEntry).Select(n => $"[{Code(n)}]"));
+      var (name, group) = inGroupTitle ? ($"Film {i}", $"{tags} Films") : ($"{tags} Film {i}", "Films");
+      Assert.True(tagged.TryAdd($"#EXTINF:-1,{name}", group, PlaylistContentType.Movies));
+      Assert.True(plain.TryAdd($"#EXTINF:-1,{name.ToLowerInvariant()}", group.ToLowerInvariant(), PlaylistContentType.Movies));
+    }
+
+    Assert.Equal(count + 1, Get<System.Collections.IList>(tagged, "_languages").Count);
+    var floor = (long)count * tagsPerEntry * RetainedBytesPerTag;
+    Assert.True(tagged.EstimatedBytes - plain.EstimatedBytes >= floor, $"{tagged.EstimatedBytes - plain.EstimatedBytes} bytes");
+
+    // A budget that holds the plain list and the floor is exceeded once every tag is counted.
+    var bounded = new PlaylistSearchIndex(plain.EstimatedBytes + floor);
+    var added = Enumerable.Range(0, count).All(i =>
+    {
+      var tags = string.Join(' ', Enumerable.Range(i * tagsPerEntry, tagsPerEntry).Select(n => $"[{Code(n)}]"));
+      var (name, group) = inGroupTitle ? ($"Film {i}", $"{tags} Films") : ($"{tags} Film {i}", "Films");
+      return bounded.TryAdd($"#EXTINF:-1,{name}", group, PlaylistContentType.Movies);
+    });
+    Assert.False(added);
+  }
+
+  private static string Code(int n) =>
+    $"Q{(char)('A' + (n / 17576 % 26))}{(char)('A' + (n / 676 % 26))}{(char)('A' + (n / 26 % 26))}{(char)('A' + (n % 26))}";
+
+  [Fact]
   public async Task OverBudget_AnalysisWithLanguagesStillSucceeds()
   {
     var path = await WriteTemp(Tagged);
