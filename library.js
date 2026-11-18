@@ -156,7 +156,7 @@
     const { h, icon, fmt, plural } = ctx;
     const state = { open: null };
     const groupsEl = h('div', { class: 'library-groups' });
-    const entriesEl = h('div', { hidden: true });
+    const entriesEl = h('div', { class: 'library-open', hidden: true });
     const el = h('section', { class: 'library-browse' }, h('h2', { class: 'library-title', text: 'Browse groups' }), groupsEl, entriesEl);
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
     const offBadge = (g) => (list.disabled.has(g.key) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
