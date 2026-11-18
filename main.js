@@ -1855,12 +1855,15 @@ function syncSearchBadges(ed) {
 
 function jumpToGroup(ed, key) {
   if (picker.ed !== ed) return;
+  const showChanged = ed.filter.show !== 'all';
   ed.filter.type = 'all';
   ed.filter.show = 'all';
   for (const pills of [picker.typeButtons, picker.showButtons]) {
     for (const b of pills?.children || []) b.setAttribute('aria-pressed', String(b.dataset.value === 'all'));
   }
   updateView(false);
+  // Show is now All, so the Everything search lists the matches it left out under On as well.
+  if (showChanged && ed.searchMode === 'everything') runSearch(ed);
   const index = ed.view.findIndex((g) => g.key === key);
   if (index < 0) {
     toast('That group is not in the list.', { error: true });

@@ -93,6 +93,15 @@ public class EditorShowFilterTests
     // Pressing a show button in Everything mode searches again.
     var row = Between(js, "const filters = h('div', { class: 'toolbar-row show-row' });", "rows.push(filters);");
     Assert.Contains("if (ed.searchMode === 'everything') runSearch(ed);", row);
+
+    // Jumping from a hit to its group switches Show to All, so the search runs again without the hide flag.
+    var jump = Between(js, "function jumpToGroup(ed, key)", "\n}\n");
+    Assert.Contains("const showChanged = ed.filter.show !== 'all';", jump);
+    Assert.Contains("if (showChanged && ed.searchMode === 'everything') runSearch(ed);", jump);
+    Assert.True(
+      jump.IndexOf("const showChanged", StringComparison.Ordinal) < jump.IndexOf("ed.filter.show = 'all';", StringComparison.Ordinal)
+      && jump.IndexOf("ed.filter.show = 'all';", StringComparison.Ordinal) < jump.IndexOf("runSearch(ed);", StringComparison.Ordinal),
+      "jumpToGroup must note the old show value, switch to All, then rerun the search.");
   }
 
   [Fact]
