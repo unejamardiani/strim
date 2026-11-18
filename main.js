@@ -1237,6 +1237,8 @@ function pickerNodes(ed) {
       ed.filter.show = value;
       writeGroupShow(ed.isSample ? null : ed.id, value);
       updateView(true);
+      // The Everything search follows the same choice: On leaves out matches in switched-off groups.
+      if (ed.searchMode === 'everything') runSearch(ed);
     }));
   picker.showButtons.setAttribute('aria-labelledby', 'group-show-label');
   filters.append(h('div', { class: 'spacer' }), sort);
@@ -1758,13 +1760,14 @@ function scheduleSearch(ed) {
 async function runSearch(ed) {
   cancelSearch();
   const query = ed.filter.query.trim();
+  const hideDisabled = ed.filter.show === 'kept';
   const hint = searchHint(query);
   if (hint) {
     ed.search = { status: 'hint', query, message: hint };
     renderSearchResults(ed);
     return;
   }
-  if (ed.search?.status === 'done' && ed.search.query === query) {
+  if (ed.search?.status === 'done' && ed.search.query === query && ed.search.hideDisabled === hideDisabled) {
     renderSearchResults(ed);
     return;
   }
@@ -1775,11 +1778,14 @@ async function runSearch(ed) {
   try {
     const result = await api('/playlist/search', {
       method: 'POST',
-      body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled] },
+      body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled], hideDisabled },
       signal: controller.signal,
     });
     if (searchController !== controller) return;
-    ed.search = { status: 'done', query, matches: result.matches || [], hasMore: result.hasMore === true };
+    ed.search = {
+      status: 'done', query, hideDisabled, matches: result.matches || [], hasMore: result.hasMore === true,
+      hiddenCount: hideDisabled && Number.isInteger(result.hiddenCount) ? result.hiddenCount : 0,
+    };
   } catch (err) {
     if (isAbort(err) || searchController !== controller) return;
     ed.search = { status: 'error', query, message: err.message || 'Search failed.' };
@@ -1808,9 +1814,13 @@ function renderSearchResults(ed) {
     return;
   }
   const matches = s.matches.slice(0, MAX_SEARCH_RESULTS);
-  const nodes = [status(s.status === 'loading'
-    ? 'Searching…'
-    : matches.length ? plural(matches.length, 'match', 'matches') : 'Nothing matches your search.')];
+  const hidden = s.status === 'done' ? s.hiddenCount || 0 : 0;
+  let text = 'Nothing matches your search.';
+  if (s.status === 'loading') text = 'Searching…';
+  else if (matches.length && hidden > 0) text = `${plural(matches.length, 'match', 'matches')} · ${fmt(hidden)} in switched-off groups not shown`;
+  else if (matches.length) text = plural(matches.length, 'match', 'matches');
+  else if (hidden > 0) text = `All ${plural(hidden, 'match', 'matches')} are in switched-off groups. Choose All to see them.`;
+  const nodes = [status(text)];
   if (matches.length) nodes.push(h('ul', { class: 'search-list' }, matches.map((m) => searchHit(ed, m))));
   if (s.status === 'done' && s.hasMore) nodes.push(h('p', { class: 'search-more', text: 'More matches, refine your search.' }));
   panel.replaceChildren(...nodes);
@@ -1845,12 +1855,15 @@ function syncSearchBadges(ed) {
 
 function jumpToGroup(ed, key) {
   if (picker.ed !== ed) return;
+  const showChanged = ed.filter.show !== 'all';
   ed.filter.type = 'all';
   ed.filter.show = 'all';
   for (const pills of [picker.typeButtons, picker.showButtons]) {
     for (const b of pills?.children || []) b.setAttribute('aria-pressed', String(b.dataset.value === 'all'));
   }
   updateView(false);
+  // Show is now All, so the Everything search lists the matches it left out under On as well.
+  if (showChanged && ed.searchMode === 'everything') runSearch(ed);
   const index = ed.view.findIndex((g) => g.key === key);
   if (index < 0) {
     toast('That group is not in the list.', { error: true });
