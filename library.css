@@ -1,0 +1,7 @@
+/* Strim Library (library.js): the read-only view of a saved playlist. */
+
+.library-head .page-title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
