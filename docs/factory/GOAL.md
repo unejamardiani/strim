@@ -41,6 +41,8 @@ Never touched without the owner deciding first; a story that needs one of these 
 - authentication, sign-in providers and CSRF protection;
 - the security of player (share) links: their codes, lifetime, access and the anonymous share route;
 - the database schema beyond additive columns (no EF migrations, no renamed or dropped columns or tables);
+  exception, approved by the owner on 18 Nov 2026: one new table for a user's film and series marks (seen, thumbs
+  up or down), created idempotently in `Configuration/Database.cs` the way the Identity tables are;
 - hosting, Docker, Docker Compose, CI workflows and anything in `tools/`;
 - the marketing copy of the landing page, guides and comparison page;
 - licences, including the font licences in `fonts/`;
