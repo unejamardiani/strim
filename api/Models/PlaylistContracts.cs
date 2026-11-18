@@ -48,7 +48,15 @@ public record PlaylistReportResponse(
   int VariantEntryCount,
   bool Truncated,
   List<ReportDuplicateSet> DuplicateSets,
-  List<ReportVariantGroup> VariantGroups);
+  List<ReportVariantGroup> VariantGroups,
+  List<ReportGroupCount> GroupCounts);
+
+/// <summary>
+/// How many entries of one group are in any duplicate set or variant group, over the whole list. Groups without
+/// either are left out.
+/// </summary>
+/// <param name="Group">The group key, the same as the analysis group's <c>Name</c>.</param>
+public record ReportGroupCount(string Group, int DuplicateEntryCount, int VariantEntryCount);
 
 public record ReportDuplicateSet(IReadOnlyList<string> Groups, List<ReportEntry> Entries);
 
@@ -59,8 +67,13 @@ public record ReportEntry(string Name, string Group, IReadOnlyList<string> Quali
 
 /// <param name="HideDisabled">Leaves out matches in disabled groups and counts them in HiddenCount.</param>
 /// <param name="ContentTypes">Names of <c>PlaylistContentType</c> to keep, combined as OR; absent or empty keeps all.</param>
+/// <param name="Lang">
+/// Comma-separated languages (de) or prefix tags (UK, EX-YU), combined as OR and compared case-insensitively;
+/// an entry matches when its audio or subtitle languages or its prefix tags hold one. Absent or empty keeps all.
+/// </param>
 public record PlaylistSearchRequest(
-  string? CacheKey, string? Query, List<string>? DisabledGroups, bool? HideDisabled = null, List<string>? ContentTypes = null);
+  string? CacheKey, string? Query, List<string>? DisabledGroups, bool? HideDisabled = null, List<string>? ContentTypes = null,
+  string? Lang = null);
 
 /// <param name="Group">The group-title the generated file writes for the entry.</param>
 /// <param name="GroupKey">Filter key sent back in disabledGroups.</param>
@@ -76,7 +89,11 @@ public record PlaylistSearchMatchResult(
   IReadOnlyList<string> PrefixTags, string? LanguageSource);
 
 /// <param name="HiddenCount">Matches left out because hideDisabled was set; 0 otherwise.</param>
-public record PlaylistSearchResponse(List<PlaylistSearchMatchResult> Matches, bool HasMore, int HiddenCount);
+/// <param name="Total">Every match after the filters, also those past the page; hidden matches not included.</param>
+/// <param name="Languages">The values lang accepts that occur in the playlist, with their entry counts.</param>
+public record PlaylistSearchResponse(
+  List<PlaylistSearchMatchResult> Matches, bool HasMore, int HiddenCount, int Total,
+  IReadOnlyList<Api.Services.PlaylistSearchLanguageCount> Languages);
 
 /// <param name="Names">Display names of one page of the group's entries, in playlist order.</param>
 /// <param name="Total">Number of entries in the whole group.</param>

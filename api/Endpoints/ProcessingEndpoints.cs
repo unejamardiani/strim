@@ -234,6 +234,11 @@ public static class ProcessingEndpoints
           return Results.BadRequest(new { error = $"Unknown content type. Use {string.Join(", ", knownTypes)}." });
         contentTypes.Add(Enum.Parse<PlaylistContentType>(known));
       }
+      if (input.Lang?.Length > MaxSearchLanguages * 8)
+        return Results.BadRequest(new { error = LanguageFormat });
+      var languages = (input.Lang ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+      if (languages.Length > MaxSearchLanguages || !languages.All(IsLanguageCode))
+        return Results.BadRequest(new { error = LanguageFormat });
 
       var source = pipeline.Cache.TryGetSessionSource(input.CacheKey);
       var analysis = source is null ? null : pipeline.Cache.TryGetAnalysis(source);
@@ -244,13 +249,13 @@ public static class ProcessingEndpoints
 
       var disabled = new HashSet<string>(input.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
       var result = index.Search(
-        input.Query, disabled, Limits.MaxSearchResults, input.HideDisabled == true, contentTypes);
+        input.Query, disabled, Limits.MaxSearchResults, input.HideDisabled == true, contentTypes, languages);
       return Results.Ok(new PlaylistSearchResponse(
         result.Matches.Select(m => new PlaylistSearchMatchResult(
           m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled,
           m.Languages.Audio, m.Languages.Subtitles, m.Languages.Markers, m.Languages.PrefixTags,
           m.Languages.Source)).ToList(),
-        result.HasMore, result.HiddenCount));
+        result.HasMore, result.HiddenCount, result.Total, index.LanguageCounts));
     }).RequireRateLimiting(Security.RateLimits.Fetch);
 
     // Read-only like the search: one page of a group's display names from the same index, so the
@@ -398,5 +403,18 @@ public static class ProcessingEndpoints
     if (disabledGroups?.Any(group => string.IsNullOrWhiteSpace(group) || group.Length > maxGroupKeyLength) == true)
       return Results.BadRequest(new { error = $"Each disabled group name must be between 1 and {maxGroupKeyLength} characters." });
     return null;
+  }
+
+  private const int MaxSearchLanguages = 20;
+  private const string LanguageFormat =
+    "Give at most 20 languages or tags, separated by commas, each 2 to 5 letters with at most one hyphen (de, UK, EX-YU).";
+
+  /// <summary>The shape of a language code or prefix tag: 2 to 5 ASCII letters, at most one hyphen between them.</summary>
+  private static bool IsLanguageCode(string value)
+  {
+    var hyphen = value.IndexOf('-');
+    var letters = value.Length - (hyphen < 0 ? 0 : 1);
+    return letters is >= 2 and <= 5 && hyphen != 0 && hyphen != value.Length - 1 && value.LastIndexOf('-') == hyphen
+      && value.All(c => c == '-' || char.IsAsciiLetter(c));
   }
 }
