@@ -1973,7 +1973,12 @@ function fitSearchLanguages() {
   }
 }
 
-const overflows = (strip) => strip.scrollWidth > strip.clientWidth + 1;
+// Compares the last shown label with the strip's edge rather than using scrollWidth, which would also count the
+// "+N" chip's wider tap area.
+function overflows(strip) {
+  const last = [...strip.querySelectorAll('.lang-chip:not(.lang-chip-off)')].at(-1);
+  return !!last && last.getBoundingClientRect().right > strip.getBoundingClientRect().right + 1;
+}
 
 // A label too wide to fit beside "+N" on its own (Audio with many languages) is shown in parts that each fit, under
 // the same heading ("Audio DE EN ES", then "Audio FR IT"). The whole label stays for screen readers; the parts are

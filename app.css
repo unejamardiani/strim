@@ -1320,10 +1320,28 @@ select.input {
     border: 0;
   }
 
+  /* A strip with a "+N" chip holds only labels that fit (main.js), so it need not clip; that lets the chip's tap
+     area reach past the strip. */
+  .search-langs:has(> .lang-more) {
+    overflow: visible;
+  }
+
   .lang-chip.lang-more {
+    position: relative;
     border: 1px dashed var(--line-strong);
     background: transparent;
     cursor: pointer;
+  }
+
+  /* The chip stays small so the row keeps two lines; its tap area is the 46px phone control, centred on it. */
+  .lang-chip.lang-more::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 46px);
+    height: 46px;
+    transform: translate(-50%, -50%);
   }
 
   .search-hit-line ~ .search-hit-meta {
