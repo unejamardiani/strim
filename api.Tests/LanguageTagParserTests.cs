@@ -116,6 +116,8 @@ public class LanguageTagParserTests
   [InlineData("EX-YU: Film", "EX-YU")]
   [InlineData("TR - Film", "TR")]
   [InlineData("[UK] Film", "UK")]
+  [InlineData("Film [UK]", "UK")]
+  [InlineData("Film (EX-YU)", "EX-YU")]
   public void CountryPrefix_GivesTagAsWrittenAndNoLanguage(string name, string expected)
   {
     var result = LanguageTagParser.Parse(name, null);
@@ -123,6 +125,15 @@ public class LanguageTagParserTests
     Assert.Equal(new[] { expected }, Sorted(result.PrefixTags));
     Assert.Equal(LanguageTagSource.Name, result.PrefixTags[expected]);
     Assert.Empty(result.AudioLanguages);
+    Assert.Empty(result.SubtitleLanguages);
+  }
+
+  [Fact]
+  public void PrefixCodeBeforeSeparator_IsAudioNotSubtitleMarker()
+  {
+    var result = LanguageTagParser.Parse("DE: SUB Orbit", null);
+
+    Assert.Equal(new[] { "de" }, Sorted(result.AudioLanguages));
     Assert.Empty(result.SubtitleLanguages);
   }
 

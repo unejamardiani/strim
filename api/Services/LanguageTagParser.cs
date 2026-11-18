@@ -33,8 +33,8 @@ public sealed record LanguageTags(
 /// <item>A code alone in square brackets or parentheses (<c>Film [EN]</c>, <c>Film (DE)</c>).</item>
 /// <item>The markers <c>MULTI</c> and <c>VOSTFR</c> (subtitles fr), and <c>&lt;code&gt; SUB</c> (subtitles).</item>
 /// <item>A leading code (2 to 5 upper-case letters, at most one inner hyphen) that is not a known language or
-/// marker becomes a prefix tag as written (<c>UK: Film</c> gives the tag UK, not English). Only the leading
-/// position counts for tags, so <c>Film (HD)</c> gives nothing.</item>
+/// marker becomes a prefix tag as written (<c>UK: Film</c> gives the tag UK, not English), and so does such a
+/// code alone in brackets anywhere (<c>Film [UK]</c>). Quality labels (<c>Film (HD)</c>) give nothing.</item>
 /// </list>
 /// Codes outside <see cref="LanguageCodes"/> are never read as a language.
 /// </summary>
@@ -70,6 +70,12 @@ public static class LanguageTagParser
     ["HI"] = "hi", ["HIN"] = "hi",
   };
 
+  /// <summary>Picture-quality labels that are never prefix tags, so <c>Film (HD)</c> gives nothing.</summary>
+  private static readonly HashSet<string> QualityLabels = new(StringComparer.Ordinal)
+  {
+    "SD", "HD", "FHD", "UHD", "HDR", "HEVC",
+  };
+
   public static LanguageTags Parse(string? entryName, string? groupTitle)
   {
     var result = new LanguageTags(NewSet(), NewSet(), NewSet(), NewSet());
@@ -100,7 +106,8 @@ public static class LanguageTagParser
       }
 
       if (i + 1 < tokens.Count && LanguageCodes.TryGetValue(token, out var subtitle)
-          && text.Substring(tokens[i + 1].Start, tokens[i + 1].Length) is "SUB" or "SUBS")
+          && text.Substring(tokens[i + 1].Start, tokens[i + 1].Length) is "SUB" or "SUBS"
+          && OnlySpacesBetween(text, start + length, tokens[i + 1].Start))
       {
         Add(result.SubtitleLanguages, subtitle, source);
         i++;
@@ -114,12 +121,12 @@ public static class LanguageTagParser
       }
 
       var bracketed = IsBracketed(text, start, length);
-      var leading = i == 0 && (bracketed || HasSeparatorAfter(text, start + length));
+      var leading = i == 0 && HasSeparatorAfter(text, start + length);
       if (LanguageCodes.TryGetValue(token, out var language) && (bracketed || leading))
       {
         Add(result.AudioLanguages, language, source);
       }
-      else if (leading)
+      else if ((bracketed || leading) && !QualityLabels.Contains(token))
       {
         Add(result.PrefixTags, token, source);
       }
@@ -176,6 +183,25 @@ public static class LanguageTagParser
     }
 
     return token == Vostfr || letters is >= 2 and <= 5;
+  }
+
+  // "DE SUB" is one marker only when nothing but spaces stands between the code and SUB ("DE: SUB" is not).
+  private static bool OnlySpacesBetween(string text, int from, int to)
+  {
+    if (to <= from)
+    {
+      return false;
+    }
+
+    for (var i = from; i < to; i++)
+    {
+      if (text[i] != ' ')
+      {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private static bool IsBracketed(string text, int start, int length)
