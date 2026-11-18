@@ -1957,19 +1957,49 @@ const PHONE_RESULTS = window.matchMedia('(max-width: 767px)');
 function fitSearchLanguages() {
   if (!picker.results) return;
   for (const strip of picker.results.querySelectorAll('.search-langs')) {
-    strip.querySelector('.lang-more')?.remove();
+    for (const extra of strip.querySelectorAll('.lang-more, .lang-part')) extra.remove();
     const chips = [...strip.querySelectorAll('.lang-chip')];
     for (const chip of chips) chip.classList.remove('lang-chip-off');
-    if (!PHONE_RESULTS.matches || strip.scrollWidth <= strip.clientWidth + 1) continue;
+    if (!PHONE_RESULTS.matches || !overflows(strip)) continue;
     const more = h('span', { class: 'lang-chip lang-more', 'aria-hidden': 'true' });
     strip.append(more);
-    let next = showLanguagePage(strip, chips, more, 0);
+    const units = chips.flatMap((chip) => splitLanguageChip(strip, chips, chip, more));
+    let next = showLanguagePage(strip, units, more, 0);
     more.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      next = showLanguagePage(strip, chips, more, next);
+      next = showLanguagePage(strip, units, more, next);
     });
   }
+}
+
+const overflows = (strip) => strip.scrollWidth > strip.clientWidth + 1;
+
+// A label too wide to fit beside "+N" on its own (Audio with many languages) is shown in parts that each fit, under
+// the same heading ("Audio DE EN ES", then "Audio FR IT"). The whole label stays for screen readers; the parts are
+// hidden from them. Returns what the pages step through: the label itself, or its parts.
+function splitLanguageChip(strip, chips, chip, more) {
+  chips.forEach((c) => c.classList.toggle('lang-chip-off', c !== chip));
+  more.textContent = '+99';
+  const words = chip.textContent.split(' ');
+  if (!overflows(strip) || chip.classList.contains('lang-tag') || words.length < 3) return [chip];
+  chip.classList.add('lang-chip-off');
+  const [head, ...rest] = words;
+  const parts = [];
+  for (const word of rest) {
+    const part = parts.at(-1);
+    if (part) {
+      const before = part.textContent;
+      part.textContent = `${before} ${word}`;
+      if (!overflows(strip)) continue;
+      part.textContent = before;
+      part.classList.add('lang-chip-off');
+    }
+    const next = h('span', { class: 'lang-chip lang-part', 'aria-hidden': 'true', text: `${head} ${word}` });
+    (part || chip).after(next);
+    parts.push(next);
+  }
+  return parts;
 }
 
 // Shows the labels from `start` that fit beside the "+N" chip (at least one) and returns where the next page starts.
@@ -1977,7 +2007,7 @@ function showLanguagePage(strip, chips, more, start) {
   chips.forEach((chip, i) => chip.classList.toggle('lang-chip-off', i < start));
   let end = chips.length;
   more.textContent = `+${chips.length - (end - start)}`;
-  while (end - start > 1 && strip.scrollWidth > strip.clientWidth + 1) {
+  while (end - start > 1 && overflows(strip)) {
     chips[--end].classList.add('lang-chip-off');
     more.textContent = `+${chips.length - (end - start)}`;
   }
