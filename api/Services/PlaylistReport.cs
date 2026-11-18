@@ -76,17 +76,33 @@ public static class PlaylistReport
     HeldBytesCounter? counter = null)
   {
     counter ??= new HeldBytesCounter();
-    void Hold(long bytes)
+    var previous = counter.Added;
+    // Checked on every addition, so the finders stop as soon as the budget is passed, also while they read.
+    counter.Added = total =>
     {
-      counter.Add(bytes);
-      if (counter.Bytes > maxBytes) throw new PlaylistReportTooLargeException();
+      if (total > maxBytes) throw new PlaylistReportTooLargeException();
+    };
+    try
+    {
+      return await BuildCountedAsync(source, maxListedSetsPerKind, counter, cancellationToken);
     }
+    finally
+    {
+      counter.Added = previous;
+    }
+  }
+
+  private static async Task<PlaylistReportResponse> BuildCountedAsync(
+    Func<CancellationToken, IAsyncEnumerable<PlaylistEntry>> source,
+    int maxListedSetsPerKind,
+    HeldBytesCounter counter,
+    CancellationToken cancellationToken)
+  {
+    void Hold(long bytes) => counter.Add(bytes);
 
     cancellationToken.ThrowIfCancellationRequested();
     var duplicates = await StreamingDuplicateFinder.FindAsync(source, cancellationToken, counter: counter);
-    Hold(0);
-    var variants = await StreamingVariantFinder.FindAsync(source, cancellationToken);
-    Hold(variants.HeldBytes);
+    var variants = await StreamingVariantFinder.FindAsync(source, cancellationToken, counter: counter);
 
     var listedSets = duplicates.Sets.Take(maxListedSetsPerKind).ToList();
     var listedGroups = variants.Groups.Take(maxListedSetsPerKind).ToList();

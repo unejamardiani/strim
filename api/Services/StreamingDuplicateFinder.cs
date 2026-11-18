@@ -3,12 +3,22 @@ namespace Api.Services;
 /// <summary>Duplicate sets as entry indices, in the order of each set's first entry, and their counts.</summary>
 public sealed record DuplicateIndexSets(IReadOnlyList<IReadOnlyList<int>> Sets, int SetCount, int EntryCount);
 
-/// <summary>Counts the bytes the streaming finder holds, so a caller can compare them with its budget.</summary>
+/// <summary>
+/// Counts the bytes the streaming finders hold, so a caller can compare them with its budget. A caller may set
+/// <see cref="Added"/> to check the total after each addition and stop a finder while it is still reading.
+/// </summary>
 public sealed class HeldBytesCounter
 {
   public long Bytes { get; private set; }
 
-  internal void Add(long bytes) => Bytes += bytes;
+  /// <summary>Called with the new total after each addition; an exception it throws stops the finder.</summary>
+  internal Action<long>? Added { get; set; }
+
+  internal void Add(long bytes)
+  {
+    Bytes += bytes;
+    Added?.Invoke(Bytes);
+  }
 }
 
 /// <summary>

@@ -127,6 +127,21 @@ public class StreamingVariantFinderTests
     Assert.True(result.HeldBytes < estimated, $"Held {result.HeldBytes} bytes against {estimated} estimated.");
   }
 
+  [Fact]
+  public async Task Find_AddsTheHeldBytesToTheCounterWhileItReads()
+  {
+    var entries = Entries(Enumerable.Range(0, 10).Select(i => i % 2 == 0 ? $"Sport {i} HD" : $"Sport {i - 1}").ToArray());
+    var counter = new HeldBytesCounter();
+    var seen = new List<long>();
+    counter.Added = seen.Add;
+
+    var result = await StreamingVariantFinder.FindAsync(new CountingSource(entries).Read, CancellationToken.None, counter: counter);
+
+    Assert.Equal(result.HeldBytes, counter.Bytes);
+    Assert.True(seen.Count > entries.Count, $"Only {seen.Count} additions.");
+    Assert.Equal(seen.Order(), seen);
+  }
+
   [Theory]
   [InlineData(3)]
   [InlineData(13)]
