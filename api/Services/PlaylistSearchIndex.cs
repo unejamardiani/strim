@@ -38,9 +38,12 @@ public sealed class PlaylistSearchIndex
   /// Entries whose folded name contains the folded query, in source order: at most
   /// <paramref name="limit"/>, with <c>HasMore</c> when further matches exist. With
   /// <paramref name="hideDisabled"/>, matches in a disabled group take no slot and are counted in
-  /// <c>HiddenCount</c> instead, which counts every such match, also those past the limit.
+  /// <c>HiddenCount</c> instead, which counts every such match, also those past the limit. With
+  /// <paramref name="contentTypes"/> not empty, matches of other types are skipped before anything else.
   /// </summary>
-  public PlaylistSearchResult Search(string? query, ISet<string> disabledGroups, int limit, bool hideDisabled = false)
+  public PlaylistSearchResult Search(
+    string? query, ISet<string> disabledGroups, int limit, bool hideDisabled = false,
+    IReadOnlySet<PlaylistContentType>? contentTypes = null)
   {
     var folded = PlaylistSearchText.Fold(query).AsSpan();
     var matches = new List<PlaylistSearchMatch>();
@@ -65,6 +68,7 @@ public sealed class PlaylistSearchIndex
         if (hit + folded.Length > tab) continue;
 
         var slot = _slots[Field(entry, 1)];
+        if (contentTypes is { Count: > 0 } && !contentTypes.Contains(slot.ContentType)) continue;
         var enabled = !PlaylistProcessor.IsDisabled(disabledGroups, slot.GroupTitle, slot.ContentType);
         if (hideDisabled && !enabled)
         {

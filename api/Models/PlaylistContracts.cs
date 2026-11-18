@@ -58,7 +58,9 @@ public record ReportVariantGroup(string BaseName, IReadOnlyList<string> Groups, 
 public record ReportEntry(string Name, string Group, IReadOnlyList<string> QualityWords);
 
 /// <param name="HideDisabled">Leaves out matches in disabled groups and counts them in HiddenCount.</param>
-public record PlaylistSearchRequest(string? CacheKey, string? Query, List<string>? DisabledGroups, bool? HideDisabled = null);
+/// <param name="ContentTypes">Names of <c>PlaylistContentType</c> to keep, combined as OR; absent or empty keeps all.</param>
+public record PlaylistSearchRequest(
+  string? CacheKey, string? Query, List<string>? DisabledGroups, bool? HideDisabled = null, List<string>? ContentTypes = null);
 
 /// <param name="Group">The group-title the generated file writes for the entry.</param>
 /// <param name="GroupKey">Filter key sent back in disabledGroups.</param>
