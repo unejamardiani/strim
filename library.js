@@ -3,12 +3,9 @@
 // Nothing here changes the playlist or what the player link serves.
 
 (() => {
-  let controller = null;
-
+  // ctx.controller is aborted by main.js when the route leaves the Library, so a pending load stops waiting.
   function mount(ctx) {
-    controller?.abort();
-    controller = new AbortController();
-    const { root, playlist, h, icon } = ctx;
+    const { root, playlist, h, icon, controller } = ctx;
     const head = h('div', { class: 'editor-head library-head' },
       h('a', { class: 'icon-btn', href: '#/', 'aria-label': 'Back to playlists' }, icon('back')),
       h('h1', { class: 'page-title', text: playlist.name || 'Untitled' }),

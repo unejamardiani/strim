@@ -421,6 +421,7 @@ function afterAuthChange() {
 // ---------- Router ----------
 
 let currentHash = location.hash;
+let libraryController = null;
 
 function parseRoute() {
   const path = location.hash.replace(/^#/, '') || '/';
@@ -467,6 +468,9 @@ window.addEventListener('beforeunload', (e) => {
 function route() {
   if (!state.ready) return;
   closeSheets();
+  // Leaving the Library cancels its wait; the editor keeps its own load and shares a pending analysis.
+  libraryController?.abort();
+  libraryController = null;
   const target = parseRoute();
   if (!state.user) {
     if (target.name !== 'home') {
@@ -850,14 +854,48 @@ async function loadGroups(ed, url, { sample = false } = {}) {
 
 // The editor and the Library load a playlist's groups through these two functions.
 async function fetchAnalysis(url, { sample = false, signal } = {}) {
-  let body;
-  if (sample) {
-    const res = await api('/playlists/sample', { signal });
-    body = { rawText: res.text, sourceName: 'Sample playlist' };
-  } else {
-    body = { sourceUrl: url };
+  if (!sample) return sharedAnalysis(url, { sourceUrl: url }, signal);
+  const res = await api('/playlists/sample', { signal });
+  return sharedAnalysis(Symbol('sample'), { rawText: res.text, sourceName: 'Sample playlist' }, signal);
+}
+
+// The server admits one analyze request at a time (UseAnalyzeBodyGate) and answers a second one with 429.
+// So the editor and the Library share the pending analysis of a source URL, an analysis of another source
+// waits until the previous one settled, and a request nobody waits for any more is cancelled.
+const pendingAnalyses = new Map();
+let lastAnalysis = Promise.resolve();
+
+function sharedAnalysis(key, body, signal) {
+  let entry = pendingAnalyses.get(key);
+  if (!entry) {
+    const controller = new AbortController();
+    entry = { controller, waiting: 0 };
+    entry.promise = lastAnalysis.then(() => api('/playlist/analyze', { method: 'POST', body, signal: controller.signal }));
+    lastAnalysis = entry.promise.catch(() => {});
+    const done = entry;
+    lastAnalysis.then(() => { if (pendingAnalyses.get(key) === done) pendingAnalyses.delete(key); });
+    pendingAnalyses.set(key, entry);
   }
-  return api('/playlist/analyze', { method: 'POST', body, signal });
+  return joinAnalysis(key, entry, signal);
+}
+
+function joinAnalysis(key, entry, signal) {
+  entry.waiting += 1;
+  return new Promise((resolve, reject) => {
+    const leave = () => {
+      entry.waiting -= 1;
+      // Checked a turn later, so the route that takes over (Library to editor) can join the request first.
+      setTimeout(() => {
+        if (entry.waiting > 0) return;
+        entry.controller.abort();
+        if (pendingAnalyses.get(key) === entry) pendingAnalyses.delete(key);
+      }, 0);
+      reject(new DOMException('The analysis was cancelled.', 'AbortError'));
+    };
+    if (signal?.aborted) return leave();
+    signal?.addEventListener('abort', leave, { once: true });
+    entry.promise.then(resolve, reject).finally(() => signal?.removeEventListener('abort', leave));
+  });
 }
 
 function loadErrorMessage(err) {
@@ -1018,8 +1056,10 @@ function showLibrary(playlist) {
   teardownPicker();
   setActionBar(false);
   document.title = `${playlist.name || 'Playlist'} · Library · Strim`;
+  libraryController = new AbortController();
   window.StrimLibrary.mount({
     root: app,
+    controller: libraryController,
     playlist,
     h,
     icon,

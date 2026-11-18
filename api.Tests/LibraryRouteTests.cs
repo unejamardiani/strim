@@ -104,6 +104,37 @@ public class LibraryRouteTests
   }
 
   [Fact]
+  public void SwitchingBeforeTheAnalysisFinished_SharesOneAnalyzeRequest_InsteadOfAHttp429()
+  {
+    var js = Read("main.js");
+    var fetch = Between(js, "async function fetchAnalysis(", "function loadErrorMessage(");
+
+    // Both routes go through one shared request per source; another source waits for the previous one.
+    Assert.Contains("if (!sample) return sharedAnalysis(url, { sourceUrl: url }, signal);", fetch);
+    Assert.Contains("let entry = pendingAnalyses.get(key);", fetch);
+    Assert.Contains("entry.promise = lastAnalysis.then(() => api('/playlist/analyze', { method: 'POST', body, signal: controller.signal }));", fetch);
+    Assert.Contains("lastAnalysis = entry.promise.catch(() => {});", fetch);
+
+    // A caller that leaves stops waiting; the request is cancelled only when nobody joined it a turn later.
+    var join = fetch[fetch.IndexOf("function joinAnalysis(", StringComparison.Ordinal)..];
+    Assert.Contains("entry.waiting += 1;", join);
+    Assert.Contains("entry.waiting -= 1;", join);
+    Assert.Contains("if (entry.waiting > 0) return;", join);
+    Assert.Contains("entry.controller.abort();", join);
+    Assert.True(join.IndexOf("setTimeout(", StringComparison.Ordinal) < join.IndexOf("entry.controller.abort();", StringComparison.Ordinal));
+
+    // Leaving the Library cancels its wait before the next route joins; the Library uses main.js's controller.
+    var route = Between(js, "function route()", "function closeSheets()");
+    Assert.True(route.IndexOf("libraryController?.abort();", StringComparison.Ordinal) < route.IndexOf("const target = parseRoute();", StringComparison.Ordinal));
+    var show = Between(js, "function showLibrary(playlist)", "function linkCard(");
+    Assert.Contains("libraryController = new AbortController();", show);
+    Assert.Contains("controller: libraryController,", show);
+    var library = Read("library.js");
+    Assert.Contains("const { root, playlist, h, icon, controller } = ctx;", library);
+    Assert.DoesNotContain("new AbortController", library);
+  }
+
+  [Fact]
   public void Scripts_HaveNoLocalImports()
   {
     var import = new Regex(@"(\bfrom|\bimport)\s*\(?\s*['""`]\.\.?/");
