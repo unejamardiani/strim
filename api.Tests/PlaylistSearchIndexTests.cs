@@ -195,6 +195,81 @@ public class PlaylistSearchIndexTests
     Assert.Equal(60, result.HiddenCount);
   }
 
+  [Fact]
+  public async Task Search_WithoutContentTypes_IsUnchanged()
+  {
+    var index = await Analyze(MixedTypes());
+
+    foreach (var hide in new[] { false, true })
+    {
+      var today = index.Search("star", Set("Films Off"), 50, hide);
+      foreach (var types in new[] { null, new HashSet<PlaylistContentType>() })
+      {
+        var result = index.Search("star", Set("Films Off"), 50, hide, types);
+        Assert.Equal(today.Matches, result.Matches);
+        Assert.Equal((today.HasMore, today.HiddenCount), (result.HasMore, result.HiddenCount));
+      }
+    }
+    Assert.True(index.Search("star", Set(), 50).HasMore);
+  }
+
+  [Fact]
+  public async Task Search_ContentTypes_FiltersBeforeLimit()
+  {
+    var index = await Analyze(MixedTypes());
+
+    var result = index.Search("star", Set(), 3, contentTypes: Types(PlaylistContentType.Movies));
+
+    Assert.Equal(new[] { "Star Film Off 1", "Star Film On 1", "Star Film On 2" }, result.Matches.Select(m => m.Name));
+    Assert.All(result.Matches, m => Assert.Equal(PlaylistContentType.Movies, m.ContentType));
+    Assert.False(result.HasMore);
+    Assert.True(index.Search("star", Set(), 4, contentTypes: Types(PlaylistContentType.Movies)) is { HasMore: false, Matches.Count: 3 });
+  }
+
+  [Fact]
+  public async Task Search_ContentTypes_CombineAsOr()
+  {
+    var index = await Analyze(MixedTypes());
+
+    var result = index.Search("star", Set(), 50, contentTypes: Types(PlaylistContentType.Movies, PlaylistContentType.Series));
+
+    Assert.Equal(
+      new[] { "Star Film Off 1", "Star Film On 1", "Star Film On 2", "Star Show 1", "Star Show 2" },
+      result.Matches.Select(m => m.Name).Order(StringComparer.Ordinal));
+    Assert.DoesNotContain(result.Matches, m => m.ContentType == PlaylistContentType.Live);
+    Assert.False(result.HasMore);
+  }
+
+  [Fact]
+  public async Task Search_ContentTypes_HiddenCountOnlyChosenTypes()
+  {
+    var index = await Analyze(MixedTypes());
+    var disabled = Set("Films Off", "Live");
+
+    var films = index.Search("star", disabled, 50, hideDisabled: true, contentTypes: Types(PlaylistContentType.Movies));
+    var all = index.Search("star", disabled, 50, hideDisabled: true);
+
+    Assert.Equal(new[] { "Star Film On 1", "Star Film On 2" }, films.Matches.Select(m => m.Name));
+    Assert.Equal(1, films.HiddenCount);
+    Assert.Equal(61, all.HiddenCount);
+  }
+
+  // 60 live channels, then films in an off and an on group, then series, all matching "star".
+  private static string MixedTypes()
+  {
+    var source = new StringBuilder("#EXTM3U\n");
+    for (var i = 1; i <= 60; i++)
+      source.Append($"#EXTINF:-1 group-title=\"Live\",Star Live {i}\nhttps://example.com/live/u/p/{i}.ts\n");
+    source.Append("#EXTINF:-1 group-title=\"Films Off\",Star Film Off 1\nhttps://example.com/movie/u/p/101.mkv\n");
+    for (var i = 1; i <= 2; i++)
+      source.Append($"#EXTINF:-1 group-title=\"Films On\",Star Film On {i}\nhttps://example.com/movie/u/p/{110 + i}.mkv\n");
+    for (var i = 1; i <= 2; i++)
+      source.Append($"#EXTINF:-1 group-title=\"Shows\",Star Show {i}\nhttps://example.com/series/u/p/{120 + i}.mkv\n");
+    return source.ToString();
+  }
+
+  private static HashSet<PlaylistContentType> Types(params PlaylistContentType[] types) => new(types);
+
   private static string OnThenOffGroups()
   {
     var source = new StringBuilder("#EXTM3U\n");

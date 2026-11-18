@@ -169,6 +169,47 @@ public class PlaylistSearchEndpointTests(StrimAppFactory factory) : IClassFixtur
   }
 
   [Fact]
+  public async Task Search_ContentTypes_ReturnsOnlyChosenTypes()
+  {
+    var client = new ApiClient(factory.CreateClient());
+    var cacheKey = await AnalyzeAsync(client, """
+      #EXTM3U
+      #EXTINF:-1 group-title="Germany",Boot TV
+      http://line.example/live/u/p/1.ts
+      #EXTINF:-1 group-title="Germany",Das Boot (1981)
+      http://line.example/movie/u/p/20.mp4
+      #EXTINF:-1 group-title="Shows",Boot Camp S01E01
+      http://line.example/series/u/p/30.mkv
+      """);
+
+    var films = await SearchOkAsync(client, new { cacheKey, query = "boot", contentTypes = new[] { "Movies" } });
+    var all = await SearchOkAsync(client, new { cacheKey, query = "boot", contentTypes = Array.Empty<string>() });
+
+    Assert.Equal(new MatchDto("Das Boot (1981)", "Germany · Movies", "Germany · Movies", 1, "Movies", true), Assert.Single(films.Matches));
+    Assert.Equal(3, all.Matches.Count);
+  }
+
+  [Fact]
+  public async Task Search_UnknownContentType_Returns400()
+  {
+    var client = new ApiClient(factory.CreateClient());
+    var cacheKey = await AnalyzeAsync(client, WithMovie);
+
+    foreach (var types in new[] { new[] { "Films" }, new[] { "1" }, new[] { "Movies", "" } })
+    {
+      var response = await client.PostAsync("/api/playlist/search", new { cacheKey, query = "ard", contentTypes = types });
+      Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+      var error = await response.Content.ReadFromJsonAsync<ErrorDto>();
+      Assert.Equal("Unknown content type. Use Live, Movies, Series.", error!.Error);
+    }
+
+    var tooMany = await client.PostAsync(
+      "/api/playlist/search", new { cacheKey, query = "ard", contentTypes = new[] { "Live", "Movies", "Series", "Live" } });
+    Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
+    Assert.Equal("Provide at most 3 content types.", (await tooMany.Content.ReadFromJsonAsync<ErrorDto>())!.Error);
+  }
+
+  [Fact]
   public async Task Search_ExpiredSession_Returns400()
   {
     var client = new ApiClient(factory.CreateClient());
@@ -193,6 +234,45 @@ public class PlaylistSearchEndpointTests(StrimAppFactory factory) : IClassFixtur
     Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     var error = await response.Content.ReadFromJsonAsync<ErrorDto>();
     Assert.Contains("not available", error!.Error);
+  }
+
+  [Fact]
+  public async Task Search_ReturnsLanguagesTagsAndSource()
+  {
+    const string tagged = """
+      #EXTM3U
+      #EXTINF:-1 group-title="Films",DE: Example Film
+      http://line.example/movie/u/p/1.mp4
+      #EXTINF:-1 group-title="FR | Films",Example Drama
+      http://line.example/movie/u/p/2.mp4
+      #EXTINF:-1 group-title="Films",Example Plain
+      http://line.example/movie/u/p/3.mp4
+      #EXTINF:-1 group-title="Films",Example Kino VOSTFR MULTI
+      http://line.example/movie/u/p/4.mp4
+      #EXTINF:-1 group-title="Films",UK: Example
+      http://line.example/movie/u/p/5.mp4
+      """;
+    var client = new ApiClient(factory.CreateClient());
+    var cacheKey = await AnalyzeAsync(client, tagged);
+
+    var response = await client.PostAsync("/api/playlist/search", new { cacheKey, query = "example" });
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    var matches = (await response.Content.ReadFromJsonAsync<LanguageSearchDto>())!.Matches.ToDictionary(m => m.Name);
+
+    Assert.Equal(new[] { "de" }, matches["DE: Example Film"].AudioLanguages);
+    Assert.Equal("title", matches["DE: Example Film"].LanguageSource);
+    Assert.Equal(new[] { "fr" }, matches["Example Drama"].AudioLanguages);
+    var plain = matches["Example Plain"];
+    Assert.True(plain.AudioLanguages.Count + plain.SubtitleLanguages.Count + plain.Markers.Count + plain.PrefixTags.Count == 0);
+    Assert.Null(plain.LanguageSource);
+    var vostfr = matches["Example Kino VOSTFR MULTI"];
+    Assert.Equal(new[] { "fr" }, vostfr.SubtitleLanguages);
+    Assert.Equal(new[] { "MULTI" }, vostfr.Markers);
+    Assert.Empty(vostfr.AudioLanguages);
+    var uk = matches["UK: Example"];
+    Assert.Equal(new[] { "UK" }, uk.PrefixTags);
+    Assert.Equal("title", uk.LanguageSource);
+    Assert.Empty(uk.AudioLanguages);
   }
 
   [Fact]
@@ -224,4 +304,8 @@ public class PlaylistSearchEndpointTests(StrimAppFactory factory) : IClassFixtur
   private sealed record MatchDto(string Name, string Group, string GroupKey, int Position, string ContentType, bool Enabled);
   private sealed record SearchDto(List<MatchDto> Matches, bool HasMore, int HiddenCount = -1);
   private sealed record ErrorDto(string Error);
+  private sealed record LanguageMatchDto(
+    string Name, List<string> AudioLanguages, List<string> SubtitleLanguages, List<string> Markers,
+    List<string> PrefixTags, string? LanguageSource);
+  private sealed record LanguageSearchDto(List<LanguageMatchDto> Matches);
 }
