@@ -105,6 +105,44 @@ public class EditorShowFilterTests
   }
 
   [Fact]
+  public void ToggledGroups_StayPinnedInTheView_UntilTheViewChanges()
+  {
+    var js = Read("main.js");
+    Assert.Contains("pinned: new Set(),", Between(js, "function newEditor", "function filterSignature"));
+
+    // updateView lets a pinned key pass the show filter; type and query still apply.
+    var view = Between(js, "function updateView(scrollToTop)", "function stickyOffset()");
+    Assert.Contains("const { pinned } = ed;", view);
+    Assert.Contains("if (show === 'kept' && ed.disabled.has(g.key) && !pinned.has(g.key)) continue;", view);
+    Assert.Contains("if (show === 'hidden' && !ed.disabled.has(g.key) && !pinned.has(g.key)) continue;", view);
+    Assert.DoesNotContain("pinned.clear()", view);
+    // The counts come from the view, pinned rows included.
+    Assert.Contains("${fmt(view.length)} of ${plural(ed.groups.length, 'group')} shown", view);
+    Assert.Contains("button.textContent = `${label} (${fmt(view.length)})`;", view);
+
+    // Cleared in the query, sort, mode, type and show handlers, on jump and when the editor is left.
+    var nodes = Between(js, "function pickerNodes(ed)", "function mountPicker(ed)");
+    Assert.Matches(@"ed\.filter\.query = search\.value;[\s\S]*?ed\.pinned\.clear\(\);\s*scheduleViewUpdate\(\);", nodes);
+    Assert.Matches(@"ed\.filter\.sort = sort\.value;\s*ed\.pinned\.clear\(\);\s*updateView\(true\);", nodes);
+    Assert.Matches(@"ed\.searchMode = value;\s*ed\.pinned\.clear\(\);", nodes);
+    Assert.Matches(@"ed\.filter\.type = value;\s*ed\.pinned\.clear\(\);\s*updateView\(true\);", nodes);
+    Assert.Matches(@"writeGroupShow\(ed\.isSample \? null : ed\.id, value\);\s*ed\.pinned\.clear\(\);\s*updateView\(true\);", nodes);
+    Assert.Contains("ed.pinned.clear();", Between(js, "function jumpToGroup(ed, key)", "\n}\n"));
+    Assert.Contains("picker.ed?.pinned.clear();", Between(js, "function teardownPicker()", "\n}\n"));
+
+    // Toggling pins; repainting does not clear.
+    var toggle = Between(js, "function onRowToggle(e)", "function bulkSet(hide)");
+    Assert.Contains("ed.pinned.add(g.key);", toggle);
+    Assert.DoesNotContain("pinned", Between(js, "function paintRows()", "function onRowToggle(e)"));
+
+    // Bulk acts on the visible rows and pins each one it changes, without rebuilding the view afterwards.
+    var bulk = Between(js, "function bulkSet(hide)", "function setAdultHidden(hide)");
+    Assert.Matches(@"for \(const g of ed\.view\) \{\s*ed\.pinned\.add\(g\.key\);\s*if \(hide\) ed\.disabled\.add\(g\.key\);\s*else ed\.disabled\.delete\(g\.key\);", bulk);
+    Assert.DoesNotContain("ed.groups", bulk);
+    Assert.DoesNotContain("pinned.clear()", bulk);
+  }
+
+  [Fact]
   public void AppCss_StylesTheLabel_WithTokensOnly_AndKeepsTheRowOnOneLine()
   {
     var css = Read("app.css");

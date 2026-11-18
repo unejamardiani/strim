@@ -772,6 +772,8 @@ function newEditor(playlist) {
     searchMode: 'groups', // groups | everything
     search: null, // Everything results: { status, query, matches, hasMore, message }
     view: [],
+    // Groups toggled since the view was built; they stay in it until a filter, the query or the mode changes.
+    pinned: new Set(),
     busy: false,
   };
 }
@@ -1165,7 +1167,10 @@ function pickerNodes(ed) {
   search.addEventListener('input', () => {
     ed.filter.query = search.value;
     if (ed.searchMode === 'everything') scheduleSearch(ed);
-    else scheduleViewUpdate();
+    else {
+      ed.pinned.clear();
+      scheduleViewUpdate();
+    }
   });
 
   const sort = h('select', { class: 'input', 'aria-label': 'Sort groups' },
@@ -1175,6 +1180,7 @@ function pickerNodes(ed) {
   sort.value = ed.filter.sort;
   sort.addEventListener('change', () => {
     ed.filter.sort = sort.value;
+    ed.pinned.clear();
     updateView(true);
   });
 
@@ -1202,6 +1208,7 @@ function pickerNodes(ed) {
     ed.searchMode,
     (value) => {
       ed.searchMode = value;
+      ed.pinned.clear();
       const next = searchLabels(ed);
       search.placeholder = next.placeholder;
       search.setAttribute('aria-label', next.label);
@@ -1224,6 +1231,7 @@ function pickerNodes(ed) {
       ed.filter.type,
       (value) => {
         ed.filter.type = value;
+        ed.pinned.clear();
         updateView(true);
       })));
   }
@@ -1236,6 +1244,7 @@ function pickerNodes(ed) {
     (value) => {
       ed.filter.show = value;
       writeGroupShow(ed.isSample ? null : ed.id, value);
+      ed.pinned.clear();
       updateView(true);
       // The Everything search follows the same choice: On leaves out matches in switched-off groups.
       if (ed.searchMode === 'everything') runSearch(ed);
@@ -1289,6 +1298,7 @@ function teardownPicker() {
   discardBulkUndo();
   resetPane();
   pane.el = null;
+  picker.ed?.pinned.clear();
   picker.ed = null;
   picker.list = null;
   picker.rows = [];
@@ -1348,11 +1358,13 @@ function updateView(scrollToTop) {
   // In Everything mode the field searches entries on the server, so it does not filter groups.
   const terms = ed.searchMode === 'everything' ? [] : ed.filter.query.toLowerCase().split(/\s+/).filter(Boolean);
   const { type, show, sort } = ed.filter;
+  const { pinned } = ed;
   const view = [];
   for (const g of groupsInOrder(ed.groups, sort)) {
     if (type !== 'all' && g.type !== type) continue;
-    if (show === 'kept' && ed.disabled.has(g.key)) continue;
-    if (show === 'hidden' && !ed.disabled.has(g.key)) continue;
+    // A group toggled in this view stays in it (dimmed when off) instead of vanishing under the finger.
+    if (show === 'kept' && ed.disabled.has(g.key) && !pinned.has(g.key)) continue;
+    if (show === 'hidden' && !ed.disabled.has(g.key) && !pinned.has(g.key)) continue;
     if (terms.length && !terms.every((t) => matchesTerm(g, t))) continue;
     view.push(g);
   }
@@ -1477,6 +1489,7 @@ function onRowToggle(e) {
   const g = ed?.view[Number(row?.dataset.index)];
   if (!g) return;
   discardBulkUndo();
+  ed.pinned.add(g.key);
   if (check.checked) ed.disabled.delete(g.key);
   else ed.disabled.add(g.key);
   row.classList.toggle('off', !check.checked);
@@ -1493,7 +1506,9 @@ function bulkSet(hide) {
   }
   if (!ed.view.length) return;
   const before = new Set(ed.disabled);
+  // The visible rows, pinned ones included; each is pinned so the rows stay put after the change.
   for (const g of ed.view) {
+    ed.pinned.add(g.key);
     if (hide) ed.disabled.add(g.key);
     else ed.disabled.delete(g.key);
   }
@@ -1858,6 +1873,7 @@ function jumpToGroup(ed, key) {
   const showChanged = ed.filter.show !== 'all';
   ed.filter.type = 'all';
   ed.filter.show = 'all';
+  ed.pinned.clear();
   for (const pills of [picker.typeButtons, picker.showButtons]) {
     for (const b of pills?.children || []) b.setAttribute('aria-pressed', String(b.dataset.value === 'all'));
   }
