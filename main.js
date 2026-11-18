@@ -863,14 +863,20 @@ async function fetchAnalysis(url, { sample = false, signal } = {}) {
 // So the editor and the Library share the pending analysis of a source URL, and an analysis of another source
 // waits until the previous one settled. A caller that leaves only stops waiting: the request itself is never
 // aborted, because the browser settles an aborted fetch before the server has released its gate, and the next
-// analysis would then start too early and get the 429.
+// analysis would then start too early and get the 429. A queued analysis whose callers all left before its turn
+// is skipped, so abandoned playlists do not delay the current one.
 const pendingAnalyses = new Map();
 let lastAnalysis = Promise.resolve();
 
 function sharedAnalysis(key, body, signal) {
   let entry = pendingAnalyses.get(key);
   if (!entry) {
-    entry = { promise: lastAnalysis.then(() => api('/playlist/analyze', { method: 'POST', body })) };
+    entry = { waiting: 0 };
+    const queued = entry;
+    entry.promise = lastAnalysis.then(() => {
+      if (queued.waiting === 0) throw new DOMException('The analysis was cancelled.', 'AbortError');
+      return api('/playlist/analyze', { method: 'POST', body });
+    });
     lastAnalysis = entry.promise.catch(() => {});
     const done = entry;
     lastAnalysis.then(() => { if (pendingAnalyses.get(key) === done) pendingAnalyses.delete(key); });
@@ -883,8 +889,12 @@ function joinAnalysis(entry, signal) {
   return new Promise((resolve, reject) => {
     const leave = () => reject(new DOMException('The analysis was cancelled.', 'AbortError'));
     if (signal?.aborted) return leave();
-    signal?.addEventListener('abort', leave, { once: true });
-    entry.promise.then(resolve, reject).finally(() => signal?.removeEventListener('abort', leave));
+    entry.waiting += 1;
+    let joined = true;
+    const quit = () => { if (joined) { joined = false; entry.waiting -= 1; } };
+    const onAbort = () => { quit(); leave(); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    entry.promise.then(resolve, reject).finally(() => { quit(); signal?.removeEventListener('abort', onAbort); });
   });
 }
 

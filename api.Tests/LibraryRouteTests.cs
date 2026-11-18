@@ -112,8 +112,15 @@ public class LibraryRouteTests
     // Both routes go through one shared request per source; another source waits for the previous one.
     Assert.Contains("if (!sample) return sharedAnalysis(url, { sourceUrl: url }, signal);", fetch);
     Assert.Contains("let entry = pendingAnalyses.get(key);", fetch);
-    Assert.Contains("entry = { promise: lastAnalysis.then(() => api('/playlist/analyze', { method: 'POST', body })) };", fetch);
+    Assert.Contains("entry.promise = lastAnalysis.then(() => {", fetch);
+    Assert.Contains("return api('/playlist/analyze', { method: 'POST', body });", fetch);
     Assert.Contains("lastAnalysis = entry.promise.catch(() => {});", fetch);
+
+    // A queued analysis whose callers all left before its turn is skipped instead of sent, so an abandoned
+    // playlist cannot delay the current one; the check runs at its turn, before the request.
+    var turn = Between(fetch, "entry.promise = lastAnalysis.then(() => {", "lastAnalysis = entry.promise.catch(");
+    var skip = turn.IndexOf("if (queued.waiting === 0) throw new DOMException('The analysis was cancelled.', 'AbortError');", StringComparison.Ordinal);
+    Assert.True(skip >= 0 && skip < turn.IndexOf("api('/playlist/analyze'", StringComparison.Ordinal));
 
     // An aborted fetch settles before the server releases its gate, so the next analysis would start too early
     // and get a 429. The analyze request therefore carries no signal and is never aborted; the queue advances
@@ -124,7 +131,13 @@ public class LibraryRouteTests
     Assert.DoesNotContain(".abort()", queue);
     var join = fetch[fetch.IndexOf("function joinAnalysis(", StringComparison.Ordinal)..];
     Assert.Contains("const leave = () => reject(new DOMException('The analysis was cancelled.', 'AbortError'));", join);
-    Assert.Contains("signal?.addEventListener('abort', leave, { once: true });", join);
+    // Every caller counts while it waits and stops counting once, on leaving or when the analysis settled, so a
+    // caller that stays keeps the shared request alive.
+    Assert.Contains("entry.waiting += 1;", join);
+    Assert.Contains("const quit = () => { if (joined) { joined = false; entry.waiting -= 1; } };", join);
+    Assert.Contains("const onAbort = () => { quit(); leave(); };", join);
+    Assert.Contains("signal?.addEventListener('abort', onAbort, { once: true });", join);
+    Assert.True(join.IndexOf("if (signal?.aborted) return leave();", StringComparison.Ordinal) < join.IndexOf("entry.waiting += 1;", StringComparison.Ordinal));
 
     // Leaving the Library cancels its wait before the next route joins; the Library uses main.js's controller.
     var route = Between(js, "function route()", "function closeSheets()");
