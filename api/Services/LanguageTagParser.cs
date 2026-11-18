@@ -125,7 +125,8 @@ public static class LanguageTagParser
       {
         Add(result.AudioLanguages, language, source);
       }
-      else if ((bracketed || leading) && !QualityLabels.Contains(token))
+      // A prefix tag must start the text itself, so "(UK: Film)" or "[UK: Film]" gives no tag.
+      else if ((bracketed || (leading && start == 0)) && !QualityLabels.Contains(token))
       {
         Add(result.PrefixTags, token, source);
       }

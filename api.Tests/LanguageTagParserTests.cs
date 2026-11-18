@@ -173,6 +173,9 @@ public class LanguageTagParserTests
   [InlineData("Film (2019)")]
   [InlineData("Film [A-B-C]")]
   [InlineData("Film [EX-]")]
+  [InlineData("(UK: Film)")]
+  [InlineData("[UK: Film]")]
+  [InlineData("[EX-YU - Film]")]
   public void OrdinaryWordsAndQualityLabels_GiveNoTag(string name)
   {
     var result = LanguageTagParser.Parse(name, name);
