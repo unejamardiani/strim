@@ -63,6 +63,26 @@ public class PlaylistReportEndpointTests : IClassFixture<StrimAppFactory>
   }
 
   [Fact]
+  public async Task Report_ReturnsGroupCounts()
+  {
+    var response = await NewClient().PostAsync("/api/playlist/report", new { sourceUrl = ReportUpstreamUrl });
+    response.EnsureSuccessStatusCode();
+    Assert.Contains("\"groupCounts\":", await response.Content.ReadAsStringAsync());
+    var report = (await response.Content.ReadFromJsonAsync<ReportDto>())!;
+
+    Assert.Equal(
+      new[]
+      {
+        new GroupCountDto("Germany", 1, 2),
+        new GroupCountDto("Germany Backup", 1, 1),
+        new GroupCountDto("HD Channels", 0, 1),
+        new GroupCountDto("Kids", 1, 0),
+        new GroupCountDto("Kids Extra", 1, 0),
+      },
+      report.GroupCounts);
+  }
+
+  [Fact]
   public async Task Report_ListsGroupsPerSet()
   {
     var client = NewClient();
@@ -276,5 +296,7 @@ public class PlaylistReportEndpointTests : IClassFixture<StrimAppFactory>
     int VariantEntryCount,
     bool Truncated,
     List<DuplicateSetDto> DuplicateSets,
-    List<VariantGroupDto> VariantGroups);
+    List<VariantGroupDto> VariantGroups,
+    List<GroupCountDto>? GroupCounts);
+  private sealed record GroupCountDto(string Group, int DuplicateEntryCount, int VariantEntryCount);
 }
