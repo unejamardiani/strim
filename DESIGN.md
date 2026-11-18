@@ -96,15 +96,19 @@ stay reachable above the list. Right, the rest but at least 300px: the entry pan
 entries of a group (a dashed 22px outline while it is empty).
 
 Desktop group row (from 1100px): each row is a one-line grid with fixed tracks, so the columns
-line up down the list. In order: marker (10px), name (1fr but at least 340px, the room it
-had in the 560px column, so the new cells never shrink it), type tag (64px; an unsplit Live row
-hides its tag and its name spans the tag track as well, about 416px), sample titles
+line up down the list. In order: marker (10px), name (1fr but at least 260px, so every track
+still fits at 1100px), type tag (64px; an unsplit Live row hides its tag and its name spans the
+tag track as well, at least about 336px), sample titles
 (1fr: the first entry titles of the group, comma-joined and cut off with an ellipsis), adult
 mark (36px: an "18+" tag on `--surface-2` in `--ink-2`), split origin (0.6fr: "from" and the
-provider's group title when Strim split that title by content type), count (56px, right-aligned)
-and switch (46px). Sample titles and origin are 13px/450 in `--ink-3`. A value that is unknown or
-empty leaves its cell empty, with no placeholder. Row height stays `--row-h`. Below 1100px these
-three cells are not shown and the row is the flex row of marker, name, tag, count and switch. The head, player link card and
+provider's group title when Strim split that title by content type), duplicates and variants
+(48px each, right-aligned 12px/650 tabular figures in `--ink-2`, such as "3 dup" and "2 var": the
+group's entries in duplicate sets and in variant groups, from `groupCounts` of the last report),
+count (56px, right-aligned) and switch (46px). The two report cells stay empty until the person
+runs the report for the loaded playlist and for a group the report has no findings for; loading
+another playlist empties them again, so they never show 0. Sample titles and origin are 13px/450
+in `--ink-3`. A value that is unknown or empty leaves its cell empty, with no placeholder. Row
+height stays `--row-h`. Below 1100px these five cells are not shown and the row is the flex row of marker, name, tag, count and switch. The head, player link card and
 source line span both columns; the dock stays centred at 736px. Below 1100px, and on the new playlist
 route, the 760px page applies unchanged and the entry pane is not shown.
 

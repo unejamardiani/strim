@@ -769,6 +769,8 @@ function newEditor(playlist) {
     controller: null,
     startedAt: 0,
     cacheKey: null,
+    // Per-group findings of the last report for this cacheKey (Map of group key to counts); null until the report ran.
+    reportCounts: null,
     totalChannels: 0,
     expirationUtc: null,
     account: null,
@@ -935,6 +937,7 @@ function applyAnalysis(ed, analysis, { sample }) {
   ed.disabled = disabled;
   ed.extras = extras;
   ed.cacheKey = analysis.cacheKey;
+  ed.reportCounts = null;
   ed.search = null;
   ed.totalChannels = analysis.totalChannels || groups.reduce((sum, g) => sum + g.count, 0);
   ed.expirationUtc = analysis.expirationUtc || null;
@@ -1515,9 +1518,12 @@ function createRow() {
   const samples = h('span', { class: 'group-samples' });
   const adult = h('span', { class: 'group-adult' });
   const origin = h('span', { class: 'group-origin' });
+  // Duplicate and variant entries from the last report (from 1100px); empty until it ran or when none were found.
+  const dups = h('span', { class: 'group-dups' });
+  const variants = h('span', { class: 'group-variants' });
   const count = h('span', { class: 'group-count' });
-  const row = h('label', { class: 'group-row', role: 'listitem' }, dot, name, badge, samples, adult, origin, count, check);
-  row._parts = { check, name, badge, samples, adult, origin, count };
+  const row = h('label', { class: 'group-row', role: 'listitem' }, dot, name, badge, samples, adult, origin, dups, variants, count, check);
+  row._parts = { check, name, badge, samples, adult, origin, dups, variants, count };
   picker.list.append(row);
   return row;
 }
@@ -1547,7 +1553,7 @@ function paintRows() {
       row.dataset.index = String(index);
       row.style.transform = `translateY(${index * rowHeight}px)`;
       row.dataset.type = g.type;
-      const { name, badge, samples, adult, origin, count } = row._parts;
+      const { name, badge, samples, adult, origin, dups, variants, count } = row._parts;
       name.textContent = g.title;
       name.title = g.title;
       const showBadge = g.type !== 'Live' || g.split;
@@ -1559,6 +1565,13 @@ function paintRows() {
       adult.title = g.adult ? 'Adult group' : '';
       origin.textContent = g.split ? `from ${g.title}` : '';
       origin.title = g.split ? `Provider group ${g.title}, split by content type` : '';
+      const found = ed.reportCounts?.get(g.key);
+      const dupCount = found?.duplicateEntryCount || 0;
+      const variantCount = found?.variantEntryCount || 0;
+      dups.textContent = dupCount ? `${fmt(dupCount)} dup` : '';
+      dups.title = dupCount ? `${plural(dupCount, 'entry', 'entries')} in duplicate sets` : '';
+      variants.textContent = variantCount ? `${fmt(variantCount)} var` : '';
+      variants.title = variantCount ? `${plural(variantCount, 'entry', 'entries')} in variant groups` : '';
       count.textContent = fmt(g.count);
     }
     const off = ed.disabled.has(g.key);
@@ -2093,6 +2106,7 @@ let reportRequest = 0;
 
 async function openReport(ed) {
   const request = ++reportRequest;
+  const cacheKey = ed.cacheKey;
   menuTitle.textContent = 'Duplicates & variants';
   menuBody.replaceChildren(h('div', { class: 'loading-card' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { class: 'grow', text: 'Checking the playlist…' })));
   if (!menuDialog.open) menuDialog.showModal();
@@ -2107,8 +2121,18 @@ async function openReport(ed) {
     menuBody.replaceChildren(h('div', { class: 'notice error' }, h('p', { text: err.message || 'Could not check the playlist.' })));
     return;
   }
+  // The row counts belong to the list the report checked; a playlist loaded meanwhile keeps its cells empty.
+  if (ed.cacheKey === cacheKey) applyReportCounts(ed, report.groupCounts);
   if (request !== reportRequest || !menuDialog.open) return;
   menuBody.replaceChildren(...reportNodes(report));
+}
+
+// Fills the desktop duplicate and variant cells from the report's groupCounts and repaints the pooled rows.
+function applyReportCounts(ed, groupCounts) {
+  ed.reportCounts = new Map((groupCounts || []).map((c) => [c.group, c]));
+  if (picker.ed !== ed || !picker.list) return;
+  for (const row of picker.rows) row.dataset.index = '';
+  paintRows();
 }
 
 function reportNodes(report) {
