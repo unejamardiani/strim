@@ -71,7 +71,9 @@ public class LibraryRouteTests
     Assert.DoesNotMatch(@"\b(fetch|XMLHttpRequest|sendBeacon|api)\s*\(", library);
     foreach (var forbidden in new[] { "/api/playlists", "/playlists", "/playlist/generate", "regenerate-code", "toggle-active", "auto-refresh" })
       Assert.DoesNotContain(forbidden, library);
-    foreach (var forbidden in new[] { "switch", "checkbox", "bulk", "Bulk", "Save", "dock", "action-bar", "setActionBar", "localStorage" })
+    // "switch" as a word or role; the copy may name "switched-off groups" (#286).
+    Assert.DoesNotMatch(@"\bswitch\b", library);
+    foreach (var forbidden in new[] { "checkbox", "bulk", "Bulk", "Save", "dock", "action-bar", "setActionBar", "localStorage" })
       Assert.DoesNotContain(forbidden, library);
 
     // main.js hides the dock and the picker before the Library renders.
