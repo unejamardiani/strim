@@ -1189,7 +1189,8 @@ select.input {
   font-weight: 600;
 }
 
-/* Name and language labels share the first line; the name keeps room and truncates, the labels clip. */
+/* Name and language labels share the first line. The name gives way first (basis 0, it only takes what the labels
+   leave) and truncates with an ellipsis; the labels shrink only once the name is down to its 5em floor. */
 .search-hit-line {
   display: flex;
   align-items: center;
@@ -1198,7 +1199,7 @@ select.input {
 }
 
 .search-hit-line .search-hit-name {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 5em;
 }
 
