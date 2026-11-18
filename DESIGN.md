@@ -122,6 +122,43 @@ at the bottom. Cards keep DOM order, so reading and tab order run left to right,
 1024px the list is the single 760px column; the empty state keeps the 760px page. Only the editor changes: the site pages keep their 1080px main column and the guides their
 700px column.
 
+### Library (`#/p/<id>/library`: library.js + library.css)
+
+Purpose: find what a saved playlist holds, films, series and channels, without editing it. The
+playlist card's Library action opens it; Edit groups in its head goes back to the editor.
+
+Read-only: nothing in the Library changes the playlist or what the player link serves. It has no
+switches, no bulk action, no Save and no dock; results and entries are text, not controls.
+
+My list by default: the Library shows the entries of the groups that are on. One toggle, "Include
+switched-off groups", adds the groups that are off and marks their groups and entries "Off". It is
+kept for the page session only. With the toggle off, the count of left-out matches and the number of
+hidden groups are shown.
+
+```
+┌──────────────────────────────┐
+│ Head                         │  back · playlist name · Edit groups
+│ Summary card                 │  groups on, entries in your list, read-only hint
+│ Search                       │  field · type pills (All/Films/Series/Channels) · toggle
+│                              │  results card: name, group · type, Off badge
+│ Browse groups                │  one card per type (Films, Series, Channels), playlist order
+│   open group                 │  All groups · title · count, entries card, More
+└──────────────────────────────┘
+```
+
+Search: the editor's search, read-only, 300ms after typing; a result shows name, group and type.
+Browse: the groups by type, then in playlist order; opening one pages its entries 50 at a time with
+More until all are shown.
+
+Phone layout (below 1100px): one 760px column. An open group replaces the group list; All groups
+returns to the list with the focus on the group that was open.
+
+Wide Library (from 1100px, CSS only): once the groups are loaded the page widens to a 1440px
+maximum (same 18px padding). While a group is open, Browse becomes two columns with a 24px gap,
+`minmax(300px, 0.4fr) minmax(0, 1fr)`: left the group list, which stays shown, right the open
+group's entries, sticky below the top bar and scrolling within the screen height. Head, summary,
+search and the Browse title span the width; with no group open the list keeps the full width.
+
 ### Site (`/`, guides: site.css)
 
 ```
