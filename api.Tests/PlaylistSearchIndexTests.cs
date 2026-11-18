@@ -141,6 +141,95 @@ public class PlaylistSearchIndexTests
   }
 
   [Fact]
+  public async Task Search_HideDisabled_SkipsOffGroupBeforeLimit()
+  {
+    var index = await Analyze(OffAndOnGroups());
+
+    var result = index.Search("news", Set("Off"), 50, hideDisabled: true);
+
+    Assert.Equal(new[] { "News On 1", "News On 2", "News On 3" }, result.Matches.Select(m => m.Name));
+    Assert.All(result.Matches, m => Assert.True(m.Enabled));
+    Assert.False(result.HasMore);
+    Assert.Equal(60, result.HiddenCount);
+  }
+
+  [Fact]
+  public async Task Search_HideOff_KeepsTodaysResult()
+  {
+    var index = await Analyze(OffAndOnGroups());
+
+    var shown = index.Search("news", Set("Off"), 50);
+    var explicitOff = index.Search("news", Set("Off"), 50, hideDisabled: false);
+
+    Assert.Equal(50, shown.Matches.Count);
+    Assert.True(shown.HasMore);
+    Assert.All(shown.Matches, m => Assert.False(m.Enabled));
+    Assert.Equal(Enumerable.Range(1, 50).Select(i => $"News Off {i}"), shown.Matches.Select(m => m.Name));
+    Assert.Equal(0, shown.HiddenCount);
+    Assert.Equal(shown.Matches, explicitOff.Matches);
+    Assert.Equal((shown.HasMore, 0), (explicitOff.HasMore, explicitOff.HiddenCount));
+  }
+
+  [Theory]
+  [InlineData("off")]
+  [InlineData("OFF")]
+  public async Task Search_HideDisabled_MatchesGroupKeysCaseInsensitively(string disabledGroup)
+  {
+    var index = await Analyze(OffAndOnGroups());
+
+    var result = index.Search("news", Set(disabledGroup), 50, hideDisabled: true);
+
+    Assert.Equal(3, result.Matches.Count);
+    Assert.Equal(60, result.HiddenCount);
+  }
+
+  [Fact]
+  public async Task Search_HideDisabled_CountsOffMatchesPastTheLimit()
+  {
+    var index = await Analyze(OnThenOffGroups());
+
+    var result = index.Search("news", Set("Off"), 50, hideDisabled: true);
+
+    Assert.Equal(Enumerable.Range(1, 50).Select(i => $"News On {i}"), result.Matches.Select(m => m.Name));
+    Assert.True(result.HasMore);
+    Assert.Equal(60, result.HiddenCount);
+  }
+
+  private static string OnThenOffGroups()
+  {
+    var source = new StringBuilder("#EXTM3U\n");
+    for (var i = 1; i <= 51; i++)
+      source.Append($"#EXTINF:-1 group-title=\"On\",News On {i}\nhttps://example.com/live/u/p/{i}.ts\n");
+    for (var i = 1; i <= 60; i++)
+      source.Append($"#EXTINF:-1 group-title=\"Off\",News Off {i}\nhttps://example.com/live/u/p/{100 + i}.ts\n");
+    return source.ToString();
+  }
+
+  private static string OffAndOnGroups()
+  {
+    var source = new StringBuilder("#EXTM3U\n");
+    for (var i = 1; i <= 60; i++)
+      source.Append($"#EXTINF:-1 group-title=\"Off\",News Off {i}\nhttps://example.com/live/u/p/{i}.ts\n");
+    for (var i = 1; i <= 3; i++)
+      source.Append($"#EXTINF:-1 group-title=\"On\",News On {i}\nhttps://example.com/live/u/p/{100 + i}.ts\n");
+    return source.ToString();
+  }
+
+  private static async Task<PlaylistSearchIndex> Analyze(string source)
+  {
+    var path = await WriteTemp(source);
+    try
+    {
+      var analysis = await PlaylistProcessor.AnalyzeFileAsync(path, CancellationToken.None);
+      return Assert.IsType<PlaylistSearchIndex>(analysis.SearchIndex);
+    }
+    finally
+    {
+      File.Delete(path);
+    }
+  }
+
+  [Fact]
   public async Task Index_OverBudget_AnalysisStillSucceeds()
   {
     var path = await WriteTemp(Source);

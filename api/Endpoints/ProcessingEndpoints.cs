@@ -231,11 +231,11 @@ public static class ProcessingEndpoints
         return Results.BadRequest(new { error = "Search is not available for this playlist because it is too large." });
 
       var disabled = new HashSet<string>(input.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-      var result = index.Search(input.Query, disabled, Limits.MaxSearchResults);
+      var result = index.Search(input.Query, disabled, Limits.MaxSearchResults, input.HideDisabled == true);
       return Results.Ok(new PlaylistSearchResponse(
         result.Matches.Select(m => new PlaylistSearchMatchResult(
           m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled)).ToList(),
-        result.HasMore));
+        result.HasMore, result.HiddenCount));
     }).RequireRateLimiting(Security.RateLimits.Fetch);
 
     // Read-only like the search: one page of a group's display names from the same index, so the
