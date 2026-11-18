@@ -9,20 +9,25 @@ RUN dotnet restore api/api.csproj
 COPY . .
 
 # Place the frontend (landing, app, guides) into api/wwwroot so it is published with the API.
+# Every stylesheet and script in the repository root is shipped, so a new front-end file needs no
+# change here.
 RUN mkdir -p api/wwwroot && \
     cp index.html app.html features.html how-to-use.html comparison.html 404.html 500.html 50x.html api/wwwroot/ && \
-    cp theme.css app.css site.css main.js robots.txt sitemap.xml api/wwwroot/ && \
+    cp *.css *.js robots.txt sitemap.xml api/wwwroot/ && \
     cp -r fonts api/wwwroot/
 
 # Version every stylesheet and script by content hash so a cached old file is never paired with a
-# new page. Matches "x.css", "../x.css" and "/x.css" in every page.
+# new page. Matches "x.css", "../x.css" and "/x.css" in every page. Only references in pages are
+# versioned, so every script must be loaded by its own tag in a page: the build fails if a page
+# still names an unversioned stylesheet or script, or if a script loads another local script.
 RUN cd api/wwwroot && \
     pages=$(find . -name '*.html') && \
-    for f in theme.css app.css site.css main.js; do \
+    for f in *.css *.js; do \
       v=$(sha256sum "$f" | cut -c1-12); \
       sed -i -E "s#([\"/])$f\"#\1$f?v=$v\"#g" $pages; \
     done && \
-    ! grep -l -E '(theme|app|site)\.css"|main\.js"' $pages && \
+    ! grep -l -E '["/][A-Za-z0-9_.-]+\.(css|js)"' $pages && \
+    ! grep -l -E "(from|import)[[:space:]]*\(?[[:space:]]*['\"]\.{1,2}/" *.js && \
     grep -q 'main.js?v=' app.html
 
 # Publish
