@@ -1,7 +1,8 @@
 # Goal
 
 > Agents read this file before every run and may not change it (`docs/factory/*` is protected). The owner
-> stated this goal on 14 Nov 2026; it replaces the first draft.
+> stated this goal on 14 Nov 2026; it replaces the first draft. On 18 Nov 2026 he added target 3, the library;
+> cleaning moved from 3 to 4 and smart cleaning from 4 to 5, so issues written before that day use the old numbers.
 
 ## Product
 
@@ -24,8 +25,11 @@ app and on an Apple TV with IPTV apps. In that order of importance:
 2. **Strim is a companion to the television apps.** It answers what the apps do not: in which group a title is,
    when the provider subscription expires, whether the link still works and when it was last fetched, what changed
    in the provider's list.
-3. **Cleaning up is quick and safe.** Few taps to find and switch groups, no accidental bulk changes, and a way back.
-4. **Smart cleaning comes last:** duplicates, best variants, language and country preferences. Report first, remove
+3. **Strim is a library of what the list holds.** A read-only mode, apart from cleaning, to find films and series
+   in the owner's own list (the cleaned list, the full one on demand), see what a film is, walk to similar films,
+   and remember what was seen and liked. Nothing in it changes the playlist.
+4. **Cleaning up is quick and safe.** Few taps to find and switch groups, no accidental bulk changes, and a way back.
+5. **Smart cleaning comes last:** duplicates, best variants, language and country preferences. Report first, remove
    later, because wrong removals are worse than none.
 
 Each improvement fits in one pull request and comes with its tests.
