@@ -18,7 +18,8 @@ public class EditorWideLayoutTests
     var design = Read("DESIGN.md");
     Assert.Contains("Wide editor (from 1100px", design);
     Assert.Contains("1440px maximum", design);
-    Assert.Contains("up\nto 560px", design.Replace("\r\n", "\n"));
+    // #228: the group column takes the larger share, the pane keeps a usable minimum.
+    Assert.Contains("`minmax(0, 1fr) minmax(300px, 0.4fr)`", design);
     Assert.Contains("entry pane", design);
     Assert.Contains("the 760px page applies unchanged", design);
     var flat = design.Replace("\r\n", "\n").Replace("\n", " ");
@@ -42,8 +43,44 @@ public class EditorWideLayoutTests
     Assert.True(media.Success, "app.css has no @media (min-width: 1100px) block.");
     var body = media.Groups[1].Value;
     Assert.Matches(@"\.page:has\(> \.editor-split\)\s*\{\s*max-width:\s*1440px;", body);
-    Assert.Matches(@"\.editor-split\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 560px\) minmax\(0, 1fr\);", body);
+    Assert.Matches(@"\.editor-split\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(300px, 0\.4fr\);", body);
     Assert.Matches(@"\.entry-pane\s*\{[^}]*display:\s*block;", body);
+  }
+
+  /// <summary>The desktop group row (#228): extra columns from 1100px only, fixed tracks, one line.</summary>
+  [Fact]
+  public void AppCss_DesktopRow_HasFixedColumns_FromBreakpointOnly()
+  {
+    var css = Read("app.css");
+    var outsideMedia = Regex.Replace(css, @"@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", "");
+    Assert.Matches(@"\.group-samples,\s*\.group-adult,\s*\.group-origin\s*\{\s*display:\s*none;", outsideMedia);
+    Assert.Matches(@"\.group-row\s*\{[^}]*display:\s*flex;", outsideMedia);
+    Assert.Matches(@"\.group-row\s*\{[^}]*height:\s*var\(--row-h\);", outsideMedia);
+    var rowMedia = Regex.Matches(css, @"@media \(min-width: 1100px\)\s*\{((?:[^{}]*\{[^{}]*\})*)[^{}]*\}")
+      .Select(m => m.Groups[1].Value)
+      .Single(b => b.Contains(".group-samples"));
+    Assert.Matches(@"\.group-row\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*10px minmax\(340px, 1fr\) 64px minmax\(0, 1fr\) 36px minmax\(0, 0\.6fr\) 56px 46px;\s*\}", rowMedia);
+    var order = new[] { ".dot", ".group-name", ".tag", ".group-samples", ".group-adult", ".group-origin", ".group-count", ".toggle" };
+    for (var i = 0; i < order.Length; i++)
+      Assert.Matches($@"\.group-row > {Regex.Escape(order[i])} \{{ grid-column: {i + 1};", rowMedia);
+    Assert.DoesNotContain("height", Regex.Match(rowMedia, @"\.group-row\s*\{[^}]*\}").Value);
+    Assert.Matches(@"\.group-samples,\s*\.group-origin\s*\{[^}]*text-overflow:\s*ellipsis;\s*white-space:\s*nowrap;", rowMedia);
+    Assert.Contains("Desktop group row (from 1100px)", Read("DESIGN.md"));
+  }
+
+  [Fact]
+  public void Editor_PooledRows_PaintSamplesAdultAndOrigin_WithoutPlaceholders()
+  {
+    var js = Read("main.js");
+    Assert.Contains("const samples = Array.isArray(g.sampleTitles) ? g.sampleTitles.filter(Boolean).join(', ') : '';", js);
+    Assert.Contains("h('label', { class: 'group-row', role: 'listitem' }, dot, name, badge, samples, adult, origin, count, check);", js);
+    var paint = js[js.IndexOf("function paintRows", StringComparison.Ordinal)..js.IndexOf("function onRowToggle", StringComparison.Ordinal)];
+    Assert.Contains("samples.textContent = g.samples;", paint);
+    Assert.Contains("adult.textContent = g.adult ? '18+' : '';", paint);
+    Assert.Contains("origin.textContent = g.split ? `from ${g.title}` : '';", paint);
+    // No per-row request: painting stays local.
+    Assert.DoesNotContain("api(", paint);
+    Assert.Contains("picker.rowHeight = Number.isFinite(value) && value > 0 ? value : 48;", js);
   }
 
   [Fact]
