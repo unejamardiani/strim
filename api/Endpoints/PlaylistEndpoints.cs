@@ -77,13 +77,13 @@ public static class PlaylistEndpoints
     // Read-only probe: one details request to the playlist's own host, answered with a sanitised
     // summary of language-like fields. Never returns the address, host, credentials or raw body.
     playlists.MapGet("/{id:guid}/provider-language-probe", async (
-      Guid id, string? kind, long? titleId, ClaimsPrincipal user, AppDbContext db, PlaylistSourceFetcher fetcher,
-      HttpContext context) =>
+      Guid id, string? kind, long? titleId, long? episodeId, ClaimsPrincipal user, AppDbContext db,
+      PlaylistSourceFetcher fetcher, HttpContext context) =>
     {
       if (await FindOwnedAsync(db, id, user) is not { } playlist) return Results.NotFound();
-      if (kind is not ("vod" or "series") || titleId is not > 0)
+      if (kind is not ("vod" or "series") || titleId is not > 0 || (kind == "series" && episodeId is not > 0))
       {
-        return Results.BadRequest(new { error = "Give kind=vod or kind=series and a positive titleId." });
+        return Results.BadRequest(new { error = "Give kind=vod or kind=series, a titleId and, for a series, an episodeId." });
       }
 
       if (ProviderLanguageProbe.BuildEndpoint(playlist.SourceUrl, kind, titleId.Value) is not { } endpoint)
@@ -95,9 +95,9 @@ public static class PlaylistEndpoints
       }
 
       var answer = await fetcher.FetchSmallTextAsync(
-        endpoint.AbsoluteUri, context.RequestAborted, ProviderLanguageProbe.MaxDetailsBytes, sameHostOnly: true);
+        endpoint.AbsoluteUri, context.RequestAborted, ProviderLanguageProbe.MaxDetailsBytes, noRedirects: true);
       var summary = answer.Success
-        ? ProviderLanguageProbe.Summarise(kind, answer.Text, ProbeSecrets(endpoint))
+        ? ProviderLanguageProbe.Summarise(kind, answer.Text, episodeId, ProbeSecrets(endpoint))
         : null;
       return summary is not null
         ? Results.Ok(summary)
@@ -218,7 +218,6 @@ public static class PlaylistEndpoints
     return app;
   }
 
-  /// <summary>Another user's playlist is reported as missing, never as forbidden.</summary>
   // The host and the credentials, raw and decoded, so no sample value can echo them.
   private static string[] ProbeSecrets(Uri endpoint)
   {
@@ -234,6 +233,7 @@ public static class PlaylistEndpoints
     return secrets.ToArray();
   }
 
+  /// <summary>Another user's playlist is reported as missing, never as forbidden.</summary>
   private static Task<Playlist?> FindOwnedAsync(AppDbContext db, Guid id, ClaimsPrincipal user)
   {
     var userId = user.UserId();

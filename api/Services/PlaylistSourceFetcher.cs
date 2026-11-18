@@ -118,15 +118,15 @@ public sealed class PlaylistSourceFetcher
   /// address checks, redirect validation, HTTP client and timeout as <see cref="FetchAsync"/>.
   /// Bodies above <see cref="SmallTextMaxBytes"/> are refused. Every failure is returned as a result;
   /// messages and log entries name only the host, never the path or query string.
-  /// <paramref name="maxBytes"/> changes the body limit; <paramref name="sameHostOnly"/> refuses redirects
-  /// to another host and keeps the host out of the log entries as well.
+  /// <paramref name="maxBytes"/> changes the body limit; <paramref name="noRedirects"/> makes exactly one
+  /// request (any redirect fails) and keeps the host out of the log entries as well.
   /// </summary>
   public async Task<SmallTextFetchResult> FetchSmallTextAsync(
-    string sourceUrl,
-    CancellationToken cancellationToken,
-    int maxBytes = SmallTextMaxBytes,
-    bool sameHostOnly = false)
+    string sourceUrl, CancellationToken cancellationToken, int maxBytes = SmallTextMaxBytes, bool noRedirects = false)
   {
+    SmallTextFetchResult Fail(Uri uri, string error, int? statusCode = null) =>
+      LogFailure(noRedirects ? "the source" : uri.Host, error, statusCode);
+
     Uri currentUri;
     try
     {
@@ -150,24 +150,18 @@ public sealed class PlaylistSourceFetcher
 
         if (IsRedirect(response.StatusCode) && response.Headers.Location is not null)
         {
-          if (redirectCount >= MaxRedirects)
+          if (noRedirects || redirectCount >= MaxRedirects)
           {
-            return Fail(sameHostOnly, currentUri,"Too many redirects");
+            return Fail(currentUri, noRedirects ? "Redirects are not allowed" : "Too many redirects");
           }
 
           try
           {
-            var redirectUri = ValidateRedirectUri(currentUri, response.Headers.Location);
-            if (sameHostOnly && !string.Equals(redirectUri.Host, currentUri.Host, StringComparison.OrdinalIgnoreCase))
-            {
-              return Fail(sameHostOnly, currentUri, "Redirect to another host is not allowed");
-            }
-
-            currentUri = redirectUri;
+            currentUri = ValidateRedirectUri(currentUri, response.Headers.Location);
           }
           catch (InvalidOperationException ex)
           {
-            return Fail(sameHostOnly, currentUri, ex.Message);
+            return Fail(currentUri, ex.Message);
           }
 
           continue;
@@ -175,48 +169,40 @@ public sealed class PlaylistSourceFetcher
 
         if (!response.IsSuccessStatusCode)
         {
-          return Fail(sameHostOnly, currentUri,$"Upstream returned {(int)response.StatusCode}", (int)response.StatusCode);
+          return Fail(currentUri, $"Upstream returned {(int)response.StatusCode}", (int)response.StatusCode);
         }
 
         if (response.Content.Headers.ContentLength > maxBytes)
         {
-          return Fail(sameHostOnly, currentUri,"Response is too large");
+          return Fail(currentUri, "Response is too large");
         }
 
         var text = await ReadSmallTextAsync(response, maxBytes, timeout.Token);
         return text is null
-          ? Fail(sameHostOnly, currentUri, "Response is too large")
+          ? Fail(currentUri, "Response is too large")
           : SmallTextFetchResult.Succeeded(text, (int)response.StatusCode);
       }
     }
     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
     {
-      return Fail(sameHostOnly, currentUri,"The request timed out");
+      return Fail(currentUri, "The request timed out");
     }
     catch (HttpRequestException)
     {
-      return Fail(sameHostOnly, currentUri,"Unable to connect");
+      return Fail(currentUri, "Unable to connect");
     }
     catch (IOException)
     {
-      return Fail(sameHostOnly, currentUri,"Reading the response failed");
+      return Fail(currentUri, "Reading the response failed");
     }
   }
 
   /// <summary>Upper bound for <see cref="FetchSmallTextAsync"/> bodies.</summary>
   public const int SmallTextMaxBytes = 64 * 1024;
 
-  private SmallTextFetchResult Fail(bool hideHost, Uri uri, string error, int? statusCode = null)
+  private SmallTextFetchResult LogFailure(string host, string error, int? statusCode)
   {
-    if (hideHost)
-    {
-      _logger.LogWarning("Small text fetch failed: {Error}", error);
-    }
-    else
-    {
-      _logger.LogWarning("Small text fetch from {Host} failed: {Error}", uri.Host, error);
-    }
-
+    _logger.LogWarning("Small text fetch from {Host} failed: {Error}", host, error);
     return SmallTextFetchResult.Failed(error, statusCode);
   }
 

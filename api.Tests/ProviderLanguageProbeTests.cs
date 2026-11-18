@@ -32,6 +32,9 @@ public sealed class ProviderLanguageProbeTests : IDisposable
   private static Func<HttpResponseMessage> Json(string body, HttpStatusCode status = HttpStatusCode.OK) =>
     () => new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
+  private static Func<HttpResponseMessage> Redirect(string location) =>
+    () => new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri(location) } };
+
   // The Strim account gets its own name, so log lines about it never echo the provider username.
   private async Task<(ApiClient Client, Guid Id)> OwnPlaylistAsync(string sourceUrl)
   {
@@ -71,20 +74,26 @@ public sealed class ProviderLanguageProbeTests : IDisposable
   }
 
   [Fact]
-  public async Task SeriesDetails_AskGetSeriesInfo_AndReportEpisodeFieldsAcrossSeasons()
+  public async Task SeriesDetails_AskGetSeriesInfo_AndReportOnlyTheChosenEpisode()
   {
     const string user = "probe-series";
     _factory.UpstreamResponses[Details(user, "get_series_info&series_id=77")] = Json("""
-      {"info":{"name":"Made Up Show"},"episodes":{"1":[{"id":"9001","info":{"audio":{"tags":{"language":"ger"}}}}],
+      {"info":{"name":"Made Up Show","audio_language":"ger"},"episodes":{"1":[{"id":"9001","info":{"audio":{"tags":{"language":"ger"}}}}],
        "2":[{"id":"9002","info":{"audio":{"tags":{"language":"eng"}}}}]}}
       """);
     var (client, id) = await OwnPlaylistAsync(Link(user));
+    var before = _factory.UpstreamRequests.Count;
 
-    var summary = await client.Http.GetFromJsonAsync<JsonElement>(ProbePath(id, "series", 77));
+    var response = await client.Http.GetAsync(ProbePath(id, "series", 77) + "&episodeId=9002");
 
-    var field = summary.GetProperty("fields").EnumerateArray()
-      .Single(f => f.GetProperty("path").GetString() == "episodes.*[].info.audio.tags.language");
-    Assert.Equal(new[] { "ger", "eng" }, Samples(field));
+    var body = await response.Content.ReadAsStringAsync();
+    var field = JsonDocument.Parse(body).RootElement.GetProperty("fields").EnumerateArray()
+      .Single(f => f.GetProperty("path").GetString() == "episode.info.audio.tags.language");
+    Assert.Equal(new[] { "eng" }, Samples(field));
+    Assert.DoesNotContain("ger", body);
+    Assert.Equal(HttpStatusCode.BadRequest, (await client.Http.GetAsync(ProbePath(id, "series", 77))).StatusCode);
+    Assert.Equal(HttpStatusCode.BadGateway, (await client.Http.GetAsync(ProbePath(id, "series", 77) + "&episodeId=1")).StatusCode);
+    Assert.Equal(before + 2, _factory.UpstreamRequests.Count);
   }
 
   [Fact]
@@ -107,14 +116,13 @@ public sealed class ProviderLanguageProbeTests : IDisposable
   {
     const string user = "probe-leak-u5";
     _factory.UpstreamResponses[Details(user, "get_vod_info&vod_id=501")] = Json(
-      $$$"""{"info":{"audio_language":"{{{Password}}}","subtitle_url":"http://{{{Host}}}/sub.srt","lang":"{{{user}}}"}}""");
+      $$$"""{"info":{"audio_language":"{{{Password}}}","subtitle_url":"http://{{{Host}}}/sub.srt","lang":"{{{user}}}","{{{Password}}}":""" +
+      $$$"""{"language":"eng"},"{{{user}}}":{"audio":"eng"},"audio_token":"tok-q7z"}}""");
+    _factory.UpstreamResponses[Details(user, "get_vod_info&vod_id=505")] = Redirect($"http://{Host}/movie/{user}/{Password}/505.mkv");
+    _factory.UpstreamResponses[Details(user, "get_vod_info&vod_id=506")] = Json("""{"error":"Title unavailable"}""");
     _factory.UpstreamResponses[Details(user, "get_vod_info&vod_id=502")] = Json("""{"error":"x"}""", HttpStatusCode.InternalServerError);
-    _factory.UpstreamResponses[Details(user, "get_vod_info&vod_id=503")] = () =>
-    {
-      var redirect = new HttpResponseMessage(HttpStatusCode.Found);
-      redirect.Headers.Location = new Uri($"http://{OtherHost}/player_api.php?username={user}&password={Password}");
-      return redirect;
-    };
+    _factory.UpstreamResponses[Details(user, "get_vod_info&vod_id=503")] =
+      Redirect($"http://{OtherHost}/player_api.php?username={user}&password={Password}");
     _factory.UpstreamResponses[Details(user, "get_vod_info&vod_id=504")] = Json("<html>not json</html>");
     var (client, id) = await OwnPlaylistAsync(Link(user));
 
@@ -122,7 +130,9 @@ public sealed class ProviderLanguageProbeTests : IDisposable
     var success = await client.Http.GetAsync(ProbePath(id, titleId: 501));
     Assert.Equal(HttpStatusCode.OK, success.StatusCode);
     bodies.Add(await success.Content.ReadAsStringAsync());
-    foreach (var titleId in new[] { 502L, 503L, 504L })
+    Assert.Contains("\"eng\"", bodies[0]);
+    Assert.DoesNotContain("tok-q7z", bodies[0]);
+    foreach (var titleId in new[] { 502L, 503L, 504L, 505L, 506L })
     {
       var failure = await client.Http.GetAsync(ProbePath(id, titleId: titleId));
       Assert.Equal(HttpStatusCode.BadGateway, failure.StatusCode);
@@ -131,7 +141,7 @@ public sealed class ProviderLanguageProbeTests : IDisposable
       bodies.Add(body);
     }
 
-    Assert.DoesNotContain(_factory.UpstreamRequests, r => r.Contains(OtherHost));
+    Assert.DoesNotContain(_factory.UpstreamRequests, r => r.Contains(OtherHost) || r.Contains("505.mkv"));
     Assert.NotEmpty(_factory.LogEntries);
     foreach (var text in bodies.Concat(_factory.LogEntries))
     {
