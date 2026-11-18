@@ -111,8 +111,10 @@
     grid-column: 1 / -1;
   }
 
+  /* theme.css hides every [hidden] element with !important, so only an !important override (later in the
+     cascade, scoped to the wide breakpoint) keeps the group list shown next to the open group. */
   .library-browse > .library-groups[hidden] {
-    display: flex;
+    display: flex !important;
   }
 
   .library-browse > .library-open {

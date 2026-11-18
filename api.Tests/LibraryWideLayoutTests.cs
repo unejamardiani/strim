@@ -27,8 +27,15 @@ public class LibraryWideLayoutTests
     var body = media.Groups[1].Value;
     Assert.Matches(@"\.page:has\(\.library-browse\)\s*\{\s*max-width:\s*1440px;", body);
     Assert.Matches(@"\.library-browse:has\(> \.library-open:not\(\[hidden\]\)\)\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(300px, 0\.4fr\) minmax\(0, 1fr\);", body);
-    // The group list stays shown next to the open group even though library.js hides it on a phone.
-    Assert.Matches(@"\.library-browse > \.library-groups\[hidden\]\s*\{\s*display:\s*flex;", body);
+    // The group list stays shown next to the open group even though library.js hides it on a phone. theme.css
+    // hides every [hidden] element with !important, so a plain display would lose: the override must be
+    // !important too, and library.css must load after theme.css for it to win.
+    Assert.Matches(@"\[hidden\]\s*\{\s*display:\s*none\s*!important;", Read("theme.css"));
+    Assert.Matches(@"\.library-browse > \.library-groups\[hidden\]\s*\{\s*display:\s*flex\s*!important;", body);
+    var html = Read("app.html");
+    var theme = html.IndexOf("href=\"theme.css\"", StringComparison.Ordinal);
+    var library = html.IndexOf("href=\"library.css\"", StringComparison.Ordinal);
+    Assert.True(theme >= 0 && library > theme, "app.html must load library.css after theme.css.");
     Assert.Matches(@"\.library-browse > \.library-title\s*\{\s*grid-column:\s*1 / -1;", body);
     Assert.Matches(@"\.library-browse > \.library-open\s*\{[^}]*position:\s*sticky;[^}]*overflow-y:\s*auto;", body);
   }
