@@ -2,7 +2,7 @@ namespace Api.Services;
 
 /// <summary>
 /// Process-local memory cache of successful TMDB answers, keyed by request path. Entries live for a fixed
-/// lifetime (30 days by default, well within TMDB's six-month limit) and are counted in bytes; past the budget
+/// lifetime (at most 30 days, well within TMDB's six-month limit) and are counted in bytes; past the budget
 /// the oldest entries are evicted, and an answer larger than the whole budget is not cached at all.
 /// Nothing is written to disk or to the database.
 /// </summary>
@@ -14,7 +14,16 @@ public sealed class TmdbCache(TimeProvider timeProvider)
   private readonly Dictionary<string, LinkedListNode<Entry>> _byKey = new(StringComparer.Ordinal);
   private readonly LinkedList<Entry> _byAge = new();
 
-  public TimeSpan Lifetime { get; init; } = TimeSpan.FromDays(30);
+  /// <summary>The longest an answer is kept; a longer configured lifetime is clamped to it.</summary>
+  public static readonly TimeSpan MaxLifetime = TimeSpan.FromDays(30);
+
+  private readonly TimeSpan _lifetime = MaxLifetime;
+
+  public TimeSpan Lifetime
+  {
+    get => _lifetime;
+    init => _lifetime = value > MaxLifetime ? MaxLifetime : value;
+  }
 
   public long ByteBudget { get; init; } = 16 * 1024 * 1024;
 

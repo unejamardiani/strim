@@ -61,6 +61,73 @@ public class TmdbCacheTests
   }
 
   [Fact]
+  public void Lifetime_IsClampedToThirtyDays()
+  {
+    Assert.Equal(TimeSpan.FromDays(30), TmdbCache.MaxLifetime);
+    Assert.Equal(TmdbCache.MaxLifetime, new TmdbCache(new ManualTime()).Lifetime);
+    Assert.Equal(TimeSpan.FromDays(30), new TmdbCache(new ManualTime()) { Lifetime = TimeSpan.FromDays(31) }.Lifetime);
+    Assert.Equal(TimeSpan.FromDays(30), new TmdbCache(new ManualTime()) { Lifetime = TimeSpan.MaxValue }.Lifetime);
+    Assert.Equal(TimeSpan.FromDays(7), new TmdbCache(new ManualTime()) { Lifetime = TimeSpan.FromDays(7) }.Lifetime);
+
+    // A clamped cache really drops the entry after 30 days.
+    var time = new ManualTime();
+    var cache = new TmdbCache(time) { Lifetime = TimeSpan.FromDays(365) };
+    cache.Set("a", new byte[10]);
+    time.Advance(TimeSpan.FromDays(30));
+    Assert.False(cache.TryGet("a", out _));
+  }
+
+  [Fact]
+  public void ExpiredEntry_ReleasesBudget()
+  {
+    var time = new ManualTime();
+    var body = new byte[100];
+    var entrySize = TmdbCache.SizeOf("a", body);
+    var cache = new TmdbCache(time) { Lifetime = TimeSpan.FromDays(1), ByteBudget = entrySize * 2 };
+
+    // Removed on lookup: an expired entry is a miss and frees its bytes.
+    cache.Set("a", body);
+    time.Advance(TimeSpan.FromDays(1));
+    Assert.False(cache.TryGet("a", out _));
+    Assert.Equal(0, cache.Bytes);
+
+    // Replaced: refreshing an expired entry counts it once, not twice.
+    cache.Set("b", body);
+    time.Advance(TimeSpan.FromDays(1));
+    cache.Set("b", body);
+    Assert.Equal(entrySize, cache.Bytes);
+    Assert.True(cache.TryGet("b", out _));
+
+    // The freed bytes are usable: two fresh entries fit again.
+    cache.Set("c", body);
+    Assert.True(cache.TryGet("b", out _));
+    Assert.True(cache.TryGet("c", out _));
+    Assert.Equal(entrySize * 2, cache.Bytes);
+  }
+
+  [Fact]
+  public void Cache_IsBuiltOnlyFromInMemoryState()
+  {
+    var type = typeof(TmdbCache);
+    var constructor = Assert.Single(type.GetConstructors());
+    Assert.Equal([typeof(TimeProvider)], constructor.GetParameters().Select(p => p.ParameterType));
+
+    var allowed = new[] { "System.Object", "System.Int64", "System.TimeSpan", "System.TimeProvider",
+      "System.Collections.Generic." };
+    var fields = type.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static
+      | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+    Assert.NotEmpty(fields);
+    foreach (var field in fields)
+    {
+      var name = field.FieldType.FullName ?? field.FieldType.Name;
+      Assert.True(allowed.Any(name.StartsWith), $"{field.Name} has type {name}");
+      Assert.DoesNotContain("System.IO", name);
+      Assert.DoesNotContain("EntityFramework", name);
+      Assert.DoesNotContain("Data", name);
+    }
+  }
+
+  [Fact]
   public void StaysWithinByteBudget()
   {
     var body = new byte[100];
