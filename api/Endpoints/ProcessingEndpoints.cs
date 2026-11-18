@@ -234,7 +234,9 @@ public static class ProcessingEndpoints
       var result = index.Search(input.Query, disabled, Limits.MaxSearchResults, input.HideDisabled == true);
       return Results.Ok(new PlaylistSearchResponse(
         result.Matches.Select(m => new PlaylistSearchMatchResult(
-          m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled)).ToList(),
+          m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled,
+          m.Languages.Audio, m.Languages.Subtitles, m.Languages.Markers, m.Languages.PrefixTags,
+          m.Languages.Source)).ToList(),
         result.HasMore, result.HiddenCount));
     }).RequireRateLimiting(Security.RateLimits.Fetch);
 
