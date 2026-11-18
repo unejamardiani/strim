@@ -81,6 +81,48 @@ public class PlaylistSearchEndpointTests(StrimAppFactory factory) : IClassFixtur
   }
 
   [Fact]
+  public async Task Search_HideDisabled_LeavesOutAndCountsOffGroups()
+  {
+    var playlist = new StringBuilder("#EXTM3U\n");
+    for (var i = 1; i <= 60; i++)
+      playlist.Append($"#EXTINF:-1 group-title=\"Off\",News Off {i}\nhttp://line.example/live/u/p/{i}.ts\n");
+    for (var i = 1; i <= 3; i++)
+      playlist.Append($"#EXTINF:-1 group-title=\"On\",News On {i}\nhttp://line.example/live/u/p/{100 + i}.ts\n");
+    var client = new ApiClient(factory.CreateClient());
+    var cacheKey = await AnalyzeAsync(client, playlist.ToString());
+    var disabledGroups = new[] { "Off" };
+
+    var today = await SearchOkAsync(client, new { cacheKey, query = "news", disabledGroups });
+    Assert.Equal(50, today.Matches.Count);
+    Assert.True(today.HasMore);
+    Assert.All(today.Matches, m => Assert.False(m.Enabled));
+    Assert.Equal(0, today.HiddenCount);
+
+    var explicitOff = await SearchOkAsync(client, new { cacheKey, query = "news", disabledGroups, hideDisabled = false });
+    Assert.Equal(today.Matches, explicitOff.Matches);
+    Assert.Equal((true, 0), (explicitOff.HasMore, explicitOff.HiddenCount));
+
+    var hidden = await SearchOkAsync(client, new { cacheKey, query = "news", disabledGroups, hideDisabled = true });
+    Assert.Equal(new[] { "News On 1", "News On 2", "News On 3" }, hidden.Matches.Select(m => m.Name));
+    Assert.DoesNotContain(hidden.Matches, m => !m.Enabled);
+    Assert.False(hidden.HasMore);
+    Assert.Equal(60, hidden.HiddenCount);
+  }
+
+  [Fact]
+  public async Task Search_WithoutHideDisabled_ReturnsZeroHiddenCount()
+  {
+    var client = new ApiClient(factory.CreateClient());
+    var cacheKey = await AnalyzeAsync(client, WithMovie);
+
+    var result = await SearchOkAsync(client, new { cacheKey, query = "kika", disabledGroups = new[] { "Kids" } });
+
+    // HiddenCount defaults to -1 in the DTO, so 0 means the field is present.
+    Assert.Equal(0, result.HiddenCount);
+    Assert.False(Assert.Single(result.Matches).Enabled);
+  }
+
+  [Fact]
   public async Task Search_RejectsInvalidInput()
   {
     var client = new ApiClient(factory.CreateClient());
@@ -161,6 +203,6 @@ public class PlaylistSearchEndpointTests(StrimAppFactory factory) : IClassFixtur
 
   private sealed record AnalysisDto(string CacheKey);
   private sealed record MatchDto(string Name, string Group, string GroupKey, int Position, string ContentType, bool Enabled);
-  private sealed record SearchDto(List<MatchDto> Matches, bool HasMore);
+  private sealed record SearchDto(List<MatchDto> Matches, bool HasMore, int HiddenCount = -1);
   private sealed record ErrorDto(string Error);
 }
