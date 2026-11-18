@@ -7,10 +7,7 @@ using Xunit;
 
 namespace Api.Tests;
 
-/// <summary>
-/// The read-only provider language probe: one details request to the playlist's own host, a
-/// sanitised summary back, and nothing of the address, host or credentials in answers or logs.
-/// </summary>
+/// <summary>The provider language probe: one request to the own host, a sanitised summary, no leaks.</summary>
 public sealed class ProviderLanguageProbeTests : IDisposable
 {
   // Made-up public IP literals that no other test uses, so the captured logs are this class's own.
@@ -70,8 +67,7 @@ public sealed class ProviderLanguageProbeTests : IDisposable
     Assert.Equal("object", fields["info.audio"].GetProperty("shapes")[0].GetString());
     Assert.DoesNotContain("info.name", fields.Keys);
 
-    var requests = _factory.UpstreamRequests.Skip(before).ToList();
-    Assert.Equal([Details(user, "get_vod_info&vod_id=501")], requests);
+    Assert.Equal(new[] { Details(user, "get_vod_info&vod_id=501") }, _factory.UpstreamRequests.Skip(before));
   }
 
   [Fact]

@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
+using Found = System.Collections.Generic.Dictionary<
+  string, (System.Collections.Generic.SortedSet<string> Shapes, System.Collections.Generic.List<string> Samples)>;
 
 namespace Api.Services;
 
@@ -52,19 +54,16 @@ public static class ProviderLanguageProbe
       using var document = JsonDocument.Parse(body, new JsonDocumentOptions { MaxDepth = 64 });
       if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
 
-      var found = new Dictionary<string, (SortedSet<string> Shapes, List<string> Samples)>(StringComparer.Ordinal);
+      var found = new Found(StringComparer.Ordinal);
       Walk(document.RootElement, "", 0, found, secrets);
       var fields = found
         .OrderBy(f => f.Key, StringComparer.Ordinal)
         .Select(f => new ProviderLanguageField(f.Key, f.Value.Shapes.ToList(), f.Value.Samples))
         .ToList();
-      return new ProviderLanguageSummary(
-        kind,
-        fields.Count > 0,
-        fields.Count > 0
-          ? $"Found {fields.Count} field(s) that look like language data."
-          : "No language fields were found in the provider's details for this title.",
-        fields);
+      var message = fields.Count > 0
+        ? $"Found {fields.Count} field(s) that look like language data."
+        : "No language fields were found in the provider's details for this title.";
+      return new ProviderLanguageSummary(kind, fields.Count > 0, message, fields);
     }
     catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
     {
@@ -72,12 +71,7 @@ public static class ProviderLanguageProbe
     }
   }
 
-  private static void Walk(
-    JsonElement element,
-    string path,
-    int depth,
-    Dictionary<string, (SortedSet<string> Shapes, List<string> Samples)> found,
-    IReadOnlyCollection<string> secrets)
+  private static void Walk(JsonElement element, string path, int depth, Found found, IReadOnlyCollection<string> secrets)
   {
     if (depth > MaxDepth) return;
     if (element.ValueKind == JsonValueKind.Array)
@@ -102,11 +96,7 @@ public static class ProviderLanguageProbe
     return LanguageWords.Any(word => lower.Contains(word, StringComparison.Ordinal));
   }
 
-  private static void Record(
-    string path,
-    JsonElement value,
-    Dictionary<string, (SortedSet<string> Shapes, List<string> Samples)> found,
-    IReadOnlyCollection<string> secrets)
+  private static void Record(string path, JsonElement value, Found found, IReadOnlyCollection<string> secrets)
   {
     if (!found.TryGetValue(path, out var field))
     {
