@@ -118,9 +118,15 @@ public sealed class PlaylistSourceFetcher
   /// address checks, redirect validation, HTTP client and timeout as <see cref="FetchAsync"/>.
   /// Bodies above <see cref="SmallTextMaxBytes"/> are refused. Every failure is returned as a result;
   /// messages and log entries name only the host, never the path or query string.
+  /// <paramref name="maxBytes"/> changes the body limit; <paramref name="noRedirects"/> makes exactly one
+  /// request (any redirect fails) and keeps the host out of the log entries as well.
   /// </summary>
-  public async Task<SmallTextFetchResult> FetchSmallTextAsync(string sourceUrl, CancellationToken cancellationToken)
+  public async Task<SmallTextFetchResult> FetchSmallTextAsync(
+    string sourceUrl, CancellationToken cancellationToken, int maxBytes = SmallTextMaxBytes, bool noRedirects = false)
   {
+    SmallTextFetchResult Fail(Uri uri, string error, int? statusCode = null) =>
+      LogFailure(noRedirects ? "the source" : uri.Host, error, statusCode);
+
     Uri currentUri;
     try
     {
@@ -144,9 +150,9 @@ public sealed class PlaylistSourceFetcher
 
         if (IsRedirect(response.StatusCode) && response.Headers.Location is not null)
         {
-          if (redirectCount >= MaxRedirects)
+          if (noRedirects || redirectCount >= MaxRedirects)
           {
-            return Fail(currentUri, "Too many redirects");
+            return Fail(currentUri, noRedirects ? "Redirects are not allowed" : "Too many redirects");
           }
 
           try
@@ -166,12 +172,12 @@ public sealed class PlaylistSourceFetcher
           return Fail(currentUri, $"Upstream returned {(int)response.StatusCode}", (int)response.StatusCode);
         }
 
-        if (response.Content.Headers.ContentLength > SmallTextMaxBytes)
+        if (response.Content.Headers.ContentLength > maxBytes)
         {
           return Fail(currentUri, "Response is too large");
         }
 
-        var text = await ReadSmallTextAsync(response, timeout.Token);
+        var text = await ReadSmallTextAsync(response, maxBytes, timeout.Token);
         return text is null
           ? Fail(currentUri, "Response is too large")
           : SmallTextFetchResult.Succeeded(text, (int)response.StatusCode);
@@ -194,13 +200,13 @@ public sealed class PlaylistSourceFetcher
   /// <summary>Upper bound for <see cref="FetchSmallTextAsync"/> bodies.</summary>
   public const int SmallTextMaxBytes = 64 * 1024;
 
-  private SmallTextFetchResult Fail(Uri uri, string error, int? statusCode = null)
+  private SmallTextFetchResult LogFailure(string host, string error, int? statusCode)
   {
-    _logger.LogWarning("Small text fetch from {Host} failed: {Error}", uri.Host, error);
+    _logger.LogWarning("Small text fetch from {Host} failed: {Error}", host, error);
     return SmallTextFetchResult.Failed(error, statusCode);
   }
 
-  private static async Task<string?> ReadSmallTextAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+  private static async Task<string?> ReadSmallTextAsync(HttpResponseMessage response, int maxBytes, CancellationToken cancellationToken)
   {
     await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
     using var buffer = new MemoryStream();
@@ -209,7 +215,7 @@ public sealed class PlaylistSourceFetcher
     {
       var read = await source.ReadAsync(chunk, cancellationToken);
       if (read == 0) break;
-      if (buffer.Length + read > SmallTextMaxBytes) return null;
+      if (buffer.Length + read > maxBytes) return null;
       buffer.Write(chunk, 0, read);
     }
 

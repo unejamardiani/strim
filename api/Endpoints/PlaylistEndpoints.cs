@@ -74,6 +74,37 @@ public static class PlaylistEndpoints
         : Results.NotFound())
       .RequireRateLimiting(Security.RateLimits.General);
 
+    // Read-only probe: one details request to the playlist's own host, answered with a sanitised
+    // summary of language-like fields. Never returns the address, host, credentials or raw body.
+    playlists.MapGet("/{id:guid}/provider-language-probe", async (
+      Guid id, string? kind, long? titleId, long? episodeId, ClaimsPrincipal user, AppDbContext db,
+      PlaylistSourceFetcher fetcher, HttpContext context) =>
+    {
+      if (await FindOwnedAsync(db, id, user) is not { } playlist) return Results.NotFound();
+      if (kind is not ("vod" or "series") || titleId is not > 0 || (kind == "series" && episodeId is not > 0))
+      {
+        return Results.BadRequest(new { error = "Give kind=vod or kind=series, a titleId and, for a series, an episodeId." });
+      }
+
+      if (ProviderLanguageProbe.BuildEndpoint(playlist.SourceUrl, kind, titleId.Value) is not { } endpoint)
+      {
+        return Results.UnprocessableEntity(new
+        {
+          error = "Not supported: this probe works only for Xtream-style get.php playlist links.",
+        });
+      }
+
+      var answer = await fetcher.FetchSmallTextAsync(
+        endpoint.AbsoluteUri, context.RequestAborted, ProviderLanguageProbe.MaxDetailsBytes, noRedirects: true);
+      var summary = answer.Success
+        ? ProviderLanguageProbe.Summarise(kind, answer.Text, episodeId, ProbeSecrets(endpoint))
+        : null;
+      return summary is not null
+        ? Results.Ok(summary)
+        : Results.Problem("The provider did not return usable details for this title.", statusCode: StatusCodes.Status502BadGateway);
+    })
+      .RequireRateLimiting(Security.RateLimits.General);
+
     mutations.MapPost("", async (PlaylistRequest input, ClaimsPrincipal user, AppDbContext db) =>
     {
       if (Validate(input) is { } invalid) return invalid;
@@ -185,6 +216,21 @@ public static class PlaylistEndpoints
     }).RequireRateLimiting(Security.RateLimits.General);
 
     return app;
+  }
+
+  // The host and the credentials, raw and decoded, so no sample value can echo them.
+  private static string[] ProbeSecrets(Uri endpoint)
+  {
+    var secrets = new List<string> { endpoint.Host };
+    foreach (var pair in endpoint.Query.TrimStart('?').Split('&'))
+    {
+      var equals = pair.IndexOf('=');
+      if (equals <= 0 || pair[..equals] is not ("username" or "password")) continue;
+      secrets.Add(pair[(equals + 1)..]);
+      secrets.Add(Uri.UnescapeDataString(pair[(equals + 1)..]));
+    }
+
+    return secrets.ToArray();
   }
 
   /// <summary>Another user's playlist is reported as missing, never as forbidden.</summary>
