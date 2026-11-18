@@ -82,6 +82,49 @@ public class StreamingPlaylistReportTests
   }
 
   [Fact]
+  public async Task BuildStreaming_FarBelowTheDuplicateFinder_RefusesDuringItsFirstPass()
+  {
+    var entries = PlaylistEntryFixture.Read(GeneratedPlaylist.Text(42, 2_000));
+    var source = new CountingSource(entries);
+    var counter = new HeldBytesCounter();
+    const long Budget = 10_000;
+
+    var error = await Assert.ThrowsAsync<PlaylistReportTooLargeException>(() =>
+      PlaylistReport.BuildStreamingAsync(source.Read, Budget, 500, CancellationToken.None, counter));
+
+    Assert.Equal("This playlist is too large for a duplicates and variants report.", error.Message);
+    Assert.Equal(1, source.Passes);
+    Assert.True(source.EntriesRead < entries.Count, $"Read {source.EntriesRead} of {entries.Count} entries.");
+    AssertRefusedWithinOneEntry(counter, Budget, entries);
+  }
+
+  [Fact]
+  public async Task BuildStreaming_WhenOnlyTheVariantFinderPassesTheBudget_RefusesWhileItReads()
+  {
+    var entries = PlaylistEntryFixture.Read(GeneratedPlaylist.Text(42, 2_000));
+    var duplicateBytes = new HeldBytesCounter();
+    await StreamingDuplicateFinder.FindAsync(new CountingSource(entries).Read, CancellationToken.None, counter: duplicateBytes);
+    var variants = await StreamingVariantFinder.FindAsync(new CountingSource(entries).Read, CancellationToken.None);
+    var budget = duplicateBytes.Bytes + variants.HeldBytes / 2;
+    var source = new CountingSource(entries);
+    var counter = new HeldBytesCounter();
+
+    await Assert.ThrowsAsync<PlaylistReportTooLargeException>(() =>
+      PlaylistReport.BuildStreamingAsync(source.Read, budget, 500, CancellationToken.None, counter));
+
+    // Both duplicate passes completed; the variant finder's two passes did not.
+    var finderPasses = StreamingDuplicateFinder.PassCount + StreamingVariantFinder.PassCount;
+    Assert.InRange(source.EntriesRead, StreamingDuplicateFinder.PassCount * entries.Count + 1, finderPasses * entries.Count - 1);
+    AssertRefusedWithinOneEntry(counter, budget, entries);
+  }
+
+  private static void AssertRefusedWithinOneEntry(HeldBytesCounter counter, long budget, List<PlaylistEntry> entries)
+  {
+    var oneEntry = entries.Max(PlaylistProcessor.EstimatedEntryBytes);
+    Assert.InRange(counter.Bytes, budget + 1, budget + oneEntry);
+  }
+
+  [Fact]
   public async Task BuildStreaming_ReportsALargeListUnderABudgetTheInMemoryPathRefuses()
   {
     const int Count = 300_000;
@@ -110,15 +153,15 @@ public class StreamingPlaylistReportTests
     var counter = new HeldBytesCounter();
     var report = await PlaylistReport.BuildStreamingAsync(Source, budget, PlaylistReport.MaxListedSetsPerKind, CancellationToken.None, counter);
 
-    var duplicates = await StreamingDuplicateFinder.FindAsync(
-      token => PlaylistProcessor.StreamEntriesFromFileAsync(file.Path, token), CancellationToken.None);
-    var variants = await StreamingVariantFinder.FindAsync(
-      token => PlaylistProcessor.StreamEntriesFromFileAsync(file.Path, token), CancellationToken.None);
+    // The counts come from the in-memory report on the same list, not from the streaming finders the builder uses.
+    var expected = PlaylistReport.Build(
+      await PlaylistProcessor.ReadEntriesFromFileAsync(file.Path, long.MaxValue, CancellationToken.None));
     Assert.Equal(Count, report.TotalEntries);
-    Assert.Equal(duplicates.SetCount, report.DuplicateSetCount);
-    Assert.Equal(duplicates.EntryCount, report.DuplicateEntryCount);
-    Assert.Equal(variants.GroupCount, report.VariantGroupCount);
-    Assert.Equal(variants.EntryCount, report.VariantEntryCount);
+    Assert.Equal(expected.DuplicateSetCount, report.DuplicateSetCount);
+    Assert.Equal(expected.DuplicateEntryCount, report.DuplicateEntryCount);
+    Assert.Equal(expected.VariantGroupCount, report.VariantGroupCount);
+    Assert.Equal(expected.VariantEntryCount, report.VariantEntryCount);
+    Assert.True(expected.DuplicateSetCount > 0 && expected.VariantGroupCount > 0);
     Assert.True(report.Truncated);
     Assert.Equal(PlaylistReport.MaxListedSetsPerKind, report.DuplicateSets.Count);
     Assert.Equal(PlaylistReport.StreamingPassCount, passes);

@@ -30,10 +30,17 @@ public static class StreamingVariantFinder
   public static async Task<VariantIndexGroups> FindAsync(
     Func<CancellationToken, IAsyncEnumerable<PlaylistEntry>> source,
     CancellationToken cancellationToken,
-    Func<string, ulong>? fingerprint = null)
+    Func<string, ulong>? fingerprint = null,
+    HeldBytesCounter? counter = null)
   {
     fingerprint ??= Fnv1a64;
     long held = 0;
+    // Adds to the caller's counter as the finder grows, so a budget can stop it while it reads.
+    void Hold(long bytes)
+    {
+      held += bytes;
+      counter?.Add(bytes);
+    }
 
     // Pass 1: a fingerprint slot per entry (-1 for an empty base name, which never groups).
     var slots = new List<int>();
@@ -43,7 +50,7 @@ public static class StreamingVariantFinder
     await foreach (var entry in source(cancellationToken).WithCancellation(cancellationToken))
     {
       cancellationToken.ThrowIfCancellationRequested();
-      held += PerEntryBytes;
+      Hold(PerEntryBytes);
       var (baseName, words) = VariantFinder.Detect(entry.Name);
       if (baseName.Length == 0)
       {
@@ -56,7 +63,7 @@ public static class StreamingVariantFinder
         slotByPrint[print] = slot = counts.Count;
         counts.Add(0);
         hasQuality.Add(false);
-        held += PerPrintBytes;
+        Hold(PerPrintBytes);
       }
       slots.Add(slot);
       counts[slot]++;
@@ -80,11 +87,11 @@ public static class StreamingVariantFinder
         {
           byBaseName[baseName] = candidate = new Candidate(baseName);
           order.Add(candidate);
-          held += PerBaseNameBytes + 2L * baseName.Length;
+          Hold(PerBaseNameBytes + 2L * baseName.Length);
         }
         candidate.Members.Add(position);
         candidate.HasQuality |= words.Count > 0;
-        held += PerMemberBytes;
+        Hold(PerMemberBytes);
       }
       position++;
     }
@@ -97,7 +104,7 @@ public static class StreamingVariantFinder
       if (candidate.Members.Count < 2 || !candidate.HasQuality) continue;
       groups.Add(new VariantIndexGroup(candidate.BaseName, candidate.Members));
       entryCount += candidate.Members.Count;
-      held += PerGroupBytes;
+      Hold(PerGroupBytes);
     }
     return new VariantIndexGroups(groups, groups.Count, entryCount, held);
   }
