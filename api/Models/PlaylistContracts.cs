@@ -23,7 +23,15 @@ public record AnalyzePlaylistResponse(
 /// <param name="ContentType">Live, Movies or Series.</param>
 /// <param name="IsAdult">The group title looks like adult content (AdultGroupRule); informational, never used for filtering.</param>
 /// <param name="Words">Search words of the group title (see GroupSearchWords); empty for entries without a group-title.</param>
-public record GroupResult(string Name, int Count, string GroupTitle, string ContentType, bool IsAdult, IReadOnlyList<string> Words);
+/// <param name="SampleTitles">Up to three entry display names of this group in playlist order; entries without a name are skipped.</param>
+public record GroupResult(
+  string Name,
+  int Count,
+  string GroupTitle,
+  string ContentType,
+  bool IsAdult,
+  IReadOnlyList<string> Words,
+  IReadOnlyList<string> SampleTitles);
 
 public record GeneratePlaylistRequest(string? SourceUrl, string? CacheKey, List<string>? DisabledGroups);
 
