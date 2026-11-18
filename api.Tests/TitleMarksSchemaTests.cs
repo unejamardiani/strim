@@ -43,6 +43,7 @@ public sealed class TitleMarksSchemaTests : IDisposable
       Query("SELECT name FROM pragma_table_info('titlemarks') ORDER BY name"));
     Assert.Contains("IX_titlemarks_userid", TitleMarkIndexes());
     Assert.Contains("IX_titlemarks_userid_kind_titlekey_year", TitleMarkIndexes());
+    Assert.Contains("IX_titlemarks_userid_kind_titlekey_noyear", TitleMarkIndexes());
     Assert.Equal(new[] { "AspNetUsers|CASCADE" }, Query("SELECT \"table\" || '|' || on_delete FROM pragma_foreign_key_list('titlemarks')"));
     Assert.Empty(_warnings.Messages);
   }
@@ -67,6 +68,7 @@ public sealed class TitleMarksSchemaTests : IDisposable
     Assert.Equal(before, Query("SELECT * FROM playlists"));
     Assert.Contains("IX_titlemarks_userid", TitleMarkIndexes());
     Assert.Contains("IX_titlemarks_userid_kind_titlekey_year", TitleMarkIndexes());
+    Assert.Contains("IX_titlemarks_userid_kind_titlekey_noyear", TitleMarkIndexes());
     Assert.Empty(_warnings.Messages);
   }
 
@@ -93,6 +95,20 @@ public sealed class TitleMarksSchemaTests : IDisposable
     Assert.Throws<DbUpdateException>(() => AddMark("user-a", "film", "film|1999|the matrix", 1999));
     Assert.Throws<DbUpdateException>(() => AddMark("user-a", "film", "film|1999|the matrix", null));
     Assert.Equal(new[] { "4" }, Query("SELECT COUNT(*) FROM titlemarks"));
+  }
+
+  [Fact]
+  public void NullYear_DoesNotCollideWithYearZero()
+  {
+    _services.EnsureStrimSchema();
+    AddUser("user-a");
+
+    AddMark("user-a", "film", "film||untitled", null);
+    AddMark("user-a", "film", "film||untitled", 0);
+
+    Assert.Throws<DbUpdateException>(() => AddMark("user-a", "film", "film||untitled", 0));
+    Assert.Throws<DbUpdateException>(() => AddMark("user-a", "film", "film||untitled", null));
+    Assert.Equal(new[] { "2" }, Query("SELECT COUNT(*) FROM titlemarks"));
   }
 
   [Fact]
@@ -128,7 +144,9 @@ public sealed class TitleMarksSchemaTests : IDisposable
     Assert.Contains("\"filmdbid\" varchar(64) NULL", sql);
     Assert.Contains("CONSTRAINT \"FK_titlemarks_AspNetUsers_userid\" FOREIGN KEY (\"userid\") REFERENCES \"AspNetUsers\"(\"Id\") ON DELETE CASCADE", sql);
     Assert.Contains("CREATE INDEX IF NOT EXISTS \"IX_titlemarks_userid\" ON \"titlemarks\" (\"userid\");", sql);
-    Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_titlemarks_userid_kind_titlekey_year\" ON \"titlemarks\" (\"userid\", \"kind\", \"titlekey\", COALESCE(\"year\", 0));", sql);
+    Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_titlemarks_userid_kind_titlekey_year\" ON \"titlemarks\" (\"userid\", \"kind\", \"titlekey\", \"year\") WHERE \"year\" IS NOT NULL;", sql);
+    Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_titlemarks_userid_kind_titlekey_noyear\" ON \"titlemarks\" (\"userid\", \"kind\", \"titlekey\") WHERE \"year\" IS NULL;", sql);
+    Assert.DoesNotContain("COALESCE", sql);
     Assert.DoesNotContain("DROP", sql, StringComparison.OrdinalIgnoreCase);
     Assert.DoesNotContain("RENAME", sql, StringComparison.OrdinalIgnoreCase);
   }

@@ -57,8 +57,8 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
       entity.HasIndex(p => p.ShareCode).HasFilter("\"sharecode\" IS NOT NULL");
     });
 
-    // Matches the SQL in Database.EnsureTitleMarksSchema. The unique index on (userid, kind, titlekey,
-    // COALESCE(year, 0)) is an expression index EF cannot model; that SQL always creates it.
+    // Matches the SQL in Database.EnsureTitleMarksSchema. Uniqueness of (userid, kind, titlekey, year), with a
+    // null year as its own value, comes from two partial unique indexes that SQL always creates.
     modelBuilder.Entity<TitleMark>(entity =>
     {
       entity.ToTable("titlemarks");

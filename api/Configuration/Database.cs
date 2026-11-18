@@ -122,7 +122,8 @@ public static class Database
 
   /// <summary>
   /// The film and series marks table on SQLite (the one table the owner approved on 18 Nov 2026). The marks
-  /// belong to an AspNetUsers row and go with it. COALESCE in the unique index makes a null year its own value.
+  /// belong to an AspNetUsers row and go with it. Two partial unique indexes keep a null year its own value: one
+  /// covers rows with a year, the other rows without, so a null year never collides with a real year (0 included).
   /// </summary>
   public const string SqliteTitleMarksSql = @"
         CREATE TABLE IF NOT EXISTS titlemarks (
@@ -140,7 +141,8 @@ public static class Database
           CONSTRAINT FK_titlemarks_AspNetUsers_userid FOREIGN KEY (userid) REFERENCES AspNetUsers (Id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS IX_titlemarks_userid ON titlemarks (userid);
-        CREATE UNIQUE INDEX IF NOT EXISTS IX_titlemarks_userid_kind_titlekey_year ON titlemarks (userid, kind, titlekey, COALESCE(year, 0));
+        CREATE UNIQUE INDEX IF NOT EXISTS IX_titlemarks_userid_kind_titlekey_year ON titlemarks (userid, kind, titlekey, year) WHERE year IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS IX_titlemarks_userid_kind_titlekey_noyear ON titlemarks (userid, kind, titlekey) WHERE year IS NULL;
       ";
 
   /// <summary>The same table on PostgreSQL, with quoted identifiers as in <see cref="TryEnsurePostgresIdentity"/>.</summary>
@@ -160,7 +162,8 @@ public static class Database
           CONSTRAINT ""FK_titlemarks_AspNetUsers_userid"" FOREIGN KEY (""userid"") REFERENCES ""AspNetUsers""(""Id"") ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS ""IX_titlemarks_userid"" ON ""titlemarks"" (""userid"");
-        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_titlemarks_userid_kind_titlekey_year"" ON ""titlemarks"" (""userid"", ""kind"", ""titlekey"", COALESCE(""year"", 0));
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_titlemarks_userid_kind_titlekey_year"" ON ""titlemarks"" (""userid"", ""kind"", ""titlekey"", ""year"") WHERE ""year"" IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_titlemarks_userid_kind_titlekey_noyear"" ON ""titlemarks"" (""userid"", ""kind"", ""titlekey"") WHERE ""year"" IS NULL;
       ";
 
   private static void EnsureTitleMarksSchema(AppDbContext db, ILogger logger)

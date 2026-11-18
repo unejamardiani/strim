@@ -21,9 +21,11 @@ The one extra table the owner approved (18 Nov 2026) holds a user's marks on fil
 `kind` (`film` or `series`), `titlekey`, `year` (nullable), `displaytitle`, `seen`, `rating` (-1, 0 or 1),
 `filmdbid` (nullable, unused for now), `createdutc`, `updatedutc`. `userid` references `AspNetUsers (Id)` with
 `ON DELETE CASCADE`, so the marks go with the account. `IX_titlemarks_userid` indexes the user;
-`IX_titlemarks_userid_kind_titlekey_year` is unique on `(userid, kind, titlekey, COALESCE(year, 0))`, so a null
-year counts as its own value. EF cannot model that expression index: `Database.EnsureTitleMarksSchema` creates the
-table and both indexes with `IF NOT EXISTS` on every start, for SQLite and PostgreSQL.
+two partial unique indexes make a null year its own value: `IX_titlemarks_userid_kind_titlekey_year` on
+`(userid, kind, titlekey, year) WHERE year IS NOT NULL` and `IX_titlemarks_userid_kind_titlekey_noyear` on
+`(userid, kind, titlekey) WHERE year IS NULL`, so a null year never collides with any real year, 0 included.
+`Database.EnsureTitleMarksSchema` creates the table and all three indexes with `IF NOT EXISTS` on every start, for
+SQLite and PostgreSQL.
 
 ## Limitations of Current Approach
 
