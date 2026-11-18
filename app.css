@@ -1189,6 +1189,46 @@ select.input {
   font-weight: 600;
 }
 
+/* Name and language labels share the first line; the name keeps room and truncates, the labels clip. */
+.search-hit-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.search-hit-line .search-hit-name {
+  flex: 1 1 auto;
+  min-width: 5em;
+}
+
+.search-langs {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.lang-chip {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* A prefix tag (UK, EX-YU) is kept as written and is not a language: outlined, not filled. */
+.lang-chip.lang-tag {
+  border-color: var(--line-strong);
+  background: transparent;
+}
+
 .search-hit-meta {
   font-size: 13px;
   color: var(--ink-2);
