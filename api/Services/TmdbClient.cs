@@ -27,7 +27,7 @@ public sealed record TmdbMovieDetails(
 public sealed class TmdbClient
 {
   public const string HttpClientName = "tmdb";
-  public const string TokenVariable = "TMDB_API_TOKEN";
+  public const string TokenVariable = "TMDB_READ_ACCESS_TOKEN";
   public static readonly Uri BaseAddress = new("https://api.themoviedb.org/3/");
 
   private static readonly JsonSerializerOptions JsonOptions = new()

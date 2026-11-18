@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Api.Configuration;
 
-/// <summary>The outbound TMDB client; the token comes from the TMDB_API_TOKEN environment variable.</summary>
+/// <summary>The outbound TMDB client; the token comes from the TMDB_READ_ACCESS_TOKEN environment variable.</summary>
 public static class TmdbServices
 {
   public static IServiceCollection AddStrimTmdb(this IServiceCollection services)

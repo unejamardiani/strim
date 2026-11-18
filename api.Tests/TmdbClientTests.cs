@@ -30,6 +30,21 @@ public class TmdbClientTests
   }
 
   [Fact]
+  public async Task ReadsTokenFromTmdbReadAccessToken()
+  {
+    Assert.Equal("TMDB_READ_ACCESS_TOKEN", TmdbClient.TokenVariable);
+    var handler = new StubHandler(_ => Json("""{"results":[]}"""));
+    var configuration = new ConfigurationBuilder()
+      .AddInMemoryCollection(new Dictionary<string, string?> { ["TMDB_READ_ACCESS_TOKEN"] = Token }).Build();
+    var client = new TmdbClient(new StubFactory(handler), configuration, new CapturingTmdbLogger(), TimeProvider.System);
+
+    Assert.True(client.IsEnabled);
+    await client.SearchMovieAsync("Some Film", null, CancellationToken.None);
+
+    Assert.Equal(Token, Assert.Single(handler.Requests).Authorization?.Parameter);
+  }
+
+  [Fact]
   public async Task SendsTokenAsHeaderNotInUri()
   {
     var handler = new StubHandler(_ => Json("""{"results":[{"id":7,"title":"Some Film","release_date":"2001-05-04"}]}"""));
