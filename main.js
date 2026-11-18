@@ -1949,32 +1949,39 @@ function renderSearchResults(ed) {
 }
 
 // On a phone the labels share line 2 with the group, so only the labels that fit whole are shown; the rest give way
-// to a "+N" chip that shows them all when tapped, without jumping to the group. Hidden labels stay in the
-// accessibility tree (visually hidden, not removed), so a screen reader still hears every one and the source note.
+// to a "+N" chip. Tapping it shows the next labels in the same place (after the last ones, the first again), so the
+// row keeps its two lines and the group stays put. Hidden labels stay in the accessibility tree (visually hidden, not
+// removed), so a screen reader still hears every one and the source note.
 const PHONE_RESULTS = window.matchMedia('(max-width: 767px)');
 
 function fitSearchLanguages() {
   if (!picker.results) return;
-  for (const strip of picker.results.querySelectorAll('.search-langs:not(.open)')) {
+  for (const strip of picker.results.querySelectorAll('.search-langs')) {
     strip.querySelector('.lang-more')?.remove();
     const chips = [...strip.querySelectorAll('.lang-chip')];
     for (const chip of chips) chip.classList.remove('lang-chip-off');
     if (!PHONE_RESULTS.matches || strip.scrollWidth <= strip.clientWidth + 1) continue;
     const more = h('span', { class: 'lang-chip lang-more', 'aria-hidden': 'true' });
+    strip.append(more);
+    let next = showLanguagePage(strip, chips, more, 0);
     more.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      strip.classList.add('open');
-      more.remove();
-      for (const chip of chips) chip.classList.remove('lang-chip-off');
+      next = showLanguagePage(strip, chips, more, next);
     });
-    strip.append(more);
-    let shown = chips.length;
-    do {
-      chips[--shown].classList.add('lang-chip-off');
-      more.textContent = `+${chips.length - shown}`;
-    } while (shown > 0 && strip.scrollWidth > strip.clientWidth + 1);
   }
+}
+
+// Shows the labels from `start` that fit beside the "+N" chip (at least one) and returns where the next page starts.
+function showLanguagePage(strip, chips, more, start) {
+  chips.forEach((chip, i) => chip.classList.toggle('lang-chip-off', i < start));
+  let end = chips.length;
+  more.textContent = `+${chips.length - (end - start)}`;
+  while (end - start > 1 && strip.scrollWidth > strip.clientWidth + 1) {
+    chips[--end].classList.add('lang-chip-off');
+    more.textContent = `+${chips.length - (end - start)}`;
+  }
+  return end < chips.length ? end : 0;
 }
 
 function searchHit(ed, m) {

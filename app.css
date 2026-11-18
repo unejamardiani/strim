@@ -1279,8 +1279,8 @@ select.input {
    be reached. So the name gets the first line to itself and the labels lead the second line, ahead of the group,
    which truncates. The labels stay on one line and never take the group's last 39px (plus the 6px gap), so the group
    stays on line 2. Only labels that fit whole are shown: main.js hides the rest visually (screen readers keep them)
-   behind a "+N" chip, and tapping it opens the strip so every label wraps into view. Only rows with the
-   .search-hit-line wrapper (Everything search) change: the Library reuses .search-hit-text without it. */
+   behind a "+N" chip; tapping it shows the next labels in the same place, so the row keeps two lines. Only rows with
+   the .search-hit-line wrapper (Everything search) change: the Library reuses .search-hit-text without it. */
 @media (max-width: 767px) {
   .search-hit-text:has(> .search-hit-line) {
     flex-direction: row;
@@ -1302,12 +1302,6 @@ select.input {
     position: relative;
     max-width: calc(100% - 45px);
     gap: 3px;
-  }
-
-  .search-langs.open {
-    flex: 1 0 100%;
-    flex-wrap: wrap;
-    max-width: none;
   }
 
   .lang-chip {
