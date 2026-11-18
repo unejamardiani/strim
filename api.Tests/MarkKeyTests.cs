@@ -129,6 +129,28 @@ public class MarkKeyTests
   }
 
   [Fact]
+  public void LongTitle_PrecomposedAndDecomposed_GiveTheSameKey()
+  {
+    var name = string.Join(' ', Enumerable.Repeat("Café Nocturne", 30)) + " (2011)";
+
+    var composed = Film(name.Normalize(System.Text.NormalizationForm.FormC));
+    var decomposed = Film(name.Normalize(System.Text.NormalizationForm.FormD));
+
+    Assert.Equal(composed.Key, decomposed.Key);
+    Assert.Equal(composed.DisplayTitle, decomposed.DisplayTitle);
+  }
+
+  [Fact]
+  public void ManyUnclosedBrackets_DoNotThrow()
+  {
+    var name = "Lantern " + new string('[', 50_000);
+
+    var key = Film(name);
+
+    Assert.StartsWith("lantern", key.Title);
+  }
+
+  [Fact]
   public void LowerCaseWordsAtTheStart_AreNotPrefixes()
   {
     Assert.Equal("Up", Film("Up (2009)").DisplayTitle);

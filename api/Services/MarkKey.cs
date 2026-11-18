@@ -34,8 +34,20 @@ public sealed record MarkKey(string Key, string Title, int? Year, string Display
   public static MarkKey? From(string? entryName, MarkKind kind)
   {
     if (string.IsNullOrWhiteSpace(entryName)) return null;
+    try
+    {
+      return Derive(entryName.Trim().Normalize(NormalizationForm.FormC), kind);
+    }
+    catch (RegexMatchTimeoutException)
+    {
+      // Entry names are untrusted; a name the patterns cannot read in time gets no key rather than an error.
+      return null;
+    }
+  }
 
-    var name = VariantFinder.Detect(entryName.Trim()).BaseName;
+  private static MarkKey? Derive(string entryName, MarkKind kind)
+  {
+    var name = VariantFinder.Detect(entryName).BaseName;
     if (kind == MarkKind.Series)
     {
       var marker = SeriesMarker.Match(name);
@@ -60,7 +72,7 @@ public sealed record MarkKey(string Key, string Title, int? Year, string Display
       }
     }
 
-    name = SquareBrackets.Replace(name, " ");
+    name = StripSquareBrackets(name);
     name = StripPrefix(name);
     var display = Cut(Collapse(name).Trim(Separators));
     var title = Cut(Normalise(display));
@@ -92,8 +104,6 @@ public sealed record MarkKey(string Key, string Title, int? Year, string Display
   private static readonly Regex TrailingYear = new(
     @"(?<![\p{L}\p{N}])((?:19|20)\d{2})[\s\-|.]*$", RegexOptions.CultureInvariant, Timeout);
 
-  private static readonly Regex SquareBrackets = new(@"\[[^\]]*\]", RegexOptions.CultureInvariant, Timeout);
-
   // A leading upper-case code after an optional pipe, followed by ':', '|', ' - ' or the end of the name.
   private static readonly Regex Prefix = new(
     @"^\s?\|?\s?([A-Z]{2,5}(?:-[A-Z]{2,5})?)\s?(?:[:|]|-(?=\s|$)|$)", RegexOptions.CultureInvariant, Timeout);
@@ -109,6 +119,29 @@ public sealed record MarkKey(string Key, string Title, int? Year, string Display
     var isTag = tags.PrefixTags.ContainsKey(code)
       || (LanguageTagParser.LanguageCodes.TryGetValue(code, out var language) && tags.AudioLanguages.ContainsKey(language));
     return isTag ? rest : name;
+  }
+
+  // Replaces each [..] with a space in one linear pass; an unclosed '[' and what follows it stay.
+  private static string StripSquareBrackets(string text)
+  {
+    var result = new StringBuilder(text.Length);
+    var open = -1;
+    for (var i = 0; i < text.Length; i++)
+    {
+      var c = text[i];
+      if (open < 0)
+      {
+        if (c == '[') open = i;
+        else result.Append(c);
+      }
+      else if (c == ']')
+      {
+        result.Append(' ');
+        open = -1;
+      }
+    }
+    if (open >= 0) result.Append(text, open, text.Length - open);
+    return result.ToString();
   }
 
   private static string Collapse(string text)
