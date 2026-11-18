@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using Api.Tests.Integration;
 using Xunit;
@@ -104,6 +105,65 @@ public class LibraryBrowseTests
     var close = Between(browse, "const close = () => {", "const open = (g) => {");
     Assert.Contains("groupsEl.hidden = false;", close);
   }
+
+  /// <summary>
+  /// Walks a 120-entry group through the real app the way loadPage does: the first page on opening, then
+  /// 'More' with offset += names until total. A failed page leaves the shown names and 'Try again' resumes.
+  /// </summary>
+  [Fact]
+  public async Task PagingAGroup_ThroughTheRealEndpoint_RequestsSuccessivePagesUntilTotal()
+  {
+    var browse = Browse();
+    // Opening a group loads its first page at once; 'More' and 'Try again' load the next one.
+    var open = Between(browse, "const open = (g) => {", "const loadPage =");
+    Assert.EndsWith("el.scrollIntoView({ block: 'start' });\n      loadPage(view);\n    };\n\n    // A failed page shows its error below the entries already shown, which stay.\n    ", open);
+    Assert.Contains("view = {\n        group: g, offset: 0,", open);
+    Assert.Equal(2, Regex.Matches(browse, Regex.Escape("onclick: () => loadPage(view) }")).Count);
+    var pageSize = int.Parse(Regex.Match(browse, @"const PAGE_SIZE = (\d+);").Groups[1].Value);
+
+    using var app = new StrimAppFactory();
+    var client = new ApiClient(app.CreateClient());
+    var playlist = new System.Text.StringBuilder("#EXTM3U\n");
+    for (var i = 1; i <= 120; i++) playlist.Append($"#EXTINF:-1 group-title=\"News\",News {i}\nhttp://line.example/live/{i}.ts\n");
+    var analyzed = await client.PostAsync("/api/playlist/analyze", new { rawText = playlist.ToString() });
+    analyzed.EnsureSuccessStatusCode();
+    var cacheKey = (await analyzed.Content.ReadFromJsonAsync<AnalysisDto>())!.CacheKey;
+
+    var shown = new List<string>();
+    var offset = 0;
+    var offsets = new List<int>();
+    var mores = 0;
+    var failed = false;
+    while (true)
+    {
+      // The second page fails once (an expired session), then 'Try again' asks for the same offset.
+      var key = offsets.Count == 1 && !failed ? "pl-expired" : cacheKey;
+      offsets.Add(offset);
+      var response = await client.Http.GetAsync($"/api/playlist/group-entries?cacheKey={Uri.EscapeDataString(key)}&group=News&offset={offset}&limit={pageSize}");
+      if (!response.IsSuccessStatusCode)
+      {
+        failed = true;
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(string.IsNullOrWhiteSpace((await response.Content.ReadFromJsonAsync<ErrorDto>())!.Error));
+        Assert.Equal(pageSize, shown.Count);
+        continue;
+      }
+      var page = (await response.Content.ReadFromJsonAsync<EntriesDto>())!;
+      shown.AddRange(page.Names);
+      offset += page.Names.Count;
+      if (page.Names.Count == 0 || offset >= page.Total) break;
+      mores++;
+    }
+
+    Assert.True(failed);
+    Assert.Equal([0, 50, 50, 100], offsets);
+    Assert.Equal(2, mores);
+    Assert.Equal(Enumerable.Range(1, 120).Select(i => $"News {i}"), shown);
+  }
+
+  private sealed record AnalysisDto(string CacheKey);
+  private sealed record EntriesDto(List<string> Names, int Total);
+  private sealed record ErrorDto(string Error);
 
   [Fact]
   public void BrowseView_HasNoSwitchBulkActionOrSave()
