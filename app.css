@@ -1253,9 +1253,10 @@ select.input {
 
 /* On a phone the first line is too narrow for a name and several labels, and labels cut off past the edge could not
    be reached. So the name gets the first line to itself and the labels lead the second line, ahead of the group,
-   which truncates. A label is never clipped: if the labels ever fill the whole second line they wrap instead. */
+   which truncates. A label is never clipped: if the labels ever fill the whole second line they wrap instead. Only
+   rows with the .search-hit-line wrapper (Everything search) change: the Library reuses .search-hit-text without it. */
 @media (max-width: 767px) {
-  .search-hit-text {
+  .search-hit-text:has(> .search-hit-line) {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
@@ -1281,7 +1282,7 @@ select.input {
     padding: 1px 5px;
   }
 
-  .search-hit-meta {
+  .search-hit-line ~ .search-hit-meta {
     flex: 1 1 0;
     min-width: 3em;
   }
