@@ -1919,6 +1919,8 @@ function renderSearchResults(ed) {
   else if (matches.length && hidden > 0) text = `${plural(matches.length, 'match', 'matches')} · ${fmt(hidden)} in switched-off groups not shown`;
   else if (matches.length) text = plural(matches.length, 'match', 'matches');
   else if (hidden > 0) text = `All ${plural(hidden, 'match', 'matches')} are in switched-off groups. Choose All to see them.`;
+  // The row labels name their source once here as well, so the note stays visible on a phone.
+  if (s.status !== 'loading' && matches.some((m) => m.languageSource === 'title')) text += ' · Labels from the title';
   const nodes = [status(text)];
   if (matches.length) nodes.push(h('ul', { class: 'search-list' }, matches.map((m) => searchHit(ed, m))));
   if (s.status === 'done' && s.hasMore) nodes.push(h('p', { class: 'search-more', text: 'More matches, refine your search.' }));
@@ -1936,9 +1938,31 @@ function searchHit(ed, m) {
   },
   h('span', { class: 'dot', 'aria-hidden': 'true' }),
   h('span', { class: 'search-hit-text' },
-    h('span', { class: 'search-hit-name', text: m.name }),
+    h('span', { class: 'search-hit-line' },
+      h('span', { class: 'search-hit-name', text: m.name }),
+      searchLanguages(m)),
     h('span', { class: 'search-hit-meta', text: `${m.group} · No. ${fmt(m.position)} · ${type}` })),
   h('span', { class: 'search-badge' })));
+}
+
+const codes = (list) => (Array.isArray(list) ? list.filter((c) => typeof c === 'string' && c) : []);
+
+// What the server read from the entry name and group title: audio, subtitles, markers such as MULTI and prefix
+// tags kept as written (UK, EX-YU). A prefix tag is never shown as a language. Nothing known gives nothing.
+function searchLanguages(m) {
+  if (m.languageSource !== 'title') return null;
+  const audio = codes(m.audioLanguages).map((c) => c.toUpperCase());
+  const subs = codes(m.subtitleLanguages).map((c) => c.toUpperCase());
+  const chips = [];
+  if (audio.length) chips.push(h('span', { class: 'lang-chip', text: `Audio ${audio.join(' ')}` }));
+  if (subs.length) chips.push(h('span', { class: 'lang-chip', text: `Sub ${subs.join(' ')}` }));
+  for (const marker of codes(m.markers)) chips.push(h('span', { class: 'lang-chip', text: marker }));
+  for (const tag of codes(m.prefixTags)) {
+    chips.push(h('span', { class: 'lang-chip lang-tag' }, h('span', { class: 'sr-only', text: 'tag ' }), tag));
+  }
+  if (!chips.length) return null;
+  return h('span', { class: 'search-langs', title: 'Read from the title' },
+    ...chips, h('span', { class: 'sr-only', text: ' from the title' }));
 }
 
 // The badges follow the switches in the list, so they stay right after a change made since the search.
