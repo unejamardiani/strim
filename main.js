@@ -1674,6 +1674,7 @@ window.addEventListener('resize', () => {
   measureRowHeight();
   if (before !== picker.rowHeight) updateView(false);
   else paintRows();
+  fitSearchLanguages();
 });
 
 document.addEventListener('keydown', (e) => {
@@ -1944,6 +1945,36 @@ function renderSearchResults(ed) {
   if (s.status === 'done' && s.hasMore) nodes.push(h('p', { class: 'search-more', text: 'More matches, refine your search.' }));
   panel.replaceChildren(...nodes);
   syncSearchBadges(ed);
+  fitSearchLanguages();
+}
+
+// On a phone the labels share line 2 with the group, so only the labels that fit whole are shown; the rest give way
+// to a "+N" chip that shows them all when tapped, without jumping to the group. Hidden labels stay in the
+// accessibility tree (visually hidden, not removed), so a screen reader still hears every one and the source note.
+const PHONE_RESULTS = window.matchMedia('(max-width: 767px)');
+
+function fitSearchLanguages() {
+  if (!picker.results) return;
+  for (const strip of picker.results.querySelectorAll('.search-langs:not(.open)')) {
+    strip.querySelector('.lang-more')?.remove();
+    const chips = [...strip.querySelectorAll('.lang-chip')];
+    for (const chip of chips) chip.classList.remove('lang-chip-off');
+    if (!PHONE_RESULTS.matches || strip.scrollWidth <= strip.clientWidth + 1) continue;
+    const more = h('span', { class: 'lang-chip lang-more', 'aria-hidden': 'true' });
+    more.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      strip.classList.add('open');
+      more.remove();
+      for (const chip of chips) chip.classList.remove('lang-chip-off');
+    });
+    strip.append(more);
+    let shown = chips.length;
+    do {
+      chips[--shown].classList.add('lang-chip-off');
+      more.textContent = `+${chips.length - shown}`;
+    } while (shown > 0 && strip.scrollWidth > strip.clientWidth + 1);
+  }
 }
 
 function searchHit(ed, m) {
