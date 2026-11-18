@@ -835,7 +835,9 @@ function applyAnalysis(ed, analysis, { sample }) {
     // Whole words of the title (S2); null only for an older response without `words`, which keeps the substring match.
     // An untitled group arrives with `words: []` and so matches no short term.
     const words = Array.isArray(g.words) ? g.words.map((w) => String(w).toLowerCase()) : null;
-    return { key: g.name, title, type, count: g.count || 0, index, split: false, search: '', words, adult: g.isAdult === true };
+    // Sample titles (S1) are joined once here, so painting a row only assigns text.
+    const samples = Array.isArray(g.sampleTitles) ? g.sampleTitles.filter(Boolean).join(', ') : '';
+    return { key: g.name, title, type, count: g.count || 0, index, split: false, search: '', words, adult: g.isAdult === true, samples };
   });
 
   const perTitle = new Map();
@@ -1380,9 +1382,13 @@ function createRow() {
   const dot = h('span', { class: 'dot', 'aria-hidden': 'true' });
   const name = h('span', { class: 'group-name' });
   const badge = h('span', { class: 'tag' });
+  // Samples, adult mark and split origin show from 1100px only (app.css); without a value their cell stays empty.
+  const samples = h('span', { class: 'group-samples' });
+  const adult = h('span', { class: 'group-adult' });
+  const origin = h('span', { class: 'group-origin' });
   const count = h('span', { class: 'group-count' });
-  const row = h('label', { class: 'group-row', role: 'listitem' }, dot, name, badge, count, check);
-  row._parts = { check, name, badge, count };
+  const row = h('label', { class: 'group-row', role: 'listitem' }, dot, name, badge, samples, adult, origin, count, check);
+  row._parts = { check, name, badge, samples, adult, origin, count };
   picker.list.append(row);
   return row;
 }
@@ -1412,12 +1418,18 @@ function paintRows() {
       row.dataset.index = String(index);
       row.style.transform = `translateY(${index * rowHeight}px)`;
       row.dataset.type = g.type;
-      const { name, badge, count } = row._parts;
+      const { name, badge, samples, adult, origin, count } = row._parts;
       name.textContent = g.title;
       name.title = g.title;
       const showBadge = g.type !== 'Live' || g.split;
       badge.hidden = !showBadge;
       if (showBadge) badge.textContent = g.type;
+      samples.textContent = g.samples;
+      samples.title = g.samples;
+      adult.textContent = g.adult ? '18+' : '';
+      adult.title = g.adult ? 'Adult group' : '';
+      origin.textContent = g.split ? `from ${g.title}` : '';
+      origin.title = g.split ? `Provider group ${g.title}, split by content type` : '';
       count.textContent = fmt(g.count);
     }
     const off = ed.disabled.has(g.key);

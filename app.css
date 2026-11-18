@@ -777,7 +777,8 @@ select.input {
 
   .editor-split {
     display: grid;
-    grid-template-columns: minmax(0, 560px) minmax(0, 1fr);
+    /* The group column takes the larger share for the desktop row columns; the pane keeps 360px at least. */
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 0.6fr);
     gap: 24px;
     align-items: start;
   }
@@ -933,6 +934,61 @@ select.input {
   flex-shrink: 0;
   min-width: 3ch;
   text-align: right;
+}
+
+/* Desktop row columns: below 1100px they produce no box, so the phone and tablet row is unchanged. */
+.group-samples,
+.group-adult,
+.group-origin {
+  display: none;
+}
+
+/* From 1100px each row is a grid with fixed tracks, so the cells line up down the list and the row
+   stays one line. Every part has its own column, so an empty or hidden cell never shifts the others. */
+@media (min-width: 1100px) {
+  .group-row {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1.1fr) 64px minmax(0, 1.4fr) 36px minmax(0, 0.9fr) 56px 46px;
+  }
+
+  .group-row > .dot { grid-column: 1; }
+  .group-row > .group-name { grid-column: 2; }
+  .group-row > .tag { grid-column: 3; justify-self: start; }
+  .group-row > .group-samples { grid-column: 4; }
+  .group-row > .group-adult { grid-column: 5; justify-self: start; }
+  .group-row > .group-origin { grid-column: 6; }
+  .group-row > .group-count { grid-column: 7; justify-self: end; }
+  .group-row > .toggle { grid-column: 8; }
+
+  .group-samples,
+  .group-origin {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 450;
+    color: var(--ink-3);
+  }
+
+  .group-adult:not(:empty) {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    background: var(--surface-2);
+    color: var(--ink-2);
+  }
+
+  .group-row.off .group-adult {
+    opacity: 0.4;
+  }
 }
 
 .group-row.off .group-name,
