@@ -95,7 +95,7 @@ public static class LanguageTagParser
 
       if (i + 1 < tokens.Count && LanguageCodes.TryGetValue(token, out var subtitle)
           && text.Substring(tokens[i + 1].Start, tokens[i + 1].Length) is "SUB" or "SUBS"
-          && OnlySpacesBetween(text, start + length, tokens[i + 1].Start))
+          && OnlyWhitespaceBetween(text, start + length, tokens[i + 1].Start))
       {
         Add(result.SubtitleLanguages, subtitle, source);
         i++;
@@ -148,8 +148,8 @@ public static class LanguageTagParser
   private static bool IsCode(string token) =>
     token.Length is >= 2 and <= 6 && token.All(c => c is >= 'A' and <= 'Z');
 
-  // "DE SUB" is one marker only when nothing but spaces stands between the code and SUB ("DE: SUB" is not).
-  private static bool OnlySpacesBetween(string text, int from, int to)
+  // "DE SUB" is one marker only when nothing but whitespace stands between the code and SUB ("DE: SUB" is not).
+  private static bool OnlyWhitespaceBetween(string text, int from, int to)
   {
     if (to <= from)
     {
@@ -158,7 +158,7 @@ public static class LanguageTagParser
 
     for (var i = from; i < to; i++)
     {
-      if (text[i] != ' ')
+      if (!char.IsWhiteSpace(text[i]))
       {
         return false;
       }

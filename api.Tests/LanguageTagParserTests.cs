@@ -127,6 +127,15 @@ public class LanguageTagParserTests
   }
 
   [Fact]
+  public void SubtitleMarker_AcceptsAnyWhitespaceBetweenCodeAndSub()
+  {
+    var result = LanguageTagParser.Parse("Film DE\tSUB", null);
+
+    Assert.Equal(new[] { "de" }, Sorted(result.SubtitleLanguages));
+    Assert.Empty(result.AudioLanguages);
+  }
+
+  [Fact]
   public void NameAndGroup_AreMergedWithoutDuplicatesAndKeepTheirSource()
   {
     var result = LanguageTagParser.Parse("DE: Film [EN] MULTI", "DE | Films VOSTFR");
