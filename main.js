@@ -536,15 +536,16 @@ function showHome() {
   loadOverview();
 }
 
-// Stored facts per playlist from /playlists/overview. If the call fails the cards stay as they are.
+// Stored facts per playlist from /playlists/overview. If the call fails or the body is not a list,
+// the cache is dropped and every card shows an empty facts line, so no outdated counts or dates remain.
 async function loadOverview() {
+  let data;
   try {
-    const data = await api('/playlists/overview');
-    if (!Array.isArray(data)) return;
-    state.overview = new Map(data.map((item) => [item.id, item]));
+    data = await api('/playlists/overview');
   } catch {
-    return;
+    data = null;
   }
+  state.overview = Array.isArray(data) ? new Map(data.map((item) => [item.id, item])) : new Map();
   for (const node of app.querySelectorAll('.playlist-card .facts')) {
     node.replaceWith(playlistFacts(node.dataset.id));
   }
