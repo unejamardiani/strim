@@ -183,6 +183,28 @@ public class PlaylistSearchIndexTests
     Assert.Equal(60, result.HiddenCount);
   }
 
+  [Fact]
+  public async Task Search_HideDisabled_CountsOffMatchesPastTheLimit()
+  {
+    var index = await Analyze(OnThenOffGroups());
+
+    var result = index.Search("news", Set("Off"), 50, hideDisabled: true);
+
+    Assert.Equal(Enumerable.Range(1, 50).Select(i => $"News On {i}"), result.Matches.Select(m => m.Name));
+    Assert.True(result.HasMore);
+    Assert.Equal(60, result.HiddenCount);
+  }
+
+  private static string OnThenOffGroups()
+  {
+    var source = new StringBuilder("#EXTM3U\n");
+    for (var i = 1; i <= 51; i++)
+      source.Append($"#EXTINF:-1 group-title=\"On\",News On {i}\nhttps://example.com/live/u/p/{i}.ts\n");
+    for (var i = 1; i <= 60; i++)
+      source.Append($"#EXTINF:-1 group-title=\"Off\",News Off {i}\nhttps://example.com/live/u/p/{100 + i}.ts\n");
+    return source.ToString();
+  }
+
   private static string OffAndOnGroups()
   {
     var source = new StringBuilder("#EXTM3U\n");

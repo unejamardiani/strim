@@ -38,13 +38,14 @@ public sealed class PlaylistSearchIndex
   /// Entries whose folded name contains the folded query, in source order: at most
   /// <paramref name="limit"/>, with <c>HasMore</c> when further matches exist. With
   /// <paramref name="hideDisabled"/>, matches in a disabled group take no slot and are counted in
-  /// <c>HiddenCount</c> instead, up to the match that sets <c>HasMore</c>.
+  /// <c>HiddenCount</c> instead, which counts every such match, also those past the limit.
   /// </summary>
   public PlaylistSearchResult Search(string? query, ISet<string> disabledGroups, int limit, bool hideDisabled = false)
   {
     var folded = PlaylistSearchText.Fold(query).AsSpan();
     var matches = new List<PlaylistSearchMatch>();
     var hidden = 0;
+    var hasMore = false;
     if (folded.IsEmpty || limit <= 0) return new PlaylistSearchResult(matches, false);
 
     for (var c = 0; c < _chunks.Count; c++)
@@ -70,14 +71,20 @@ public sealed class PlaylistSearchIndex
           hidden++;
           continue;
         }
-        if (matches.Count == limit) return new PlaylistSearchResult(matches, true, hidden);
+        if (matches.Count == limit)
+        {
+          // Hidden matches past the cap are still counted, so HiddenCount stays complete.
+          if (!hideDisabled) return new PlaylistSearchResult(matches, true);
+          hasMore = true;
+          continue;
+        }
 
         matches.Add(new PlaylistSearchMatch(
           new string(text[(tab + 1)..(at - 1)]), slot.OutputGroup, slot.GroupKey, slot.ContentType, Field(entry, 2), enabled));
       }
     }
 
-    return new PlaylistSearchResult(matches, false, hidden);
+    return new PlaylistSearchResult(matches, hasMore, hidden);
   }
 
   /// <summary>

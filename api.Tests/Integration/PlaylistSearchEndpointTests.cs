@@ -110,6 +110,25 @@ public class PlaylistSearchEndpointTests(StrimAppFactory factory) : IClassFixtur
   }
 
   [Fact]
+  public async Task Search_HideDisabled_CountsOffMatchesPastTheLimit()
+  {
+    var playlist = new StringBuilder("#EXTM3U\n");
+    for (var i = 1; i <= 51; i++)
+      playlist.Append($"#EXTINF:-1 group-title=\"On\",News On {i}\nhttp://line.example/live/u/p/{i}.ts\n");
+    for (var i = 1; i <= 60; i++)
+      playlist.Append($"#EXTINF:-1 group-title=\"Off\",News Off {i}\nhttp://line.example/live/u/p/{100 + i}.ts\n");
+    var client = new ApiClient(factory.CreateClient());
+    var cacheKey = await AnalyzeAsync(client, playlist.ToString());
+
+    var hidden = await SearchOkAsync(client, new { cacheKey, query = "news", disabledGroups = new[] { "Off" }, hideDisabled = true });
+
+    Assert.Equal(50, hidden.Matches.Count);
+    Assert.All(hidden.Matches, m => Assert.True(m.Enabled));
+    Assert.True(hidden.HasMore);
+    Assert.Equal(60, hidden.HiddenCount);
+  }
+
+  [Fact]
   public async Task Search_WithoutHideDisabled_ReturnsZeroHiddenCount()
   {
     var client = new ApiClient(factory.CreateClient());
