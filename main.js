@@ -1,5 +1,5 @@
 // Strim app: a playlists home and a group picker, driven by the backend (no local M3U parsing).
-// Routes: #/ (playlists, or the editor for guests), #/new, #/p/<playlist id>.
+// Routes: #/ (playlists, or the editor for guests), #/new, #/p/<playlist id>, #/p/<playlist id>/library.
 
 // ---------- Configuration ----------
 
@@ -85,6 +85,7 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  book: '<path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H19v13H6.5A1.5 1.5 0 0 0 5 18.5zM5 18.5A1.5 1.5 0 0 0 6.5 20H19"/>',
 };
 
 function icon(name) {
@@ -420,11 +421,12 @@ function afterAuthChange() {
 // ---------- Router ----------
 
 let currentHash = location.hash;
+let libraryController = null;
 
 function parseRoute() {
   const path = location.hash.replace(/^#/, '') || '/';
-  const match = /^\/p\/([0-9a-f-]{36})$/i.exec(path);
-  if (match) return { name: 'playlist', id: match[1].toLowerCase() };
+  const match = /^\/p\/([0-9a-f-]{36})(\/library)?$/i.exec(path);
+  if (match) return { name: match[2] ? 'library' : 'playlist', id: match[1].toLowerCase() };
   if (path === '/new') return { name: 'new' };
   return { name: 'home' };
 }
@@ -466,6 +468,9 @@ window.addEventListener('beforeunload', (e) => {
 function route() {
   if (!state.ready) return;
   closeSheets();
+  // Leaving the Library cancels its wait; the editor keeps its own load and shares a pending analysis.
+  libraryController?.abort();
+  libraryController = null;
   const target = parseRoute();
   if (!state.user) {
     if (target.name !== 'home') {
@@ -483,6 +488,7 @@ function route() {
     navigate('#/', { replace: true });
     return;
   }
+  if (target.name === 'library') return showLibrary(playlist);
   showEditor(playlist);
 }
 
@@ -620,7 +626,8 @@ function playlistCard(playlist) {
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Actions for ${playlist.name}`, onclick: () => openPlaylistMenu(playlist.id) }, icon('more'))),
     linkBox(playlist),
     h('div', { class: 'row-actions' },
-      h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}` }, icon('list'), 'Edit groups')));
+      h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}` }, icon('list'), 'Edit groups'),
+      h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}/library` }, icon('book'), 'Library')));
 }
 
 function menuIcon(name) {
@@ -639,9 +646,11 @@ function openPlaylistMenu(id) {
 
   const current = parseRoute();
   const inEditor = current.name === 'playlist' && current.id === playlist.id;
+  const inLibrary = current.name === 'library' && current.id === playlist.id;
   menuTitle.textContent = playlist.name || 'Playlist';
   menuBody.replaceChildren(h('div', { class: 'menu' },
     inEditor ? null : item('list', 'Edit groups', () => navigate(`#/p/${playlist.id}`)),
+    inLibrary ? null : item('book', 'Library', () => navigate(`#/p/${playlist.id}/library`)),
     active ? item('copy', 'Copy player link', () => { menuDialog.close(); copyText(shareUrl(playlist)); }) : null,
     active ? h('a', { class: 'menu-item', href: shareUrl(playlist), download: fileName(playlist.name), onclick: () => menuDialog.close() },
       menuIcon('download'), h('span', { class: 'grow', text: 'Download .m3u' })) : null,
@@ -830,26 +839,69 @@ async function loadGroups(ed, url, { sample = false } = {}) {
   if (isVisible(ed)) renderEditor();
 
   try {
-    let body;
-    if (sample) {
-      const res = await api('/playlists/sample', { signal: controller.signal });
-      body = { rawText: res.text, sourceName: 'Sample playlist' };
-    } else {
-      body = { sourceUrl: url };
-    }
-    const analysis = await api('/playlist/analyze', { method: 'POST', body, signal: controller.signal });
+    const analysis = await fetchAnalysis(url, { sample, signal: controller.signal });
     if (ed.controller !== controller) return;
     applyAnalysis(ed, analysis, { sample });
   } catch (err) {
     if (isAbort(err) || ed.controller !== controller) return;
     ed.phase = 'error';
-    ed.error = err.status === 504
-      ? 'The provider took too long to answer. Try again in a moment.'
-      : err.message || 'Could not load the playlist.';
+    ed.error = loadErrorMessage(err);
   } finally {
     if (ed.controller === controller) ed.controller = null;
   }
   if (isVisible(ed)) renderEditor();
+}
+
+// The editor and the Library load a playlist's groups through these two functions.
+async function fetchAnalysis(url, { sample = false, signal } = {}) {
+  if (!sample) return sharedAnalysis(url, { sourceUrl: url }, signal);
+  const res = await api('/playlists/sample', { signal });
+  return sharedAnalysis(Symbol('sample'), { rawText: res.text, sourceName: 'Sample playlist' }, signal);
+}
+
+// The server admits one analyze request at a time (UseAnalyzeBodyGate) and answers a second one with 429.
+// So the editor and the Library share the pending analysis of a source URL, and an analysis of another source
+// waits until the previous one settled. A caller that leaves only stops waiting: the request itself is never
+// aborted, because the browser settles an aborted fetch before the server has released its gate, and the next
+// analysis would then start too early and get the 429. A queued analysis whose callers all left before its turn
+// is skipped, so abandoned playlists do not delay the current one.
+const pendingAnalyses = new Map();
+let lastAnalysis = Promise.resolve();
+
+function sharedAnalysis(key, body, signal) {
+  let entry = pendingAnalyses.get(key);
+  if (!entry) {
+    entry = { waiting: 0 };
+    const queued = entry;
+    entry.promise = lastAnalysis.then(() => {
+      if (queued.waiting === 0) throw new DOMException('The analysis was cancelled.', 'AbortError');
+      return api('/playlist/analyze', { method: 'POST', body });
+    });
+    lastAnalysis = entry.promise.catch(() => {});
+    const done = entry;
+    lastAnalysis.then(() => { if (pendingAnalyses.get(key) === done) pendingAnalyses.delete(key); });
+    pendingAnalyses.set(key, entry);
+  }
+  return joinAnalysis(entry, signal);
+}
+
+function joinAnalysis(entry, signal) {
+  return new Promise((resolve, reject) => {
+    const leave = () => reject(new DOMException('The analysis was cancelled.', 'AbortError'));
+    if (signal?.aborted) return leave();
+    entry.waiting += 1;
+    let joined = true;
+    const quit = () => { if (joined) { joined = false; entry.waiting -= 1; } };
+    const onAbort = () => { quit(); leave(); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    entry.promise.then(resolve, reject).finally(() => { quit(); signal?.removeEventListener('abort', onAbort); });
+  });
+}
+
+function loadErrorMessage(err) {
+  return err.status === 504
+    ? 'The provider took too long to answer. Try again in a moment.'
+    : err.message || 'Could not load the playlist.';
 }
 
 function applyAnalysis(ed, analysis, { sample }) {
@@ -991,7 +1043,39 @@ function editorHead(ed, playlist) {
   return h('div', { class: 'editor-head' },
     state.user ? back : null,
     nameInput,
+    playlist ? h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}/library` }, icon('book'), 'Library') : null,
     playlist ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Playlist actions', onclick: () => openPlaylistMenu(playlist.id) }, icon('more')) : null);
+}
+
+// ---------- Library ----------
+
+// The Library (library.js) is read-only. main.js passes in the playlist and the helpers it needs;
+// the groups come from the stored disabled groups and the same analysis the editor loads.
+function showLibrary(playlist) {
+  clearInterval(loadingTimer);
+  teardownPicker();
+  setActionBar(false);
+  document.title = `${playlist.name || 'Playlist'} · Library · Strim`;
+  libraryController = new AbortController();
+  window.StrimLibrary.mount({
+    root: app,
+    controller: libraryController,
+    playlist,
+    h,
+    icon,
+    fmt,
+    plural,
+    isCurrent: () => {
+      const target = parseRoute();
+      return target.name === 'library' && target.id === playlist.id;
+    },
+    loadGroups: async (signal) => {
+      const ed = newEditor(playlist);
+      applyAnalysis(ed, await fetchAnalysis(playlist.sourceUrl, { signal }), { sample: false });
+      return { groups: ed.groups, disabled: ed.disabled, totalChannels: ed.totalChannels };
+    },
+    errorMessage: loadErrorMessage,
+  });
 }
 
 function linkCard(playlist) {
