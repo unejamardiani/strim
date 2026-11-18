@@ -65,7 +65,15 @@ public record PlaylistSearchRequest(
 /// <param name="Group">The group-title the generated file writes for the entry.</param>
 /// <param name="GroupKey">Filter key sent back in disabledGroups.</param>
 /// <param name="Position">1-based position within <paramref name="Group"/> in source order.</param>
-public record PlaylistSearchMatchResult(string Name, string Group, string GroupKey, int Position, string ContentType, bool Enabled);
+/// <param name="AudioLanguages">ISO 639-1 audio languages read from the entry name or group title.</param>
+/// <param name="SubtitleLanguages">ISO 639-1 subtitle languages (VOSTFR, "DE SUB"), kept apart from audio.</param>
+/// <param name="Markers">Markers such as MULTI.</param>
+/// <param name="PrefixTags">Prefix tags kept as written (UK, EX-YU), never mapped to a language.</param>
+/// <param name="LanguageSource">"title" when any of the lists holds a value; null when nothing is known.</param>
+public record PlaylistSearchMatchResult(
+  string Name, string Group, string GroupKey, int Position, string ContentType, bool Enabled,
+  IReadOnlyList<string> AudioLanguages, IReadOnlyList<string> SubtitleLanguages, IReadOnlyList<string> Markers,
+  IReadOnlyList<string> PrefixTags, string? LanguageSource);
 
 /// <param name="HiddenCount">Matches left out because hideDisabled was set; 0 otherwise.</param>
 public record PlaylistSearchResponse(List<PlaylistSearchMatchResult> Matches, bool HasMore, int HiddenCount);

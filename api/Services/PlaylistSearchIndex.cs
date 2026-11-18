@@ -5,17 +5,19 @@ namespace Api.Services;
 /// <summary>
 /// A compact index of every entry, recorded while the source is analysed, so a search never reads
 /// the playlist again. Each entry is one record "folded name \t display name \n" in fixed-size text
-/// chunks plus three ints; group data is shared per (group title, content type, written title). Nothing is copied
-/// or resized as the index grows.
+/// chunks plus four ints; group data is shared per (group title, content type, written title) and language tags
+/// per distinct combination, so an entry pays one int for its tags. Nothing is copied or resized as the index grows.
 /// </summary>
 public sealed class PlaylistSearchIndex
 {
   // Below the large object heap threshold; a longer record gets a chunk of its own.
   private const int ChunkChars = 32 * 1024;
   private const int BlockEntries = 4 * 1024;
-  // Per entry: record offset in its chunk, slot, 1-based position in its output group.
-  private const int Fields = 3;
+  // Per entry: record offset in its chunk, slot, 1-based position in its output group, language combination.
+  private const int Fields = 4;
   private const int SlotOverheadBytes = 128;
+  // A string object without its characters, plus the array slot that refers to it.
+  private const int ValueOverheadBytes = 40;
 
   private readonly long _maxBytes;
   private readonly List<char[]> _chunks = new();
@@ -25,6 +27,11 @@ public sealed class PlaylistSearchIndex
   private readonly List<Slot> _slots = new();
   private readonly Dictionary<(string, PlaylistContentType, string, bool), int> _slotIds = new();
   private readonly StringBuilder _folded = new();
+  // Combination 0 is "no tags", so an untagged entry needs no table row.
+  private readonly List<PlaylistSearchLanguages> _languages = new() { PlaylistSearchLanguages.None };
+  private readonly Dictionary<string, int> _languageIds = new(StringComparer.Ordinal);
+  // Group title to its combination in the shared table, so the group cache keeps no copy of its own.
+  private readonly Dictionary<string, int> _groupLanguages = new(StringComparer.Ordinal);
 
   internal PlaylistSearchIndex(long maxBytes) => _maxBytes = maxBytes;
   public int Count { get; private set; }
@@ -84,7 +91,10 @@ public sealed class PlaylistSearchIndex
         }
 
         matches.Add(new PlaylistSearchMatch(
-          new string(text[(tab + 1)..(at - 1)]), slot.OutputGroup, slot.GroupKey, slot.ContentType, Field(entry, 2), enabled));
+          new string(text[(tab + 1)..(at - 1)]), slot.OutputGroup, slot.GroupKey, slot.ContentType, Field(entry, 2), enabled)
+        {
+          Languages = _languages[Field(entry, 3)],
+        });
       }
     }
 
@@ -133,12 +143,24 @@ public sealed class PlaylistSearchIndex
     var known = _slotIds.TryGetValue(slotKey, out var slotId);
     var newChunk = _chunks.Count == 0 || _chunkUsed[^1] + length > _chunks[^1].Length;
     var newBlock = Count % BlockEntries == 0;
+    // A group title is parsed once into the shared table; a name only when it may hold a code.
+    var knownGroup = _groupLanguages.TryGetValue(groupTitle, out var groupLanguageId);
+    var (groupTags, groupKey) = (PlaylistSearchLanguages.None, "");
+    if (!knownGroup) groupTags = PlaylistSearchLanguages.From(LanguageTagParser.Parse(null, groupTitle), out groupKey);
+    var (languages, languageKey) = (groupTags, groupKey);
+    var nameTagged = MayHoldCode(name);
+    if (nameTagged)
+    {
+      languages = PlaylistSearchLanguages.From(LanguageTagParser.Parse(name.ToString(), groupTitle), out languageKey);
+    }
     // Counts what is allocated, whole chunks and blocks, not only the characters and fields in use.
     // A new slot keeps the title, its output group, its group key and a written title that differs.
     var writtenChars = ReferenceEquals(written, groupTitle) ? 0 : written.Length;
     EstimatedBytes += (newChunk ? (long)Math.Max(ChunkChars, length) * sizeof(char) : 0)
       + (newBlock ? BlockEntries * Fields * sizeof(int) : 0)
-      + (known ? 0 : SlotOverheadBytes + (((long)groupTitle.Length * 3) + writtenChars) * sizeof(char));
+      + (known ? 0 : SlotOverheadBytes + (((long)groupTitle.Length * 3) + writtenChars) * sizeof(char))
+      + (knownGroup ? 0 : SlotOverheadBytes + CombinationBytes(groupTags, groupKey))
+      + (nameTagged && languageKey != groupKey ? CombinationBytes(languages, languageKey) : 0);
     if (_maxBytes <= 0 || EstimatedBytes > _maxBytes) return false;
 
     if (!known)
@@ -147,6 +169,9 @@ public sealed class PlaylistSearchIndex
       _slots.Add(new Slot(groupTitle, contentType, written, keepsLine));
       _slotIds[slotKey] = slotId;
     }
+
+    if (!knownGroup) _groupLanguages[groupTitle] = groupLanguageId = Intern(groupTags, groupKey);
+    var languageId = nameTagged ? Intern(languages, languageKey) : groupLanguageId;
 
     if (newChunk)
     {
@@ -158,7 +183,7 @@ public sealed class PlaylistSearchIndex
     var field = Count % BlockEntries * Fields;
     var used = _chunkUsed[^1];
     // The position is set by Complete, once the output groups are known.
-    (_blocks[^1][field], _blocks[^1][field + 1]) = (used, slotId);
+    (_blocks[^1][field], _blocks[^1][field + 1], _blocks[^1][field + 3]) = (used, slotId, languageId);
     Count++;
 
     var chunk = _chunks[^1].AsSpan(used);
@@ -202,6 +227,39 @@ public sealed class PlaylistSearchIndex
     return this;
   }
 
+  /// <summary>
+  /// The bytes a combination not yet in the table keeps: the record, its four arrays and table row, the key,
+  /// and one string and array reference per value (whose characters the key already counts).
+  /// </summary>
+  private long CombinationBytes(PlaylistSearchLanguages tags, string key)
+  {
+    if (key.Length == 0 || _languageIds.ContainsKey(key)) return 0;
+    var values = tags.Audio.Count + tags.Subtitles.Count + tags.Markers.Count + tags.PrefixTags.Count;
+    return (2 * SlotOverheadBytes) + ((long)key.Length * 2 * sizeof(char)) + ((long)values * ValueOverheadBytes);
+  }
+
+  private int Intern(PlaylistSearchLanguages tags, string key)
+  {
+    if (key.Length == 0) return 0;
+    if (_languageIds.TryGetValue(key, out var id)) return id;
+    id = _languages.Count;
+    _languages.Add(tags);
+    _languageIds[key] = id;
+    return id;
+  }
+
+  // Every code holds two upper-case letters, adjacent or around one hyphen (EX-YU, A-B).
+  private static bool MayHoldCode(ReadOnlySpan<char> name)
+  {
+    for (var i = 1; i < name.Length; i++)
+    {
+      if (!char.IsAsciiLetterUpper(name[i])) continue;
+      if (char.IsAsciiLetterUpper(name[i - 1])) return true;
+      if (i >= 2 && name[i - 1] == '-' && char.IsAsciiLetterUpper(name[i - 2])) return true;
+    }
+    return false;
+  }
+
   private int Field(int entry, int field) => _blocks[entry / BlockEntries][(entry % BlockEntries * Fields) + field];
 
   /// <summary>The last entry in [first, end) whose record starts at or before the offset.</summary>
@@ -240,4 +298,38 @@ public sealed record PlaylistGroupEntriesResult(IReadOnlyList<string> Names, int
 /// <param name="Position">1-based position within <paramref name="OutputGroup"/> in source order.</param>
 /// <param name="Enabled">False when the plain group title or the group key is disabled.</param>
 public sealed record PlaylistSearchMatch(
-  string Name, string OutputGroup, string GroupKey, PlaylistContentType ContentType, int Position, bool Enabled);
+  string Name, string OutputGroup, string GroupKey, PlaylistContentType ContentType, int Position, bool Enabled)
+{
+  public PlaylistSearchLanguages Languages { get; init; } = PlaylistSearchLanguages.None;
+}
+
+/// <summary>
+/// One shared combination of the tags <see cref="LanguageTagParser"/> read from an entry name and its group title.
+/// <see cref="Source"/> is <c>title</c> when any tag was read, null when nothing is known (never a guess).
+/// </summary>
+public sealed record PlaylistSearchLanguages(
+  IReadOnlyList<string> Audio, IReadOnlyList<string> Subtitles, IReadOnlyList<string> Markers,
+  IReadOnlyList<string> PrefixTags, string? Source)
+{
+  public const string TitleSource = "title";
+  public static readonly PlaylistSearchLanguages None = new([], [], [], [], null);
+
+  /// <summary>The combination of <paramref name="tags"/> and its table key; the key is empty when there are no tags.</summary>
+  internal static PlaylistSearchLanguages From(LanguageTags tags, out string key)
+  {
+    if (tags.IsEmpty)
+    {
+      key = "";
+      return None;
+    }
+
+    var result = new PlaylistSearchLanguages(
+      Sorted(tags.AudioLanguages), Sorted(tags.SubtitleLanguages), Sorted(tags.Markers), Sorted(tags.PrefixTags), TitleSource);
+    key = string.Join('|', string.Join(',', result.Audio), string.Join(',', result.Subtitles),
+      string.Join(',', result.Markers), string.Join(',', result.PrefixTags));
+    return result;
+  }
+
+  private static string[] Sorted(IReadOnlyDictionary<string, LanguageTagSource> set) =>
+    set.Keys.Order(StringComparer.Ordinal).ToArray();
+}
