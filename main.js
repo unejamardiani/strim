@@ -1072,9 +1072,12 @@ function showLibrary(playlist) {
     loadGroups: async (signal) => {
       const ed = newEditor(playlist);
       applyAnalysis(ed, await fetchAnalysis(playlist.sourceUrl, { signal }), { sample: false });
-      return { groups: ed.groups, disabled: ed.disabled, totalChannels: ed.totalChannels };
+      return { groups: ed.groups, disabled: ed.disabled, totalChannels: ed.totalChannels, cacheKey: ed.cacheKey };
     },
     errorMessage: loadErrorMessage,
+    // The editor's Everything search endpoint; it only reads the analysed list.
+    searchHint,
+    search: (body, signal) => api('/playlist/search', { method: 'POST', body, signal }),
   });
 }
 
