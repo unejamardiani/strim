@@ -118,8 +118,14 @@ public sealed class PlaylistSourceFetcher
   /// address checks, redirect validation, HTTP client and timeout as <see cref="FetchAsync"/>.
   /// Bodies above <see cref="SmallTextMaxBytes"/> are refused. Every failure is returned as a result;
   /// messages and log entries name only the host, never the path or query string.
+  /// <paramref name="maxBytes"/> changes the body limit; <paramref name="sameHostOnly"/> refuses redirects
+  /// to another host and keeps the host out of the log entries as well.
   /// </summary>
-  public async Task<SmallTextFetchResult> FetchSmallTextAsync(string sourceUrl, CancellationToken cancellationToken)
+  public async Task<SmallTextFetchResult> FetchSmallTextAsync(
+    string sourceUrl,
+    CancellationToken cancellationToken,
+    int maxBytes = SmallTextMaxBytes,
+    bool sameHostOnly = false)
   {
     Uri currentUri;
     try
@@ -146,16 +152,22 @@ public sealed class PlaylistSourceFetcher
         {
           if (redirectCount >= MaxRedirects)
           {
-            return Fail(currentUri, "Too many redirects");
+            return Fail(sameHostOnly, currentUri,"Too many redirects");
           }
 
           try
           {
-            currentUri = ValidateRedirectUri(currentUri, response.Headers.Location);
+            var redirectUri = ValidateRedirectUri(currentUri, response.Headers.Location);
+            if (sameHostOnly && !string.Equals(redirectUri.Host, currentUri.Host, StringComparison.OrdinalIgnoreCase))
+            {
+              return Fail(sameHostOnly, currentUri, "Redirect to another host is not allowed");
+            }
+
+            currentUri = redirectUri;
           }
           catch (InvalidOperationException ex)
           {
-            return Fail(currentUri, ex.Message);
+            return Fail(sameHostOnly, currentUri, ex.Message);
           }
 
           continue;
@@ -163,44 +175,52 @@ public sealed class PlaylistSourceFetcher
 
         if (!response.IsSuccessStatusCode)
         {
-          return Fail(currentUri, $"Upstream returned {(int)response.StatusCode}", (int)response.StatusCode);
+          return Fail(sameHostOnly, currentUri,$"Upstream returned {(int)response.StatusCode}", (int)response.StatusCode);
         }
 
-        if (response.Content.Headers.ContentLength > SmallTextMaxBytes)
+        if (response.Content.Headers.ContentLength > maxBytes)
         {
-          return Fail(currentUri, "Response is too large");
+          return Fail(sameHostOnly, currentUri,"Response is too large");
         }
 
-        var text = await ReadSmallTextAsync(response, timeout.Token);
+        var text = await ReadSmallTextAsync(response, maxBytes, timeout.Token);
         return text is null
-          ? Fail(currentUri, "Response is too large")
+          ? Fail(sameHostOnly, currentUri, "Response is too large")
           : SmallTextFetchResult.Succeeded(text, (int)response.StatusCode);
       }
     }
     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
     {
-      return Fail(currentUri, "The request timed out");
+      return Fail(sameHostOnly, currentUri,"The request timed out");
     }
     catch (HttpRequestException)
     {
-      return Fail(currentUri, "Unable to connect");
+      return Fail(sameHostOnly, currentUri,"Unable to connect");
     }
     catch (IOException)
     {
-      return Fail(currentUri, "Reading the response failed");
+      return Fail(sameHostOnly, currentUri,"Reading the response failed");
     }
   }
 
   /// <summary>Upper bound for <see cref="FetchSmallTextAsync"/> bodies.</summary>
   public const int SmallTextMaxBytes = 64 * 1024;
 
-  private SmallTextFetchResult Fail(Uri uri, string error, int? statusCode = null)
+  private SmallTextFetchResult Fail(bool hideHost, Uri uri, string error, int? statusCode = null)
   {
-    _logger.LogWarning("Small text fetch from {Host} failed: {Error}", uri.Host, error);
+    if (hideHost)
+    {
+      _logger.LogWarning("Small text fetch failed: {Error}", error);
+    }
+    else
+    {
+      _logger.LogWarning("Small text fetch from {Host} failed: {Error}", uri.Host, error);
+    }
+
     return SmallTextFetchResult.Failed(error, statusCode);
   }
 
-  private static async Task<string?> ReadSmallTextAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+  private static async Task<string?> ReadSmallTextAsync(HttpResponseMessage response, int maxBytes, CancellationToken cancellationToken)
   {
     await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
     using var buffer = new MemoryStream();
@@ -209,7 +229,7 @@ public sealed class PlaylistSourceFetcher
     {
       var read = await source.ReadAsync(chunk, cancellationToken);
       if (read == 0) break;
-      if (buffer.Length + read > SmallTextMaxBytes) return null;
+      if (buffer.Length + read > maxBytes) return null;
       buffer.Write(chunk, 0, read);
     }
 
