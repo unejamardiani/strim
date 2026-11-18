@@ -9,6 +9,8 @@ public static class TmdbServices
   public static IServiceCollection AddStrimTmdb(this IServiceCollection services)
   {
     services.TryAddSingleton(TimeProvider.System);
+    // Process-local and in memory only: one cache for the app's lifetime.
+    services.AddSingleton<TmdbCache>();
     services.AddSingleton<TmdbClient>();
     services.AddHttpClient(TmdbClient.HttpClientName, client =>
       {

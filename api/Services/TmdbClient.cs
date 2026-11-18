@@ -39,12 +39,14 @@ public sealed class TmdbClient
   private readonly ILogger<TmdbClient> _logger;
   private readonly TimeProvider _timeProvider;
   private readonly string? _token;
+  private readonly TmdbCache? _cache;
   private readonly object _gate = new();
   private DateTimeOffset _blockedUntil = DateTimeOffset.MinValue;
 
   public TmdbClient(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<TmdbClient> logger,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider, TmdbCache? cache = null)
   {
+    _cache = cache;
     _httpClientFactory = httpClientFactory;
     _logger = logger;
     _timeProvider = timeProvider;
@@ -84,6 +86,11 @@ public sealed class TmdbClient
     {
       return new(TmdbStatus.Disabled, null);
     }
+    if (_cache is not null && _cache.TryGet(relativeUri, out var cached)
+      && JsonSerializer.Deserialize<T>(cached, JsonOptions) is { } hit)
+    {
+      return new(TmdbStatus.Ok, hit);
+    }
     lock (_gate)
     {
       if (_timeProvider.GetUtcNow() < _blockedUntil)
@@ -119,9 +126,15 @@ public sealed class TmdbClient
         return new(TmdbStatus.Unavailable, null);
       }
 
-      await using var body = await response.Content.ReadAsStreamAsync(timeout.Token);
-      var value = await JsonSerializer.DeserializeAsync<T>(body, JsonOptions, timeout.Token);
-      return value is null ? new(TmdbStatus.Unavailable, null) : new(TmdbStatus.Ok, value);
+      var body = await response.Content.ReadAsByteArrayAsync(timeout.Token);
+      var value = JsonSerializer.Deserialize<T>(body, JsonOptions);
+      if (value is null)
+      {
+        return new(TmdbStatus.Unavailable, null);
+      }
+      // Only successful answers are cached; errors, rate limits and timeouts return before this line.
+      _cache?.Set(relativeUri, body);
+      return new(TmdbStatus.Ok, value);
     }
     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
     {
