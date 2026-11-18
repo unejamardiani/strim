@@ -5,3 +5,37 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* Search: the field, then the type pills and the one toggle, which wrap below each other on a phone. */
+.library-search {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.library-toggle {
+  min-height: var(--control-h);
+}
+
+.library-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* A result is text, not a control: the search row's look without its hover or pointer. */
+.library-hit {
+  min-height: var(--row-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 8px 18px;
+  border-top: 1px solid var(--line);
+}
