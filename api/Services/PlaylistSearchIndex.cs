@@ -46,17 +46,22 @@ public sealed class PlaylistSearchIndex
   /// <paramref name="limit"/>, with <c>HasMore</c> when further matches exist. With
   /// <paramref name="hideDisabled"/>, matches in a disabled group take no slot and are counted in
   /// <c>HiddenCount</c> instead, which counts every such match, also those past the limit. With
-  /// <paramref name="contentTypes"/> not empty, matches of other types are skipped before anything else.
+  /// <paramref name="contentTypes"/> or <paramref name="languages"/> not empty, matches of other types, or without
+  /// one of the languages or prefix tags (compared case-insensitively), are skipped before anything else.
+  /// <c>Total</c> counts every match that is neither skipped nor hidden, also those past the limit.
   /// </summary>
   public PlaylistSearchResult Search(
     string? query, ISet<string> disabledGroups, int limit, bool hideDisabled = false,
-    IReadOnlySet<PlaylistContentType>? contentTypes = null)
+    IReadOnlySet<PlaylistContentType>? contentTypes = null, IReadOnlyCollection<string>? languages = null)
   {
     var folded = PlaylistSearchText.Fold(query).AsSpan();
     var matches = new List<PlaylistSearchMatch>();
     var hidden = 0;
-    var hasMore = false;
+    var total = 0;
     if (folded.IsEmpty || limit <= 0) return new PlaylistSearchResult(matches, false);
+    // Decided once per combination in the shared table, so the scan tests one bool per entry.
+    var wanted = languages is { Count: > 0 } ? new HashSet<string>(languages, StringComparer.OrdinalIgnoreCase) : null;
+    var keep = wanted is null ? null : _languages.Select(l => l.FilterValues().Any(wanted.Contains)).ToArray();
 
     for (var c = 0; c < _chunks.Count; c++)
     {
@@ -76,19 +81,15 @@ public sealed class PlaylistSearchIndex
 
         var slot = _slots[Field(entry, 1)];
         if (contentTypes is { Count: > 0 } && !contentTypes.Contains(slot.ContentType)) continue;
+        if (keep is not null && !keep[Field(entry, 3)]) continue;
         var enabled = !PlaylistProcessor.IsDisabled(disabledGroups, slot.GroupTitle, slot.ContentType);
         if (hideDisabled && !enabled)
         {
           hidden++;
           continue;
         }
-        if (matches.Count == limit)
-        {
-          // Hidden matches past the cap are still counted, so HiddenCount stays complete.
-          if (!hideDisabled) return new PlaylistSearchResult(matches, true);
-          hasMore = true;
-          continue;
-        }
+        // Matches past the cap are still counted, so Total and HiddenCount stay complete.
+        if (total++ >= limit) continue;
 
         matches.Add(new PlaylistSearchMatch(
           new string(text[(tab + 1)..(at - 1)]), slot.OutputGroup, slot.GroupKey, slot.ContentType, Field(entry, 2), enabled)
@@ -98,8 +99,17 @@ public sealed class PlaylistSearchIndex
       }
     }
 
-    return new PlaylistSearchResult(matches, hasMore, hidden);
+    return new PlaylistSearchResult(matches, total > limit, hidden) { Total = total };
   }
+
+  /// <summary>Rarer prefix tags still filter but are not offered, so odd prefixes do not clutter the choice.</summary>
+  public const int MinPrefixTagEntries = 20;
+
+  /// <summary>
+  /// The languages and prefix tags the language filter accepts, with the number of entries carrying each, most
+  /// frequent first. A prefix tag is listed only from <see cref="MinPrefixTagEntries"/> entries on. Set by Complete.
+  /// </summary>
+  public IReadOnlyList<PlaylistSearchLanguageCount> LanguageCounts { get; private set; } = [];
 
   /// <summary>
   /// The display names of the entries under <paramref name="groupKey"/> in source order, skipping
@@ -224,6 +234,22 @@ public sealed class PlaylistSearchIndex
     {
       _blocks[entry / BlockEntries][(entry % BlockEntries * Fields) + 2] = ++positions[_slots[Field(entry, 1)].OutputId];
     }
+
+    // Entries per combination first, so each value sums a few table rows instead of reading every entry again.
+    var perCombination = new int[_languages.Count];
+    for (var entry = 0; entry < Count; entry++) perCombination[Field(entry, 3)]++;
+    var counts = new Dictionary<string, (bool Tag, int Count)>(StringComparer.Ordinal);
+    for (var id = 1; id < _languages.Count; id++)
+    {
+      foreach (var value in _languages[id].FilterValues())
+      {
+        counts[value] = (_languages[id].PrefixTags.Contains(value), counts.GetValueOrDefault(value).Count + perCombination[id]);
+      }
+    }
+    LanguageCounts = counts.Where(c => !c.Value.Tag || c.Value.Count >= MinPrefixTagEntries)
+      .OrderByDescending(c => c.Value.Count).ThenBy(c => c.Key, StringComparer.Ordinal)
+      .Select(c => new PlaylistSearchLanguageCount(c.Key, c.Value.Tag ? "tag" : "language", c.Value.Count))
+      .ToList();
     return this;
   }
 
@@ -286,7 +312,16 @@ public sealed class PlaylistSearchIndex
 }
 
 /// <param name="HiddenCount">Matches left out because their group is disabled; 0 unless they are hidden.</param>
-public sealed record PlaylistSearchResult(IReadOnlyList<PlaylistSearchMatch> Matches, bool HasMore, int HiddenCount = 0);
+public sealed record PlaylistSearchResult(IReadOnlyList<PlaylistSearchMatch> Matches, bool HasMore, int HiddenCount = 0)
+{
+  /// <summary>Every match that passed the filters and is not hidden, also those past the limit.</summary>
+  public int Total { get; init; }
+}
+
+/// <param name="Value">An ISO 639-1 language (de) or a prefix tag as written (UK, EX-YU).</param>
+/// <param name="Kind"><c>language</c> or <c>tag</c>.</param>
+/// <param name="Count">Entries of the whole playlist that carry the value.</param>
+public sealed record PlaylistSearchLanguageCount(string Value, string Kind, int Count);
 
 /// <param name="Names">The display names of one page of the group's entries, in source order.</param>
 /// <param name="Total">The number of entries in the whole group.</param>
@@ -329,6 +364,9 @@ public sealed record PlaylistSearchLanguages(
       string.Join(',', result.Markers), string.Join(',', result.PrefixTags));
     return result;
   }
+
+  /// <summary>The distinct values the language filter matches: audio and subtitle languages and prefix tags.</summary>
+  internal IEnumerable<string> FilterValues() => Audio.Concat(Subtitles).Concat(PrefixTags).Distinct(StringComparer.Ordinal);
 
   private static string[] Sorted(IReadOnlyDictionary<string, LanguageTagSource> set) =>
     set.Keys.Order(StringComparer.Ordinal).ToArray();
