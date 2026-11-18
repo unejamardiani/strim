@@ -136,7 +136,9 @@ public class PlaylistOverviewTests(StrimAppFactory factory) : IClassFixture<Stri
     response.EnsureSuccessStatusCode();
     var body = await response.Content.ReadAsStringAsync();
 
-    foreach (var leaked in new[] { "sofa-user", "sofa-secret", "get.php", "username", "password", "m3u_plus", "8080",
+    foreach (var leaked in new[] { "sofa-user", "sofa-secret", "get.php", "username", "password", "m3u_plus",
+      // The port with its colon: a bare "8080" can occur inside a random playlist GUID.
+      ":8080",
       "overview-share-code-1", "sourceUrl", "shareCode" })
     {
       Assert.DoesNotContain(leaked, body, StringComparison.OrdinalIgnoreCase);
