@@ -8,18 +8,24 @@ namespace Api.Services;
 public static class PlaylistProcessor
 {
   private const int DefaultMaxLineLengthChars = 64 * 1024;
-  private const int DefaultMaxGroupCount = 10_000;
+  internal const int DefaultMaxGroupCount = 10_000;
   private const int DefaultMaxGroupTitleLengthChars = 512;
 
   /// <summary>Title given to entries without a group-title.</summary>
   private const string UngroupedTitle = "Ungrouped";
-  private const long DefaultMaxGroupMetadataBytes = 8L * 1024 * 1024;
+  internal const long DefaultMaxGroupMetadataBytes = 8L * 1024 * 1024;
   private const long DefaultMaxSearchIndexBytes = 64L * 1024 * 1024;
   // Approximate dictionary + string overhead for one distinct group. This is intentionally
   // conservative: the cap protects the JSON response and process heap, not just raw text.
   private const int EstimatedGroupEntryOverheadBytes = 128;
   /// <summary>Entry titles kept per group for the analysis response; the store never grows past this.</summary>
   public const int SampleTitlesPerGroup = 3;
+  /// <summary>
+  /// Most characters of one sample title, ellipsis included. With the default limits the worst case
+  /// (DefaultMaxGroupCount groups, three samples each at this length) stays under the shared byte budget.
+  /// </summary>
+  public const int MaxSampleTitleLength = 120;
+  private const char SampleTitleEllipsis = '…';
   /// <summary>Most #EXTVLCOPT/#KODIPROP/other '#' lines kept between one #EXTINF and its address.</summary>
   public const int MaxOptionLinesPerEntry = 32;
   private const string GroupKeySeparator = " \u00B7 ";
@@ -82,6 +88,7 @@ public static class PlaylistProcessor
     // The first titles per group-title and content type, at most SampleTitlesPerGroup each.
     var samples = new Dictionary<string, List<string>?[]>(StringComparer.OrdinalIgnoreCase);
     long sampleBytes = 0;
+    var samplesFull = false;
     PlaylistSearchIndex? searchIndex = new(maxSearchIndexBytes);
 
     await using var stream = new FileStream(
@@ -115,7 +122,7 @@ public static class PlaylistProcessor
         ref groupVariantCount,
         ref groupMetadataBytes,
         maxGroupMetadataBytes);
-      AddSampleTitle(samples, groupTitle, contentType, line, ref sampleBytes, maxGroupMetadataBytes);
+      AddSampleTitle(samples, groupTitle, contentType, line, ref sampleBytes, ref samplesFull, maxGroupMetadataBytes);
     }
 
     var analysis = new PlaylistAnalysisResult(BuildGroups(groups, explicitUngrouped, samples), total);
@@ -579,9 +586,10 @@ public static class PlaylistProcessor
   }
 
   /// <summary>
-  /// Keeps the entry's display name as a sample of its group while the group has fewer than
-  /// <see cref="SampleTitlesPerGroup"/>. Entries without a name are skipped. All samples share a byte
-  /// budget of <paramref name="maxSampleBytes"/>; past it, further samples are dropped, never the analysis.
+  /// Keeps the entry's display name, capped by <see cref="CapSampleTitle"/>, as a sample of its group while
+  /// the group has fewer than <see cref="SampleTitlesPerGroup"/>. Entries without a name are skipped. All
+  /// samples share a byte budget of <paramref name="maxSampleBytes"/>; the cap keeps the default settings
+  /// under it. Once a sample does not fit, no further sample is added for any group, never the analysis.
   /// </summary>
   private static void AddSampleTitle(
     Dictionary<string, List<string>?[]> samples,
@@ -589,6 +597,7 @@ public static class PlaylistProcessor
     PlaylistContentType contentType,
     string extinfLine,
     ref long sampleBytes,
+    ref bool samplesFull,
     long maxSampleBytes)
   {
     if (!samples.TryGetValue(groupTitle, out var perType))
@@ -598,16 +607,35 @@ public static class PlaylistProcessor
     }
 
     var titles = perType[(int)contentType] ??= new List<string>(SampleTitlesPerGroup);
-    if (titles.Count >= SampleTitlesPerGroup) return;
+    if (samplesFull || titles.Count >= SampleTitlesPerGroup) return;
 
     var name = PlaylistSearchText.DisplayNameSpan(extinfLine);
     if (name.IsEmpty) return;
 
-    var bytes = (long)name.Length * sizeof(char);
-    if (maxSampleBytes > 0 && sampleBytes > maxSampleBytes - bytes) return;
+    var title = CapSampleTitle(name);
+    var bytes = (long)title.Length * sizeof(char);
+    if (maxSampleBytes > 0 && sampleBytes > maxSampleBytes - bytes)
+    {
+      samplesFull = true;
+      return;
+    }
 
     sampleBytes += bytes;
-    titles.Add(name.ToString());
+    titles.Add(title);
+  }
+
+  /// <summary>
+  /// Returns <paramref name="name"/> unchanged when it has at most <see cref="MaxSampleTitleLength"/>
+  /// characters; otherwise its start followed by an ellipsis, <see cref="MaxSampleTitleLength"/> characters
+  /// in total, one less when the cut would split a surrogate pair.
+  /// </summary>
+  public static string CapSampleTitle(ReadOnlySpan<char> name)
+  {
+    if (name.Length <= MaxSampleTitleLength) return name.ToString();
+
+    var keep = MaxSampleTitleLength - 1;
+    if (char.IsHighSurrogate(name[keep - 1])) keep--;
+    return string.Concat(name[..keep], [SampleTitleEllipsis]);
   }
 
   private static List<PlaylistGroup> BuildGroups(
