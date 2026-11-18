@@ -76,6 +76,7 @@ public static class Database
   {
     db.Database.EnsureCreated();
     EnsureIdentitySchema(db, logger);
+    EnsureTitleMarksSchema(db, logger);
 
     if (db.Database.IsNpgsql())
     {
@@ -116,6 +117,64 @@ public static class Database
     else if (db.Database.IsSqlite())
     {
       TryEnsureSqliteIdentity(db, logger);
+    }
+  }
+
+  /// <summary>
+  /// The film and series marks table on SQLite (the one table the owner approved on 18 Nov 2026). The marks
+  /// belong to an AspNetUsers row and go with it. COALESCE in the unique index makes a null year its own value.
+  /// </summary>
+  public const string SqliteTitleMarksSql = @"
+        CREATE TABLE IF NOT EXISTS titlemarks (
+          id TEXT NOT NULL PRIMARY KEY,
+          userid TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          titlekey TEXT NOT NULL,
+          year INTEGER NULL,
+          displaytitle TEXT NOT NULL,
+          seen INTEGER NOT NULL,
+          rating INTEGER NOT NULL,
+          filmdbid TEXT NULL,
+          createdutc TEXT NOT NULL,
+          updatedutc TEXT NOT NULL,
+          CONSTRAINT FK_titlemarks_AspNetUsers_userid FOREIGN KEY (userid) REFERENCES AspNetUsers (Id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS IX_titlemarks_userid ON titlemarks (userid);
+        CREATE UNIQUE INDEX IF NOT EXISTS IX_titlemarks_userid_kind_titlekey_year ON titlemarks (userid, kind, titlekey, COALESCE(year, 0));
+      ";
+
+  /// <summary>The same table on PostgreSQL, with quoted identifiers as in <see cref="TryEnsurePostgresIdentity"/>.</summary>
+  public const string PostgresTitleMarksSql = @"
+        CREATE TABLE IF NOT EXISTS ""titlemarks"" (
+          ""id"" uuid NOT NULL PRIMARY KEY,
+          ""userid"" varchar(450) NOT NULL,
+          ""kind"" varchar(16) NOT NULL,
+          ""titlekey"" varchar(256) NOT NULL,
+          ""year"" integer NULL,
+          ""displaytitle"" varchar(256) NOT NULL,
+          ""seen"" boolean NOT NULL,
+          ""rating"" integer NOT NULL,
+          ""filmdbid"" varchar(64) NULL,
+          ""createdutc"" timestamp with time zone NOT NULL,
+          ""updatedutc"" timestamp with time zone NOT NULL,
+          CONSTRAINT ""FK_titlemarks_AspNetUsers_userid"" FOREIGN KEY (""userid"") REFERENCES ""AspNetUsers""(""Id"") ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_titlemarks_userid"" ON ""titlemarks"" (""userid"");
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_titlemarks_userid_kind_titlekey_year"" ON ""titlemarks"" (""userid"", ""kind"", ""titlekey"", COALESCE(""year"", 0));
+      ";
+
+  private static void EnsureTitleMarksSchema(AppDbContext db, ILogger logger)
+  {
+    var isNpgsql = db.Database.IsNpgsql();
+    if (!isNpgsql && !db.Database.IsSqlite()) return;
+    try
+    {
+      db.Database.ExecuteSqlRaw(isNpgsql ? PostgresTitleMarksSql : SqliteTitleMarksSql);
+      logger.LogDebug("Title marks schema ensured");
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to ensure the title marks schema: {Message}", ex.Message);
     }
   }
 
