@@ -21,13 +21,16 @@ public class PlaylistProcessorTests
     Assert.Equal("Live", results[1].ContentType);
   }
 
-  private static async Task<(PlaylistAnalysisResult Analysis, List<Api.Models.GroupResult> Groups)> AnalyzeTextAsync(string source)
+  private static async Task<(PlaylistAnalysisResult Analysis, List<Api.Models.GroupResult> Groups)> AnalyzeTextAsync(
+    string source,
+    long maxGroupMetadataBytes = PlaylistProcessor.DefaultMaxGroupMetadataBytes)
   {
     var path = Path.GetTempFileName();
     try
     {
       await File.WriteAllTextAsync(path, source);
-      var analysis = await PlaylistProcessor.AnalyzeFileAsync(path, CancellationToken.None);
+      var analysis = await PlaylistProcessor.AnalyzeFileAsync(
+        path, CancellationToken.None, maxGroupMetadataBytes: maxGroupMetadataBytes);
       return (analysis, PlaylistProcessor.ToGroupResults(analysis.Groups));
     }
     finally
@@ -116,6 +119,116 @@ public class PlaylistProcessorTests
     Assert.NotEqual("Germany", live.Name);
     Assert.Equal(new[] { "Live One", "Live Two" }, live.SampleTitles);
     Assert.Equal(new[] { "Episode One", "Episode Two" }, series.SampleTitles);
+  }
+
+  private static string Playlist(int groupCount, int titlesPerGroup, Func<int, int, string> title)
+  {
+    var text = new System.Text.StringBuilder("#EXTM3U\n");
+    for (var g = 0; g < groupCount; g++)
+    {
+      for (var t = 0; t < titlesPerGroup; t++)
+      {
+        text.Append("#EXTINF:-1 group-title=\"G").Append(g).Append("\",").Append(title(g, t)).Append('\n');
+        text.Append("https://example.com/live/").Append(g).Append('/').Append(t).Append(".ts\n");
+      }
+    }
+    return text.ToString();
+  }
+
+  [Fact]
+  public async Task SampleTitles_VeryLongTitles_EveryGroupKeepsThreeCappedSamples()
+  {
+    var source = Playlist(24, 3, (g, t) => new string((char)('a' + t), 60_000));
+
+    var (_, groups) = await AnalyzeTextAsync(source);
+
+    Assert.Equal(24, groups.Count);
+    foreach (var group in groups)
+    {
+      Assert.Equal(PlaylistProcessor.SampleTitlesPerGroup, group.SampleTitles.Count);
+      for (var t = 0; t < 3; t++)
+      {
+        var sample = group.SampleTitles[t];
+        Assert.Equal(PlaylistProcessor.MaxSampleTitleLength, sample.Length);
+        Assert.Equal(new string((char)('a' + t), PlaylistProcessor.MaxSampleTitleLength - 1) + "…", sample);
+      }
+    }
+  }
+
+  [Fact]
+  public void CapSampleTitle_KeepsShortTitlesAndCutsLongOnesOnACharacterBoundary()
+  {
+    var max = PlaylistProcessor.MaxSampleTitleLength;
+    var atCap = new string('x', max);
+    Assert.Equal("Short title", PlaylistProcessor.CapSampleTitle("Short title"));
+    Assert.Equal(atCap, PlaylistProcessor.CapSampleTitle(atCap));
+
+    var cut = PlaylistProcessor.CapSampleTitle(atCap + "y");
+    Assert.Equal(new string('x', max - 1) + "…", cut);
+
+    // A surrogate pair (U+1F3AC) whose high half sits at the last kept position is dropped whole.
+    var emoji = "\U0001F3AC";
+    var straddling = new string('x', max - 2) + emoji + "tail";
+    var cutPair = PlaylistProcessor.CapSampleTitle(straddling);
+    Assert.Equal(new string('x', max - 2) + "…", cutPair);
+    Assert.DoesNotContain(cutPair, char.IsSurrogate);
+
+    // A pair that ends right before the cut stays whole.
+    var whole = new string('x', max - 3) + emoji + "tail";
+    var cutWhole = PlaylistProcessor.CapSampleTitle(whole);
+    Assert.Equal(new string('x', max - 3) + emoji + "…", cutWhole);
+    Assert.True(cutWhole.Length <= max);
+  }
+
+  [Fact]
+  public async Task SampleTitles_DefaultLimits_MaxGroupCountGroupsOfCapLengthTitlesAllKeepThreeSamples()
+  {
+    const int groupCount = PlaylistProcessor.DefaultMaxGroupCount;
+    const int titleLength = PlaylistProcessor.MaxSampleTitleLength;
+    Assert.Equal(groupCount, new PlaylistCacheOptions().MaxGroupCount);
+    Assert.Equal(PlaylistProcessor.DefaultMaxGroupMetadataBytes, new PlaylistCacheOptions().MaxGroupMetadataBytes);
+
+    // Worst case of the shared budget: every group variant with three samples at the cap, UTF-16.
+    const long worstCaseBytes = (long)groupCount * PlaylistProcessor.SampleTitlesPerGroup * titleLength * sizeof(char);
+    Assert.Equal(7_200_000, worstCaseBytes);
+    Assert.True(worstCaseBytes <= PlaylistProcessor.DefaultMaxGroupMetadataBytes);
+
+    var source = Playlist(groupCount, 3, (g, t) => $"{g}-{t}-".PadRight(titleLength, 'n'));
+
+    var (_, groups) = await AnalyzeTextAsync(source);
+
+    Assert.Equal(groupCount, groups.Count);
+    Assert.All(groups, group =>
+    {
+      Assert.Equal(PlaylistProcessor.SampleTitlesPerGroup, group.SampleTitles.Count);
+      Assert.All(group.SampleTitles, s => Assert.Equal(titleLength, s.Length));
+    });
+  }
+
+  [Fact]
+  public async Task SampleTitles_BudgetReached_StopsAddingSamplesForGood()
+  {
+    // 300 bytes: room for both groups' metadata and one 100-character sample (200 bytes), not two.
+    var source = $"""
+      #EXTM3U
+      #EXTINF:-1 group-title="G1",{new string('A', 100)}
+      https://example.com/live/1.ts
+      #EXTINF:-1 group-title="G1",{new string('B', 100)}
+      https://example.com/live/2.ts
+      #EXTINF:-1 group-title="G1",C
+      https://example.com/live/3.ts
+      #EXTINF:-1 group-title="G2",D
+      https://example.com/live/4.ts
+      """;
+
+    var (_, groups) = await AnalyzeTextAsync(source, maxGroupMetadataBytes: 300);
+
+    var g1 = Assert.Single(groups, g => g.Name == "G1");
+    Assert.Equal(new[] { new string('A', 100) }, g1.SampleTitles);
+    Assert.Equal(3, g1.Count);
+    var g2 = Assert.Single(groups, g => g.Name == "G2");
+    Assert.Empty(g2.SampleTitles);
+    Assert.Equal(1, g2.Count);
   }
 
   [Fact]
