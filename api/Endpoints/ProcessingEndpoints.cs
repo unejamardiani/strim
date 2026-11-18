@@ -222,6 +222,18 @@ public static class ProcessingEndpoints
       if (PlaylistSearchText.Fold(input.Query).Length < Limits.MinSearchQueryLength)
         return Results.BadRequest(new { error = $"Search needs at least {Limits.MinSearchQueryLength} letters or digits." });
       if (InvalidDisabledGroups(input.DisabledGroups, pipeline.Cache) is { } invalidGroups) return invalidGroups;
+      var knownTypes = Enum.GetNames<PlaylistContentType>();
+      if (input.ContentTypes?.Count > knownTypes.Length)
+        return Results.BadRequest(new { error = $"Provide at most {knownTypes.Length} content types." });
+      var contentTypes = new HashSet<PlaylistContentType>();
+      foreach (var name in input.ContentTypes ?? new List<string>())
+      {
+        // Only the names, so numbers such as "1" are refused like any other unknown value.
+        var known = knownTypes.FirstOrDefault(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase));
+        if (known is null)
+          return Results.BadRequest(new { error = $"Unknown content type. Use {string.Join(", ", knownTypes)}." });
+        contentTypes.Add(Enum.Parse<PlaylistContentType>(known));
+      }
 
       var source = pipeline.Cache.TryGetSessionSource(input.CacheKey);
       var analysis = source is null ? null : pipeline.Cache.TryGetAnalysis(source);
@@ -231,7 +243,8 @@ public static class ProcessingEndpoints
         return Results.BadRequest(new { error = "Search is not available for this playlist because it is too large." });
 
       var disabled = new HashSet<string>(input.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-      var result = index.Search(input.Query, disabled, Limits.MaxSearchResults, input.HideDisabled == true);
+      var result = index.Search(
+        input.Query, disabled, Limits.MaxSearchResults, input.HideDisabled == true, contentTypes);
       return Results.Ok(new PlaylistSearchResponse(
         result.Matches.Select(m => new PlaylistSearchMatchResult(
           m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled,

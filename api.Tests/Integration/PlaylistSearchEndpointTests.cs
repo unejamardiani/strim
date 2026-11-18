@@ -169,6 +169,47 @@ public class PlaylistSearchEndpointTests(StrimAppFactory factory) : IClassFixtur
   }
 
   [Fact]
+  public async Task Search_ContentTypes_ReturnsOnlyChosenTypes()
+  {
+    var client = new ApiClient(factory.CreateClient());
+    var cacheKey = await AnalyzeAsync(client, """
+      #EXTM3U
+      #EXTINF:-1 group-title="Germany",Boot TV
+      http://line.example/live/u/p/1.ts
+      #EXTINF:-1 group-title="Germany",Das Boot (1981)
+      http://line.example/movie/u/p/20.mp4
+      #EXTINF:-1 group-title="Shows",Boot Camp S01E01
+      http://line.example/series/u/p/30.mkv
+      """);
+
+    var films = await SearchOkAsync(client, new { cacheKey, query = "boot", contentTypes = new[] { "Movies" } });
+    var all = await SearchOkAsync(client, new { cacheKey, query = "boot", contentTypes = Array.Empty<string>() });
+
+    Assert.Equal(new MatchDto("Das Boot (1981)", "Germany · Movies", "Germany · Movies", 1, "Movies", true), Assert.Single(films.Matches));
+    Assert.Equal(3, all.Matches.Count);
+  }
+
+  [Fact]
+  public async Task Search_UnknownContentType_Returns400()
+  {
+    var client = new ApiClient(factory.CreateClient());
+    var cacheKey = await AnalyzeAsync(client, WithMovie);
+
+    foreach (var types in new[] { new[] { "Films" }, new[] { "1" }, new[] { "Movies", "" } })
+    {
+      var response = await client.PostAsync("/api/playlist/search", new { cacheKey, query = "ard", contentTypes = types });
+      Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+      var error = await response.Content.ReadFromJsonAsync<ErrorDto>();
+      Assert.Equal("Unknown content type. Use Live, Movies, Series.", error!.Error);
+    }
+
+    var tooMany = await client.PostAsync(
+      "/api/playlist/search", new { cacheKey, query = "ard", contentTypes = new[] { "Live", "Movies", "Series", "Live" } });
+    Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
+    Assert.Equal("Provide at most 3 content types.", (await tooMany.Content.ReadFromJsonAsync<ErrorDto>())!.Error);
+  }
+
+  [Fact]
   public async Task Search_ExpiredSession_Returns400()
   {
     var client = new ApiClient(factory.CreateClient());
