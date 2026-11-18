@@ -73,6 +73,29 @@ public class EditorShowFilterTests
   }
 
   [Fact]
+  public void EverythingSearch_FollowsTheShowFilter_AndReportsHiddenMatches()
+  {
+    var js = Read("main.js");
+    var run = Between(js, "async function runSearch(ed)", "function renderSearchResults(ed)");
+    // On hides switched-off groups in the search too; All and Off list every match.
+    Assert.Contains("const hideDisabled = ed.filter.show === 'kept';", run);
+    Assert.Contains("body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled], hideDisabled },", run);
+    // A cached result only counts when it was fetched with the same flag.
+    Assert.Contains("ed.search.query === query && ed.search.hideDisabled === hideDisabled", run);
+    Assert.Contains("hiddenCount: hideDisabled && Number.isInteger(result.hiddenCount) ? result.hiddenCount : 0,", run);
+
+    var render = Between(js, "function renderSearchResults(ed)", "function searchHit(ed, m)");
+    Assert.Contains("const hidden = s.status === 'done' ? s.hiddenCount || 0 : 0;", render);
+    Assert.Contains("${fmt(hidden)} in switched-off groups not shown", render);
+    Assert.Contains("All ${plural(hidden, 'match', 'matches')} are in switched-off groups.", render);
+    Assert.Contains("'Nothing matches your search.'", render);
+
+    // Pressing a show button in Everything mode searches again.
+    var row = Between(js, "const filters = h('div', { class: 'toolbar-row show-row' });", "rows.push(filters);");
+    Assert.Contains("if (ed.searchMode === 'everything') runSearch(ed);", row);
+  }
+
+  [Fact]
   public void AppCss_StylesTheLabel_WithTokensOnly_AndKeepsTheRowOnOneLine()
   {
     var css = Read("app.css");
