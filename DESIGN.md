@@ -90,15 +90,16 @@ Short, plain, second person. "Switch off the groups you never watch", "All on / 
 
 Wide editor (from 1100px, CSS only): once the groups are loaded, the editor page widens to a
 1440px maximum (same 18px padding) and the picker becomes two columns with a 24px gap,
-`minmax(0, 1fr) minmax(360px, 0.6fr)`. Left, the larger share (about 650px at 1100px, 860px at
+`minmax(0, 1fr) minmax(300px, 0.4fr)`. Left, the larger share (about 740px at 1100px, 985px at
 1440px): sticky filters, search results and the group list, so search, filters and All on/off
-stay reachable above the list. Right, the rest but at least 360px: the entry pane, a sticky area reserved for the
+stay reachable above the list. Right, the rest but at least 300px: the entry pane, a sticky area reserved for the
 entries of a group (a dashed 22px outline while it is empty).
 
 Desktop group row (from 1100px): each row is a one-line grid with fixed tracks, so the columns
-line up down the list. In order: marker (10px), name (1.1fr), type tag (64px), sample titles
-(1.4fr: the first entry titles of the group, comma-joined and cut off with an ellipsis), adult
-mark (36px: an "18+" tag on `--surface-2` in `--ink-2`), split origin (0.9fr: "from" and the
+line up down the list. In order: marker (10px), name (1fr but at least 340px, the room it
+had in the 560px column, so the new cells never shrink it), type tag (64px), sample titles
+(1fr: the first entry titles of the group, comma-joined and cut off with an ellipsis), adult
+mark (36px: an "18+" tag on `--surface-2` in `--ink-2`), split origin (0.6fr: "from" and the
 provider's group title when Strim split that title by content type), count (56px, right-aligned)
 and switch (46px). Sample titles and origin are 13px/450 in `--ink-3`. A value that is unknown or
 empty leaves its cell empty, with no placeholder. Row height stays `--row-h`. Below 1100px these

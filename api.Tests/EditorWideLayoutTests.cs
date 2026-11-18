@@ -19,7 +19,7 @@ public class EditorWideLayoutTests
     Assert.Contains("Wide editor (from 1100px", design);
     Assert.Contains("1440px maximum", design);
     // #228: the group column takes the larger share, the pane keeps a usable minimum.
-    Assert.Contains("`minmax(0, 1fr) minmax(360px, 0.6fr)`", design);
+    Assert.Contains("`minmax(0, 1fr) minmax(300px, 0.4fr)`", design);
     Assert.Contains("entry pane", design);
     Assert.Contains("the 760px page applies unchanged", design);
     var flat = design.Replace("\r\n", "\n").Replace("\n", " ");
@@ -43,7 +43,7 @@ public class EditorWideLayoutTests
     Assert.True(media.Success, "app.css has no @media (min-width: 1100px) block.");
     var body = media.Groups[1].Value;
     Assert.Matches(@"\.page:has\(> \.editor-split\)\s*\{\s*max-width:\s*1440px;", body);
-    Assert.Matches(@"\.editor-split\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(360px, 0\.6fr\);", body);
+    Assert.Matches(@"\.editor-split\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(300px, 0\.4fr\);", body);
     Assert.Matches(@"\.entry-pane\s*\{[^}]*display:\s*block;", body);
   }
 
@@ -59,7 +59,7 @@ public class EditorWideLayoutTests
     var rowMedia = Regex.Matches(css, @"@media \(min-width: 1100px\)\s*\{((?:[^{}]*\{[^{}]*\})*)[^{}]*\}")
       .Select(m => m.Groups[1].Value)
       .Single(b => b.Contains(".group-samples"));
-    Assert.Matches(@"\.group-row\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*10px minmax\(0, 1\.1fr\) 64px minmax\(0, 1\.4fr\) 36px minmax\(0, 0\.9fr\) 56px 46px;\s*\}", rowMedia);
+    Assert.Matches(@"\.group-row\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*10px minmax\(340px, 1fr\) 64px minmax\(0, 1fr\) 36px minmax\(0, 0\.6fr\) 56px 46px;\s*\}", rowMedia);
     var order = new[] { ".dot", ".group-name", ".tag", ".group-samples", ".group-adult", ".group-origin", ".group-count", ".toggle" };
     for (var i = 0; i < order.Length; i++)
       Assert.Matches($@"\.group-row > {Regex.Escape(order[i])} \{{ grid-column: {i + 1};", rowMedia);
