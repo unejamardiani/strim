@@ -48,7 +48,15 @@ public record PlaylistReportResponse(
   int VariantEntryCount,
   bool Truncated,
   List<ReportDuplicateSet> DuplicateSets,
-  List<ReportVariantGroup> VariantGroups);
+  List<ReportVariantGroup> VariantGroups,
+  List<ReportGroupCount> GroupCounts);
+
+/// <summary>
+/// How many entries of one group are in any duplicate set or variant group, over the whole list. Groups without
+/// either are left out.
+/// </summary>
+/// <param name="Group">The group key, the same as the analysis group's <c>Name</c>.</param>
+public record ReportGroupCount(string Group, int DuplicateEntryCount, int VariantEntryCount);
 
 public record ReportDuplicateSet(IReadOnlyList<string> Groups, List<ReportEntry> Entries);
 
