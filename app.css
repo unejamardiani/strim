@@ -725,6 +725,34 @@ select.input {
   background-color: var(--surface-2);
 }
 
+/* The show filter row (#269) stays one line: the label never breaks, the pills may scroll. */
+.toolbar-row.show-row {
+  flex-wrap: nowrap;
+}
+
+.show-row .pills {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.show-row select.input {
+  flex: none;
+}
+
+.show-label {
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+@media (max-width: 440px) {
+  .show-hint {
+    display: none;
+  }
+}
+
 .summary {
   display: flex;
   align-items: center;

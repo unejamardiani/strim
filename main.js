@@ -723,6 +723,28 @@ async function deletePlaylist(playlist) {
 
 // ---------- Editor ----------
 
+// The group show filter (All / On / Off) is remembered per saved playlist, in this browser only (#269).
+const GROUP_SHOW_VALUES = ['all', 'kept', 'hidden'];
+
+function readGroupShow(id) {
+  if (!id) return 'all';
+  try {
+    const value = localStorage.getItem(`strim.groupShow.${id}`);
+    return GROUP_SHOW_VALUES.includes(value) ? value : 'all';
+  } catch {
+    return 'all';
+  }
+}
+
+function writeGroupShow(id, value) {
+  if (!id || !GROUP_SHOW_VALUES.includes(value)) return;
+  try {
+    localStorage.setItem(`strim.groupShow.${id}`, value);
+  } catch {
+    // Private mode or a full quota: the choice lasts for this view only.
+  }
+}
+
 function newEditor(playlist) {
   return {
     id: playlist?.id || null,
@@ -746,7 +768,7 @@ function newEditor(playlist) {
     disabled: new Set(),
     extras: [],
     baseline: '',
-    filter: { query: '', type: 'all', show: 'all', sort: 'provider' },
+    filter: { query: '', type: 'all', show: readGroupShow(playlist?.id), sort: 'provider' },
     searchMode: 'groups', // groups | everything
     search: null, // Everything results: { status, query, matches, hasMore, message }
     view: [],
@@ -1205,14 +1227,18 @@ function pickerNodes(ed) {
         updateView(true);
       })));
   }
-  const filters = h('div', { class: 'toolbar-row' });
+  const filters = h('div', { class: 'toolbar-row show-row' });
+  filters.append(h('span', { class: 'show-label', id: 'group-show-label' },
+    'Show', h('span', { class: 'show-hint', text: ' groups' })));
   filters.append(picker.showButtons = segmented(
     [{ value: 'all', label: 'All' }, { value: 'kept', label: 'On' }, { value: 'hidden', label: 'Off' }],
     ed.filter.show,
     (value) => {
       ed.filter.show = value;
+      writeGroupShow(ed.isSample ? null : ed.id, value);
       updateView(true);
     }));
+  picker.showButtons.setAttribute('aria-labelledby', 'group-show-label');
   filters.append(h('div', { class: 'spacer' }), sort);
   rows.push(filters);
 
