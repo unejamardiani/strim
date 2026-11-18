@@ -36,12 +36,16 @@ public sealed class PlaylistSearchIndex
 
   /// <summary>
   /// Entries whose folded name contains the folded query, in source order: at most
-  /// <paramref name="limit"/>, with <c>HasMore</c> when further matches exist.
+  /// <paramref name="limit"/>, with <c>HasMore</c> when further matches exist. With
+  /// <paramref name="hideDisabled"/>, matches in a disabled group take no slot and are counted in
+  /// <c>HiddenCount</c> instead, which counts every such match, also those past the limit.
   /// </summary>
-  public PlaylistSearchResult Search(string? query, ISet<string> disabledGroups, int limit)
+  public PlaylistSearchResult Search(string? query, ISet<string> disabledGroups, int limit, bool hideDisabled = false)
   {
     var folded = PlaylistSearchText.Fold(query).AsSpan();
     var matches = new List<PlaylistSearchMatch>();
+    var hidden = 0;
+    var hasMore = false;
     if (folded.IsEmpty || limit <= 0) return new PlaylistSearchResult(matches, false);
 
     for (var c = 0; c < _chunks.Count; c++)
@@ -59,16 +63,28 @@ public sealed class PlaylistSearchIndex
         at = entry + 1 < end ? Field(entry + 1, 0) : text.Length;
         // The search resumes at a record start, so a first hit past the tab lies in the display name.
         if (hit + folded.Length > tab) continue;
-        if (matches.Count == limit) return new PlaylistSearchResult(matches, true);
 
         var slot = _slots[Field(entry, 1)];
         var enabled = !PlaylistProcessor.IsDisabled(disabledGroups, slot.GroupTitle, slot.ContentType);
+        if (hideDisabled && !enabled)
+        {
+          hidden++;
+          continue;
+        }
+        if (matches.Count == limit)
+        {
+          // Hidden matches past the cap are still counted, so HiddenCount stays complete.
+          if (!hideDisabled) return new PlaylistSearchResult(matches, true);
+          hasMore = true;
+          continue;
+        }
+
         matches.Add(new PlaylistSearchMatch(
           new string(text[(tab + 1)..(at - 1)]), slot.OutputGroup, slot.GroupKey, slot.ContentType, Field(entry, 2), enabled));
       }
     }
 
-    return new PlaylistSearchResult(matches, false);
+    return new PlaylistSearchResult(matches, hasMore, hidden);
   }
 
   /// <summary>
@@ -207,7 +223,8 @@ public sealed class PlaylistSearchIndex
   }
 }
 
-public sealed record PlaylistSearchResult(IReadOnlyList<PlaylistSearchMatch> Matches, bool HasMore);
+/// <param name="HiddenCount">Matches left out because their group is disabled; 0 unless they are hidden.</param>
+public sealed record PlaylistSearchResult(IReadOnlyList<PlaylistSearchMatch> Matches, bool HasMore, int HiddenCount = 0);
 
 /// <param name="Names">The display names of one page of the group's entries, in source order.</param>
 /// <param name="Total">The number of entries in the whole group.</param>
