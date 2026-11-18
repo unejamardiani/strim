@@ -26,7 +26,9 @@ public static class SiteEndpoints
     app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Name == "database" });
     app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 
-    app.MapGet("/api/config", () => Results.Ok(new { publicShareBaseUrl }));
+    // tmdbEnabled tells the frontend whether TMDB data and attribution may appear; never the token itself.
+    app.MapGet("/api/config", (TmdbClient tmdbClient) =>
+      Results.Ok(new { publicShareBaseUrl, tmdbEnabled = tmdbClient.IsEnabled }));
 
     // The landing page is the default document; the editor lives at /app. The route also matches
     // "/app/", where the page's relative asset paths would resolve under /app/, so redirect that.
