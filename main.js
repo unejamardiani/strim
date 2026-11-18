@@ -1078,6 +1078,8 @@ function showLibrary(playlist) {
     // The editor's Everything search endpoint; it only reads the analysed list.
     searchHint,
     search: (body, signal) => api('/playlist/search', { method: 'POST', body, signal }),
+    // One page of a group's names (#215), read-only like the search.
+    groupEntries: (params, signal) => api(`/playlist/group-entries?${new URLSearchParams(params)}`, { signal }),
   });
 }
 
