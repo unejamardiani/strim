@@ -22,14 +22,35 @@ public class PlaylistCardFactsTests
   }
 
   [Fact]
-  public void ListRoute_LoadsTheOverview_AndKeepsCardsWhenItFails()
+  public void ListRoute_LoadsTheOverview_AndDropsCachedFactsWhenItFails()
   {
     var js = Read("main.js");
     Assert.Contains("api('/playlists/overview')", js);
-    // The card asks for the facts line; a failed call returns before any card is touched.
     Assert.Contains("playlistFacts(playlist.id)", js);
     var load = Regex.Match(js, @"async function loadOverview\(\) \{.*?\n\}", RegexOptions.Singleline).Value;
-    Assert.Matches(@"catch \{\s*return;\s*\}", load);
+    Assert.False(string.IsNullOrEmpty(load), "main.js has no loadOverview function.");
+
+    // A failed call or a non-array body no longer returns early and keeps the earlier cache (#254).
+    Assert.DoesNotMatch(@"catch \{\s*return;\s*\}", load);
+    Assert.DoesNotContain("if (!Array.isArray(data)) return;", load);
+    Assert.Matches(@"catch \{\s*data = null;\s*\}", load);
+    // The cache is rebuilt from the response, or emptied when the response is unusable.
+    Assert.Contains("state.overview = Array.isArray(data) ? new Map(data.map((item) => [item.id, item])) : new Map();", load);
+
+    // Every rendered facts line is redrawn after either outcome, so empty ones replace old counts and dates.
+    var reset = load.IndexOf("state.overview = Array.isArray(data)", StringComparison.Ordinal);
+    var redraw = load.IndexOf("node.replaceWith(playlistFacts(node.dataset.id))", StringComparison.Ordinal);
+    Assert.True(reset >= 0 && redraw > reset, "loadOverview redraws the facts lines after setting the cache.");
+  }
+
+  [Fact]
+  public void Facts_AreEmpty_WhenThePlaylistIsNotInTheOverview()
+  {
+    var facts = FactsFunction();
+    // Without an overview entry no fact is pushed: the line renders as an empty .facts node.
+    Assert.Contains("const item = state.overview.get(id);", facts);
+    Assert.Matches(@"if \(item\) \{", facts);
+    Assert.Contains("return h('div', { class: 'facts', dataset: { id } }, parts);", facts);
   }
 
   [Fact]
