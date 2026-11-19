@@ -9,6 +9,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Api.Endpoints;
 
+/// <summary>Who reads a playlist's Library; for a viewer, <paramref name="DisabledGroups"/> are the groups hidden from them.</summary>
+internal sealed record LibraryAccess(Guid PlaylistId, string UserId, bool IsViewer, List<string>? DisabledGroups);
+
 /// <summary>Creates an invitation; the label is the owner's name for the person.</summary>
 public record ShareRequest(string? Label);
 
@@ -241,6 +244,16 @@ public static class ShareEndpoints
 
     return app;
   }
+
+  /// <summary>
+  /// The caller's access to a playlist's Library in one query: the owner, an accepted viewer with the hidden groups
+  /// from the database, or null (the same 404 as for a stranger).
+  /// </summary>
+  internal static Task<LibraryAccess?> LibraryAccessAsync(AppDbContext db, Guid id, string userId, CancellationToken ct) =>
+    db.Playlists.AsNoTracking()
+      .Where(p => p.Id == id && (p.OwnerId == userId || db.PlaylistShares.Any(s => s.PlaylistId == p.Id && s.ViewerUserId == userId)))
+      .Select(p => new LibraryAccess(p.Id, userId, p.OwnerId != userId, p.DisabledGroups))
+      .FirstOrDefaultAsync(ct);
 
   /// <summary>SHA-256 of the token as lowercase hex, the only form of it that is stored.</summary>
   public static string HashToken(string token) =>
