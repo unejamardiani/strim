@@ -286,6 +286,23 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 @media (min-width: 1100px) { .film-rail-nav { display: flex; } }
 .film-rail { display: flex; gap: 12px; margin: 0 -24px; padding: 4px 24px 6px; overflow-x: auto; scrollbar-width: none; scroll-behavior: smooth; scroll-snap-type: x proximity; scroll-padding-left: 24px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); }
 .film-rail .film-tile { flex: 0 0 112px; scroll-snap-align: start; }
+/* In your list (#391): season pills on the film rail's mask, one open at a time with its episode grid below. */
+.series-rail { display: flex; gap: 8px; margin: 0 -24px; padding: 2px 24px 4px; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); }
+.series-season { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; }
+.series-season span:last-child { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.series-season[aria-expanded="true"] { background: var(--pill-on); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.series-season.is-absent, .series-episode.is-absent, .series-key.is-absent { background: none; box-shadow: inset 0 0 0 1.5px var(--line-strong); color: var(--ink-3); }
+.series-season.is-absent span:last-child { color: var(--ink-3); }
+.series-here { width: 7px; height: 7px; border-radius: 1.5px; background: var(--series); }
+.series-episodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.series-episode { display: grid; place-items: center; height: 36px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.series-episode.is-here { background: var(--series-soft); box-shadow: inset 0 0 0 2px var(--series); }
+.series-more { grid-column: 1 / -1; font-size: 13px; color: var(--ink-2); }
+.series-legend { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 12px; color: var(--ink-3); }
+.series-key { width: 12px; height: 12px; border-radius: 4px; background: var(--surface-2); }
+.series-key.is-absent { margin-left: 8px; }
+.series-context, .series-note { margin: 0; font-size: 13px; color: var(--ink-2); }
+.series-context b { color: var(--ink); }
 .film-on { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .film-on.is-off { background: none; box-shadow: inset 0 0 0 1.5px var(--ink-3); }
 .film-tile-flag { position: absolute; top: 6px; left: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 750; color: var(--dock-ink); background: color-mix(in srgb, var(--dock-bg) 82%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }

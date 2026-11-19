@@ -166,6 +166,16 @@ leaving out what is missing; a missing poster shows the Series square on `--seri
 set the series mark, so every row of the series repaints; the texts say "series" for "film"
 ("Similar series", "Which series is it?", "Not this series", "Series data and posters: TMDB").
 
+In your list (#391): between overview and similar series, a film section head "In your list" with
+"21 of 32 episodes" (or "21 episodes" without TMDB's total), hidden when the list holds nothing of
+the series. Seasons are 38px pills on the film rail's mask ("S1" and count/total, "Specials" for
+season 0); a season the list lacks is outlined in `--line-strong` with `--ink-3`. A pill opens its
+episodes below (one at a time, closed at first) as a grid of 36px numbers, filled when in the list,
+outlined when not, at most 200 then "and N more", with a 12px legend. Opened from an episode row,
+the season pill carries a 7px Series square, the episode `--series-soft` with a 2px `--series`
+ring, and while no season is open a line reads "Opened from S1 · E3". Entries without an episode
+number are counted in a line of their own.
+
 Marks (#298): every film and series row (search results and group entries) ends with three round
 icon buttons, Seen (check), Thumbs up and Thumbs down, `--control-h` square (46px on phones, 42px
 from 768px) with `aria-pressed`. A pressed control has the `--accent-soft` fill; tapping it again

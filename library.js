@@ -690,6 +690,7 @@
           h('span', { class: 'film-rating', role: 'img', 'aria-label': `TMDB rating ${rating} out of 10` }, icon('star'), h('b', { text: rating }), h('span', { text: 'TMDB' })),
           h('span', { class: 'film-sep', 'aria-hidden': 'true' })] : null, marksEl));
       if (f?.overview) body.append(h('p', { class: 'film-overview is-clamped', text: f.overview }));
+      if (series && hasInList(f)) body.append(seriesInList(ctx, f, card.stack.length === 0 ? answer.context : null));
       if (f?.similar?.length) body.append(similarFilms(ctx, f));
       if (f) {
         body.append(h('div', { class: 'film-source' },
@@ -773,6 +774,59 @@
     card.el.querySelector('.film-body')?.prepend(note);
     setTimeout(() => note.remove(), 5000);
   };
+
+  // In your list (#391): the series' seasons as pills, one open at a time with its episode grid. The context marks the
+  // season and episode of the row the card was opened from; a similar series opened in place has none.
+  const hasInList = (f) => !!f?.inList && (f.inList.episodes > 0 || f.inList.unnumbered > 0);
+  const seasonLabel = (n) => (n === 0 ? 'Specials' : `S${n}`);
+
+  function seriesInList(ctx, f, context) {
+    const { h } = ctx;
+    const list = f.inList;
+    const here = context?.season != null ? context : null;
+    const panel = h('div', { class: 'series-panel' });
+    const line = here ? h('p', { class: 'series-context' }, 'Opened from ',
+      h('b', { text: [seasonLabel(here.season), here.episode != null ? `E${here.episode}` : ''].filter(Boolean).join(' · ') })) : null;
+    const pills = list.seasons.map((s) => {
+      const pill = h('button', {
+        class: s.count > 0 ? 'series-season' : 'series-season is-absent', type: 'button', 'aria-expanded': 'false',
+        onclick: () => openSeason(pill, s),
+      }, here?.season === s.season ? h('span', { class: 'series-here', 'aria-hidden': 'true' }) : null,
+      h('b', { text: seasonLabel(s.season) }), h('span', { text: s.total != null ? `${s.count}/${s.total}` : String(s.count) }));
+      return pill;
+    });
+    // A pill opens its episodes below and closes the one open before; tapping the open pill closes it.
+    function openSeason(pill, s) {
+      const open = pill.getAttribute('aria-expanded') !== 'true';
+      for (const p of pills) p.setAttribute('aria-expanded', String(open && p === pill));
+      panel.replaceChildren(...(open ? seasonEpisodes(ctx, s, here?.season === s.season ? here.episode : null) : []));
+      if (line) line.hidden = open;
+    }
+    const total = f.episodeCount > 0 ? `${list.episodes} of ${f.episodeCount} episodes` : `${list.episodes} ${list.episodes === 1 ? 'episode' : 'episodes'}`;
+    return h('section', { class: 'film-section series-section' },
+      h('div', { class: 'film-section-head' },
+        h('h3', { class: 'film-section-title', text: 'In your list' }),
+        h('span', { class: 'film-section-count', text: total })),
+      pills.length ? h('div', { class: 'series-rail', role: 'group', 'aria-label': 'Seasons' }, pills) : null,
+      panel, line,
+      list.unnumbered > 0 ? h('p', { class: 'series-note', text: `${list.unnumbered} ${list.unnumbered === 1 ? 'entry' : 'entries'} without an episode number` }) : null);
+  }
+
+  // Every number up to TMDB's total plus those the list has beyond it; at most 200, the rest as "and N more".
+  function seasonEpisodes(ctx, s, episode) {
+    const { h } = ctx;
+    const have = new Set(s.episodes);
+    const all = [...new Set([...Array.from({ length: Math.min(s.total || 0, 200) }, (_, i) => i + 1), ...s.episodes])].sort((a, b) => a - b);
+    const shown = all.slice(0, 200);
+    const more = Math.max(all.length + s.count - s.episodes.length, s.total || 0) - shown.length;
+    const items = shown.map((n) => h('li', {
+      class: ['series-episode', have.has(n) ? '' : 'is-absent', n === episode ? 'is-here' : ''].filter(Boolean).join(' '),
+      text: String(n), 'aria-label': `Episode ${n}${have.has(n) ? '' : ', not in your list'}`,
+    }));
+    if (more > 0) items.push(h('li', { class: 'series-more', text: `and ${more} more` }));
+    return [h('ol', { class: 'series-episodes', 'aria-label': `${seasonLabel(s.season)} episodes` }, items),
+      h('p', { class: 'series-legend' }, h('span', { class: 'series-key' }), 'In your list', h('span', { class: 'series-key is-absent' }), 'Not in your list')];
+  }
 
   // Similar films (#368) in the API's order, those in the list first; only those open a card.
   function similarFilms(ctx, f) {

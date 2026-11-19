@@ -57,6 +57,62 @@ public class LibrarySeriesCardUiTests
   }
 
   [Fact]
+  public void Seasons_ArePills_OneOpenAtATime()
+  {
+    var card = Card();
+    Assert.Contains("class: s.count > 0 ? 'series-season' : 'series-season is-absent', type: 'button', 'aria-expanded': 'false',", card);
+    Assert.Contains("const seasonLabel = (n) => (n === 0 ? 'Specials' : `S${n}`);", card);
+    Assert.Contains("s.total != null ? `${s.count}/${s.total}` : String(s.count)", card);
+    // Opening a pill closes every other; the open one closes again.
+    Assert.Contains("for (const p of pills) p.setAttribute('aria-expanded', String(open && p === pill));", card);
+    Assert.Contains("panel.replaceChildren(...(open ? seasonEpisodes(ctx, s, here?.season === s.season ? here.episode : null) : []));", card);
+    // The episodes are list items, not buttons, cut at 200 with "and N more", and a legend below.
+    Assert.Contains("const shown = all.slice(0, 200);", card);
+    Assert.Contains("const items = shown.map((n) => h('li', {", card);
+    Assert.Contains("h('li', { class: 'series-more', text: `and ${more} more` })", card);
+    Assert.Contains("h('p', { class: 'series-legend' }", card);
+    Assert.Contains("`${list.unnumbered} ${list.unnumbered === 1 ? 'entry' : 'entries'} without an episode number`", card);
+    Assert.Contains("f.episodeCount > 0 ? `${list.episodes} of ${f.episodeCount} episodes`", card);
+    var css = Read("library.css");
+    Assert.Contains(".series-season { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--surface-2);", css);
+    Assert.Contains(".series-episodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 6px;", css);
+    Assert.Contains(".series-episode { display: grid; place-items: center; height: 36px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; font-weight: 650; font-variant-numeric: tabular-nums; }", css);
+    Assert.Contains(".series-season.is-absent, .series-episode.is-absent, .series-key.is-absent { background: none; box-shadow: inset 0 0 0 1.5px var(--line-strong); color: var(--ink-3); }", css);
+    Assert.Contains("In your list (#391):", Read("DESIGN.md"));
+  }
+
+  [Fact]
+  public void ContextLine_OnlyFromAnEpisodeRow()
+  {
+    var card = Card();
+    // Only the row the card was opened from carries a context; a similar series opened in place has none.
+    Assert.Contains("seriesInList(ctx, f, card.stack.length === 0 ? answer.context : null)", card);
+    Assert.Contains("const here = context?.season != null ? context : null;", card);
+    Assert.Contains("const line = here ? h('p', { class: 'series-context' }, 'Opened from ',", card);
+    Assert.Contains("here?.season === s.season ? h('span', { class: 'series-here', 'aria-hidden': 'true' }) : null,", card);
+    Assert.Contains("n === episode ? 'is-here' : ''", card);
+    // The line shows only while no season is open.
+    Assert.Contains("if (line) line.hidden = open;", card);
+    var css = Read("library.css");
+    Assert.Contains(".series-episode.is-here { background: var(--series-soft); box-shadow: inset 0 0 0 2px var(--series); }", css);
+    Assert.Contains(".series-here { width: 7px; height: 7px;", css);
+    Assert.Contains(".series-context, .series-note { margin: 0; font-size: 13px; color: var(--ink-2); }", css);
+  }
+
+  [Fact]
+  public void Section_HiddenWithoutInList()
+  {
+    var card = Card();
+    Assert.Contains("const hasInList = (f) => !!f?.inList && (f.inList.episodes > 0 || f.inList.unnumbered > 0);", card);
+    Assert.Contains("if (series && hasInList(f)) body.append(seriesInList(", card);
+    // Between the overview and the similar series.
+    var overview = card.IndexOf("if (f?.overview) body.append(", StringComparison.Ordinal);
+    var section = card.IndexOf("if (series && hasInList(f))", StringComparison.Ordinal);
+    var similar = card.IndexOf("if (f?.similar?.length) body.append(similarFilms(ctx, f));", StringComparison.Ordinal);
+    Assert.True(overview < section && section < similar);
+  }
+
+  [Fact]
   public void FilmCard_Unchanged()
   {
     var card = Card();
