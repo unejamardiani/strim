@@ -79,7 +79,7 @@ public class EditorShowFilterTests
     var run = Between(js, "async function runSearch(ed)", "function renderSearchResults(ed)");
     // On hides switched-off groups in the search too; All and Off list every match.
     Assert.Contains("const hideDisabled = ed.filter.show === 'kept';", run);
-    Assert.Contains("body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled], hideDisabled },", run);
+    Assert.Contains("body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled], hideDisabled, lang: lang || null },", run);
     // A cached result only counts when it was fetched with the same flag.
     Assert.Contains("ed.search.query === query && ed.search.hideDisabled === hideDisabled", run);
     Assert.Contains("hiddenCount: hideDisabled && Number.isInteger(result.hiddenCount) ? result.hiddenCount : 0,", run);
