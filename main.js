@@ -1131,6 +1131,9 @@ function showLibrary(playlist) {
     filmCard: (params, signal) => api(`/playlists/${playlist.id}/library/film-card?${new URLSearchParams(params)}`, { signal }),
     // Picks the TMDB film of an entry, or clears the pick with a null id (#368); api() sends the CSRF token.
     setFilmMatch: (body) => api('/marks/film-match', { method: 'PUT', body }),
+    // The series card (#390) and its match, the same way.
+    seriesCard: (params, signal) => api(`/playlists/${playlist.id}/library/series-card?${new URLSearchParams(params)}`, { signal }),
+    setSeriesMatch: (body) => api('/marks/series-match', { method: 'PUT', body }),
   });
 }
 

@@ -18,10 +18,10 @@ public class LibraryFilmCardUiTests
   {
     var card = Card();
     Assert.Contains("const opensCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Movies' && !!e.markKey;", card);
-    Assert.Contains("if (!opensCard(ctx, e)) return ctx.h('span', { class: 'search-hit-name', text: e.name });", card);
+    Assert.Contains("if (!opens(ctx, e)) return ctx.h('span', { class: 'search-hit-name', text: e.name });", card);
     Assert.Contains("const params = { name: film.name, group: film.group, type: 'Movies', cacheKey: film.cacheKey, includeDisabled: includeOff, hideSeen };", card);
     Assert.Contains("answer = await ctx.filmCard(params, own.signal);", card);
-    Assert.Contains("h('span', { class: 'sr-only', role: 'status', text: 'Loading film details' })", card);
+    Assert.Contains("h('span', { class: 'sr-only', role: 'status', text: `Loading ${word(entry)} details` })", card);
     var main = Read("main.js");
     Assert.Contains("state.tmdbEnabled = config.status === 'fulfilled' && config.value?.tmdbEnabled === true;", main);
     Assert.Contains("tmdbEnabled: state.tmdbEnabled,", main);
@@ -71,14 +71,14 @@ public class LibraryFilmCardUiTests
     Assert.Contains("notFound: 'TMDB has no film with this title. Your marks still work.',", card);
     Assert.Contains("failed: 'The film details could not be loaded.',", card);
     // The #298 controls and their shared state, so a change in the card repaints the rows.
-    Assert.Contains("const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: 'Movies', markKey: entry.markKey, ...given });", card);
-    Assert.Contains("if (answer?.tmdbData) body.append(filmCredit(ctx));", card);
+    Assert.Contains("const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given });", card);
+    Assert.Contains("if (answer?.tmdbData) body.append(filmCredit(ctx, entry));", card);
     // The approved layout: a glass Close, a kicker, the icon-only marks capsule and a grid of candidate tiles.
     Assert.Contains("h('button', { class: 'icon-btn film-glass', type: 'button', 'aria-label': 'Close'", card);
     Assert.Contains("f.year ? `Film · ${f.year}` : 'Film'", card);
     Assert.DoesNotContain("b.append(label)", card);
     Assert.Contains(".film-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;", Read("library.css"));
-    Assert.Contains("the mark controls and, for films, the name, which opens the film card.", Read("DESIGN.md"));
+    Assert.Contains("the mark controls and, for films and series, the name, which opens the film or series card.", Read("DESIGN.md"));
   }
 
   [Fact]
@@ -118,11 +118,11 @@ public class LibraryFilmCardUiTests
   {
     var card = Card();
     Assert.Contains("h('button', { class: 'film-tile', type: 'button', onclick: () => setMatch(ctx, c.id) }", card);
-    Assert.Contains("h('button', { class: 'film-unmatch', type: 'button', onclick: () => setMatch(ctx, null) }, 'Not this film')", card);
-    Assert.Contains("await ctx.setFilmMatch({ name: film.name, tmdbId });", card);
+    Assert.Contains("h('button', { class: 'film-unmatch', type: 'button', onclick: () => setMatch(ctx, null) }, `Not this ${word(entry)}`)", card);
+    Assert.Contains("else await ctx.setFilmMatch({ name: film.name, tmdbId });", card);
     Assert.Contains("renderFilm(ctx, before);", card);
-    Assert.Contains("cardToast(ctx)(`The film was not changed. ${err.message || ''}`.trim(), { error: true });", card);
-    Assert.Contains("'Strim finds only this film for the title.'", card);
+    Assert.Contains("cardToast(ctx)(`The ${word(film)} was not changed. ${err.message || ''}`.trim(), { error: true });", card);
+    Assert.Contains("`Strim finds only this ${word(film)} for the title.`", card);
     Assert.Contains("setFilmMatch: (body) => api('/marks/film-match', { method: 'PUT', body }),", Read("main.js"));
   }
 }
