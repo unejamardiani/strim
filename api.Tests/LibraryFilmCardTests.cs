@@ -221,6 +221,128 @@ public sealed class LibraryFilmCardTests
     Assert.Equal(-1, marks.GetProperty("rating").GetInt32());
   }
 
+  // "Films Old" is switched off on the saved playlist, so a viewer never sees Speed.
+  private const string FilmList = """
+    #EXTM3U
+    #EXTINF:-1 group-title="Films",The Matrix (1999)
+    http://line.example/movie/u/p/30.mkv
+    #EXTINF:-1 group-title="Films Old",Speed (1994)
+    http://line.example/movie/u/p/31.mkv
+    #EXTINF:-1 group-title="Films",DE - Heat (1995) 4K
+    http://line.example/movie/u/p/32.mkv
+    """;
+
+  private const string MatrixWithSimilar = """
+    {"id":603,"title":"The Matrix","release_date":"1999-03-31","genres":[],"similar":{"results":[
+      {"id":3,"title":"Speed","release_date":"1994-06-09"},{"id":5,"title":"Heat","release_date":"1995-12-15"}]}}
+    """;
+
+  private static Task<TestHost> StartViewerHostAsync() =>
+    TestHost.StartAsync(Token, request => request.AbsolutePath switch
+    {
+      "/3/search/movie" => Json($$"""{"results":[{{Matrix}}]}"""),
+      "/3/movie/603" => Json(MatrixWithSimilar),
+      _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+    }, ["Films Old"], FilmList);
+
+  [Fact]
+  public async Task Viewer_GetsCardWithOwnMarks()
+  {
+    await using var host = await StartViewerHostAsync();
+    var viewer = await host.ViewerAsync("card-viewer");
+    await MarkAsync(host.Client, "The Matrix (1999)", seen: true, rating: 1);
+
+    var unmarked = (await host.CardAsync(viewer, "The Matrix (1999)")).GetProperty("marks");
+    Assert.False(unmarked.GetProperty("seen").GetBoolean());
+    Assert.Equal(0, unmarked.GetProperty("rating").GetInt32());
+
+    await MarkAsync(viewer, "The Matrix (1999) HD", seen: false, rating: -1);
+    var card = await host.CardAsync(viewer, "The Matrix (1999)");
+    Assert.Equal("matched", card.GetProperty("status").GetString());
+    Assert.False(card.GetProperty("marks").GetProperty("seen").GetBoolean());
+    Assert.Equal(-1, card.GetProperty("marks").GetProperty("rating").GetInt32());
+    // The owner's card keeps the owner's marks.
+    Assert.Equal(1, (await host.CardAsync(host.Client, "The Matrix (1999)")).GetProperty("marks").GetProperty("rating").GetInt32());
+  }
+
+  [Fact]
+  public async Task Viewer_Similar_CountsVisibleGroupsOnly()
+  {
+    await using var host = await StartViewerHostAsync();
+    var viewer = await host.ViewerAsync("similar-viewer");
+    var viewerKey = await host.OpenLibraryAsync(viewer);
+    var ownerKey = await host.OpenLibraryAsync(host.Client);
+
+    // Even when asking for switched-off groups, a viewer finds only the films of the visible groups.
+    var seen = InList(await host.CardAsync(viewer, "The Matrix (1999)", $"&libraryKey={viewerKey}&includeDisabled=true"));
+    Assert.Equal(["Heat"], seen);
+    Assert.Equal(["Speed", "Heat"],
+      InList(await host.CardAsync(host.Client, "The Matrix (1999)", $"&libraryKey={ownerKey}&includeDisabled=true")));
+
+    // Another user's Library key finds nothing in the list.
+    Assert.Empty(InList(await host.CardAsync(viewer, "The Matrix (1999)", $"&libraryKey={ownerKey}")));
+  }
+
+  [Fact]
+  public async Task Viewer_StoredId_IsTheViewersOwn()
+  {
+    await using var host = await StartViewerHostAsync();
+    var viewer = await host.ViewerAsync("stored-viewer");
+    await MarkAsync(host.Client, "The Matrix (1999)", seen: true, rating: 1);
+    host.SetFilmDbId(host.UserName, "604");
+
+    // The owner's stored id is never used for the viewer: the viewer's card searches by title and year.
+    await host.CardAsync(viewer, "The Matrix (1999)");
+    Assert.Equal(["/3/search/movie", "/3/movie/603"], host.TmdbRequests.Select(u => u.AbsolutePath));
+
+    await MarkAsync(viewer, "The Matrix (1999)", seen: true, rating: 0);
+    host.SetFilmDbId("stored-viewer", "605");
+    host.TmdbRequests.Clear();
+    await host.CardAsync(viewer, "The Matrix (1999)");
+    Assert.Equal("/3/movie/605", Assert.Single(host.TmdbRequests).AbsolutePath);
+  }
+
+  [Fact]
+  public async Task RevokedViewer_404()
+  {
+    await using var host = await StartViewerHostAsync();
+    var viewer = await host.ViewerAsync("revoked-viewer");
+    var key = await host.OpenLibraryAsync(viewer);
+    var path = host.CardPath("The Matrix (1999)") + $"&libraryKey={key}";
+    Assert.Equal(HttpStatusCode.OK, (await viewer.Http.GetAsync(path)).StatusCode);
+
+    var shares = JsonDocument.Parse(await host.Client.Http.GetStringAsync($"/api/playlists/{host.PlaylistId}/shares")).RootElement;
+    var shareId = Assert.Single(shares.EnumerateArray().ToList()).GetProperty("id").GetGuid();
+    Assert.Equal(HttpStatusCode.NoContent,
+      (await host.Client.SendAsync(HttpMethod.Delete, $"/api/playlists/{host.PlaylistId}/shares/{shareId}")).StatusCode);
+    var requests = host.TmdbRequests.Count;
+
+    Assert.Equal(HttpStatusCode.NotFound, (await viewer.Http.GetAsync(path)).StatusCode);
+    Assert.Equal(requests, host.TmdbRequests.Count);
+  }
+
+  [Fact]
+  public async Task Viewer_Card_ShowsGroup()
+  {
+    await using var host = await StartViewerHostAsync();
+    var viewer = await host.ViewerAsync("group-viewer");
+    var key = await host.OpenLibraryAsync(viewer);
+
+    var card = await host.CardAsync(viewer, "The Matrix (1999)", $"&libraryKey={key}", group: "Films");
+
+    Assert.Equal("Films", card.GetProperty("group").GetString());
+    var heat = Assert.Single(card.GetProperty("film").GetProperty("similar").EnumerateArray(), s => s.GetProperty("inList").GetBoolean());
+    Assert.Equal("Films", heat.GetProperty("group").GetString());
+    Assert.Equal("DE - Heat (1995) 4K", heat.GetProperty("entry").GetString());
+  }
+
+  private static List<string?> InList(JsonElement card) =>
+    card.GetProperty("film").GetProperty("similar").EnumerateArray()
+      .Where(s => s.GetProperty("inList").GetBoolean()).Select(s => s.GetProperty("title").GetString()).ToList();
+
+  private static async Task MarkAsync(ApiClient client, string name, bool seen, int rating) =>
+    Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(HttpMethod.Put, "/api/marks", new { name, kind = "film", seen, rating })).StatusCode);
+
   private static async Task<string> SearchBodyAsync(TestHost host)
   {
     var analyzed = await host.Client.PostAsync("/api/playlist/analyze", new { rawText = TestPlaylists.Mixed });
@@ -246,10 +368,12 @@ public sealed class LibraryFilmCardTests
     public Guid PlaylistId { get; private set; }
     public string UserName { get; } = "card-owner";
 
-    public static async Task<TestHost> StartAsync(string? token, Func<Uri, HttpResponseMessage> tmdb)
+    public static async Task<TestHost> StartAsync(
+      string? token, Func<Uri, HttpResponseMessage> tmdb, string[]? disabledGroups = null, string? upstream = null)
     {
       var requests = new ConcurrentQueue<Uri>();
       var root = new StrimAppFactory();
+      if (upstream is not null) root.UpstreamPlaylists[StrimAppFactory.UpstreamUrl] = upstream;
       var app = root.WithWebHostBuilder(builder =>
       {
         builder.ConfigureAppConfiguration((_, config) =>
@@ -262,7 +386,7 @@ public sealed class LibraryFilmCardTests
       var created = await host.Client.PostAsync("/api/playlists", new
       {
         name = "Living room", sourceUrl = StrimAppFactory.UpstreamUrl, sourceName = "provider",
-        disabledGroups = Array.Empty<string>(), totalChannels = 4, groupCount = 2,
+        disabledGroups = disabledGroups ?? [], totalChannels = 4, groupCount = 2,
       });
       created.EnsureSuccessStatusCode();
       host.PlaylistId = JsonDocument.Parse(await created.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
@@ -278,6 +402,42 @@ public sealed class LibraryFilmCardTests
       var response = await Client.Http.GetAsync(CardPath(name, group, type));
       Assert.Equal(HttpStatusCode.OK, response.StatusCode);
       return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
+    }
+
+    public async Task<JsonElement> CardAsync(ApiClient client, string name, string query = "", string group = "Films")
+    {
+      var response = await client.Http.GetAsync(CardPath(name, group) + query);
+      Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+      return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
+    }
+
+    /// <summary>A new user who accepted the owner's invitation to the playlist.</summary>
+    public async Task<ApiClient> ViewerAsync(string userName)
+    {
+      var invited = await Client.PostAsync($"/api/playlists/{PlaylistId}/shares", new { label = "Guest" });
+      Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
+      var token = JsonDocument.Parse(await invited.Content.ReadAsStringAsync()).RootElement.GetProperty("inviteToken").GetString();
+      var viewer = new ApiClient(Factory.CreateClient());
+      await viewer.RegisterAsync(userName);
+      Assert.Equal(HttpStatusCode.OK, (await viewer.PostAsync("/api/shares/accept", new { token })).StatusCode);
+      return viewer;
+    }
+
+    public async Task<string> OpenLibraryAsync(ApiClient client)
+    {
+      var opened = await client.PostAsync($"/api/playlists/{PlaylistId}/library/open", null);
+      Assert.Equal(HttpStatusCode.OK, opened.StatusCode);
+      return JsonDocument.Parse(await opened.Content.ReadAsStringAsync()).RootElement.GetProperty("libraryKey").GetString()!;
+    }
+
+    /// <summary>Stores a TMDB id on the user's single mark; the id has no route here.</summary>
+    public void SetFilmDbId(string userName, string filmDbId)
+    {
+      using var scope = Factory.Services.CreateScope();
+      var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+      var userId = db.Users.Single(u => u.UserName == userName).Id;
+      Assert.Single(db.TitleMarks.Where(m => m.UserId == userId).ToList()).FilmDbId = filmDbId;
+      db.SaveChanges();
     }
 
     /// <summary>Marks a film through PUT /api/marks; the TMDB id has no route yet (S5), so it is set in the database.</summary>
