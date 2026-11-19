@@ -239,6 +239,10 @@
 .film-load .film-title { margin: 0; font-size: 26px; }
 .film-state-title { margin: 0; font-size: 26px; letter-spacing: -0.035em; }
 .film-meta { margin: 10px 0 0; font-size: 14px; font-weight: 550; color: var(--ink-2); }
+/* Series card (#390): the film card with the Series square and a facts line under the genres. */
+.film-poster-empty.is-series { background: linear-gradient(160deg, var(--series-soft), var(--surface-3)); }
+.film-poster-empty.is-series::after { border-radius: 3px; background: var(--series); transform: none; }
+.series-facts { margin: 4px 0 0; font-size: 13px; font-weight: 550; color: var(--ink-3); }
 .film-actions { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; }
 .film-sep { width: 1px; height: 22px; background: var(--line-strong); }
 .film-rating { display: inline-flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; }

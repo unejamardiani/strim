@@ -133,11 +133,11 @@ playlist card's Library action opens it; Edit groups in its head goes back to th
 
 Read-only: nothing in the Library changes the playlist or what the player link serves. It has no
 switches, no bulk action, no Save and no dock; results and entries are text, not controls, except
-the mark controls and, for films, the name, which opens the film card.
+the mark controls and, for films and series, the name, which opens the film or series card.
 
 Film card (#367): only with TMDB on (`/api/config`), a film row's name is a button and the whole row
-its tap target (hover tint, 16px chevron from 768px, `.is-open` tint and 3px `--accent` inset). Series,
-channels and, with TMDB off, every row stay text and nothing about TMDB shows. One `<dialog>`: the
+its tap target (hover tint, 16px chevron from 768px, `.is-open` tint and 3px `--accent` inset).
+Channels and, with TMDB off, every row stay text and nothing about TMDB shows. One `<dialog>`: the
 app's sheet below 1100px (bottom sheet with handle below 600px, 520px centred from 600px), from 1100px
 a 420px side pane beside the list that does not block the page. A glass Close circle floats top right.
 It loads once on open (a skeleton poster, the entry name and the marks). The stage is centred: 2:3
@@ -157,6 +157,14 @@ previous card and its scroll; device Back still closes the whole card. Other til
 candidates are buttons: a tap stores the match and reloads the card. A matched card ends with "In
 your list as" (entry, group) and "Not this film", which clears the match. A failed request brings the
 previous card back with an error notice.
+
+Series card (#390): with TMDB on, a series row's name opens the same card from `series-card`, and
+another episode row swaps it in place. Everything is the film card's except: the kicker carries the
+Series square, "Series · 2019–2023", "Series · since 2019" while it runs or "Series · 2019"; under the
+genres a facts line (13px/550, `--ink-3`) joins state, seasons, episodes and network with " · ",
+leaving out what is missing; a missing poster shows the Series square on `--series-soft`; the marks
+set the series mark, so every row of the series repaints; the texts say "series" for "film"
+("Similar series", "Which series is it?", "Not this series", "Series data and posters: TMDB").
 
 Marks (#298): every film and series row (search results and group entries) ends with three round
 icon buttons, Seen (check), Thumbs up and Thumbs down, `--control-h` square (46px on phones, 42px

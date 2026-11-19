@@ -536,16 +536,30 @@
   const answerMarkKey = new WeakMap();
   const wide = window.matchMedia('(min-width: 1100px)');
   const opensCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Movies' && !!e.markKey;
+  // A series row opens the same card with the series answer (#390); words and calls follow the entry's type.
+  const opensSeriesCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Series' && !!e.markKey;
+  const opens = (ctx, e) => opensCard(ctx, e) || opensSeriesCard(ctx, e);
+  const word = (film) => (film.type === 'Series' ? 'series' : 'film');
+  const subject = (answer) => answer?.film || answer?.series || null;
   const FILM_NOTES = {
     notFound: 'TMDB has no film with this title. Your marks still work.',
     notApplicable: 'There is no film card for this entry.',
     unavailable: 'TMDB is not answering right now.',
     failed: 'The film details could not be loaded.',
   };
+  const notes = (film) => (film.type === 'Series'
+    ? Object.fromEntries(Object.entries(FILM_NOTES).map(([k, v]) => [k, v.replace('film', 'series')])) : FILM_NOTES);
+  const seriesYears = (s) => (!s.firstYear ? 'Series'
+    : s.state === 'returning' && !s.lastYear ? `Series · since ${s.firstYear}`
+      : s.lastYear && s.lastYear !== s.firstYear ? `Series · ${s.firstYear}–${s.lastYear}` : `Series · ${s.firstYear}`);
+  const STATES = { returning: 'Returning', ended: 'Ended', cancelled: 'Cancelled', upcoming: 'Upcoming' };
+  const seriesFacts = (s) => [STATES[s.state],
+    s.seasonCount ? `${s.seasonCount} ${s.seasonCount === 1 ? 'season' : 'seasons'}` : '',
+    s.episodeCount ? `${s.episodeCount} ${s.episodeCount === 1 ? 'episode' : 'episodes'}` : '', s.network].filter(Boolean).join(' · ');
 
   function filmName(ctx, e, group, cacheKey) {
-    if (!opensCard(ctx, e)) return ctx.h('span', { class: 'search-hit-name', text: e.name });
-    const film = { name: e.name, group: group || '', cacheKey, markKey: e.markKey, off: e.enabled === false };
+    if (!opens(ctx, e)) return ctx.h('span', { class: 'search-hit-name', text: e.name });
+    const film = { name: e.name, group: group || '', cacheKey, markKey: e.markKey, off: e.enabled === false, type: opensSeriesCard(ctx, e) ? 'Series' : 'Movies' };
     const button = ctx.h('button', {
       class: 'search-hit-name library-film-open', type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
       dataset: { name: film.name, group: film.group }, text: e.name, onclick: () => openFilm(ctx, film, button),
@@ -553,7 +567,7 @@
     return button;
   }
 
-  const filmChevron = (ctx, e) => (opensCard(ctx, e) ? ctx.h('span', { class: 'library-film-chevron' }, ctx.icon('chevron')) : null);
+  const filmChevron = (ctx, e) => (opens(ctx, e) ? ctx.h('span', { class: 'library-film-chevron' }, ctx.icon('chevron')) : null);
 
   function markOpen(ctx, button) {
     for (const b of ctx.root.querySelectorAll('.library-film-open')) {
@@ -618,14 +632,15 @@
     const { film } = card;
     const seq = ++card.seq;
     card.pending?.abort();
-    const key = JSON.stringify([film.name, film.group, includeOff, hideSeen]);
+    const key = JSON.stringify([film.name, film.group, includeOff, hideSeen, film.type]);
     let answer = answers.get(key);
     if (!answer) {
       renderFilm(ctx, null);
       const own = (card.pending = new AbortController());
       try {
         const params = { name: film.name, group: film.group, type: 'Movies', cacheKey: film.cacheKey, includeDisabled: includeOff, hideSeen };
-        answer = await ctx.filmCard(params, own.signal);
+        if (film.type === 'Series') answer = await ctx.seriesCard({ ...params, type: 'Series' }, own.signal);
+        else answer = await ctx.filmCard(params, own.signal);
       } catch {
         if (seq === card.seq) renderFilm(ctx, { status: 'failed' });
         return;
@@ -641,10 +656,11 @@
     const { h, icon } = ctx;
     const entry = card.film;
     const scroll = card.el.querySelector('.film-scroll');
-    const f = answer?.status === 'matched' ? answer.film : null;
+    const f = answer?.status === 'matched' ? subject(answer) : null;
+    const series = entry.type === 'Series';
     const choose = answer?.status === 'choose' && answer.candidates?.length > 0;
     const title = h('h2', { class: choose ? 'film-state-title' : 'film-title', id: 'film-card-title', tabindex: '-1',
-      text: choose ? 'Which film is it?' : f?.title || entry.name });
+      text: choose ? `Which ${word(entry)} is it?` : f?.title || entry.name });
     card.answer = answer;
     const marksEl = cardMarks(ctx, entry, answer);
     const body = h('div', { class: 'film-body' });
@@ -652,22 +668,24 @@
     if (!answer) {
       top = h('div', { class: 'film-load' }, h('div', { class: 'film-poster skel', 'aria-hidden': 'true' }), title,
         h('span', { class: 'skel skel-line', 'aria-hidden': 'true' }), marksEl,
-        h('span', { class: 'sr-only', role: 'status', text: 'Loading film details' }));
+        h('span', { class: 'sr-only', role: 'status', text: `Loading ${word(entry)} details` }));
     } else if (choose) {
       // Picking a candidate stores the match (#368) and loads the card again.
       top = h('div', { class: 'film-choose' }, title,
-        h('p', { class: 'film-choose-text', text: `More than one film fits "${entry.name}". Pick yours and Strim remembers it.` }),
+        h('p', { class: 'film-choose-text', text: `More than one ${word(entry)} fits "${entry.name}". Pick yours and Strim remembers it.` }),
         h('ul', { class: 'film-grid' }, answer.candidates.map((c) => h('li', null, h('button', { class: 'film-tile', type: 'button', onclick: () => setMatch(ctx, c.id) },
-          poster(ctx, c.posterUrl, '', 'film-tile-poster'),
+          poster(ctx, c.posterUrl, '', 'film-tile-poster', entry.type),
           h('span', { class: 'film-tile-title', text: c.title || entry.name }),
           h('span', { class: 'film-tile-meta', text: c.year ? String(c.year) : 'Year unknown' }))))),
         marksEl);
     } else {
       const rating = f?.rating > 0 ? f.rating.toFixed(1) : '';
       const meta = f ? (f.genres || []).slice(0, 3).join(' · ') : entry.group;
-      top = h('div', { class: 'film-stage' }, filmBackdrop(ctx, f?.posterUrl), poster(ctx, f?.posterUrl, `Poster of ${title.textContent}`, 'film-poster'),
-        f ? h('p', { class: 'film-kicker', dataset: { type: 'Movies' } }, h('span', { class: 'dot', 'aria-hidden': 'true' }), f.year ? `Film · ${f.year}` : 'Film') : null,
-        title, meta ? h('p', { class: 'film-meta', text: meta }) : null,
+      const facts = f && series ? seriesFacts(f) : '';
+      top = h('div', { class: 'film-stage' }, filmBackdrop(ctx, f?.posterUrl), poster(ctx, f?.posterUrl, `Poster of ${title.textContent}`, 'film-poster', entry.type),
+        f && series ? h('p', { class: 'film-kicker', dataset: { type: 'Series' } }, h('span', { class: 'dot', 'aria-hidden': 'true' }), seriesYears(f))
+          : f ? h('p', { class: 'film-kicker', dataset: { type: 'Movies' } }, h('span', { class: 'dot', 'aria-hidden': 'true' }), f.year ? `Film · ${f.year}` : 'Film') : null,
+        title, meta ? h('p', { class: 'film-meta', text: meta }) : null, facts ? h('p', { class: 'series-facts', text: facts }) : null,
         h('div', { class: 'film-actions' }, rating ? [
           h('span', { class: 'film-rating', role: 'img', 'aria-label': `TMDB rating ${rating} out of 10` }, icon('star'), h('b', { text: rating }), h('span', { text: 'TMDB' })),
           h('span', { class: 'film-sep', 'aria-hidden': 'true' })] : null, marksEl));
@@ -676,17 +694,17 @@
       if (f) {
         body.append(h('div', { class: 'film-source' },
           h('p', null, 'In your list as', h('b', { text: entry.name }), entry.group, entry.off ? h('span', { class: 'search-badge off', text: 'Off' }) : null),
-          h('button', { class: 'film-unmatch', type: 'button', onclick: () => setMatch(ctx, null) }, 'Not this film')));
+          h('button', { class: 'film-unmatch', type: 'button', onclick: () => setMatch(ctx, null) }, `Not this ${word(entry)}`)));
       }
       if (!f) {
         const failed = answer.status === 'failed';
         const retry = failed || answer.status === 'unavailable';
         body.append(h('div', { class: failed ? 'notice error' : 'notice', role: failed ? 'alert' : null },
-          h('p', { text: FILM_NOTES[answer.status === 'choose' ? 'notFound' : answer.status] || FILM_NOTES.failed }),
+          h('p', { text: notes(entry)[answer.status === 'choose' ? 'notFound' : answer.status] || notes(entry).failed }),
           retry ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadFilm(ctx) }, 'Try again') : null));
       }
     }
-    if (answer?.tmdbData) body.append(filmCredit(ctx));
+    if (answer?.tmdbData) body.append(filmCredit(ctx, entry));
     const prev = card.stack.at(-1);
     card.el.querySelector('.film-card-head').firstElementChild.replaceWith(prev
       ? h('button', { class: 'icon-btn film-glass', type: 'button', 'aria-label': `Back to ${prev.title}`, onclick: () => filmBack(ctx) }, icon('back'))
@@ -722,8 +740,9 @@
   }
 
   // The poster as given by the API, lazy; none or a failed image keeps the same box with the Movies diamond.
-  function poster(ctx, url, alt, cls) {
-    const empty = () => ctx.h('div', { class: `${cls} film-poster-empty`, 'aria-hidden': 'true' });
+  function poster(ctx, url, alt, cls, type) {
+    // A series box (#390) carries the Series square instead of the diamond.
+    const empty = () => ctx.h('div', { class: `${cls} film-poster-empty${type === 'Series' ? ' is-series' : ''}`, 'aria-hidden': 'true' });
     if (!url) return empty();
     const img = ctx.h('img', { class: cls, alt, width: 342, height: 513, loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', src: url });
     img.addEventListener('error', () => img.replaceWith(empty()), { once: true });
@@ -742,7 +761,7 @@
       : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0 };
     if (answer?.marks && !owner) answerMarkKey.set(answer, key);
     const toast = cardToast(ctx);
-    const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: 'Movies', markKey: entry.markKey, ...given });
+    const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given });
     el.classList.add('film-marks');
     if (given.seen !== now.seen || given.rating !== now.rating) syncRows(ctx, entry.markKey, given);
     return el;
@@ -758,11 +777,12 @@
   // Similar films (#368) in the API's order, those in the list first; only those open a card.
   function similarFilms(ctx, f) {
     const { h, icon } = ctx;
-    const rail = h('div', { class: 'film-rail', role: 'group', 'aria-label': 'Similar films', tabindex: '0' }, f.similar.map((s, i) => similarTile(ctx, s, i)));
+    const label = card.film.type === 'Series' ? 'Similar series' : 'Similar films';
+    const rail = h('div', { class: 'film-rail', role: 'group', 'aria-label': label, tabindex: '0' }, f.similar.map((s, i) => similarTile(ctx, s, i)));
     const step = (dir) => rail.scrollBy({ left: dir * rail.clientWidth });
     return h('section', { class: 'film-section' },
       h('div', { class: 'film-section-head' },
-        h('h3', { class: 'film-section-title', text: 'Similar films' }),
+        h('h3', { class: 'film-section-title', text: label }),
         h('span', { class: 'film-section-count', text: `${f.similar.filter((s) => s.inList).length} in your list` }),
         h('span', { class: 'film-rail-nav' },
           h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Previous', onclick: () => step(-1) }, icon('back')),
@@ -773,7 +793,7 @@
   function similarTile(ctx, s, i) {
     const { h, icon } = ctx;
     const off = s.inList && s.enabled === false;
-    const art = h('span', { class: 'film-tile-art' }, poster(ctx, s.posterUrl, '', 'film-tile-poster'),
+    const art = h('span', { class: 'film-tile-art' }, poster(ctx, s.posterUrl, '', 'film-tile-poster', card.film.type),
       off ? h('span', { class: 'film-tile-flag', 'aria-hidden': 'true', text: 'Off' }) : null,
       s.seen ? h('span', { class: 'film-tile-seen', 'aria-hidden': s.inList ? 'true' : null }, icon('check'), s.inList ? null : h('span', { class: 'sr-only', text: 'Seen' })) : null);
     const title = h('span', { class: 'film-tile-title', text: s.title });
@@ -789,9 +809,9 @@
   // The card in place: the current one goes on a stack with its scroll positions; device Back still closes all.
   function openSimilar(ctx, s, i) {
     const scroll = card.el.querySelector('.film-scroll');
-    card.stack.push({ film: card.film, answer: card.answer, title: card.answer.film.title || card.film.name, similar: s, tile: i,
+    card.stack.push({ film: card.film, answer: card.answer, title: subject(card.answer).title || card.film.name, similar: s, tile: i,
       top: scroll.scrollTop, rail: scroll.querySelector('.film-rail')?.scrollLeft || 0 });
-    card.film = { name: s.entry, group: s.group, cacheKey: card.film.cacheKey, markKey: `similar:${s.entry}`, off: s.enabled === false };
+    card.film = { name: s.entry, group: s.group, cacheKey: card.film.cacheKey, markKey: `similar:${s.entry}`, off: s.enabled === false, type: card.film.type };
     // The local key starts from the tile, so Back from a card still loading or failed keeps the tile's Seen.
     if (!marks.has(card.film.markKey)) marks.set(card.film.markKey, { seen: s.seen === true, rating: 0 });
     loadFilm(ctx);
@@ -818,31 +838,32 @@
     const seq = ++card.seq;
     renderFilm(ctx, null);
     try {
-      await ctx.setFilmMatch({ name: film.name, tmdbId });
+      if (film.type === 'Series') await ctx.setSeriesMatch({ name: film.name, tmdbId });
+      else await ctx.setFilmMatch({ name: film.name, tmdbId });
     } catch (err) {
       if (seq !== card.seq) return;
       renderFilm(ctx, before);
-      cardToast(ctx)(`The film was not changed. ${err.message || ''}`.trim(), { error: true });
+      cardToast(ctx)(`The ${word(film)} was not changed. ${err.message || ''}`.trim(), { error: true });
       return;
     }
     if (seq !== card.seq) return;
     for (const k of [...answers.keys()]) if (JSON.parse(k)[0] === film.name) answers.delete(k);
     await loadFilm(ctx);
     // An automatic match cannot be cleared: the card then comes back with the same film.
-    if (tmdbId === null && card.film === film && card.answer?.film && card.answer.film.id === before?.film?.id) {
-      card.el.querySelector('.film-body')?.prepend(ctx.h('div', { class: 'notice', text: 'Strim finds only this film for the title.' }));
+    if (tmdbId === null && card.film === film && subject(card.answer) && subject(card.answer).id === subject(before)?.id) {
+      card.el.querySelector('.film-body')?.prepend(ctx.h('div', { class: 'notice', text: `Strim finds only this ${word(film)} for the title.` }));
     }
   }
 
   // TMDB's logo and notice (#315) with the credit line (#316), only when the card carries TMDB data.
-  function filmCredit(ctx) {
+  function filmCredit(ctx, entry) {
     const { h } = ctx;
     const link = (...kids) => h('a', { href: 'https://www.themoviedb.org', target: '_blank', rel: 'noopener noreferrer' }, ...kids);
     const logo = h('img', { src: '/tmdb-logo.svg', alt: 'TMDB', class: 'tmdb-logo' });
     const logoLink = link(logo);
     logo.addEventListener('error', () => { logoLink.hidden = true; }, { once: true });
     return h('div', { class: 'film-credit' },
-      h('p', { class: 'film-credit-line' }, logoLink, h('span', null, 'Film data and posters: ', link('TMDB'))),
+      h('p', { class: 'film-credit-line' }, logoLink, h('span', null, entry.type === 'Series' ? 'Series data and posters: ' : 'Film data and posters: ', link('TMDB'))),
       h('p', { text: 'This application uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.' }));
   }
 })();
