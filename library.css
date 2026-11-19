@@ -117,6 +117,35 @@
   margin: 12px 18px;
 }
 
+/* My marks (#299): every mark of the user, plain text rows with a Remove button, below Browse. */
+.library-mylist {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.library-mylist > .card {
+  align-self: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.library-mylist > .card > .search-hit-meta {
+  margin: 0;
+  padding: 12px 18px 8px;
+}
+
+.library-mylist .search-hit-name {
+  overflow-wrap: anywhere;
+}
+
+.library-mylist .library-hit > .btn {
+  flex-shrink: 0;
+  min-height: var(--control-h);
+}
+
 /* Wide Library (#288, the editor's 1100px breakpoint): once the groups are loaded the page widens to
    1440px, and an open group shows its entries next to the group list instead of replacing it. */
 @media (min-width: 1100px) {
