@@ -131,6 +131,7 @@ public sealed class PlaylistSearchIndex
   {
     var names = new List<string>();
     var types = new List<PlaylistContentType>();
+    var groups = new List<string>();
     var seenHidden = 0;
     var inGroup = _slots.Select(s => string.Equals(s.GroupKey, groupKey, StringComparison.OrdinalIgnoreCase)).ToArray();
     if (!inGroup.Contains(true)) return new PlaylistGroupEntriesResult(names, 0);
@@ -152,11 +153,17 @@ public sealed class PlaylistSearchIndex
 
         names.Add(name ?? NameAt(c, entry));
         types.Add(type);
+        groups.Add(_slots[Field(entry, 1)].OutputGroup);
       }
     }
 
-    return new PlaylistGroupEntriesResult(names, total) { Types = types, SeenHiddenCount = seenHidden };
+    return new PlaylistGroupEntriesResult(names, total) { Types = types, Groups = groups, SeenHiddenCount = seenHidden };
   }
+
+  /// <summary>Whether <paramref name="groupKey"/> names a group of the list that <paramref name="disabledGroups"/> leaves on.</summary>
+  public bool IsVisibleGroup(string groupKey, ISet<string> disabledGroups) =>
+    _slots.Any(s => string.Equals(s.GroupKey, groupKey, StringComparison.OrdinalIgnoreCase)
+      && !PlaylistProcessor.IsDisabled(disabledGroups, s.GroupTitle, s.ContentType));
 
   /// <summary>Scans of the whole index (searches, group pages, film lookups) since it was built.</summary>
   public int PassCount => _passCount;
@@ -397,6 +404,9 @@ public sealed record PlaylistGroupEntriesResult(IReadOnlyList<string> Names, int
 {
   /// <summary>The content type of each name.</summary>
   public IReadOnlyList<PlaylistContentType> Types { get; init; } = [];
+
+  /// <summary>The group-title the generated file writes for each name.</summary>
+  public IReadOnlyList<string> Groups { get; init; } = [];
 
   /// <summary>Entries of the group the mark filter hid as seen.</summary>
   public int SeenHiddenCount { get; init; }

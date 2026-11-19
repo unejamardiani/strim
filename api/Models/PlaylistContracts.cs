@@ -109,6 +109,15 @@ public record LibrarySearchRequest(
   public PlaylistSearchRequest ToSearch() => new(CacheKey, Query, DisabledGroups, HideDisabled, ContentTypes, Lang);
 }
 
+/// <summary>The playlist-scoped Library search: <see cref="LibrarySearchRequest"/> with a Library key.</summary>
+/// <param name="DisabledGroups">Read for the owner only; a viewer's hidden groups come from the database.</param>
+public record PlaylistLibrarySearchRequest(
+  string? LibraryKey, string? Query, List<string>? DisabledGroups, bool? HideDisabled = null, List<string>? ContentTypes = null,
+  string? Lang = null, bool? HideSeen = null, bool? Liked = null)
+{
+  public PlaylistSearchRequest ToSearch() => new(LibraryKey, Query, DisabledGroups, HideDisabled, ContentTypes, Lang);
+}
+
 /// <summary>A search match with the caller's mark (see <see cref="PlaylistSearchMatchResult"/>).</summary>
 /// <param name="MarkKey">The film or series mark key; null for live channels and names without a title.</param>
 /// <param name="Rating">-1, 0 or 1. Seen and Rating are null when the caller has no mark on the title.</param>
@@ -123,7 +132,8 @@ public record LibrarySearchResponse(
   IReadOnlyList<Api.Services.PlaylistSearchLanguageCount> Languages);
 
 /// <summary>One group entry with the caller's mark; the fields as in <see cref="LibrarySearchMatchResult"/>.</summary>
-public record LibraryGroupEntry(string Name, string ContentType, string? MarkKey, bool? Seen, int? Rating);
+/// <param name="Group">The group-title the player shows for the entry.</param>
+public record LibraryGroupEntry(string Name, string ContentType, string? MarkKey, bool? Seen, int? Rating, string? Group = null);
 
 /// <summary>A page as in <see cref="PlaylistGroupEntriesResponse"/>, with Entries holding the marks.</summary>
 /// <param name="Total">Entries of the group after the mark options; SeenHiddenCount as in the Library search.</param>

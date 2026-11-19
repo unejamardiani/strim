@@ -226,11 +226,32 @@ public static class ProcessingEndpoints
       ClaimsPrincipal user, AppDbContext db, PlaylistPipeline pipeline, CancellationToken ct) =>
       GroupEntries(cacheKey, group, offset, limit, pipeline, await LibraryMarks.LoadAsync(db, user.UserId()!, ct), hideSeen == true, liked == true));
 
-    // With marks, the search answers the Library's shape.
-    static IResult Search(PlaylistSearchRequest input, PlaylistPipeline pipeline, LibraryMarks? marks = null, bool hideSeen = false, bool liked = false)
+    // The same, scoped to one playlist for its owner and accepted viewers (epic #373): a lib- key bound to playlist
+    // and user, access checked against the database on every request, and for a viewer only the visible groups.
+    var playlistLibrary = app.MapGroup("/api/playlists/{id:guid}/library").RequireAuthorization().RequireRateLimiting(Security.RateLimits.Fetch);
+    playlistLibrary.MapPost("/search", async (Guid id, PlaylistLibrarySearchRequest input, ClaimsPrincipal user, AppDbContext db, PlaylistPipeline pipeline, CancellationToken ct) =>
+      await ShareEndpoints.LibraryAccessAsync(db, id, user.UserId()!, ct) is { } access
+        ? Search(input.ToSearch(), pipeline, await LibraryMarks.LoadAsync(db, access.UserId, ct), input.HideSeen == true, input.Liked == true, access)
+        : Results.NotFound());
+    playlistLibrary.MapGet("/group-entries", async (Guid id, string? libraryKey, string? group, int? offset, int? limit, bool? hideSeen, bool? liked,
+      ClaimsPrincipal user, AppDbContext db, PlaylistPipeline pipeline, CancellationToken ct) =>
+      await ShareEndpoints.LibraryAccessAsync(db, id, user.UserId()!, ct) is { } access
+        ? GroupEntries(libraryKey, group, offset, limit, pipeline, await LibraryMarks.LoadAsync(db, access.UserId, ct), hideSeen == true, liked == true, access)
+        : Results.NotFound());
+
+    // The editor's session for a cacheKey; with access, the Library key of that playlist and user, else 404.
+    static PlaylistSourceFile? SourceOf(string key, PlaylistPipeline pipeline, LibraryAccess? access) => access is null
+      ? pipeline.Cache.TryGetSessionSource(key)
+      : pipeline.Cache.TryGetLibrarySource(key, access.PlaylistId, access.UserId);
+
+    // With marks, the search answers the Library's shape. A viewer's hidden groups come from the database: their
+    // matches are left out and not counted, whatever the request asks for.
+    static IResult Search(
+      PlaylistSearchRequest input, PlaylistPipeline pipeline, LibraryMarks? marks = null, bool hideSeen = false, bool liked = false,
+      LibraryAccess? access = null)
     {
       if (string.IsNullOrWhiteSpace(input.CacheKey))
-        return Results.BadRequest(new { error = "Provide a cacheKey." });
+        return Results.BadRequest(new { error = access is null ? "Provide a cacheKey." : "Provide a libraryKey." });
       if (input.Query?.Length > Limits.MaxSearchQueryLength)
         return Results.BadRequest(new { error = $"Search must be {Limits.MaxSearchQueryLength} characters or less." });
       if (PlaylistSearchText.Fold(input.Query).Length < Limits.MinSearchQueryLength)
@@ -254,16 +275,19 @@ public static class ProcessingEndpoints
       if (languages.Length > MaxSearchLanguages || !languages.All(IsLanguageCode))
         return Results.BadRequest(new { error = LanguageFormat });
 
-      var source = pipeline.Cache.TryGetSessionSource(input.CacheKey);
+      var source = SourceOf(input.CacheKey, pipeline, access);
+      if (source is null && access is not null) return Results.NotFound();
       var analysis = source is null ? null : pipeline.Cache.TryGetAnalysis(source);
       if (analysis is null)
         return Results.BadRequest(new { error = SessionExpired });
       if (analysis.SearchIndex is not { } index)
         return Results.BadRequest(new { error = "Search is not available for this playlist because it is too large." });
 
-      var disabled = new HashSet<string>(input.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+      var viewer = access is { IsViewer: true };
+      var disabled = new HashSet<string>((viewer ? access!.DisabledGroups : input.DisabledGroups) ?? [], StringComparer.OrdinalIgnoreCase);
       var result = index.Search(
-        input.Query, disabled, Limits.MaxSearchResults, input.HideDisabled == true, contentTypes, languages, marks?.Filter(hideSeen, liked));
+        input.Query, disabled, Limits.MaxSearchResults, viewer || input.HideDisabled == true, contentTypes, languages, marks?.Filter(hideSeen, liked));
+      if (viewer) result = result with { HiddenCount = 0 };
       if (marks is not null) return Results.Ok(LibrarySearch(result, marks, index.LanguageCounts));
       return Results.Ok(new PlaylistSearchResponse(
         result.Matches.Select(m => new PlaylistSearchMatchResult(
@@ -279,22 +303,27 @@ public static class ProcessingEndpoints
       GroupEntries(cacheKey, group, offset, limit, pipeline)).RequireRateLimiting(Security.RateLimits.Fetch);
 
     static IResult GroupEntries(
-      string? cacheKey, string? group, int? offset, int? limit, PlaylistPipeline pipeline, LibraryMarks? marks = null, bool hideSeen = false, bool liked = false)
+      string? cacheKey, string? group, int? offset, int? limit, PlaylistPipeline pipeline, LibraryMarks? marks = null, bool hideSeen = false, bool liked = false,
+      LibraryAccess? access = null)
     {
       if (string.IsNullOrWhiteSpace(cacheKey))
-        return Results.BadRequest(new { error = "Provide a cacheKey." });
+        return Results.BadRequest(new { error = access is null ? "Provide a cacheKey." : "Provide a libraryKey." });
       var maxGroupKeyLength = PlaylistProcessor.MaxGroupKeyLength(pipeline.Cache.MaxGroupTitleLengthChars);
       if (string.IsNullOrWhiteSpace(group) || group.Length > maxGroupKeyLength)
         return Results.BadRequest(new { error = $"The group must be between 1 and {maxGroupKeyLength} characters." });
       if (offset < 0 || limit < 1)
         return Results.BadRequest(new { error = "Offset must be 0 or more and limit 1 or more." });
 
-      var source = pipeline.Cache.TryGetSessionSource(cacheKey);
+      var source = SourceOf(cacheKey, pipeline, access);
+      if (source is null && access is not null) return Results.NotFound();
       var analysis = source is null ? null : pipeline.Cache.TryGetAnalysis(source);
       if (analysis is null)
         return Results.BadRequest(new { error = SessionExpired });
       if (analysis.SearchIndex is not { } index)
         return Results.BadRequest(new { error = "Search is not available for this playlist because it is too large." });
+      // A group hidden from a viewer answers like one that does not exist.
+      if (access is { IsViewer: true } && !index.IsVisibleGroup(group, new HashSet<string>(access.DisabledGroups ?? [], StringComparer.OrdinalIgnoreCase)))
+        return Results.NotFound();
 
       var page = Math.Min(limit ?? Limits.MaxSearchResults, Limits.MaxSearchResults);
       var result = index.GroupEntries(group, offset ?? 0, page, marks?.Filter(hideSeen, liked));
@@ -400,7 +429,7 @@ public static class ProcessingEndpoints
     result.Names.Select((name, i) =>
     {
       var (key, seen, rating) = marks.Lookup(name, result.Types[i]);
-      return new LibraryGroupEntry(name, result.Types[i].ToString(), key, seen, rating);
+      return new LibraryGroupEntry(name, result.Types[i].ToString(), key, seen, rating, result.Groups[i]);
     }).ToList(),
     result.Total, result.SeenHiddenCount);
 
