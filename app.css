@@ -1422,8 +1422,10 @@ select.input {
 
 /* On a phone the first line is too narrow for a name and several labels, and labels cut off past the edge could not
    be reached. So the name gets the first line to itself and the labels lead the second line, ahead of the group,
-   which truncates. A label is never clipped: if the labels ever fill the whole second line they wrap instead. Only
-   rows with the .search-hit-line wrapper (Everything search) change: the Library reuses .search-hit-text without it. */
+   which truncates. The labels stay on one line and never take the group's last 39px (plus the 6px gap), so the group
+   stays on line 2. Only labels that fit whole are shown: main.js hides the rest visually (screen readers keep them)
+   behind a "+N" chip; tapping it shows the next labels in the same place, so the row keeps two lines. Only rows with
+   the .search-hit-line wrapper (Everything search) change: the Library reuses .search-hit-text without it. */
 @media (max-width: 767px) {
   .search-hit-text:has(> .search-hit-line) {
     flex-direction: row;
@@ -1442,18 +1444,54 @@ select.input {
   }
 
   .search-langs {
-    flex-wrap: wrap;
-    gap: 2px 3px;
-    overflow: visible;
+    position: relative;
+    max-width: calc(100% - 45px);
+    gap: 3px;
   }
 
   .lang-chip {
     padding: 1px 5px;
   }
 
+  .lang-chip.lang-chip-off {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* A strip with a "+N" chip holds only labels that fit (main.js), so it need not clip; that lets the chip's tap
+     area reach past the strip. */
+  .search-langs:has(> .lang-more) {
+    overflow: visible;
+  }
+
+  .lang-chip.lang-more {
+    position: relative;
+    border: 1px dashed var(--line-strong);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  /* The chip stays small so the row keeps two lines; its tap area is the 46px phone control, centred on it. */
+  .lang-chip.lang-more::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 46px);
+    height: 46px;
+    transform: translate(-50%, -50%);
+  }
+
   .search-hit-line ~ .search-hit-meta {
     flex: 1 1 0;
-    min-width: 3em;
+    min-width: 39px;
   }
 }
 
