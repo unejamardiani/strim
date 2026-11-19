@@ -5,7 +5,10 @@ using System.Text.Json;
 
 namespace Api.Services;
 
-public enum TmdbStatus { Ok, Disabled, NotFound, Unavailable }
+/// <summary>
+/// <see cref="RateLimited"/>: TMDB answered 429, or Strim is still waiting out its Retry-After and sent no request.
+/// </summary>
+public enum TmdbStatus { Ok, Disabled, NotFound, Unavailable, RateLimited }
 
 public sealed record TmdbResult<T>(TmdbStatus Status, T? Value) where T : class;
 
@@ -21,8 +24,9 @@ public sealed record TmdbMovieDetails(
 
 /// <summary>
 /// The only place Strim talks to TMDB. Requests go to one fixed HTTPS host, the token travels in the
-/// Authorization header only, redirects, timeouts, errors and rate limits all become Unavailable, and
-/// nothing derived from the token is ever logged or thrown.
+/// Authorization header only, redirects, timeouts and errors become Unavailable, and nothing derived from the
+/// token or the query is ever logged or thrown. A 429 is never retried: every call returns RateLimited without a
+/// request until its Retry-After (seconds or an HTTP date, capped at <see cref="MaxBackoff"/>) has passed.
 /// </summary>
 public sealed class TmdbClient
 {
@@ -58,7 +62,11 @@ public sealed class TmdbClient
 
   internal TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(5);
 
-  internal TimeSpan DefaultBackoff { get; init; } = TimeSpan.FromSeconds(60);
+  /// <summary>The pause after a 429 without a readable Retry-After.</summary>
+  public static readonly TimeSpan DefaultBackoff = TimeSpan.FromSeconds(60);
+
+  /// <summary>The longest pause a Retry-After can ask for, so a bad header cannot switch TMDB off for days.</summary>
+  public static readonly TimeSpan MaxBackoff = TimeSpan.FromHours(1);
 
   public Task<TmdbResult<TmdbMoviePage>> SearchMovieAsync(string title, int? year, CancellationToken cancellationToken)
   {
@@ -95,7 +103,7 @@ public sealed class TmdbClient
     {
       if (_timeProvider.GetUtcNow() < _blockedUntil)
       {
-        return new(TmdbStatus.Unavailable, null);
+        return new(TmdbStatus.RateLimited, null);
       }
     }
 
@@ -111,9 +119,11 @@ public sealed class TmdbClient
       using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
       if (response.StatusCode == HttpStatusCode.TooManyRequests)
       {
-        BlockUntilRetryAfter(response.Headers.RetryAfter);
-        _logger.LogWarning("TMDB rate limit reached; pausing requests.");
-        return new(TmdbStatus.Unavailable, null);
+        var pause = BlockUntilRetryAfter(response.Headers.RetryAfter);
+        // Neither the token nor the query: only how long Strim waits.
+        _logger.LogWarning("TMDB rate limit reached; pausing requests for {Seconds} s.",
+          (int)Math.Ceiling(pause.TotalSeconds));
+        return new(TmdbStatus.RateLimited, null);
       }
       if (response.StatusCode == HttpStatusCode.NotFound)
       {
@@ -149,12 +159,15 @@ public sealed class TmdbClient
     }
   }
 
-  private void BlockUntilRetryAfter(RetryConditionHeaderValue? retryAfter)
+  /// <summary>Blocks calls for the Retry-After pause (or the default), capped at <see cref="MaxBackoff"/>.</summary>
+  private TimeSpan BlockUntilRetryAfter(RetryConditionHeaderValue? retryAfter)
   {
     var now = _timeProvider.GetUtcNow();
-    var until = retryAfter?.Delta is TimeSpan delta ? now + delta
-      : retryAfter?.Date is DateTimeOffset date ? date
-      : now + DefaultBackoff;
+    var pause = retryAfter?.Delta is TimeSpan delta ? delta
+      : retryAfter?.Date is DateTimeOffset date ? date - now
+      : DefaultBackoff;
+    pause = pause < TimeSpan.Zero ? TimeSpan.Zero : pause > MaxBackoff ? MaxBackoff : pause;
+    var until = now + pause;
     lock (_gate)
     {
       if (until > _blockedUntil)
@@ -162,5 +175,6 @@ public sealed class TmdbClient
         _blockedUntil = until;
       }
     }
+    return pause;
   }
 }
