@@ -40,6 +40,7 @@ public class ViewerBarrierTests(StrimAppFactory factory) : IClassFixture<StrimAp
     "POST /api/playlists/{id:guid}/library/search",
     "GET /api/playlists/{id:guid}/library/group-entries",
     "GET /api/playlists/{id:guid}/library/film-card",
+    "GET /api/playlists/{id:guid}/library/series-card",
   ];
 
   /// <summary>Routes not bound to one playlist: the caller's own lists, the sample and the anonymous player link.</summary>
@@ -162,6 +163,8 @@ public class ViewerBarrierTests(StrimAppFactory factory) : IClassFixture<StrimAp
     }
     await Record("film card", viewer.Http.GetAsync(
       $"/api/playlists/{playlistId}/library/film-card?libraryKey={libraryKey}&name=Tatort&group=Germany&type=Movies"));
+    await Record("series card", viewer.Http.GetAsync(
+      $"/api/playlists/{playlistId}/library/series-card?libraryKey={libraryKey}&name=Tatort%20S01E01&group=Germany&type=Series"));
     foreach (var (method, _, template, body) in OwnerRoutes)
     {
       var path = template.Replace("{id}", playlistId.ToString()).Replace("{shareId}", Guid.NewGuid().ToString());
