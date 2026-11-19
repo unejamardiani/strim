@@ -157,6 +157,33 @@ public sealed class LibraryFilmCardTests
   }
 
   [Fact]
+  public async Task TmdbRateLimited_ReturnsCardWithoutTmdbData()
+  {
+    await using var host = await TestHost.StartAsync(Token, _ =>
+    {
+      var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+      response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMinutes(10));
+      return response;
+    });
+    await host.AddMarkAsync("The Matrix (1999)", seen: true, rating: 1, filmDbId: null);
+
+    var first = await host.CardAsync("The Matrix (1999)");
+    Assert.Single(host.TmdbRequests);
+
+    // While Strim backs off, the card still answers with the entry's own marks and sends nothing to TMDB.
+    var card = await host.CardAsync("The Matrix (1999) HD");
+    Assert.Single(host.TmdbRequests);
+    foreach (var answer in new[] { first, card })
+    {
+      Assert.Equal("unavailable", answer.GetProperty("status").GetString());
+      Assert.Equal(JsonValueKind.Null, answer.GetProperty("film").ValueKind);
+      Assert.Equal(JsonValueKind.Null, answer.GetProperty("candidates").ValueKind);
+      Assert.True(answer.GetProperty("marks").GetProperty("seen").GetBoolean());
+      Assert.Equal(1, answer.GetProperty("marks").GetProperty("rating").GetInt32());
+    }
+  }
+
+  [Fact]
   public async Task OtherUsersPlaylist_NotFound_AndTokenNeverReturned()
   {
     await using var host = await TestHost.StartAsync(Token, request => request.AbsolutePath == "/3/search/movie"
