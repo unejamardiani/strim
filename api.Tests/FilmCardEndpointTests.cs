@@ -44,4 +44,41 @@ public sealed class FilmCardEndpointTests
       Assert.DoesNotContain(produces, c => c.StartsWith("image/", StringComparison.OrdinalIgnoreCase));
     }
   }
+
+  [Fact]
+  public async Task Card_FlagsTmdbDataPresence()
+  {
+    await using (var matched = await TestHost.StartAsync(Token, request => request.AbsolutePath == "/3/search/movie"
+      ? Json($$"""{"results":[{{Matrix}}]}""")
+      : Json(MatrixDetails)))
+    {
+      var card = await matched.CardAsync("The Matrix (1999)");
+      Assert.Equal("matched", card.GetProperty("status").GetString());
+      Assert.True(card.GetProperty("tmdbData").GetBoolean());
+      // A channel's card has no TMDB data.
+      Assert.False((await matched.CardAsync("The Matrix (1999)", "News", "Live")).GetProperty("tmdbData").GetBoolean());
+    }
+
+    // Without a token there is no card at all, so nothing to credit.
+    await using (var unset = await TestHost.StartAsync(token: null, _ => Json("{}")))
+    {
+      var response = await unset.Client.Http.GetAsync(unset.CardPath("The Matrix (1999)"));
+      Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    await using (var limited = await TestHost.StartAsync(Token, _ =>
+      new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests)))
+    {
+      var card = await limited.CardAsync("The Matrix (1999)");
+      Assert.Equal("unavailable", card.GetProperty("status").GetString());
+      Assert.False(card.GetProperty("tmdbData").GetBoolean());
+    }
+
+    await using (var none = await TestHost.StartAsync(Token, _ => Json("""{"results":[]}""")))
+    {
+      var card = await none.CardAsync("The Matrix (1999)");
+      Assert.Equal("notFound", card.GetProperty("status").GetString());
+      Assert.False(card.GetProperty("tmdbData").GetBoolean());
+    }
+  }
 }
