@@ -19,11 +19,11 @@ namespace Api.Tests;
 public sealed class LibraryFilmCardTests
 {
   // A made-up value; only its absence from responses matters.
-  private const string Token = "test-tmdb-token-not-real-5b1e7a90";
+  internal const string Token = "test-tmdb-token-not-real-5b1e7a90";
 
-  private const string Matrix = """{"id":603,"title":"The Matrix","release_date":"1999-03-31","poster_path":"/m.jpg"}""";
+  internal const string Matrix = """{"id":603,"title":"The Matrix","release_date":"1999-03-31","poster_path":"/m.jpg"}""";
 
-  private const string MatrixDetails = """
+  internal const string MatrixDetails = """
     {"id":603,"title":"The Matrix","overview":"A hacker learns the truth.","release_date":"1999-03-31",
      "poster_path":"/m.jpg","vote_average":8.2,"genres":[{"id":28,"name":"Action"},{"id":878,"name":"Science Fiction"}],
      "similar":{"results":[]}}
@@ -86,7 +86,7 @@ public sealed class LibraryFilmCardTests
     Assert.Equal("matched", card.GetProperty("status").GetString());
     var film = card.GetProperty("film");
     Assert.Equal(603, film.GetProperty("id").GetInt32());
-    Assert.Equal("/m.jpg", film.GetProperty("posterPath").GetString());
+    Assert.Equal("https://image.tmdb.org/t/p/w342/m.jpg", film.GetProperty("posterUrl").GetString());
     Assert.Equal("The Matrix", film.GetProperty("title").GetString());
     Assert.Equal(1999, film.GetProperty("year").GetInt32());
     Assert.Equal(8.2, film.GetProperty("rating").GetDouble());
@@ -112,7 +112,7 @@ public sealed class LibraryFilmCardTests
     var candidates = card.GetProperty("candidates").EnumerateArray().ToList();
     Assert.Equal([603, 9], candidates.Select(c => c.GetProperty("id").GetInt32()));
     Assert.Equal(1999, candidates[1].GetProperty("year").GetInt32());
-    Assert.Equal("/b.jpg", candidates[1].GetProperty("posterPath").GetString());
+    Assert.Equal("https://image.tmdb.org/t/p/w342/b.jpg", candidates[1].GetProperty("posterUrl").GetString());
     Assert.False(string.IsNullOrEmpty(candidates[1].GetProperty("title").GetString()));
     Assert.Single(host.TmdbRequests);
   }
@@ -231,10 +231,10 @@ public sealed class LibraryFilmCardTests
     return await search.Content.ReadAsStringAsync();
   }
 
-  private static HttpResponseMessage Json(string body) =>
+  internal static HttpResponseMessage Json(string body) =>
     new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
-  private sealed class TestHost : IAsyncDisposable
+  internal sealed class TestHost : IAsyncDisposable
   {
     /// <summary>The base factory; it owns the throwaway database and cache directory.</summary>
     public required StrimAppFactory Root { get; init; }
