@@ -12,6 +12,9 @@ namespace Api.Endpoints;
 /// <summary>Creates an invitation; the label is the owner's name for the person.</summary>
 public record ShareRequest(string? Label);
 
+/// <summary>Accepts an invitation; the token comes from the link's fragment, posted in the body.</summary>
+public record AcceptShareRequest(string? Token);
+
 /// <summary>
 /// The owner's invitations to read-only access of one playlist (epic #373). Every route answers anyone but the
 /// playlist's owner with 404.
@@ -20,6 +23,13 @@ public record ShareRequest(string? Label);
 /// <item><c>POST /api/playlists/{id}/shares</c> creates an invitation; the token is returned once and only its
 /// SHA-256 is stored. 409 at <see cref="MaxSharesPerPlaylist"/>.</item>
 /// <item><c>DELETE /api/playlists/{id}/shares/{shareId}</c> revokes access or withdraws the invitation.</item>
+/// </list>
+/// Any signed-in user:
+/// <list type="bullet">
+/// <item><c>POST /api/shares/accept</c> binds an open invitation to the caller (single use); unknown, expired, used
+/// and deleted tokens all give the same 404.</item>
+/// <item><c>GET /api/shares/mine</c> lists the playlists shared with the caller: name, owner and entry count only.</item>
+/// <item><c>DELETE /api/shares/mine/{playlistId}</c> leaves a share.</item>
 /// </list>
 /// Neither the token, its hash nor the label is ever logged.
 /// </summary>
@@ -82,6 +92,84 @@ public static class ShareEndpoints
       if (deleted == 0) return Results.NotFound();
 
       logger.LogInformation("User {UserId} deleted share {ShareId} of playlist {PlaylistId}", user.UserId(), shareId, id);
+      return Results.NoContent();
+    });
+
+    var viewer = app.MapGroup("/api/shares").RequireAuthorization();
+    var viewerMutations = viewer.MapGroup("").RequireCsrfToken().RequireRateLimiting(Security.RateLimits.Sensitive);
+
+    viewerMutations.MapPost("/accept", async (AcceptShareRequest input, ClaimsPrincipal user, AppDbContext db) =>
+    {
+      var userId = user.UserId();
+      var token = input.Token?.Trim();
+      var hash = string.IsNullOrEmpty(token) ? null : HashToken(token);
+      var share = hash is null ? null : await db.PlaylistShares.AsNoTracking().FirstOrDefaultAsync(s => s.TokenHash == hash);
+      var now = DateTimeOffset.UtcNow;
+      if (share is null || share.TokenExpiresUtc is null || share.TokenExpiresUtc <= now)
+      {
+        logger.LogWarning("Refused an invitation: {Reason}", share is null ? "unknown" : "expired");
+        return Results.NotFound();
+      }
+
+      var playlist = await db.Playlists.AsNoTracking().Where(p => p.Id == share.PlaylistId)
+        .Select(p => new { p.Id, p.Name, p.OwnerId }).FirstAsync();
+      if (playlist.OwnerId == userId)
+      {
+        logger.LogWarning("Refused an invitation: {Reason}", "own playlist");
+        return Results.BadRequest(new { error = "This is your own playlist. Send the link to the person you invited." });
+      }
+
+      if (await db.PlaylistShares.AnyAsync(s => s.PlaylistId == playlist.Id && s.ViewerUserId == userId))
+      {
+        // The caller already has access: the spare invitation is removed instead of bound twice.
+        await db.PlaylistShares.Where(s => s.Id == share.Id && s.TokenHash == hash).ExecuteDeleteAsync();
+        logger.LogInformation("User {UserId} already had access to playlist {PlaylistId}; deleted spare invitation {ShareId}", userId, playlist.Id, share.Id);
+        return Results.Ok(new { playlistId = playlist.Id, name = playlist.Name });
+      }
+
+      // Conditional on the hash, so two concurrent uses of one token bind it at most once.
+      var bound = await db.PlaylistShares.Where(s => s.Id == share.Id && s.TokenHash == hash)
+        .ExecuteUpdateAsync(set => set
+          .SetProperty(s => s.ViewerUserId, userId)
+          .SetProperty(s => s.AcceptedUtc, now)
+          .SetProperty(s => s.TokenHash, (string?)null)
+          .SetProperty(s => s.TokenExpiresUtc, (DateTimeOffset?)null));
+      if (bound == 0)
+      {
+        logger.LogWarning("Refused an invitation: {Reason}", "used");
+        return Results.NotFound();
+      }
+
+      logger.LogInformation("User {UserId} accepted share {ShareId} of playlist {PlaylistId}", userId, share.Id, playlist.Id);
+      return Results.Ok(new { playlistId = playlist.Id, name = playlist.Name });
+    });
+
+    viewer.MapGet("/mine", async (ClaimsPrincipal user, AppDbContext db) =>
+    {
+      var userId = user.UserId();
+      var rows = await (
+        from s in db.PlaylistShares
+        where s.ViewerUserId == userId
+        join p in db.Playlists on s.PlaylistId equals p.Id
+        select new
+        {
+          playlistId = p.Id,
+          name = p.Name,
+          ownerName = db.Users.Where(u => u.Id == p.OwnerId).Select(u => u.UserName).FirstOrDefault(),
+          totalChannels = p.TotalChannels,
+          sharedSinceUtc = s.AcceptedUtc,
+        }).AsNoTracking().ToListAsync();
+      // A handful of rows; sorted in memory like the owner's list.
+      return Results.Ok(rows.OrderBy(r => r.name, StringComparer.OrdinalIgnoreCase));
+    });
+
+    viewerMutations.MapDelete("/mine/{playlistId:guid}", async (Guid playlistId, ClaimsPrincipal user, AppDbContext db) =>
+    {
+      var userId = user.UserId();
+      var deleted = await db.PlaylistShares.Where(s => s.PlaylistId == playlistId && s.ViewerUserId == userId).ExecuteDeleteAsync();
+      if (deleted == 0) return Results.NotFound();
+
+      logger.LogInformation("User {UserId} left playlist {PlaylistId}", userId, playlistId);
       return Results.NoContent();
     });
 
