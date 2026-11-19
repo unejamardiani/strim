@@ -1129,6 +1129,8 @@ function showLibrary(playlist) {
     // The film card (#367): TMDB facts and the marks of one film entry, only when /api/config reports TMDB on.
     tmdbEnabled: state.tmdbEnabled,
     filmCard: (params, signal) => api(`/playlists/${playlist.id}/library/film-card?${new URLSearchParams(params)}`, { signal }),
+    // Picks the TMDB film of an entry, or clears the pick with a null id (#368); api() sends the CSRF token.
+    setFilmMatch: (body) => api('/marks/film-match', { method: 'PUT', body }),
   });
 }
 

@@ -251,15 +251,52 @@
 .film-marks .library-mark svg { width: 17px; height: 17px; stroke-width: 2; }
 .film-marks .library-mark[aria-pressed="true"] { background: var(--pill-on); color: var(--accent); box-shadow: 0 1px 2px rgba(29,26,22,.12), 0 4px 10px -6px rgba(29,26,22,.3); }
 
-/* "choose": the candidates as plain tiles; choosing one is #368. */
+/* "choose": the candidates as tile buttons (#368); a tap stores the match. */
 .film-choose { display: flex; flex-direction: column; gap: 14px; padding: 70px 24px 24px; }
 .film-choose-text { color: var(--ink-2); }
 .film-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-.film-tile { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.film-grid .film-tile { width: 100%; }
+.film-tile { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; }
+button.film-tile { cursor: pointer; }
+.film-tile-art { position: relative; display: block; }
 .film-tile-poster { display: block; width: 100%; height: auto; aspect-ratio: 2 / 3; object-fit: cover; margin-bottom: 5px; border-radius: 12px; box-shadow: 0 10px 18px -12px rgba(29,26,22,.5); outline: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); outline-offset: -1px; }
+button.film-tile .film-tile-poster { transition: transform .18s cubic-bezier(.2, 1, .3, 1); }
+button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .film-tile-title { overflow: hidden; font-size: 13.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.film-tile-meta { font-size: 12px; color: var(--ink-2); }
+.film-tile-meta { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; color: var(--ink-2); }
+.film-tile-meta > :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .film-choose .film-marks { align-self: center; }
+
+/* Similar films (#368): a rail of tiles; in-list tiles are buttons with their group, the others greyed out. */
+.film-section { display: flex; flex-direction: column; gap: 12px; }
+.film-section-head { display: flex; align-items: center; gap: 10px; }
+.film-section-title { margin: 0; font-family: var(--font-display); font-size: 19px; font-weight: 800; letter-spacing: -0.03em; }
+.film-section-count { flex: 1; font-size: 13px; color: var(--ink-2); }
+.film-rail-nav { display: none; gap: 6px; }
+.film-rail-nav .icon-btn { width: 32px; height: 32px; min-width: 32px; min-height: 32px; border-radius: 50%; background: var(--surface-2); }
+.film-rail-nav svg { width: 15px; height: 15px; }
+@media (min-width: 1100px) { .film-rail-nav { display: flex; } }
+.film-rail { display: flex; gap: 12px; margin: 0 -24px; padding: 4px 24px 6px; overflow-x: auto; scrollbar-width: none; scroll-behavior: smooth; scroll-snap-type: x proximity; scroll-padding-left: 24px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); }
+.film-rail .film-tile { flex: 0 0 112px; scroll-snap-align: start; }
+.film-on { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.film-on.is-off { background: none; box-shadow: inset 0 0 0 1.5px var(--ink-3); }
+.film-tile-flag { position: absolute; top: 6px; left: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 750; color: var(--dock-ink); background: color-mix(in srgb, var(--dock-bg) 82%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.film-tile-seen { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); color: var(--ok); box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+.film-tile-seen svg { width: 12px; height: 12px; stroke-width: 3.4; }
+.film-tile.is-absent .film-tile-poster { filter: grayscale(.85) contrast(.85); opacity: .5; box-shadow: none; }
+.film-tile.is-absent .film-tile-title { font-weight: 600; color: var(--ink-2); }
+.film-tile.is-absent .film-tile-meta { color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) {
+  .film-rail { scroll-behavior: auto; }
+  button.film-tile .film-tile-poster { transition: none; }
+}
+
+/* Where the film sits in the list, with "Not this film" to clear the match (#368). */
+.film-source { display: flex; align-items: center; gap: 12px; padding: 12px 6px 12px 14px; border-radius: var(--radius); background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
+.film-source p { flex: 1; min-width: 0; }
+.film-source b { display: block; overflow: hidden; font-weight: 650; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
+.film-source .search-badge { margin-left: 6px; }
+.film-unmatch { flex: none; min-height: 38px; padding: 0 12px; border: 0; background: none; color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 
 .film-body { display: flex; flex-direction: column; gap: 22px; padding: 0 24px 24px; }
 .film-overview { font-size: 15px; line-height: 1.6; }

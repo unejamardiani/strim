@@ -148,6 +148,16 @@ to 3 lines with More/Less. "choose" lists the candidates as a 3-column grid of p
 states and failures show the entry name, its group and a short notice. With TMDB data, TMDB's logo,
 credit line and notice end it. Close, Escape, backdrop or Back close it without moving the page.
 
+Similar films and the match (#368): below the overview a "Similar films" rail ("N in your list", from
+1100px Previous/Next arrows) of 112px poster tiles in the API's order, those in the list first. An
+in-list tile is a button with a green dot and its group (hollow dot and an "Off" flag when the group
+is off) and opens that film's card in place, with a glass Back circle top left that returns to the
+previous card and its scroll; device Back still closes the whole card. Other tiles are greyed out,
+"Not in your list", and open nothing. A seen film carries a small check on its poster. "choose"
+candidates are buttons: a tap stores the match and reloads the card. A matched card ends with "In
+your list as" (entry, group) and "Not this film", which clears the match. A failed request brings the
+previous card back with an error notice.
+
 Marks (#298): every film and series row (search results and group entries) ends with three round
 icon buttons, Seen (check), Thumbs up and Thumbs down, `--control-h` square (46px on phones, 42px
 from 768px) with `aria-pressed`. A pressed control has the `--accent-soft` fill; tapping it again
