@@ -176,6 +176,11 @@ the season pill carries a 7px Series square, the episode `--series-soft` with a 
 ring, and while no season is open a line reads "Opened from S1 · E3". Entries without an episode
 number are counted in a line of their own.
 
+Similar series and the match (#392): the film card's rail, tiles, in-place card with glass Back,
+"choose" grid and "Not this series", unchanged. An in-list similar series opens as a series card
+without the "Opened from" context. A stored or cleared match holds for every episode row of the
+series, so each of them loads its card again; a failed request brings the previous card back.
+
 Marks (#298): every film and series row (search results and group entries) ends with three round
 icon buttons, Seen (check), Thumbs up and Thumbs down, `--control-h` square (46px on phones, 42px
 from 768px) with `aria-pressed`. A pressed control has the `--accent-soft` fill; tapping it again

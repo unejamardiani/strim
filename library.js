@@ -901,7 +901,9 @@
       return;
     }
     if (seq !== card.seq) return;
-    for (const k of [...answers.keys()]) if (JSON.parse(k)[0] === film.name) answers.delete(k);
+    // Every episode row of a series shares its match (#392), so a series match drops every kept series answer.
+    const stale = (k) => (film.type === 'Series' ? k[4] === 'Series' : k[0] === film.name);
+    for (const k of [...answers.keys()]) if (stale(JSON.parse(k))) answers.delete(k);
     await loadFilm(ctx);
     // An automatic match cannot be cleared: the card then comes back with the same film.
     if (tmdbId === null && card.film === film && subject(card.answer) && subject(card.answer).id === subject(before)?.id) {
