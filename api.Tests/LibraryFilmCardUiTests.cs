@@ -29,6 +29,15 @@ public class LibraryFilmCardUiTests
   }
 
   [Fact]
+  public void TheScrollArea_TakesItsContentHeight_SoSafariDoesNotCollapseTheSheet()
+  {
+    // 19 Nov 2026: with `flex: 1` (a 0% basis) the phone sheet had no height in iOS Safari; only the backdrop showed.
+    var css = Read("library.css");
+    Assert.Contains(".film-scroll { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;", css);
+    Assert.DoesNotContain(".film-scroll { display: flex; flex-direction: column; flex: 1;", css);
+  }
+
+  [Fact]
   public void TheCard_IsASheetOrASidePane_ClosedByBackWithoutMovingThePage()
   {
     var card = Card();
