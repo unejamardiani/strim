@@ -26,7 +26,7 @@ public class TitleMark
   /// <summary>-1, 0 or 1.</summary>
   public int Rating { get; set; }
 
-  /// <summary>Reserved for a film database id; unused for now.</summary>
+  /// <summary>The TMDB id the user confirmed for the film (<c>PUT /api/marks/film-match</c>), or null.</summary>
   public string? FilmDbId { get; set; }
 
   public DateTimeOffset CreatedUtc { get; set; }
