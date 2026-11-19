@@ -22,6 +22,20 @@ public sealed record TmdbMovieDetails(
   int Id, string? Title, string? Overview, string? ReleaseDate, string? PosterPath, double VoteAverage,
   IReadOnlyList<TmdbGenre>? Genres, TmdbMoviePage? Similar);
 
+public sealed record TmdbTvSummary(int Id, string? Name, string? FirstAirDate, string? PosterPath, double VoteAverage);
+
+public sealed record TmdbTvPage(IReadOnlyList<TmdbTvSummary>? Results);
+
+public sealed record TmdbTvSeason(int SeasonNumber, int? EpisodeCount);
+
+public sealed record TmdbNetwork(int Id, string? Name);
+
+public sealed record TmdbTvDetails(
+  int Id, string? Name, string? Overview, string? FirstAirDate, string? LastAirDate, string? Status,
+  int? NumberOfSeasons, int? NumberOfEpisodes, string? PosterPath, double VoteAverage,
+  IReadOnlyList<TmdbGenre>? Genres, IReadOnlyList<TmdbNetwork>? Networks, IReadOnlyList<TmdbTvSeason>? Seasons,
+  TmdbTvPage? Similar);
+
 /// <summary>
 /// The only place Strim talks to TMDB. Requests go to one fixed HTTPS host, the token travels in the
 /// Authorization header only, redirects, timeouts and errors become Unavailable, and nothing derived from the
@@ -85,6 +99,27 @@ public sealed class TmdbClient
     ArgumentOutOfRangeException.ThrowIfNegativeOrZero(movieId);
     return SendAsync<TmdbMovieDetails>(
       "movie/" + movieId.ToString(CultureInfo.InvariantCulture) + "?append_to_response=similar",
+      cancellationToken);
+  }
+
+  /// <summary>Searches series by the cleaned title and, when known, the first-air year; nothing else is sent.</summary>
+  public Task<TmdbResult<TmdbTvPage>> SearchTvAsync(string title, int? year, CancellationToken cancellationToken)
+  {
+    ArgumentException.ThrowIfNullOrWhiteSpace(title);
+    var query = "search/tv?include_adult=false&query=" + Uri.EscapeDataString(title.Trim());
+    if (year is int y)
+    {
+      query += "&first_air_date_year=" + y.ToString(CultureInfo.InvariantCulture);
+    }
+    return SendAsync<TmdbTvPage>(query, cancellationToken);
+  }
+
+  /// <summary>Details of one series (with its seasons) and its similar series, fetched in one request.</summary>
+  public Task<TmdbResult<TmdbTvDetails>> GetTvWithSimilarAsync(int tvId, CancellationToken cancellationToken)
+  {
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(tvId);
+    return SendAsync<TmdbTvDetails>(
+      "tv/" + tvId.ToString(CultureInfo.InvariantCulture) + "?append_to_response=similar",
       cancellationToken);
   }
 
