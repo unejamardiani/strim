@@ -1194,8 +1194,8 @@ select.input {
   margin: 12px;
 }
 
-/* Language filter (#266): the chip shares the status line, and the open list stays short, so the first result
-   stays on the first screen of a phone. */
+/* Language filter (#266): the chip shares the status line, and the open list is one row that scrolls sideways,
+   so the first result stays on the first screen of a phone (360 x 640). */
 .search-head {
   display: flex;
   align-items: center;
@@ -1206,6 +1206,9 @@ select.input {
 .search-head-status {
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lang-filter {
@@ -1218,7 +1221,7 @@ select.input {
 
 .lang-filter-toggle,
 .lang-filter-clear {
-  min-height: 38px;
+  min-height: var(--control-h);
   border: 1px solid transparent;
   border-radius: 999px;
   background: var(--surface-2);
@@ -1245,7 +1248,7 @@ select.input {
 
 .lang-filter-clear {
   flex: none;
-  width: 38px;
+  width: var(--control-h);
   font-size: 18px;
   line-height: 1;
 }
@@ -1256,36 +1259,50 @@ select.input {
 }
 
 .lang-panel {
-  max-height: 132px;
-  overflow-y: auto;
-  padding: 0 18px 10px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 18px 6px;
   border-bottom: 1px solid var(--line);
+  scrollbar-width: thin;
 }
 
 .lang-panel-note,
 .lang-panel-title {
-  margin: 0 0 6px;
+  flex: none;
+  margin: 0;
   font-size: 12px;
   color: var(--ink-3);
+  white-space: nowrap;
 }
 
 .lang-panel-title {
-  margin-top: 6px;
   font-weight: 700;
+}
+
+/* The note follows the options, so the first options are in view when the row opens. */
+.lang-panel-note {
+  order: 1;
 }
 
 .lang-options {
   display: flex;
-  flex-wrap: wrap;
+  flex: none;
+  flex-wrap: nowrap;
   gap: 6px;
 }
 
 .lang-option {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: var(--control-h);
+  padding: 0 12px;
+  white-space: nowrap;
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--ink-2);
