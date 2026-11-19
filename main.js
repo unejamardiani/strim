@@ -1706,6 +1706,7 @@ window.addEventListener('resize', () => {
   measureRowHeight();
   if (before !== picker.rowHeight) updateView(false);
   else paintRows();
+  fitSearchLanguages();
 });
 
 document.addEventListener('keydown', (e) => {
@@ -1985,6 +1986,78 @@ function renderSearchResults(ed) {
   if (s.status === 'done' && s.hasMore) nodes.push(h('p', { class: 'search-more', text: 'More matches, refine your search.' }));
   picker.searchBody.replaceChildren(...nodes);
   syncSearchBadges(ed);
+  fitSearchLanguages();
+}
+
+// On a phone the labels share line 2 with the group, so only the labels that fit whole are shown; the rest give way
+// to a "+N" chip. Tapping it shows the next labels in the same place (after the last ones, the first again), so the
+// row keeps its two lines and the group stays put. Hidden labels stay in the accessibility tree (visually hidden, not
+// removed), so a screen reader still hears every one and the source note.
+const PHONE_RESULTS = window.matchMedia('(max-width: 767px)');
+
+function fitSearchLanguages() {
+  if (!picker.results) return;
+  for (const strip of picker.results.querySelectorAll('.search-langs')) {
+    for (const extra of strip.querySelectorAll('.lang-more, .lang-part')) extra.remove();
+    const chips = [...strip.querySelectorAll('.lang-chip')];
+    for (const chip of chips) chip.classList.remove('lang-chip-off');
+    if (!PHONE_RESULTS.matches || !overflows(strip)) continue;
+    const more = h('span', { class: 'lang-chip lang-more', 'aria-hidden': 'true' });
+    strip.append(more);
+    const units = chips.flatMap((chip) => splitLanguageChip(strip, chips, chip, more));
+    let next = showLanguagePage(strip, units, more, 0);
+    more.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      next = showLanguagePage(strip, units, more, next);
+    });
+  }
+}
+
+// Compares the last shown label with the strip's edge rather than using scrollWidth, which would also count the
+// "+N" chip's wider tap area.
+function overflows(strip) {
+  const last = [...strip.querySelectorAll('.lang-chip:not(.lang-chip-off)')].at(-1);
+  return !!last && last.getBoundingClientRect().right > strip.getBoundingClientRect().right + 1;
+}
+
+// A label too wide to fit beside "+N" on its own (Audio with many languages) is shown in parts that each fit, under
+// the same heading ("Audio DE EN ES", then "Audio FR IT"). The whole label stays for screen readers; the parts are
+// hidden from them. Returns what the pages step through: the label itself, or its parts.
+function splitLanguageChip(strip, chips, chip, more) {
+  chips.forEach((c) => c.classList.toggle('lang-chip-off', c !== chip));
+  more.textContent = '+99';
+  const words = chip.textContent.split(' ');
+  if (!overflows(strip) || chip.classList.contains('lang-tag') || words.length < 3) return [chip];
+  chip.classList.add('lang-chip-off');
+  const [head, ...rest] = words;
+  const parts = [];
+  for (const word of rest) {
+    const part = parts.at(-1);
+    if (part) {
+      const before = part.textContent;
+      part.textContent = `${before} ${word}`;
+      if (!overflows(strip)) continue;
+      part.textContent = before;
+      part.classList.add('lang-chip-off');
+    }
+    const next = h('span', { class: 'lang-chip lang-part', 'aria-hidden': 'true', text: `${head} ${word}` });
+    (part || chip).after(next);
+    parts.push(next);
+  }
+  return parts;
+}
+
+// Shows the labels from `start` that fit beside the "+N" chip (at least one) and returns where the next page starts.
+function showLanguagePage(strip, chips, more, start) {
+  chips.forEach((chip, i) => chip.classList.toggle('lang-chip-off', i < start));
+  let end = chips.length;
+  more.textContent = `+${chips.length - (end - start)}`;
+  while (end - start > 1 && overflows(strip)) {
+    chips[--end].classList.add('lang-chip-off');
+    more.textContent = `+${chips.length - (end - start)}`;
+  }
+  return end < chips.length ? end : 0;
 }
 
 function searchHit(ed, m) {
