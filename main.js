@@ -280,7 +280,27 @@ async function loadSession() {
   state.shareBase = String(configured || new URL(API_BASE, window.location.origin).toString()).replace(/\/+$/, '');
   state.providers = providers.status === 'fulfilled' && Array.isArray(providers.value) ? providers.value : [];
   state.user = me.status === 'fulfilled' ? me.value : null;
+  showTmdbAttribution(config.status === 'fulfilled' && config.value?.tmdbEnabled === true);
   if (state.user) await loadPlaylists();
+}
+
+// TMDB requires its logo and notice wherever its data may appear; shown only when the API reports TMDB enabled.
+function showTmdbAttribution(enabled) {
+  const block = document.getElementById('tmdb-attribution');
+  if (block) block.hidden = !enabled;
+}
+
+// A missing logo file hides only the image; the link keeps a text label and the notice stays.
+function watchTmdbLogo() {
+  const logo = document.getElementById('tmdb-logo');
+  if (!logo) return;
+  const hide = () => {
+    if (logo.hidden) return;
+    logo.hidden = true;
+    logo.parentElement?.append('TMDB');
+  };
+  logo.addEventListener('error', hide, { once: true });
+  if (logo.complete && logo.naturalWidth === 0) hide();
 }
 
 async function loadPlaylists() {
@@ -2414,6 +2434,7 @@ async function saveEditor(ed) {
 accountButton.addEventListener('click', () => openAccount());
 
 async function init() {
+  watchTmdbLogo();
   try {
     await loadSession();
   } catch (err) {
