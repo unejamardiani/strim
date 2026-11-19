@@ -77,6 +77,11 @@ public class LibraryFilmCardUiTests
     Assert.Contains("rail?.querySelector(`[data-i=\"${prev.tile}\"]`)?.focus({ preventScroll: true });", card);
     // A mark in a card opened from a similar film reaches the rows through the key the API returns.
     Assert.Contains("const real = saved?.key || keyAlias.get(key);", Read("library.js"));
+    // A kept answer reopened from a similar tile keeps the marks its row used, so a tap there cannot clear Seen.
+    Assert.Contains("const answerMarkKey = new WeakMap();", card);
+    Assert.Contains("const given = !answer?.marks || owner === key ? now\n      : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0 };", card);
+    Assert.Contains("if (answer?.marks && !owner) answerMarkKey.set(answer, key);", card);
+    Assert.DoesNotContain("if (answer) answer.marks = null;", card);
     var css = Read("library.css");
     Assert.Contains(".film-rail .film-tile { flex: 0 0 112px; scroll-snap-align: start; }", css);
     Assert.Contains(".film-tile.is-absent .film-tile-poster { filter: grayscale(.85) contrast(.85); opacity: .5; box-shadow: none; }", css);

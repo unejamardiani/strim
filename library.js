@@ -532,6 +532,8 @@
   const card = { el: null, film: null, button: null, seq: 0, pending: null, answer: null, stack: [] };
   const keyAlias = new Map();
   const answers = new Map();
+  // The mark key that first used an answer's marks (#368).
+  const answerMarkKey = new WeakMap();
   const wide = window.matchMedia('(min-width: 1100px)');
   const opensCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Movies' && !!e.markKey;
   const FILM_NOTES = {
@@ -716,10 +718,14 @@
   // The #298 controls as an icon capsule; they share the state by mark key, so the rows repaint with them. In a modal card
   // a failure shows inside the card for 5 s, because the toasts lie under the dialog's top layer.
   function cardMarks(ctx, entry, answer) {
-    const now = marks.get(entry.markKey) || { seen: false, rating: 0 };
-    // An answer's marks count once: a kept answer reopened later must not undo a mark set since.
-    const given = answer?.marks ? { seen: answer.marks.seen === true, rating: answer.marks.rating || 0 } : now;
-    if (answer) answer.marks = null;
+    const key = entry.markKey;
+    const now = marks.get(key) || { seen: false, rating: 0 };
+    // An answer's marks count once: a kept answer reopened later must not undo a mark set since. Reopened under
+    // another key (its row, then a similar tile), it takes the live state of the key that first used it.
+    const owner = answerMarkKey.get(answer);
+    const given = !answer?.marks || owner === key ? now
+      : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0 };
+    if (answer?.marks && !owner) answerMarkKey.set(answer, key);
     const toast = cardToast(ctx);
     const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: 'Movies', markKey: entry.markKey, ...given });
     el.classList.add('film-marks');
