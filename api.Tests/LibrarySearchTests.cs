@@ -84,7 +84,8 @@ public class LibrarySearchTests
     var library = Read("library.js");
     var hit = Between(library, "function hit(", "window.StrimLibrary");
     Assert.Contains("h('li', { class: 'library-hit', dataset: { type } },", hit);
-    Assert.Contains("h('span', { class: 'search-hit-name', text: m.name }),", hit);
+    // A film's name opens the film card (#367) outside hit(); every other name stays text.
+    Assert.Contains("filmName(ctx, m, m.group, cacheKey),", hit);
     Assert.Contains("h('span', { class: 'search-hit-meta', text: `${m.group} · ${TYPE_LABELS[type]}` })", hit);
     Assert.Contains("const TYPE_LABELS = { Live: 'Channel', Movies: 'Film', Series: 'Series' };", library);
     foreach (var control in new[] { "'button'", "'a'", "'input'", "onclick", "href", "role: 'switch'" })

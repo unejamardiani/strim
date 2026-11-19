@@ -38,6 +38,7 @@ const state = {
   playlists: [],
   overview: new Map(),
   shareBase: '',
+  tmdbEnabled: false,
   editor: null,
 };
 
@@ -87,6 +88,8 @@ const ICONS = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   up: '<path d="M7 10v10H4V10zM7 10l4-6.5c1.3 0 2.2 1 2 2.3L12.5 9H18a2 2 0 0 1 2 2.3l-1.2 6.8A2 2 0 0 1 16.8 20H7"/>',
   down: '<path transform="rotate(180 12 12)" d="M7 10v10H4V10zM7 10l4-6.5c1.3 0 2.2 1 2 2.3L12.5 9H18a2 2 0 0 1 2 2.3l-1.2 6.8A2 2 0 0 1 16.8 20H7"/>',
+  chevron: '<path d="M9 6l6 6-6 6"/>',
+  star: '<path fill="currentColor" stroke="none" d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
   book: '<path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H19v13H6.5A1.5 1.5 0 0 0 5 18.5zM5 18.5A1.5 1.5 0 0 0 6.5 20H19"/>',
 };
 
@@ -282,7 +285,8 @@ async function loadSession() {
   state.shareBase = String(configured || new URL(API_BASE, window.location.origin).toString()).replace(/\/+$/, '');
   state.providers = providers.status === 'fulfilled' && Array.isArray(providers.value) ? providers.value : [];
   state.user = me.status === 'fulfilled' ? me.value : null;
-  showTmdbAttribution(config.status === 'fulfilled' && config.value?.tmdbEnabled === true);
+  state.tmdbEnabled = config.status === 'fulfilled' && config.value?.tmdbEnabled === true;
+  showTmdbAttribution(state.tmdbEnabled);
   if (state.user) await loadPlaylists();
 }
 
@@ -1122,6 +1126,9 @@ function showLibrary(playlist) {
     },
     // One page of a group's entries with their marks (#215, #297), read-only like the search.
     groupEntries: (params, signal) => api(`/library/group-entries?${new URLSearchParams(params)}`, { signal }),
+    // The film card (#367): TMDB facts and the marks of one film entry, only when /api/config reports TMDB on.
+    tmdbEnabled: state.tmdbEnabled,
+    filmCard: (params, signal) => api(`/playlists/${playlist.id}/library/film-card?${new URLSearchParams(params)}`, { signal }),
   });
 }
 

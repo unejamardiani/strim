@@ -147,7 +147,7 @@ public class LibraryRouteTests
     var show = Between(js, "function showLibrary(playlist)", "function linkCard(");
     Assert.Contains("libraryController = new AbortController();", show);
     Assert.Contains("controller: libraryController,", show);
-    var library = Read("library.js");
+    var library = Read("library.js").Split("// Film card (#367)")[0];
     Assert.Contains("const { root, playlist, h, icon, controller } = ctx;", library);
     Assert.DoesNotContain("new AbortController", library);
   }

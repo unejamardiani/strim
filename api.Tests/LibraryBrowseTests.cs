@@ -108,7 +108,7 @@ public class LibraryBrowseTests
           }
           if (view !== state.open || !ctx.isCurrent()) return;
           const names = page.entries || [];
-          view.list.append(...names.map((e) => h('li', { class: 'library-hit' }, h('span', { class: 'search-hit-name', text: e.name }), markControls(ctx, e))));
+          view.list.append(...names.map((e) => h('li', { class: 'library-hit' }, filmName(ctx, e, view.group.title, list.cacheKey), filmChevron(ctx, e), markControls(ctx, e))));
           view.offset += names.length;
           view.count.textContent = plural(page.total, 'entry', 'entries');
           const done = names.length === 0 || view.offset >= page.total;
