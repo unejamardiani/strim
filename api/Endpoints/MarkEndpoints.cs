@@ -25,7 +25,7 @@ public record FilmMatchRequest(string? Name, JsonElement? TmdbId);
 /// <item><c>PUT /api/marks/film-match</c> stores (or, with a null id, clears) the TMDB film the user picked for a
 /// film's card; 404 without a TMDB token.</item>
 /// <item><c>DELETE /api/marks/{key}</c> removes a mark by its key (404 when the caller has none).</item>
-/// <item><c>GET /api/marks?seen=&amp;rating=&amp;page=&amp;pageSize=</c> lists the caller's marks.</item>
+/// <item><c>GET /api/marks?seen=&amp;rating=&amp;page=&amp;pageSize=</c> lists the caller's marks, newest change first.</item>
 /// </list>
 /// </summary>
 public static class MarkEndpoints
@@ -54,12 +54,13 @@ public static class MarkEndpoints
       var query = db.TitleMarks.Where(m => m.UserId == userId);
       if (seen is { } s) query = query.Where(m => m.Seen == s);
       if (rating is { } r) query = query.Where(m => m.Rating == r);
-      var total = await query.CountAsync();
-      var items = await query
-        .OrderBy(m => m.TitleKey).ThenBy(m => m.Id)
-        .Skip((number - 1) * size).Take(size)
-        .ToListAsync();
-      return Results.Ok(new { items = items.Select(ToDto), total, page = number, pageSize = size });
+      // Newest change first (#299). SQLite cannot ORDER BY DateTimeOffset, so the caller's marks (at most
+      // MaxMarksPerUser) are sorted in memory, as the playlist list is.
+      var all = await query.ToListAsync();
+      var items = all
+        .OrderByDescending(m => m.UpdatedUtc).ThenBy(m => m.TitleKey, StringComparer.Ordinal)
+        .Skip((number - 1) * size).Take(size);
+      return Results.Ok(new { items = items.Select(ToDto), total = all.Count, page = number, pageSize = size });
     });
 
     mutations.MapPut("", async (MarkRequest input, ClaimsPrincipal user, AppDbContext db) =>

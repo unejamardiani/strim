@@ -1108,6 +1108,9 @@ function showLibrary(playlist) {
     search: (body, signal) => api('/library/search', { method: 'POST', body, signal }),
     // A film or series mark (#298), stored per user; api() sends the CSRF token. It never touches the playlist.
     setMark: (mark) => api('/marks', { method: 'PUT', body: mark }),
+    // My marks (#299): one page of the caller's marks, and removing one by key (api() sends the CSRF token).
+    listMarks: (params, signal) => api(`/marks?${new URLSearchParams(params)}`, { signal }),
+    removeMark: (key) => api(`/marks/${encodeURIComponent(key)}`, { method: 'DELETE' }),
     toast,
     // The editor's language labels and language filter (#265, #266), passed in rather than copied. The filter works
     // on a host shaped like the editor's state (searchLang, searchLanguages) and calls host.onLangChoice on a change.

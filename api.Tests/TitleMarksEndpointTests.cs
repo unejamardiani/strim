@@ -190,6 +190,53 @@ public class TitleMarksEndpointTests(StrimAppFactory factory) : IClassFixture<St
   }
 
   [Fact]
+  public async Task List_ShowsTheNewestChangeFirst_AcrossPages()
+  {
+    var client = await SignedInAsync("marks-newest");
+    await SetAsync(client, "Alien (1979)", seen: true);
+    await SetAsync(client, "Brazil (1985)", rating: 1);
+    await SetAsync(client, "Dark S01E01", rating: -1, kind: "series");
+    // Fixed times, so the order does not hang on the clock between requests: Brazil oldest, then Dark, Alien newest.
+    WithDb(db =>
+    {
+      var start = new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero);
+      foreach (var (key, minutes) in new[] { ("film:1985:brazil", 0), ("series::dark", 1), ("film:1979:alien", 2) })
+        db.TitleMarks.Where(m => m.TitleKey == key).ExecuteUpdate(s => s.SetProperty(m => m.UpdatedUtc, start.AddMinutes(minutes)));
+      return 0;
+    });
+
+    Assert.Equal(new[] { "Alien", "Dark", "Brazil" }, (await ListAsync(client)).Items.Select(m => m.Title));
+    Assert.Equal(new[] { "Alien", "Dark" }, (await ListAsync(client, "?pageSize=2")).Items.Select(m => m.Title));
+    Assert.Equal(new[] { "Brazil" }, (await ListAsync(client, "?page=2&pageSize=2")).Items.Select(m => m.Title));
+
+    // A new change moves the mark to the top.
+    await SetAsync(client, "Brazil (1985)", seen: true);
+    Assert.Equal(new[] { "Brazil", "Alien", "Dark" }, (await ListAsync(client)).Items.Select(m => m.Title));
+  }
+
+  [Fact]
+  public async Task UndoAfterRemove_SetsTheSameMarkAgain_FromItsTitleAndYear()
+  {
+    var client = await SignedInAsync("marks-remove-undo");
+    await SetAsync(client, "DE - The Matrix (1999) 4K", seen: true, rating: 1);
+    await SetAsync(client, "Dark S01E01", rating: -1, kind: "series");
+    var before = (await ListAsync(client)).Items.OrderBy(m => m.Key).ToList();
+
+    // What the Library's My marks list sends: DELETE by key, then the set call with "title (year)" or the title.
+    foreach (var mark in before)
+    {
+      Assert.Equal(HttpStatusCode.NoContent, (await DeleteAsync(client, mark.Key)).StatusCode);
+      var name = mark.Year is { } year ? $"{mark.Title} ({year})" : mark.Title;
+      var restored = await client.SendAsync(HttpMethod.Put, "/api/marks", new { name, kind = mark.Kind, seen = mark.Seen, rating = mark.Rating });
+      Assert.Equal(mark, await restored.Content.ReadFromJsonAsync<MarkDto>());
+    }
+
+    Assert.Equal(before, (await ListAsync(client)).Items.OrderBy(m => m.Key));
+    Assert.Equal(2, RowCount("marks-remove-undo"));
+    Assert.Equal(HttpStatusCode.BadRequest, (await DeleteAsync(client, MatrixKey, withCsrf: false)).StatusCode);
+  }
+
+  [Fact]
   public async Task Marks_NeverReachPlayerLinkOrDownload()
   {
     const string Source = "http://93.184.215.14/get.php?username=marks&password=p";

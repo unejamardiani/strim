@@ -144,6 +144,14 @@ names without a title get no controls. Two more toggles next to "Include switche
 "Hide seen" and "Liked only", filter the search and the open group for the page session; with Hide
 seen on, the count of seen matches left out is shown. The editor shows no marks.
 
+My marks (#299): a section below Browse groups lists every mark of the user, newest change first,
+50 at a time with More, including titles no longer in any playlist. It shows even when the playlist
+does not load. Pills filter it to All, Seen, Liked or Disliked. A row is plain text, never a link to
+an entry: display title, then year (when known) · Film or Series · Seen · Liked or Disliked, and a
+Remove button at `--control-h`. Remove asks no confirmation: the row goes at once and a toast offers
+Undo, which sets the same mark again and puts the row back in its place. With no marks it says so
+and how to mark a title.
+
 My list by default: the Library shows the entries of the groups that are on. One toggle, "Include
 switched-off groups", adds the groups that are off and marks their groups and entries "Off". It is
 kept for the page session only. With the toggle off, the count of left-out matches and the number of
@@ -157,6 +165,7 @@ hidden groups are shown.
 │                              │  results card: name, group · type, Off badge
 │ Browse groups                │  one card per type (Films, Series, Channels), playlist order
 │   open group                 │  All groups · title · count, entries card, More
+│ My marks                     │  filter pills · count, marks card (title, meta, Remove), More
 └──────────────────────────────┘
 ```
 

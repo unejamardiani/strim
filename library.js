@@ -11,7 +11,8 @@
       h('h1', { class: 'page-title', text: playlist.name || 'Untitled' }),
       h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}` }, icon('list'), 'Edit groups'));
     const body = h('div');
-    root.replaceChildren(head, body);
+    // My marks (#299) do not hang on the playlist, so they show even when it has no source or fails to load.
+    root.replaceChildren(head, body, myMarks(ctx));
     if (!playlist.sourceUrl) {
       body.replaceChildren(h('div', { class: 'notice' }, 'This playlist has no source URL. Add one in the editor to see what it holds.'));
       return;
@@ -364,5 +365,158 @@
       markControls(ctx, m));
   }
 
+  // mount() runs only after this file has run to its end, so My marks below may follow the export.
   window.StrimLibrary = { mount };
+
+  // My marks (#299): every film and series the user marked, newest change first, including titles that are in no
+  // playlist any more. A row is plain text, never a link to an entry. Remove asks nothing and offers Undo, which sets
+  // the same mark again with the set call; main.js sends both with the CSRF token.
+  const MARK_FILTERS = [
+    { value: 'all', label: 'All', params: {} },
+    { value: 'seen', label: 'Seen', params: { seen: true } },
+    { value: 'liked', label: 'Liked', params: { rating: 1 } },
+    { value: 'disliked', label: 'Disliked', params: { rating: -1 } },
+  ];
+  const MARKS_PAGE = 50;
+
+  function myMarks(ctx) {
+    const { h, fmt, plural } = ctx;
+    const view = { filter: 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1 };
+    const status = (text) => h('p', { class: 'search-status', role: 'status', text });
+    const count = h('p', { class: 'search-hit-meta' });
+    const list = h('ol', { class: 'search-list' });
+    const foot = h('div', { class: 'library-foot' });
+    const pills = h('div', { class: 'pills', role: 'group', 'aria-label': 'Show marks' });
+    for (const option of MARK_FILTERS) {
+      pills.append(h('button', {
+        type: 'button', 'aria-pressed': String(option.value === view.filter), dataset: { value: option.value },
+        onclick: () => {
+          view.filter = option.value;
+          for (const b of pills.children) b.setAttribute('aria-pressed', String(b.dataset.value === option.value));
+          start();
+        },
+      }, option.label));
+    }
+
+    const paint = () => {
+      count.textContent = plural(view.total, 'mark');
+      if (!view.done) foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: loadPage }, 'More'));
+      else if (view.total > 0) foot.replaceChildren(status(`All ${fmt(view.total)} shown`));
+      else if (view.filter === 'all') foot.replaceChildren(status('No marks yet. Mark a film or series as seen, or give it a thumb, in the search or a group.'));
+      else foot.replaceChildren(status('No marks of this kind.'));
+    };
+
+    // The next page starts after the marks shown now; marks a page repeats after a remove or an undo are skipped.
+    // A mark set in the search or a group moves to the top and shifts every position, so a page can add nothing
+    // new: the list then moves on to the next page at once instead of asking for the same page again.
+    const loadPage = async () => {
+      const seq = view.seq;
+      foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
+      let page;
+      let requested;
+      try {
+        const filter = MARK_FILTERS.find((f) => f.value === view.filter).params;
+        requested = Math.max(Math.floor(view.shown.size / MARKS_PAGE) + 1, view.minPage);
+        page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
+      } catch (err) {
+        if (seq !== view.seq || ctx.controller.signal.aborted) return;
+        foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+          h('p', { text: err.message || 'Your marks could not be loaded.' }),
+          h('button', { class: 'btn btn-sm', type: 'button', onclick: loadPage }, 'Try again')));
+        return;
+      }
+      if (seq !== view.seq || !ctx.isCurrent()) return;
+      const items = page.items || [];
+      let added = 0;
+      for (const m of items) {
+        if (view.shown.has(m.key)) continue;
+        view.shown.add(m.key);
+        list.append(row(m));
+        added += 1;
+      }
+      view.total = page.total;
+      view.done = items.length < MARKS_PAGE || view.shown.size >= page.total;
+      if (!view.done && added === 0) {
+        view.minPage = requested + 1;
+        loadPage();
+        return;
+      }
+      paint();
+    };
+
+    const row = (m) => {
+      const meta = [m.year, m.kind === 'series' ? 'Series' : 'Film', m.seen ? 'Seen' : '',
+        { 1: 'Liked', '-1': 'Disliked' }[m.rating] || ''].filter(Boolean).join(' · ');
+      const li = h('li', { class: 'library-hit' },
+        h('span', { class: 'search-hit-text' },
+          h('span', { class: 'search-hit-name', text: m.title }),
+          h('span', { class: 'search-hit-meta', text: meta })),
+        h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Remove the mark on ${m.title}`, onclick: () => remove(m, li) }, 'Remove'));
+      return li;
+    };
+
+    // The row goes at once and comes back on a failure; it stays hidden in place so Undo puts it back there.
+    const remove = async (m, li) => {
+      li.hidden = true;
+      try {
+        await ctx.removeMark(m.key);
+      } catch (err) {
+        // 404: the mark is already gone, for example removed on another device.
+        if (err.status !== 404) {
+          li.hidden = false;
+          ctx.toast(`The mark was not removed. ${err.message || ''}`.trim(), { error: true });
+          return;
+        }
+      }
+      syncRows(ctx, m.key, { seen: false, rating: 0 });
+      if (!li.isConnected) return;
+      view.shown.delete(m.key);
+      view.total -= 1;
+      paint();
+      ctx.toast(`Mark on ${m.title} removed`, { action: { label: 'Undo', onClick: () => undo(m, li) } });
+    };
+
+    const undo = async (m, li) => {
+      if (!li.hidden || li.dataset.restoring) return;
+      li.dataset.restoring = 'true';
+      let mark;
+      try {
+        mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating });
+      } catch (err) {
+        delete li.dataset.restoring;
+        ctx.toast(`The mark was not restored. ${err.message || ''}`.trim(), { error: true });
+        return;
+      }
+      syncRows(ctx, mark.key, { seen: mark.seen, rating: mark.rating });
+      if (!li.isConnected || view.shown.has(mark.key)) return;
+      li.replaceWith(row(mark));
+      view.shown.add(mark.key);
+      view.total += 1;
+      paint();
+    };
+
+    const start = () => {
+      view.seq += 1;
+      view.shown = new Set();
+      view.total = 0;
+      view.done = false;
+      view.minPage = 1;
+      count.textContent = '';
+      list.replaceChildren();
+      loadPage();
+    };
+    start();
+    return h('section', { class: 'library-mylist', 'aria-label': 'My marks' },
+      h('h2', { class: 'library-title', text: 'My marks' }),
+      h('p', { class: 'field-hint', text: 'Every film and series you marked, newest change first, also titles no longer in a playlist.' }),
+      pills,
+      h('div', { class: 'card' }, count, list, foot));
+  }
+
+  // A remove or an undo in My marks shows on the rows of the same title in the search and the open group.
+  function syncRows(ctx, key, mark) {
+    if (!marks.has(key)) return;
+    marks.set(key, mark);
+    for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
+  }
 })();
