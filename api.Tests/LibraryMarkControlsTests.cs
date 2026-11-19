@@ -41,7 +41,7 @@ public class LibraryMarkControlsTests
     // Search results and group entries both carry the controls.
     var library = Read("library.js");
     Assert.Contains("markControls(ctx, m));", Between(library, "function hit(", "window.StrimLibrary"));
-    Assert.Contains("h('span', { class: 'search-hit-name', text: e.name }), markControls(ctx, e))", library);
+    Assert.Contains("filmName(ctx, e, view.group.title, list.cacheKey), filmChevron(ctx, e), markControls(ctx, e))", library);
     Assert.Contains("const names = page.entries || [];", library);
 
     // The icons exist; the tap target is the phone control height.

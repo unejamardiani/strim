@@ -177,3 +177,95 @@
     overflow-y: auto;
   }
 }
+
+/* Film card (#367), one rule per line. A film row's name opens it and the whole row is the tap target; the
+   marks, the Off badge and the language chip stay tappable above it. */
+.library-hit { position: relative; }
+.library-hit .library-marks, .library-hit .search-badge, .library-hit .search-langs { position: relative; z-index: 1; }
+.library-film-open { display: block; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 16px; font-weight: 600; text-align: start; cursor: pointer; }
+.library-film-open::after { content: ""; position: absolute; inset: 0; }
+.library-hit:has(.library-film-open):hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.library-hit.is-open { background: color-mix(in srgb, var(--surface-2) 70%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.library-film-chevron { display: none; color: var(--ink-3); }
+.library-film-chevron svg { width: 16px; height: 16px; }
+
+@media (min-width: 768px) {
+  .library-film-open { font-size: 15px; }
+  .library-film-chevron { display: flex; }
+}
+
+/* The app's sheet (a bottom sheet below 600px, centred from 600px); from 1100px a side pane beside the list. */
+.film-card { --film-pane-w: 420px; --film-poster-w: 200px; --film-poster-shadow: 0 28px 50px -22px rgba(29,26,22,.6), 0 10px 22px -12px rgba(29,26,22,.35); max-width: 520px; isolation: isolate; }
+@media (prefers-color-scheme: dark) { .film-card { --film-poster-shadow: 0 30px 60px -20px rgba(0,0,0,.9), 0 10px 24px -10px rgba(0,0,0,.6); } }
+.film-card-head { position: absolute; z-index: 4; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; pointer-events: none; }
+.film-glass, .film-glass:hover { border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent); background: color-mix(in srgb, var(--surface) 68%, transparent); color: var(--ink); pointer-events: auto; -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5); }
+.film-glass svg { width: 18px; height: 18px; }
+.film-scroll { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.film-scroll > * { flex-shrink: 0; }
+
+@media (max-width: 599px) {
+  .film-card { max-width: none; max-height: 92dvh; }
+  .film-card::before { position: absolute; z-index: 5; top: 8px; left: calc(50% - 20px); margin: 0; background: color-mix(in srgb, var(--ink) 30%, transparent); }
+}
+
+@media (min-width: 1100px) {
+  .film-card { --film-poster-w: 208px; position: fixed; top: calc(var(--topbar-h) + 12px); bottom: 18px; right: max(18px, calc((100vw - 1440px) / 2 + 18px)); inset-inline-start: auto; z-index: 25; width: var(--film-pane-w); height: auto; max-width: none; max-height: none; margin: 0; border-radius: var(--radius-lg); }
+  .page:has(> .film-card[open]), body:has(.film-card[open]) .site-links { padding-right: calc(18px + var(--film-pane-w) + 24px); }
+}
+
+/* From 1100 to 1439px an open pane leaves one Browse column: the open group replaces the group list again. */
+@media (min-width: 1100px) and (max-width: 1439px) {
+  .page:has(> .film-card[open]) .library-browse { display: flex; }
+  .page:has(> .film-card[open]) .library-browse > .library-groups[hidden] { display: none !important; }
+  .page:has(> .film-card[open]) .library-browse > .library-open { position: static; max-height: none; }
+}
+
+/* Stage: poster, kicker, title, genres, then rating and marks, centred. The blurred backdrop comes later. */
+.film-stage, .film-load { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.film-stage { padding: 52px 24px 22px; }
+.film-load { gap: 14px; padding: 58px 24px 24px; }
+.film-choose p, .film-body p { margin: 0; }
+.film-poster { display: block; width: var(--film-poster-w); height: auto; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 16px; box-shadow: var(--film-poster-shadow); outline: 1px solid rgba(255,255,255,.16); outline-offset: -1px; }
+.film-load .film-poster { width: 150px; box-shadow: none; }
+.film-poster-empty { display: grid; place-items: center; background: linear-gradient(160deg, var(--movies-soft), var(--surface-3)); }
+.film-poster-empty::after { content: ""; width: 22%; aspect-ratio: 1; border-radius: 2px; background: var(--movies); transform: rotate(45deg); }
+.film-kicker { display: inline-flex; align-items: center; gap: 8px; margin: 24px 0 0; font-size: 12px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); }
+.film-title, .film-state-title { display: -webkit-box; margin: 8px 0 0; overflow: hidden; font-family: var(--font-display); font-size: 36px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; text-wrap: balance; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.film-poster-empty + .film-title { margin-top: 24px; }
+.film-load .film-title { margin: 0; font-size: 26px; }
+.film-state-title { margin: 0; font-size: 26px; letter-spacing: -0.035em; }
+.film-meta { margin: 10px 0 0; font-size: 14px; font-weight: 550; color: var(--ink-2); }
+.film-actions { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; }
+.film-sep { width: 1px; height: 22px; background: var(--line-strong); }
+.film-rating { display: inline-flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; }
+.film-rating svg { width: 15px; height: 15px; align-self: center; fill: var(--movies); stroke: var(--movies); stroke-width: 1.4; }
+.film-rating b { font-family: var(--font-display); font-size: 24px; font-weight: 800; letter-spacing: -0.04em; }
+.film-rating span { font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--ink-3); }
+.skel { background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%); }
+.skel-line { display: block; width: 46%; height: 12px; border-radius: 6px; }
+
+/* Marks capsule: the #298 buttons, icon only, 36px with a 44px hit area. */
+.film-marks.library-marks { display: inline-flex; gap: 1px; margin: 0; padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--surface-2) 80%, transparent); }
+.film-marks .library-mark { position: relative; width: 36px; height: 36px; min-width: 36px; min-height: 36px; border-radius: 50%; color: var(--ink-2); }
+.film-marks .library-mark::after { content: ""; position: absolute; inset: -4px; }
+.film-marks .library-mark svg { width: 17px; height: 17px; stroke-width: 2; }
+.film-marks .library-mark[aria-pressed="true"] { background: var(--pill-on); color: var(--accent); box-shadow: 0 1px 2px rgba(29,26,22,.12), 0 4px 10px -6px rgba(29,26,22,.3); }
+
+/* "choose": the candidates as plain tiles; choosing one is #368. */
+.film-choose { display: flex; flex-direction: column; gap: 14px; padding: 70px 24px 24px; }
+.film-choose-text { color: var(--ink-2); }
+.film-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.film-tile { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.film-tile-poster { display: block; width: 100%; height: auto; aspect-ratio: 2 / 3; object-fit: cover; margin-bottom: 5px; border-radius: 12px; box-shadow: 0 10px 18px -12px rgba(29,26,22,.5); outline: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); outline-offset: -1px; }
+.film-tile-title { overflow: hidden; font-size: 13.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.film-tile-meta { font-size: 12px; color: var(--ink-2); }
+.film-choose .film-marks { align-self: center; }
+
+.film-body { display: flex; flex-direction: column; gap: 22px; padding: 0 24px 24px; }
+.film-overview { font-size: 15px; line-height: 1.6; }
+.film-overview.is-clamped { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.film-more { align-self: flex-start; min-height: 36px; margin-top: -16px; padding: 0; border: 0; background: none; color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.film-credit { display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.5; color: var(--ink-3); }
+.film-credit-line { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--ink-2); }
+.film-credit-line .tmdb-logo { height: 14px; }
+.film-credit a { color: inherit; }

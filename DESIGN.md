@@ -133,7 +133,20 @@ playlist card's Library action opens it; Edit groups in its head goes back to th
 
 Read-only: nothing in the Library changes the playlist or what the player link serves. It has no
 switches, no bulk action, no Save and no dock; results and entries are text, not controls, except
-the mark controls below.
+the mark controls and, for films, the name, which opens the film card.
+
+Film card (#367): only with TMDB on (`/api/config`), a film row's name is a button and the whole row
+its tap target (hover tint, 16px chevron from 768px, `.is-open` tint and 3px `--accent` inset). Series,
+channels and, with TMDB off, every row stay text and nothing about TMDB shows. One `<dialog>`: the
+app's sheet below 1100px (bottom sheet with handle below 600px, 520px centred from 600px), from 1100px
+a 420px side pane beside the list that does not block the page. A glass Close circle floats top right.
+It loads once on open (a skeleton poster, the entry name and the marks). The stage is centred: 2:3
+poster (200px, 208px in the pane; Movies-diamond box when missing), kicker "Film · year", title
+(Bricolage 36px/800), up to three genres joined by " · ", then the TMDB rating and the marks capsule
+(Seen, Thumbs up, Thumbs down as 36px icon buttons sharing the rows' state). The overview is clamped
+to 3 lines with More/Less. "choose" lists the candidates as a 3-column grid of poster tiles; other
+states and failures show the entry name, its group and a short notice. With TMDB data, TMDB's logo,
+credit line and notice end it. Close, Escape, backdrop or Back close it without moving the page.
 
 Marks (#298): every film and series row (search results and group entries) ends with three round
 icon buttons, Seen (check), Thumbs up and Thumbs down, `--control-h` square (46px on phones, 42px
@@ -166,6 +179,7 @@ hidden groups are shown.
 │ Browse groups                │  one card per type (Films, Series, Channels), playlist order
 │   open group                 │  All groups · title · count, entries card, More
 │ My marks                     │  filter pills · count, marks card (title, meta, Remove), More
+│ Film card                    │  sheet, or side pane from 1100px: poster, facts, marks, overview
 └──────────────────────────────┘
 ```
 
