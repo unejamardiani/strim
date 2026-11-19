@@ -68,4 +68,49 @@ public class LibraryFilmCardUiTests
     Assert.Contains(".film-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;", Read("library.css"));
     Assert.Contains("the mark controls and, for films, the name, which opens the film card.", Read("DESIGN.md"));
   }
+
+  [Fact]
+  public void SimilarFilms_ListTheListsFilmsFirst_AndOnlyThoseOpenACardInPlace()
+  {
+    var card = Card();
+    Assert.Contains("if (f?.similar?.length) body.append(similarFilms(ctx, f));", card);
+    Assert.Contains("`${f.similar.filter((s) => s.inList).length} in your list`", card);
+    Assert.Contains("h('div', { class: 'film-tile is-absent' }, art, title,", card);
+    Assert.Contains("[s.year, 'Not in your list'].filter(Boolean).join(' · ')", card);
+    Assert.Contains("[s.title, s.year, `in ${s.group}`, off ? 'group off' : '', s.seen ? 'seen' : '']", card);
+    Assert.Contains("onclick: () => openSimilar(ctx, s, i)", card);
+    Assert.Contains("card.film = { name: s.entry, group: s.group, cacheKey: card.film.cacheKey, markKey: `similar:${s.entry}`", card);
+    Assert.Contains("'aria-label': `Back to ${prev.title}`, onclick: () => filmBack(ctx)", card);
+    // Back from a loading or failed inner card copies the tile's own Seen back, not a placeholder.
+    var seed = card.IndexOf("if (!marks.has(card.film.markKey)) marks.set(card.film.markKey, { seen: s.seen === true, rating: 0 });", StringComparison.Ordinal);
+    Assert.True(seed >= 0 && seed < card.IndexOf("function filmBack(ctx)", StringComparison.Ordinal));
+    Assert.Contains("prev.similar.seen = marks.get(card.film.markKey)?.seen ?? prev.similar.seen;", card);
+    // Back renders the stored card without a request and puts the focus on the tapped tile.
+    Assert.Contains("renderFilm(ctx, prev.answer);", card);
+    Assert.Contains("rail?.querySelector(`[data-i=\"${prev.tile}\"]`)?.focus({ preventScroll: true });", card);
+    // A mark in a card opened from a similar film reaches the rows through the key the API returns.
+    Assert.Contains("const real = saved?.key || keyAlias.get(key);", Read("library.js"));
+    // A kept answer reopened from a similar tile keeps the marks its row used, so a tap there cannot clear Seen.
+    Assert.Contains("const answerMarkKey = new WeakMap();", card);
+    Assert.Contains("const given = !answer?.marks || owner === key ? now\n      : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0 };", card);
+    Assert.Contains("if (answer?.marks && !owner) answerMarkKey.set(answer, key);", card);
+    Assert.DoesNotContain("if (answer) answer.marks = null;", card);
+    var css = Read("library.css");
+    Assert.Contains(".film-rail .film-tile { flex: 0 0 112px; scroll-snap-align: start; }", css);
+    Assert.Contains(".film-tile.is-absent .film-tile-poster { filter: grayscale(.85) contrast(.85); opacity: .5; box-shadow: none; }", css);
+    Assert.Contains("Similar films and the match (#368):", Read("DESIGN.md"));
+  }
+
+  [Fact]
+  public void TheMatch_IsChosenOrCleared_WithTheCsrfPut_AndAFailureRestoresTheCard()
+  {
+    var card = Card();
+    Assert.Contains("h('button', { class: 'film-tile', type: 'button', onclick: () => setMatch(ctx, c.id) }", card);
+    Assert.Contains("h('button', { class: 'film-unmatch', type: 'button', onclick: () => setMatch(ctx, null) }, 'Not this film')", card);
+    Assert.Contains("await ctx.setFilmMatch({ name: film.name, tmdbId });", card);
+    Assert.Contains("renderFilm(ctx, before);", card);
+    Assert.Contains("cardToast(ctx)(`The film was not changed. ${err.message || ''}`.trim(), { error: true });", card);
+    Assert.Contains("'Strim finds only this film for the title.'", card);
+    Assert.Contains("setFilmMatch: (body) => api('/marks/film-match', { method: 'PUT', body }),", Read("main.js"));
+  }
 }

@@ -228,7 +228,13 @@
     marks.set(key, next);
     repaint();
     try {
-      await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating });
+      const saved = await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating });
+      // A card opened from a similar film (#368) uses a local key; the rows of the title use the one the API returns.
+      const real = saved?.key || keyAlias.get(key);
+      if (real && real !== key) {
+        keyAlias.set(key, real);
+        syncRows(ctx, real, next);
+      }
     } catch (err) {
       // A later tap on the same title already replaced this change.
       if (marks.get(key) !== next) return;
@@ -523,8 +529,11 @@
 
   // Film card (#367): a film row's name opens poster and details from TMDB in a <dialog>, a bottom sheet on a phone
   // and a side pane from 1100px. Only when /api/config reports TMDB on; it reads only and never changes the playlist.
-  const card = { el: null, film: null, button: null, seq: 0, pending: null };
+  const card = { el: null, film: null, button: null, seq: 0, pending: null, answer: null, stack: [] };
+  const keyAlias = new Map();
   const answers = new Map();
+  // The mark key that first used an answer's marks (#368).
+  const answerMarkKey = new WeakMap();
   const wide = window.matchMedia('(min-width: 1100px)');
   const opensCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Movies' && !!e.markKey;
   const FILM_NOTES = {
@@ -536,7 +545,7 @@
 
   function filmName(ctx, e, group, cacheKey) {
     if (!opensCard(ctx, e)) return ctx.h('span', { class: 'search-hit-name', text: e.name });
-    const film = { name: e.name, group: group || '', cacheKey, markKey: e.markKey };
+    const film = { name: e.name, group: group || '', cacheKey, markKey: e.markKey, off: e.enabled === false };
     const button = ctx.h('button', {
       class: 'search-hit-name library-film-open', type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
       dataset: { name: film.name, group: film.group }, text: e.name, onclick: () => openFilm(ctx, film, button),
@@ -560,6 +569,7 @@
     if (!card.el?.isConnected) card.el = filmDialog(ctx);
     card.film = film;
     card.button = button;
+    card.stack = [];
     markOpen(ctx, button);
     if (!card.el.open) {
       showCard();
@@ -597,7 +607,8 @@
     card.seq += 1;
     if (history.state?.filmCard) history.back();
     markOpen(ctx, null);
-    const { film, button } = card;
+    const { button } = card;
+    const film = card.stack[0]?.film || card.film;
     const again = [...ctx.root.querySelectorAll('.library-film-open')].find((b) => b.dataset.name === film.name && b.dataset.group === film.group);
     (button?.isConnected ? button : again || ctx.root.querySelector('.input-search'))?.focus({ preventScroll: true });
   }
@@ -634,6 +645,7 @@
     const choose = answer?.status === 'choose' && answer.candidates?.length > 0;
     const title = h('h2', { class: choose ? 'film-state-title' : 'film-title', id: 'film-card-title', tabindex: '-1',
       text: choose ? 'Which film is it?' : f?.title || entry.name });
+    card.answer = answer;
     const marksEl = cardMarks(ctx, entry, answer);
     const body = h('div', { class: 'film-body' });
     let top;
@@ -642,12 +654,13 @@
         h('span', { class: 'skel skel-line', 'aria-hidden': 'true' }), marksEl,
         h('span', { class: 'sr-only', role: 'status', text: 'Loading film details' }));
     } else if (choose) {
-      // #367 lists the candidates only; choosing one is #368.
-      top = h('div', { class: 'film-choose' }, title, h('p', { class: 'film-choose-text', text: `More than one film fits "${entry.name}".` }),
-        h('ul', { class: 'film-grid' }, answer.candidates.map((c) => h('li', { class: 'film-tile' },
+      // Picking a candidate stores the match (#368) and loads the card again.
+      top = h('div', { class: 'film-choose' }, title,
+        h('p', { class: 'film-choose-text', text: `More than one film fits "${entry.name}". Pick yours and Strim remembers it.` }),
+        h('ul', { class: 'film-grid' }, answer.candidates.map((c) => h('li', null, h('button', { class: 'film-tile', type: 'button', onclick: () => setMatch(ctx, c.id) },
           poster(ctx, c.posterUrl, '', 'film-tile-poster'),
           h('span', { class: 'film-tile-title', text: c.title || entry.name }),
-          h('span', { class: 'film-tile-meta', text: c.year ? String(c.year) : 'Year unknown' })))),
+          h('span', { class: 'film-tile-meta', text: c.year ? String(c.year) : 'Year unknown' }))))),
         marksEl);
     } else {
       const rating = f?.rating > 0 ? f.rating.toFixed(1) : '';
@@ -659,6 +672,12 @@
           h('span', { class: 'film-rating', role: 'img', 'aria-label': `TMDB rating ${rating} out of 10` }, icon('star'), h('b', { text: rating }), h('span', { text: 'TMDB' })),
           h('span', { class: 'film-sep', 'aria-hidden': 'true' })] : null, marksEl));
       if (f?.overview) body.append(h('p', { class: 'film-overview is-clamped', text: f.overview }));
+      if (f?.similar?.length) body.append(similarFilms(ctx, f));
+      if (f) {
+        body.append(h('div', { class: 'film-source' },
+          h('p', null, 'In your list as', h('b', { text: entry.name }), entry.group, entry.off ? h('span', { class: 'search-badge off', text: 'Off' }) : null),
+          h('button', { class: 'film-unmatch', type: 'button', onclick: () => setMatch(ctx, null) }, 'Not this film')));
+      }
       if (!f) {
         const failed = answer.status === 'failed';
         const retry = failed || answer.status === 'unavailable';
@@ -668,6 +687,10 @@
       }
     }
     if (answer?.tmdbData) body.append(filmCredit(ctx));
+    const prev = card.stack.at(-1);
+    card.el.querySelector('.film-card-head').firstElementChild.replaceWith(prev
+      ? h('button', { class: 'icon-btn film-glass', type: 'button', 'aria-label': `Back to ${prev.title}`, onclick: () => filmBack(ctx) }, icon('back'))
+      : h('span'));
     card.el.setAttribute('aria-busy', String(!answer));
     scroll.replaceChildren(top, body);
     scroll.scrollTop = 0;
@@ -695,20 +718,105 @@
   // The #298 controls as an icon capsule; they share the state by mark key, so the rows repaint with them. In a modal card
   // a failure shows inside the card for 5 s, because the toasts lie under the dialog's top layer.
   function cardMarks(ctx, entry, answer) {
-    const now = marks.get(entry.markKey) || { seen: false, rating: 0 };
-    // An answer's marks count once: a kept answer reopened later must not undo a mark set since.
-    const given = answer?.marks ? { seen: answer.marks.seen === true, rating: answer.marks.rating || 0 } : now;
-    if (answer) answer.marks = null;
-    const toast = (text, options) => {
-      if (!card.el.matches(':modal')) return ctx.toast(text, options);
-      const note = ctx.h('div', { class: 'notice error', role: 'alert', text });
-      card.el.querySelector('.film-body')?.prepend(note);
-      setTimeout(() => note.remove(), 5000);
-    };
+    const key = entry.markKey;
+    const now = marks.get(key) || { seen: false, rating: 0 };
+    // An answer's marks count once: a kept answer reopened later must not undo a mark set since. Reopened under
+    // another key (its row, then a similar tile), it takes the live state of the key that first used it.
+    const owner = answerMarkKey.get(answer);
+    const given = !answer?.marks || owner === key ? now
+      : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0 };
+    if (answer?.marks && !owner) answerMarkKey.set(answer, key);
+    const toast = cardToast(ctx);
     const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: 'Movies', markKey: entry.markKey, ...given });
     el.classList.add('film-marks');
     if (given.seen !== now.seen || given.rating !== now.rating) syncRows(ctx, entry.markKey, given);
     return el;
+  }
+
+  const cardToast = (ctx) => (text, options) => {
+    if (!card.el.matches(':modal')) return ctx.toast(text, options);
+    const note = ctx.h('div', { class: 'notice error', role: 'alert', text });
+    card.el.querySelector('.film-body')?.prepend(note);
+    setTimeout(() => note.remove(), 5000);
+  };
+
+  // Similar films (#368) in the API's order, those in the list first; only those open a card.
+  function similarFilms(ctx, f) {
+    const { h, icon } = ctx;
+    const rail = h('div', { class: 'film-rail', role: 'group', 'aria-label': 'Similar films', tabindex: '0' }, f.similar.map((s, i) => similarTile(ctx, s, i)));
+    const step = (dir) => rail.scrollBy({ left: dir * rail.clientWidth });
+    return h('section', { class: 'film-section' },
+      h('div', { class: 'film-section-head' },
+        h('h3', { class: 'film-section-title', text: 'Similar films' }),
+        h('span', { class: 'film-section-count', text: `${f.similar.filter((s) => s.inList).length} in your list` }),
+        h('span', { class: 'film-rail-nav' },
+          h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Previous', onclick: () => step(-1) }, icon('back')),
+          h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Next', onclick: () => step(1) }, icon('chevron')))),
+      rail);
+  }
+
+  function similarTile(ctx, s, i) {
+    const { h, icon } = ctx;
+    const off = s.inList && s.enabled === false;
+    const art = h('span', { class: 'film-tile-art' }, poster(ctx, s.posterUrl, '', 'film-tile-poster'),
+      off ? h('span', { class: 'film-tile-flag', 'aria-hidden': 'true', text: 'Off' }) : null,
+      s.seen ? h('span', { class: 'film-tile-seen', 'aria-hidden': s.inList ? 'true' : null }, icon('check'), s.inList ? null : h('span', { class: 'sr-only', text: 'Seen' })) : null);
+    const title = h('span', { class: 'film-tile-title', text: s.title });
+    if (!s.inList) {
+      return h('div', { class: 'film-tile is-absent' }, art, title,
+        h('span', { class: 'film-tile-meta', text: [s.year, 'Not in your list'].filter(Boolean).join(' · ') }));
+    }
+    const label = [s.title, s.year, `in ${s.group}`, off ? 'group off' : '', s.seen ? 'seen' : ''].filter(Boolean).join(', ');
+    return h('button', { class: 'film-tile', type: 'button', 'aria-label': label, dataset: { i: String(i) }, onclick: () => openSimilar(ctx, s, i) }, art, title,
+      h('span', { class: 'film-tile-meta' }, h('span', { class: off ? 'film-on is-off' : 'film-on', 'aria-hidden': 'true' }), h('span', { text: s.group })));
+  }
+
+  // The card in place: the current one goes on a stack with its scroll positions; device Back still closes all.
+  function openSimilar(ctx, s, i) {
+    const scroll = card.el.querySelector('.film-scroll');
+    card.stack.push({ film: card.film, answer: card.answer, title: card.answer.film.title || card.film.name, similar: s, tile: i,
+      top: scroll.scrollTop, rail: scroll.querySelector('.film-rail')?.scrollLeft || 0 });
+    card.film = { name: s.entry, group: s.group, cacheKey: card.film.cacheKey, markKey: `similar:${s.entry}`, off: s.enabled === false };
+    // The local key starts from the tile, so Back from a card still loading or failed keeps the tile's Seen.
+    if (!marks.has(card.film.markKey)) marks.set(card.film.markKey, { seen: s.seen === true, rating: 0 });
+    loadFilm(ctx);
+  }
+
+  function filmBack(ctx) {
+    const prev = card.stack.pop();
+    prev.similar.seen = marks.get(card.film.markKey)?.seen ?? prev.similar.seen;
+    card.seq += 1;
+    card.pending?.abort();
+    card.film = prev.film;
+    renderFilm(ctx, prev.answer);
+    const scroll = card.el.querySelector('.film-scroll');
+    scroll.scrollTop = prev.top;
+    const rail = scroll.querySelector('.film-rail');
+    if (rail) rail.scrollLeft = prev.rail;
+    rail?.querySelector(`[data-i="${prev.tile}"]`)?.focus({ preventScroll: true });
+  }
+
+  // Choose a candidate, or clear the match with a null id (#368); a failure brings the previous card back.
+  async function setMatch(ctx, tmdbId) {
+    const { film } = card;
+    const before = card.answer;
+    const seq = ++card.seq;
+    renderFilm(ctx, null);
+    try {
+      await ctx.setFilmMatch({ name: film.name, tmdbId });
+    } catch (err) {
+      if (seq !== card.seq) return;
+      renderFilm(ctx, before);
+      cardToast(ctx)(`The film was not changed. ${err.message || ''}`.trim(), { error: true });
+      return;
+    }
+    if (seq !== card.seq) return;
+    for (const k of [...answers.keys()]) if (JSON.parse(k)[0] === film.name) answers.delete(k);
+    await loadFilm(ctx);
+    // An automatic match cannot be cleared: the card then comes back with the same film.
+    if (tmdbId === null && card.film === film && card.answer?.film && card.answer.film.id === before?.film?.id) {
+      card.el.querySelector('.film-body')?.prepend(ctx.h('div', { class: 'notice', text: 'Strim finds only this film for the title.' }));
+    }
   }
 
   // TMDB's logo and notice (#315) with the credit line (#316), only when the card carries TMDB data.
