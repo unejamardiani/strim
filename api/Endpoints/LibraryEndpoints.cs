@@ -9,7 +9,11 @@ namespace Api.Endpoints;
 
 /// <summary>A film's TMDB facts plus the user's marks.</summary>
 public sealed record LibraryFilmCard(
-  string Status, LibraryFilmDetails? Film, IReadOnlyList<LibraryFilmCandidate>? Candidates, LibraryFilmMarks Marks);
+  string Status, LibraryFilmDetails? Film, IReadOnlyList<LibraryFilmCandidate>? Candidates, LibraryFilmMarks Marks)
+{
+  /// <summary>Whether the card carries data from TMDB, so the browser shows the TMDB credit line.</summary>
+  public bool TmdbData => Film is not null || Candidates is { Count: > 0 };
+}
 
 /// <param name="PosterUrl">The poster on TMDB's image host (<see cref="TmdbPosterUrl"/>); the browser loads it directly.</param>
 public sealed record LibraryFilmDetails(
