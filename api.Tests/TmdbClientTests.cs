@@ -111,32 +111,110 @@ public class TmdbClientTests
   }
 
   [Fact]
-  public async Task RateLimited_RespectsRetryAfter()
+  public async Task RateLimited_BlocksCallsUntilRetryAfter()
   {
     var time = new ManualTime();
-    var withRetryAfter = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
-    withRetryAfter.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(10));
-    var answers = new Queue<HttpResponseMessage>(
-      [withRetryAfter, new HttpResponseMessage(HttpStatusCode.TooManyRequests), Json("""{"results":[]}""")]);
+    var logger = new CapturingTmdbLogger();
+    var answers = new Queue<HttpResponseMessage>([TooMany(r => r.RetryAfter = new(TimeSpan.FromSeconds(10))),
+      Json("""{"results":[]}""")]);
+    var handler = new StubHandler(_ => answers.Dequeue());
+    var client = CreateClient(handler, time: time, logger: logger);
+
+    Assert.Equal(TmdbStatus.RateLimited, (await client.SearchMovieAsync("Secret Title", 1999, default)).Status);
+    time.Advance(TimeSpan.FromSeconds(9));
+    // Every call is blocked, whatever it asks for.
+    Assert.Equal(TmdbStatus.RateLimited, (await client.SearchMovieAsync("Other", null, default)).Status);
+    Assert.Equal(TmdbStatus.RateLimited, (await client.GetMovieWithSimilarAsync(7, default)).Status);
+    Assert.Single(handler.Requests);
+
+    time.Advance(TimeSpan.FromSeconds(1));
+    Assert.Equal(TmdbStatus.Ok, (await client.SearchMovieAsync("A", null, default)).Status);
+    Assert.Equal(2, handler.Requests.Count);
+
+    var line = Assert.Single(logger.Lines);
+    Assert.Contains("rate limit", line);
+    foreach (var forbidden in new[] { Token, "Secret", "secret", "1999", "search", "query" })
+      Assert.DoesNotContain(forbidden, line);
+  }
+
+  [Fact]
+  public async Task RateLimited_HttpDateAndMissingHeader_UseDateOrDefault()
+  {
+    var time = new ManualTime();
+    var answers = new Queue<HttpResponseMessage>([
+      TooMany(r => r.RetryAfter = new(time.GetUtcNow().AddSeconds(120))),
+      TooMany(_ => { }),
+      TooMany(r => r.TryAddWithoutValidation("Retry-After", "soon")),
+      Json("""{"results":[]}"""),
+    ]);
     var handler = new StubHandler(_ => answers.Dequeue());
     var client = CreateClient(handler, time: time);
 
-    Assert.Equal(TmdbStatus.Unavailable, (await client.SearchMovieAsync("A", null, default)).Status);
-    time.Advance(TimeSpan.FromSeconds(9));
-    Assert.Equal(TmdbStatus.Unavailable, (await client.SearchMovieAsync("A", null, default)).Status);
+    // An HTTP date: blocked until that moment.
+    Assert.Equal(TmdbStatus.RateLimited, (await client.SearchMovieAsync("A", null, default)).Status);
+    time.Advance(TimeSpan.FromSeconds(119));
+    Assert.Equal(TmdbStatus.RateLimited, (await client.SearchMovieAsync("A", null, default)).Status);
+    Assert.Single(handler.Requests);
+    time.Advance(TimeSpan.FromSeconds(1));
+
+    // No header, then one that cannot be read: the default applies each time.
+    Assert.Equal(TimeSpan.FromSeconds(60), TmdbClient.DefaultBackoff);
+    for (var expected = 2; expected <= 3; expected++)
+    {
+      Assert.Equal(TmdbStatus.RateLimited, (await client.SearchMovieAsync("A", null, default)).Status);
+      time.Advance(TmdbClient.DefaultBackoff - TimeSpan.FromSeconds(1));
+      Assert.Equal(TmdbStatus.RateLimited, (await client.SearchMovieAsync("A", null, default)).Status);
+      Assert.Equal(expected, handler.Requests.Count);
+      time.Advance(TimeSpan.FromSeconds(1));
+    }
+
+    Assert.Equal(TmdbStatus.Ok, (await client.SearchMovieAsync("A", null, default)).Status);
+    Assert.Equal(4, handler.Requests.Count);
+  }
+
+  [Theory]
+  [InlineData(false)]
+  [InlineData(true)]
+  public async Task RateLimited_RetryAfterIsCapped(bool asDate)
+  {
+    var time = new ManualTime();
+    var days = TimeSpan.FromDays(3);
+    var answers = new Queue<HttpResponseMessage>([
+      TooMany(r => r.RetryAfter = asDate ? new(time.GetUtcNow() + days) : new(days)),
+      Json("""{"results":[]}"""),
+    ]);
+    var handler = new StubHandler(_ => answers.Dequeue());
+    var client = CreateClient(handler, time: time);
+
+    Assert.Equal(TimeSpan.FromHours(1), TmdbClient.MaxBackoff);
+    Assert.Equal(TmdbStatus.RateLimited, (await client.SearchMovieAsync("A", null, default)).Status);
+    time.Advance(TmdbClient.MaxBackoff - TimeSpan.FromSeconds(1));
+    Assert.Equal(TmdbStatus.RateLimited, (await client.SearchMovieAsync("A", null, default)).Status);
     Assert.Single(handler.Requests);
 
-    time.Advance(TimeSpan.FromSeconds(2));
-    // No Retry-After: the default back-off applies.
-    Assert.Equal(TmdbStatus.Unavailable, (await client.SearchMovieAsync("A", null, default)).Status);
-    Assert.Equal(2, handler.Requests.Count);
-    time.Advance(TimeSpan.FromSeconds(59));
-    Assert.Equal(TmdbStatus.Unavailable, (await client.SearchMovieAsync("A", null, default)).Status);
-    Assert.Equal(2, handler.Requests.Count);
-
-    time.Advance(TimeSpan.FromSeconds(2));
+    time.Advance(TimeSpan.FromSeconds(1));
     Assert.Equal(TmdbStatus.Ok, (await client.SearchMovieAsync("A", null, default)).Status);
-    Assert.Equal(3, handler.Requests.Count);
+    Assert.Equal(2, handler.Requests.Count);
+  }
+
+  [Fact]
+  public async Task RateLimited_DoesNotRetry()
+  {
+    // Every answer is a 429 with no wait at all, so a retry loop would be free to run.
+    var handler = new StubHandler(_ => TooMany(r => r.RetryAfter = new(TimeSpan.Zero)));
+    var client = CreateClient(handler, time: new ManualTime());
+
+    var result = await client.GetMovieWithSimilarAsync(3, default);
+
+    Assert.Equal(TmdbStatus.RateLimited, result.Status);
+    Assert.Single(handler.Requests);
+  }
+
+  private static HttpResponseMessage TooMany(Action<HttpResponseHeaders> headers)
+  {
+    var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+    headers(response.Headers);
+    return response;
   }
 
   [Fact]
