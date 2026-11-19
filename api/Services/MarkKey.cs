@@ -47,7 +47,9 @@ public sealed record MarkKey(string Key, string Title, int? Year, string Display
 
   private static MarkKey? Derive(string entryName, MarkKind kind)
   {
-    var name = VariantFinder.Detect(entryName).BaseName;
+    // White space is folded first, so the patterns below see single spaces only. A prefix is read before quality
+    // words go, while its separator is still there ("DE - 4K"); a code standing alone is the title.
+    var name = Collapse(VariantFinder.Detect(StripPrefix(Collapse(entryName))).BaseName);
     if (kind == MarkKind.Series)
     {
       var marker = SeriesMarker.Match(name);
@@ -62,7 +64,10 @@ public sealed record MarkKey(string Key, string Title, int? Year, string Display
       year = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
       name = name.Remove(match.Index, match.Length);
     }
-    else
+
+    // Square-bracketed noise goes before the trailing year is looked for, so "Title 2020 [Multi-Sub]" keeps its year.
+    name = Collapse(StripSquareBrackets(name));
+    if (year is null)
     {
       var trailing = TrailingYear.Match(name);
       if (trailing.Success && trailing.Index > 0)
@@ -72,7 +77,6 @@ public sealed record MarkKey(string Key, string Title, int? Year, string Display
       }
     }
 
-    name = StripSquareBrackets(name);
     name = StripPrefix(name);
     var display = Cut(Collapse(name).Trim(Separators));
     var title = Cut(Normalise(display));
@@ -99,14 +103,15 @@ public sealed record MarkKey(string Key, string Title, int? Year, string Display
     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, Timeout);
 
   private static readonly Regex BracketedYear = new(
-    @"[(\[]\s?((?:19|20)\d{2})\s?[)\]]", RegexOptions.CultureInvariant, Timeout);
+    @"[(\[]\s*((?:19|20)\d{2})\s*[)\]]", RegexOptions.CultureInvariant, Timeout);
 
   private static readonly Regex TrailingYear = new(
     @"(?<![\p{L}\p{N}])((?:19|20)\d{2})[\s\-|.]*$", RegexOptions.CultureInvariant, Timeout);
 
-  // A leading upper-case code after an optional pipe, followed by ':', '|', ' - ' or the end of the name.
+  // A leading upper-case code after an optional pipe, followed by ':', '|' or ' - '. A code that stands alone is
+  // the title itself ("MIST"), never a prefix.
   private static readonly Regex Prefix = new(
-    @"^\s?\|?\s?([A-Z]{2,5}(?:-[A-Z]{2,5})?)\s?(?:[:|]|-(?=\s|$)|$)", RegexOptions.CultureInvariant, Timeout);
+    @"^\s?\|?\s?([A-Z]{2,5}(?:-[A-Z]{2,5})?)\s?(?:[:|]|-(?=\s|$))", RegexOptions.CultureInvariant, Timeout);
 
   private static string StripPrefix(string name)
   {
