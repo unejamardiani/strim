@@ -366,18 +366,26 @@ public class PlaylistSearchIndexTests
 
     var disabled = Set("Country 7 · Movies");
     index.Search("numero 149999", disabled, 50); // warm-up
-    var stopwatch = Stopwatch.StartNew();
-    var rare = index.Search("numero 149999", disabled, 50);
-    var common = index.Search("numero", disabled, 50);
-    var none = index.Search("nothing like this", disabled, 50);
-    stopwatch.Stop();
+    // The fastest of three rounds: a slow scheduler tick on a shared CI runner must not fail the test,
+    // while a search that is really slow is slow in every round.
+    PlaylistSearchResult rare = null!, common = null!, none = null!;
+    var fastest = long.MaxValue;
+    for (var round = 0; round < 3; round++)
+    {
+      var stopwatch = Stopwatch.StartNew();
+      rare = index.Search("numero 149999", disabled, 50);
+      common = index.Search("numero", disabled, 50);
+      none = index.Search("nothing like this", disabled, 50);
+      stopwatch.Stop();
+      fastest = Math.Min(fastest, stopwatch.ElapsedMilliseconds);
+    }
 
     var last = Assert.Single(rare.Matches);
     Assert.Equal(("Title Número 149999 series HD", "Country 39 · Series", 1250), (last.Name, last.OutputGroup, last.Position));
     Assert.Equal(50, common.Matches.Count);
     Assert.True(common.HasMore);
     Assert.Empty(none.Matches);
-    Assert.True(stopwatch.ElapsedMilliseconds < 500, $"{stopwatch.ElapsedMilliseconds} ms");
+    Assert.True(fastest < 500, $"{fastest} ms");
   }
 
   private static long AllocatedArrayBytes(PlaylistSearchIndex index, int entries)
