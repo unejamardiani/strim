@@ -722,7 +722,7 @@
     };
     const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: 'Movies', markKey: entry.markKey, ...given });
     el.classList.add('film-marks');
-    ['Seen', 'Like', 'Dislike'].forEach((label, i) => {
+    ['Seen', 'Thumbs up', 'Thumbs down'].forEach((label, i) => {
       const b = el.children[i];
       b.className = 'btn film-mark';
       b.setAttribute('aria-label', label);

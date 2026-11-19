@@ -204,7 +204,7 @@
 .film-card-body > * { flex-shrink: 0; }
 
 @media (max-width: 599px) {
-  .film-card { max-height: 88dvh; }
+  .film-card { max-width: none; max-height: 92dvh; }
   .film-card-head::before { content: ""; flex: 0 0 100%; height: 5px; margin: 4px 0; border-radius: 999px; background: linear-gradient(90deg, transparent calc(50% - 20px), var(--line-strong) 0 calc(50% + 20px), transparent 0); }
 }
 

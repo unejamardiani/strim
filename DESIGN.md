@@ -141,7 +141,7 @@ channels and, with TMDB off, every row stay text and nothing about TMDB shows. O
 app's sheet below 1100px (bottom sheet with handle below 600px, 520px centred from 600px), from 1100px
 a 420px side pane beside the list that does not block the page. It loads once on open. Body: 2:3
 poster (108px, 132px in the pane; Movies-diamond box when missing), title (26px/800), year, rating
-("7.6 /10 TMDB"), up to four genre pills, the marks as labelled Seen, Like, Dislike buttons sharing
+("7.6 /10 TMDB"), up to four genre pills, the marks as labelled Seen, Thumbs up, Thumbs down buttons sharing
 the rows' state, the overview clamped to 5 lines with More/Less; "choose" lists the candidates; other
 states and failures show a short notice. With TMDB data, TMDB's logo, credit line and notice end it.
 Close, Escape, backdrop, a swipe down on the phone or Back close it without moving the page.
