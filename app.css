@@ -190,7 +190,12 @@ body.scrolled .topbar {
   color: var(--ink-3);
 }
 
+/* With the editor dock, only the TMDB attribution stays; the body padding keeps it above the dock. */
 body.has-dock .site-links {
+  padding: 0 18px;
+}
+
+body.has-dock .site-links > a {
   display: none;
 }
 
