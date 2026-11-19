@@ -108,7 +108,7 @@ public sealed class LibrarySimilarFilmsTests : IAsyncLifetime
     var heat = similar.Single(s => s.GetProperty("id").GetInt32() == 5);
     Assert.Equal("Heat", heat.GetProperty("title").GetString());
     Assert.Equal(1995, heat.GetProperty("year").GetInt32());
-    Assert.Equal("/h.jpg", heat.GetProperty("posterPath").GetString());
+    Assert.Equal("https://image.tmdb.org/t/p/w342/h.jpg", heat.GetProperty("posterUrl").GetString());
     Assert.True(heat.GetProperty("inList").GetBoolean());
     Assert.Equal("DE - Heat (1995) 4K", heat.GetProperty("entry").GetString());
     Assert.Equal("Films", heat.GetProperty("group").GetString());
@@ -121,7 +121,7 @@ public sealed class LibrarySimilarFilmsTests : IAsyncLifetime
 
     var unknown = similar.Single(s => s.GetProperty("id").GetInt32() == 4);
     Assert.False(unknown.GetProperty("inList").GetBoolean());
-    Assert.Equal("/u.jpg", unknown.GetProperty("posterPath").GetString());
+    Assert.Equal("https://image.tmdb.org/t/p/w342/u.jpg", unknown.GetProperty("posterUrl").GetString());
     Assert.Equal(JsonValueKind.Null, unknown.GetProperty("entry").ValueKind);
 
     // The full list, only on request: Collateral is found in its switched-off group.
