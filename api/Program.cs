@@ -97,6 +97,7 @@ app.MapAuthEndpoints();
 app.MapPlaylistEndpoints();
 app.MapProcessingEndpoints();
 app.MapLibraryEndpoints();
+app.MapMarkEndpoints();
 app.MapSiteEndpoints(app.Environment, publicShareBaseUrl);
 
 app.Run();
