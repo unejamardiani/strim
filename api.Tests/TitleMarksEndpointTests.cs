@@ -151,13 +151,17 @@ public class TitleMarksEndpointTests(StrimAppFactory factory) : IClassFixture<St
     WithDb(db =>
     {
       var userId = db.Users.Single(u => u.UserName == "marks-cap").Id;
-      var now = DateTimeOffset.UtcNow;
-      db.TitleMarks.AddRange(Enumerable.Range(1, MarkEndpoints.MaxMarksPerUser - 1).Select(i => new TitleMark
-      {
-        Id = Guid.NewGuid(), UserId = userId, Kind = "film", TitleKey = $"film::filler {i}", DisplayTitle = $"Filler {i}",
-        Seen = true, CreatedUtc = now, UpdatedUtc = now,
-      }));
-      return db.SaveChanges();
+      // One SQL statement instead of thousands of tracked entities: the bulk insert stays cheap, so it does not
+      // slow down the timing-sensitive tests that run in parallel.
+      return db.Database.ExecuteSqlRaw(
+        """
+        WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < {1})
+        INSERT INTO titlemarks (id, userid, kind, titlekey, year, displaytitle, seen, rating, filmdbid, createdutc, updatedutc)
+        SELECT printf('00000000-0000-0000-0000-%012d', i), {0}, 'film', 'film::filler ' || i, NULL, 'Filler ' || i,
+               1, 0, NULL, strftime('%Y-%m-%d %H:%M:%S+00:00', 'now'), strftime('%Y-%m-%d %H:%M:%S+00:00', 'now')
+        FROM n
+        """,
+        userId, MarkEndpoints.MaxMarksPerUser - 1);
     });
 
     var refused = await SetAsync(client, "Heat (1995)", seen: true);
