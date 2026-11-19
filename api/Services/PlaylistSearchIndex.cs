@@ -202,6 +202,49 @@ public sealed class PlaylistSearchIndex
     return found;
   }
 
+  /// <summary>
+  /// In one pass: the seasons and episodes of every series entry whose series <see cref="MarkKey"/> equals
+  /// <paramref name="seriesKey"/>, read with <see cref="SeriesEpisode"/> and distinct across groups and variants, and
+  /// for each of <paramref name="similarKeys"/> the first series entry carrying it, preferring an enabled group.
+  /// Films, channels and adult groups are never read; with <paramref name="hideDisabled"/>, neither are disabled groups.
+  /// </summary>
+  public PlaylistSeriesResult FindSeries(
+    string seriesKey, IReadOnlySet<string> similarKeys, ISet<string> disabledGroups, bool hideDisabled)
+  {
+    var seasons = new SortedDictionary<int, SortedSet<int>>();
+    var unnumbered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var similar = new Dictionary<string, PlaylistSearchMatch>(StringComparer.Ordinal);
+    Interlocked.Increment(ref _passCount);
+    var enabled = _slots.Select(s => !PlaylistProcessor.IsDisabled(disabledGroups, s.GroupTitle, s.ContentType)).ToArray();
+    var usable = _slots.Select((s, i) => s.ContentType == PlaylistContentType.Series
+      && !AdultGroupRule.IsAdultGroupTitle(s.GroupTitle) && (enabled[i] || !hideDisabled)).ToArray();
+    for (var c = 0; c < _chunks.Count; c++)
+    {
+      var end = c + 1 < _chunks.Count ? _chunkFirstEntry[c + 1] : Count;
+      for (var entry = _chunkFirstEntry[c]; entry < end; entry++)
+      {
+        var slotId = Field(entry, 1);
+        if (!usable[slotId]) continue;
+        var name = NameAt(c, entry);
+        if (MarkKey.From(name, MarkKind.Series)?.Key is not { } key) continue;
+        if (key == seriesKey)
+        {
+          var (season, episode) = SeriesEpisode.Parse(name);
+          if (season is { } number && !seasons.ContainsKey(number)) seasons[number] = new SortedSet<int>();
+          // An entry without an episode number (a season pack, a special) counts once per name across groups.
+          if (episode is { } e) seasons[season!.Value].Add(e);
+          else unnumbered.Add(name);
+        }
+        else if (similarKeys.Contains(key) && !(similar.TryGetValue(key, out var known) && (known.Enabled || !enabled[slotId])))
+        {
+          var slot = _slots[slotId];
+          similar[key] = new PlaylistSearchMatch(name, slot.OutputGroup, slot.GroupKey, slot.ContentType, Field(entry, 2), enabled[slotId]);
+        }
+      }
+    }
+    return new PlaylistSeriesResult(seasons.ToDictionary(s => s.Key, s => (IReadOnlyCollection<int>)s.Value), unnumbered.Count, similar);
+  }
+
   private string NameAt(int chunk, int entry)
   {
     var text = _chunks[chunk].AsSpan(0, _chunkUsed[chunk]);
@@ -410,6 +453,17 @@ public sealed record PlaylistGroupEntriesResult(IReadOnlyList<string> Names, int
 
   /// <summary>Entries of the group the mark filter hid as seen.</summary>
   public int SeenHiddenCount { get; init; }
+}
+
+/// <param name="Seasons">Each season the list holds, with its distinct episode numbers in ascending order.</param>
+/// <param name="Unnumbered">Distinct names of the series without an episode number.</param>
+/// <param name="Similar">For each similar series key found, its first entry (in an enabled group when there is one).</param>
+public sealed record PlaylistSeriesResult(
+  IReadOnlyDictionary<int, IReadOnlyCollection<int>> Seasons, int Unnumbered,
+  IReadOnlyDictionary<string, PlaylistSearchMatch> Similar)
+{
+  /// <summary>Distinct numbered episodes across every season.</summary>
+  public int Episodes => Seasons.Values.Sum(s => s.Count);
 }
 
 /// <param name="Name">The entry's display name.</param>

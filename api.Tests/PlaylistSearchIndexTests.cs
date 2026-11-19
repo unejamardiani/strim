@@ -290,6 +290,92 @@ public class PlaylistSearchIndexTests
     Assert.Equal(4, index.Search("star", Set("Films Off"), 50, languages: ["de"]).Matches.Count);
   }
 
+  private static readonly string DarkKey = MarkKey.From("Dark", MarkKind.Series)!.Key;
+  private static readonly string LostKey = MarkKey.From("Lost", MarkKind.Series)!.Key;
+  private static readonly string HeatKey = MarkKey.From("Heat", MarkKind.Series)!.Key;
+
+  private static string SeriesSource(params (string Group, string Name, string Kind)[] entries)
+  {
+    var source = new StringBuilder("#EXTM3U\n");
+    var i = 0;
+    foreach (var (group, name, kind) in entries)
+      source.Append($"#EXTINF:-1 group-title=\"{group}\",{name}\nhttps://example.com/{kind}/u/p/{++i}.mkv\n");
+    return source.ToString();
+  }
+
+  [Fact]
+  public async Task FindSeries_OnePass()
+  {
+    var index = await Analyze(SeriesSource(
+      ("Shows", "Dark S01E01", "series"), ("Shows", "Lost S01E01", "series"),
+      ("Shows", "Dark S01E02", "series"), ("Shows", "Heat S02E03", "series")));
+    var before = index.PassCount;
+
+    var result = index.FindSeries(DarkKey, new HashSet<string> { LostKey, HeatKey }, Set(), hideDisabled: true);
+
+    Assert.Equal(before + 1, index.PassCount);
+    Assert.Equal([1, 2], result.Seasons[1]);
+    Assert.Equal(2, result.Episodes);
+    Assert.Equal("Lost S01E01", result.Similar[LostKey].Name);
+    Assert.Equal("Heat S02E03", result.Similar[HeatKey].Name);
+    Assert.Equal("Shows", result.Similar[HeatKey].OutputGroup);
+  }
+
+  [Fact]
+  public async Task FindSeries_DistinctAcrossGroupsAndVariants()
+  {
+    var index = await Analyze(SeriesSource(
+      ("Shows DE", "DE: Dark S01E01", "series"), ("Shows EN", "Dark S01E01 FHD", "series"),
+      ("Shows DE", "Dark 1x02", "series"), ("Shows EN", "Dark Staffel 1 Folge 2", "series"),
+      ("Shows DE", "Dark S02E10", "series"), ("Shows DE", "Dark S02E01", "series"),
+      ("Shows DE", "Dark S02", "series"), ("Shows EN", "Dark S02", "series"),
+      ("Shows DE", "Dark", "series"), ("Shows DE", "Dark Special", "series"), ("Shows DE", "Dark (2017) S03E01", "series")));
+
+    var result = index.FindSeries(DarkKey, new HashSet<string>(), Set(), hideDisabled: true);
+
+    Assert.Equal([1, 2], result.Seasons.Keys.Order());
+    Assert.Equal([1, 2], result.Seasons[1]);
+    Assert.Equal([1, 10], result.Seasons[2]);
+    Assert.Equal(4, result.Episodes);
+    // "Dark S02" twice and "Dark"; "Dark Special" and the 2017 entry have keys of their own.
+    Assert.Equal(2, result.Unnumbered);
+  }
+
+  [Fact]
+  public async Task FindSeries_SkipsAdultAndFilms()
+  {
+    var index = await Analyze(SeriesSource(
+      ("Shows", "Dark S01E01", "series"), ("Films", "Dark S01E05", "movie"), ("Live", "Dark S01E06", "live"),
+      ("XXX Shows", "Dark S01E07", "series"), ("XXX Shows", "Lost S01E01", "series"),
+      ("Films", "Heat S01E01", "movie")));
+
+    var result = index.FindSeries(DarkKey, new HashSet<string> { LostKey, HeatKey }, Set(), hideDisabled: false);
+
+    Assert.Equal([1], Assert.Single(result.Seasons).Value);
+    Assert.Equal(0, result.Unnumbered);
+    Assert.Empty(result.Similar);
+  }
+
+  [Fact]
+  public async Task FindSeries_HideDisabled()
+  {
+    var index = await Analyze(SeriesSource(
+      ("Shows Old", "Dark S03E01", "series"), ("Shows Old", "Lost S01E01", "series"),
+      ("Shows Old", "Heat S01E01", "series"), ("Shows", "Dark S01E01", "series"), ("Shows", "Lost S02E01", "series")));
+    var similarKeys = new HashSet<string> { LostKey, HeatKey };
+
+    var cleaned = index.FindSeries(DarkKey, similarKeys, Set("Shows Old"), hideDisabled: true);
+    Assert.Equal([1], cleaned.Seasons.Keys);
+    Assert.Equal(("Lost S02E01", true), (cleaned.Similar[LostKey].Name, cleaned.Similar[LostKey].Enabled));
+    Assert.False(cleaned.Similar.ContainsKey(HeatKey));
+
+    // The full list: the switched-off season joins, an enabled entry still wins, and an off-only series is marked off.
+    var full = index.FindSeries(DarkKey, similarKeys, Set("Shows Old"), hideDisabled: false);
+    Assert.Equal([1, 3], full.Seasons.Keys.Order());
+    Assert.Equal("Lost S02E01", full.Similar[LostKey].Name);
+    Assert.Equal(("Heat S01E01", false), (full.Similar[HeatKey].Name, full.Similar[HeatKey].Enabled));
+  }
+
   // 60 live channels, then films in an off and an on group, then series, all matching "star".
   private static string MixedTypes()
   {
