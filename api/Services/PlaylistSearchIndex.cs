@@ -63,6 +63,7 @@ public sealed class PlaylistSearchIndex
     var seenHidden = 0;
     var total = 0;
     if (folded.IsEmpty || limit <= 0) return new PlaylistSearchResult(matches, false);
+    Interlocked.Increment(ref _passCount);
     // Decided once per combination in the shared table, so the scan tests one bool per entry.
     var wanted = languages is { Count: > 0 } ? new HashSet<string>(languages, StringComparer.OrdinalIgnoreCase) : null;
     var keep = wanted is null ? null : _languages.Select(l => l.FilterValues().Any(wanted.Contains)).ToArray();
@@ -133,6 +134,7 @@ public sealed class PlaylistSearchIndex
     var seenHidden = 0;
     var inGroup = _slots.Select(s => string.Equals(s.GroupKey, groupKey, StringComparison.OrdinalIgnoreCase)).ToArray();
     if (!inGroup.Contains(true)) return new PlaylistGroupEntriesResult(names, 0);
+    Interlocked.Increment(ref _passCount);
 
     var total = 0;
     for (var c = 0; c < _chunks.Count; c++)
@@ -154,6 +156,43 @@ public sealed class PlaylistSearchIndex
     }
 
     return new PlaylistGroupEntriesResult(names, total) { Types = types, SeenHiddenCount = seenHidden };
+  }
+
+  /// <summary>Scans of the whole index (searches, group pages, film lookups) since it was built.</summary>
+  public int PassCount => _passCount;
+  private int _passCount;
+
+  /// <summary>
+  /// For each wanted film mark key, the first film entry in source order whose <see cref="MarkKey"/> equals it,
+  /// preferring an entry in an enabled group, in one pass for all keys. Adult groups are never matched; with
+  /// <paramref name="hideDisabled"/>, neither are disabled groups.
+  /// </summary>
+  public IReadOnlyDictionary<string, PlaylistSearchMatch> FindFilms(
+    IReadOnlySet<string> keys, ISet<string> disabledGroups, bool hideDisabled)
+  {
+    var found = new Dictionary<string, PlaylistSearchMatch>(StringComparer.Ordinal);
+    if (keys.Count == 0) return found;
+    Interlocked.Increment(ref _passCount);
+    var enabled = _slots.Select(s => !PlaylistProcessor.IsDisabled(disabledGroups, s.GroupTitle, s.ContentType)).ToArray();
+    var usable = _slots.Select((s, i) => s.ContentType == PlaylistContentType.Movies
+      && !AdultGroupRule.IsAdultGroupTitle(s.GroupTitle) && (enabled[i] || !hideDisabled)).ToArray();
+    var settled = 0;
+    for (var c = 0; c < _chunks.Count && settled < keys.Count; c++)
+    {
+      var end = c + 1 < _chunks.Count ? _chunkFirstEntry[c + 1] : Count;
+      for (var entry = _chunkFirstEntry[c]; entry < end && settled < keys.Count; entry++)
+      {
+        var slotId = Field(entry, 1);
+        if (!usable[slotId]) continue;
+        var name = NameAt(c, entry);
+        if (MarkKey.From(name, MarkKind.Film)?.Key is not { } key || !keys.Contains(key)) continue;
+        if (found.TryGetValue(key, out var known) && (known.Enabled || !enabled[slotId])) continue;
+        var slot = _slots[slotId];
+        found[key] = new PlaylistSearchMatch(name, slot.OutputGroup, slot.GroupKey, slot.ContentType, Field(entry, 2), enabled[slotId]);
+        if (enabled[slotId]) settled++;
+      }
+    }
+    return found;
   }
 
   private string NameAt(int chunk, int entry)
