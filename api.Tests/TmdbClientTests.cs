@@ -286,17 +286,148 @@ public class TmdbClientTests
     Assert.Contains("append_to_response=similar", request.Uri.Query);
   }
 
+  [Fact]
+  public async Task SearchTv_SendsTitleAndFirstAirYearOnly()
+  {
+    var handler = new StubHandler(_ => Json("""
+      {"results":[{"id":9,"name":"Some Series","first_air_date":"2008-01-20","poster_path":"/s.jpg","vote_average":8.9}]}
+      """));
+    var client = CreateClient(handler);
+
+    var result = await client.SearchTvAsync(" Some Series ", 2008, CancellationToken.None);
+    await client.SearchTvAsync("Some Series", null, CancellationToken.None);
+
+    Assert.Equal(TmdbStatus.Ok, result.Status);
+    var hit = Assert.Single(result.Value!.Results!);
+    Assert.Equal((9, "Some Series", "2008-01-20", "/s.jpg", 8.9),
+      (hit.Id, hit.Name, hit.FirstAirDate, hit.PosterPath, hit.VoteAverage));
+    Assert.Equal(2, handler.Requests.Count);
+    Assert.All(handler.Requests, r => Assert.Equal("/3/search/tv", r.Uri.AbsolutePath));
+    Assert.Equal("?include_adult=false&query=Some%20Series&first_air_date_year=2008", handler.Requests[0].Uri.Query);
+    Assert.Equal("?include_adult=false&query=Some%20Series", handler.Requests[1].Uri.Query);
+    await Assert.ThrowsAnyAsync<ArgumentException>(() => client.SearchTvAsync(" ", 2008, default));
+    Assert.Equal(2, handler.Requests.Count);
+  }
+
+  [Fact]
+  public async Task TvDetails_OneRequestWithSimilarAndSeasons()
+  {
+    var handler = new StubHandler(_ => Json("""
+      {"id":42,"name":"Some Series","overview":"A story.","first_air_date":"2008-01-20",
+       "last_air_date":"2013-09-29","status":"Ended","number_of_seasons":2,"number_of_episodes":20,
+       "poster_path":"/p.jpg","vote_average":8.5,"genres":[{"id":1,"name":"Drama"}],
+       "networks":[{"id":5,"name":"Some Network"}],
+       "seasons":[{"season_number":0,"episode_count":3},{"season_number":1,"episode_count":7},
+                  {"season_number":2,"episode_count":13}],
+       "similar":{"results":[{"id":43,"name":"Other Series","first_air_date":"2010-04-01"},{"id":44,"name":"Third"}]}}
+      """));
+    var client = CreateClient(handler);
+
+    var result = await client.GetTvWithSimilarAsync(42, CancellationToken.None);
+
+    Assert.Equal(TmdbStatus.Ok, result.Status);
+    var tv = result.Value!;
+    Assert.Equal(("Some Series", "A story.", "2008-01-20", "2013-09-29", "Ended"),
+      (tv.Name, tv.Overview, tv.FirstAirDate, tv.LastAirDate, tv.Status));
+    Assert.Equal((2, 20, "/p.jpg", 8.5), (tv.NumberOfSeasons, tv.NumberOfEpisodes, tv.PosterPath, tv.VoteAverage));
+    Assert.Equal("Drama", Assert.Single(tv.Genres!).Name);
+    Assert.Equal("Some Network", Assert.Single(tv.Networks!).Name);
+    Assert.Equal(new[] { (0, (int?)3), (1, 7), (2, 13) }, tv.Seasons!.Select(s => (s.SeasonNumber, s.EpisodeCount)));
+    Assert.Equal(new[] { 43, 44 }, tv.Similar!.Results!.Select(r => r.Id));
+    Assert.Equal("2010-04-01", tv.Similar.Results![0].FirstAirDate);
+    var request = Assert.Single(handler.Requests);
+    Assert.Equal("/3/tv/42", request.Uri.AbsolutePath);
+    Assert.Equal("?append_to_response=similar", request.Uri.Query);
+    await Assert.ThrowsAnyAsync<ArgumentOutOfRangeException>(() => client.GetTvWithSimilarAsync(0, default));
+  }
+
+  [Fact]
+  public async Task Tv_UsesCacheAndBackoff()
+  {
+    var time = new ManualTime();
+    var cache = new TmdbCache(time);
+    var answers = new Queue<HttpResponseMessage>([
+      Json("""{"results":[{"id":9,"name":"Some Series"}]}"""),
+      Json("""{"id":9,"name":"Some Series","seasons":[{"season_number":1,"episode_count":6}]}"""),
+      TooMany(r => r.RetryAfter = new(TimeSpan.FromSeconds(30))),
+      Json("""{"id":10,"name":"Later"}"""),
+    ]);
+    var handler = new StubHandler(_ => answers.Dequeue());
+    var client = CreateClient(handler, time: time, cache: cache);
+
+    Assert.Equal(TmdbStatus.Ok, (await client.SearchTvAsync("Some Series", 2008, default)).Status);
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTvWithSimilarAsync(9, default)).Status);
+    // Cache hits: no request, and the tv paths do not collide with the film paths.
+    Assert.Equal(9, Assert.Single((await client.SearchTvAsync("Some Series", 2008, default)).Value!.Results!).Id);
+    Assert.Equal(6, Assert.Single((await client.GetTvWithSimilarAsync(9, default)).Value!.Seasons!).EpisodeCount);
+    Assert.True(cache.TryGet("search/tv?include_adult=false&query=Some%20Series&first_air_date_year=2008", out _));
+    Assert.True(cache.TryGet("tv/9?append_to_response=similar", out _));
+    Assert.False(cache.TryGet("movie/9?append_to_response=similar", out _));
+    Assert.Equal(2, handler.Requests.Count);
+
+    // A 429 blocks every call, films and series alike, until its Retry-After has passed.
+    Assert.Equal(TmdbStatus.RateLimited, (await client.GetTvWithSimilarAsync(10, default)).Status);
+    time.Advance(TimeSpan.FromSeconds(29));
+    Assert.Equal(TmdbStatus.RateLimited, (await client.SearchTvAsync("Other", null, default)).Status);
+    Assert.Equal(TmdbStatus.RateLimited, (await client.SearchMovieAsync("Other", null, default)).Status);
+    Assert.Equal(3, handler.Requests.Count);
+    // A cached answer is still served while blocked.
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTvWithSimilarAsync(9, default)).Status);
+    time.Advance(TimeSpan.FromSeconds(1));
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTvWithSimilarAsync(10, default)).Status);
+    Assert.Equal(4, handler.Requests.Count);
+  }
+
+  [Fact]
+  public async Task Tv_TokenNeverInUriOrLog()
+  {
+    var logger = new CapturingTmdbLogger();
+    var calls = 0;
+    var handler = new StubHandler(request => ++calls switch
+    {
+      1 => Json("""{"results":[]}"""),
+      2 => throw new HttpRequestException("transport failed for " + request.Headers.Authorization),
+      3 => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+      {
+        Content = new StringContent("{\"status_message\":\"" + request.Headers.Authorization + "\"}"),
+      },
+      4 => Json("not json " + request.Headers.Authorization),
+      _ => TooMany(r => r.RetryAfter = new(TimeSpan.FromSeconds(5))),
+    });
+    var client = CreateClient(handler, logger: logger, time: new ManualTime());
+
+    Assert.Equal(TmdbStatus.Ok, (await client.SearchTvAsync("Secret Series", 1999, default)).Status);
+    for (var i = 0; i < 3; i++)
+    {
+      Assert.Equal(TmdbStatus.Unavailable, (await client.GetTvWithSimilarAsync(3, default)).Status);
+    }
+    Assert.Equal(TmdbStatus.RateLimited, (await client.SearchTvAsync("Secret Series", 1999, default)).Status);
+
+    Assert.Equal(5, handler.Requests.Count);
+    Assert.All(handler.Requests, r =>
+    {
+      Assert.Equal("Bearer", r.Authorization?.Scheme);
+      Assert.Equal(Token, r.Authorization?.Parameter);
+      Assert.DoesNotContain(Token, r.Uri.OriginalString);
+    });
+    Assert.Equal(4, logger.Lines.Count);
+    foreach (var line in logger.Lines)
+      foreach (var forbidden in new[] { Token, "Secret", "1999", "search", "query", "tv/" })
+        Assert.DoesNotContain(forbidden, line);
+  }
+
   private static TmdbClient CreateClient(
     StubHandler handler,
     string? token = Token,
     TimeSpan? timeout = null,
     TimeProvider? time = null,
-    ILogger<TmdbClient>? logger = null)
+    ILogger<TmdbClient>? logger = null,
+    TmdbCache? cache = null)
   {
     var configuration = new ConfigurationBuilder()
       .AddInMemoryCollection(new Dictionary<string, string?> { [TmdbClient.TokenVariable] = token }).Build();
     return new TmdbClient(new StubFactory(handler), configuration, logger ?? new CapturingTmdbLogger(),
-      time ?? TimeProvider.System) { Timeout = timeout ?? TimeSpan.FromSeconds(5) };
+      time ?? TimeProvider.System, cache) { Timeout = timeout ?? TimeSpan.FromSeconds(5) };
   }
 
   private static HttpResponseMessage Json(string body) =>
