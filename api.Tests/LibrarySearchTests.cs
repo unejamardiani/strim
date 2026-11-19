@@ -92,6 +92,57 @@ public class LibrarySearchTests
   }
 
   [Fact]
+  public void Results_ShowTheEditorsLanguageLabels_PassedInNotCopied()
+  {
+    var library = Read("library.js");
+    var hit = Between(library, "function hit(", "window.StrimLibrary");
+    Assert.Contains("h('span', { class: 'search-hit-line' },", hit);
+    Assert.Contains("ctx.searchLanguages(m)),", hit);
+    // The labels and their phone fitting are the editor's functions, handed over by main.js (no import, #285).
+    foreach (var copied in new[] { "lang-chip", "languageSource === 'title') return", "Audio ", "import " })
+      Assert.DoesNotContain(copied, library);
+    var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
+    Assert.Contains("    searchLanguages,\n    fitSearchLanguages,\n", show);
+    var run = Between(library, "async function runSearch(", "function hit(");
+    Assert.Contains("ctx.fitSearchLanguages(results.body);", run);
+    Assert.Contains("window.addEventListener('resize', () => ctx.fitSearchLanguages(results.body), { signal: ctx.controller.signal });", library);
+  }
+
+  [Fact]
+  public void LanguageFilter_IsTheEditors_AndSendsLangWithTypesAndToggle()
+  {
+    var library = Read("library.js");
+    var section = Between(library, "function searchSection(", "async function runSearch(");
+    Assert.Contains("const host = { searchLang: [], searchLanguages: [], onLangChoice: () => run() };", section);
+    Assert.Contains("const filter = ctx.languageFilter(host);", section);
+    Assert.Contains("h('div', { class: 'search-head' }, results.head, filter.bar),", section);
+    Assert.Contains("filter.panel,", section);
+    foreach (var copied in new[] { "lang-filter", "lang-panel", "lang-option", "type: 'checkbox'" })
+      Assert.DoesNotContain(copied, library);
+
+    // One request carries the type, the toggle and the language choice together; the offer comes from the response.
+    var run = Between(library, "async function runSearch(", "function hit(");
+    Assert.Contains("const lang = state.host.searchLang.join(',');", run);
+    Assert.Contains("if (contentTypes.length) body.contentTypes = contentTypes;\n    if (lang) body.lang = lang;", run);
+    Assert.Contains("state.host.searchLanguages = found.languages.filter(", run);
+    Assert.Contains("state.filter.render();", run);
+    Assert.Contains("else if (lang) text = 'Nothing matches your search in the chosen languages.';", run);
+
+    // main.js builds the editor's chip and list on the Library's host; a change there searches the Library again.
+    var js = Read("main.js");
+    var show = Between(js, "function showLibrary(playlist)", "function linkCard(");
+    Assert.Contains("host.langFilter = langFilterNodes(host);", show);
+    Assert.Contains("render: () => renderLangFilter(host)", show);
+    var choice = Between(js, "function setLangChoice(ed, values)", "\n}\n");
+    Assert.Contains("if (ed.onLangChoice) ed.onLangChoice();\n  else runSearch(ed);", choice);
+    Assert.Contains("const f = ed.langFilter || picker.langFilter;", Between(js, "function renderLangFilter(ed)", "const codes = "));
+    // The editor's state never has a host's fields, so its filter keeps working on the picker and runSearch.
+    var editorState = Between(js, "function newEditor(playlist)", "\n}\n");
+    Assert.DoesNotContain("onLangChoice", editorState);
+    Assert.DoesNotContain("langFilter", editorState);
+  }
+
+  [Fact]
   public void EditorEverythingSearch_IsUnchanged()
   {
     var js = Read("main.js");
