@@ -39,7 +39,7 @@ public class LibraryBrowseTests
     // The groups are the ones the Library loaded once; the browse view sits next to the search.
     var load = Between(library, "async function load(", "const TYPES = [");
     Assert.Contains("const browse = browseSection(ctx, result);", load);
-    Assert.Contains("searchSection(ctx, result, browse.refresh),\n    browse.el);", load);
+    Assert.Contains("searchSection(ctx, result, browse.refresh, browse.reload),\n    browse.el);", load);
     Assert.Single(Regex.Matches(library, Regex.Escape("ctx.loadGroups(")));
 
     // index and type are the playlist position and the content type main.js derives from the analysis.
@@ -70,7 +70,7 @@ public class LibraryBrowseTests
   }
 
   private const string PinnedOpenAndLoadPage = """
-        const open = (g) => {
+        const open = (g, scroll = true) => {
           const view = {
             group: g, offset: 0,
             count: h('p', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') }),
@@ -86,7 +86,7 @@ public class LibraryBrowseTests
             h('div', { class: 'card' }, view.list, view.foot));
           groupsEl.hidden = true;
           entriesEl.hidden = false;
-          el.scrollIntoView({ block: 'start' });
+          if (scroll) el.scrollIntoView({ block: 'start' });
           loadPage(view);
         };
 
@@ -95,7 +95,10 @@ public class LibraryBrowseTests
           view.foot.replaceChildren(status(view.offset ? 'Loading more…' : 'Loading entries…'));
           let page;
           try {
-            page = await ctx.groupEntries({ cacheKey: list.cacheKey, group: view.group.key, offset: view.offset, limit: PAGE_SIZE }, ctx.controller.signal);
+            const params = { cacheKey: list.cacheKey, group: view.group.key, offset: view.offset, limit: PAGE_SIZE };
+            if (hideSeen) params.hideSeen = true;
+            if (likedOnly) params.liked = true;
+            page = await ctx.groupEntries(params, ctx.controller.signal);
           } catch (err) {
             if (view !== state.open || ctx.controller.signal.aborted) return;
             view.foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
@@ -104,13 +107,16 @@ public class LibraryBrowseTests
             return;
           }
           if (view !== state.open || !ctx.isCurrent()) return;
-          const names = page.names || [];
-          view.list.append(...names.map((name) => h('li', { class: 'library-hit' }, h('span', { class: 'search-hit-name', text: name }))));
+          const names = page.entries || [];
+          view.list.append(...names.map((e) => h('li', { class: 'library-hit' }, h('span', { class: 'search-hit-name', text: e.name }), markControls(ctx, e))));
           view.offset += names.length;
           view.count.textContent = plural(page.total, 'entry', 'entries');
           const done = names.length === 0 || view.offset >= page.total;
           if (!done) view.foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'More'));
-          else view.foot.replaceChildren(status(page.total === 0 ? 'No entries in this group.' : `All ${fmt(page.total)} shown`));
+          else {
+            const seen = hideSeen && page.seenHiddenCount > 0 ? ` · ${plural(page.seenHiddenCount, 'seen entry', 'seen entries')} hidden` : '';
+            view.foot.replaceChildren(status((page.total === 0 ? 'No entries in this group.' : `All ${fmt(page.total)} shown`) + seen));
+          }
         };
     """;
 
@@ -122,7 +128,7 @@ public class LibraryBrowseTests
     // only replaces the footer are pinned to the exact source: clearing the list, skipping the first page or
     // another offset step fails here. api.Tests has no JS engine (no new dependency); the test below walks
     // the real endpoint with the same steps.
-    Assert.Equal(PinnedOpenAndLoadPage.ReplaceLineEndings("\n"), Between(browse, "    const open = (g) => {", "\n\n    // The shared toggle"));
+    Assert.Equal(PinnedOpenAndLoadPage.ReplaceLineEndings("\n"), Between(browse, "    const open = (g, scroll = true) => {", "\n\n    // The shared toggle"));
     // The entries list is only placed in the view and appended to; nothing else clears or replaces it.
     Assert.Equal(2, Regex.Matches(browse, Regex.Escape("view.list")).Count);
     Assert.DoesNotContain("innerHTML", Read("library.js"));
@@ -133,11 +139,11 @@ public class LibraryBrowseTests
 
     // main.js hands in the read-only group-entries request with the parameters as the query string.
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
-    Assert.Contains("groupEntries: (params, signal) => api(`/playlist/group-entries?${new URLSearchParams(params)}`, { signal }),", show);
+    Assert.Contains("groupEntries: (params, signal) => api(`/library/group-entries?${new URLSearchParams(params)}`, { signal }),", show);
     Assert.DoesNotContain("/playlist/group-entries", Read("library.js"));
 
     // 'All groups' (pinned in open) goes back to the list.
-    var close = Between(browse, "const close = () => {", "const open = (g) => {");
+    var close = Between(browse, "const close = () => {", "const open = (g, scroll = true) => {");
     Assert.Contains("groupsEl.hidden = false;", close);
   }
 

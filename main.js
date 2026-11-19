@@ -85,6 +85,8 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  up: '<path d="M7 10v10H4V10zM7 10l4-6.5c1.3 0 2.2 1 2 2.3L12.5 9H18a2 2 0 0 1 2 2.3l-1.2 6.8A2 2 0 0 1 16.8 20H7"/>',
+  down: '<path transform="rotate(180 12 12)" d="M7 10v10H4V10zM7 10l4-6.5c1.3 0 2.2 1 2 2.3L12.5 9H18a2 2 0 0 1 2 2.3l-1.2 6.8A2 2 0 0 1 16.8 20H7"/>',
   book: '<path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H19v13H6.5A1.5 1.5 0 0 0 5 18.5zM5 18.5A1.5 1.5 0 0 0 6.5 20H19"/>',
 };
 
@@ -1101,9 +1103,12 @@ function showLibrary(playlist) {
       return { groups: ed.groups, disabled: ed.disabled, totalChannels: ed.totalChannels, cacheKey: ed.cacheKey };
     },
     errorMessage: loadErrorMessage,
-    // The editor's Everything search endpoint; it only reads the analysed list.
+    // The Library's search (#297): the editor's Everything search with the caller's marks; it only reads the list.
     searchHint,
-    search: (body, signal) => api('/playlist/search', { method: 'POST', body, signal }),
+    search: (body, signal) => api('/library/search', { method: 'POST', body, signal }),
+    // A film or series mark (#298), stored per user; api() sends the CSRF token. It never touches the playlist.
+    setMark: (mark) => api('/marks', { method: 'PUT', body: mark }),
+    toast,
     // The editor's language labels and language filter (#265, #266), passed in rather than copied. The filter works
     // on a host shaped like the editor's state (searchLang, searchLanguages) and calls host.onLangChoice on a change.
     searchLanguages,
@@ -1112,8 +1117,8 @@ function showLibrary(playlist) {
       host.langFilter = langFilterNodes(host);
       return { bar: host.langFilter.bar, panel: host.langFilter.panel, render: () => renderLangFilter(host) };
     },
-    // One page of a group's names (#215), read-only like the search.
-    groupEntries: (params, signal) => api(`/playlist/group-entries?${new URLSearchParams(params)}`, { signal }),
+    // One page of a group's entries with their marks (#215, #297), read-only like the search.
+    groupEntries: (params, signal) => api(`/library/group-entries?${new URLSearchParams(params)}`, { signal }),
   });
 }
 
