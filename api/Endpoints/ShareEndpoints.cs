@@ -206,8 +206,10 @@ public static class ShareEndpoints
           if (!access.IsOwner)
           {
             // A viewer sees the visible groups only; the hidden ones come from the database, never the request.
+            // A stored plain group-title hides every content type of that title, as in the player link.
             var disabled = new HashSet<string>(access.DisabledGroups ?? [], StringComparer.OrdinalIgnoreCase);
-            groups = groups.Where(g => !disabled.Contains(g.Name)).ToList();
+            groups = PlaylistProcessor.ToGroupResults(
+              analysis.Groups.Where(g => !PlaylistProcessor.IsDisabled(disabled, g.GroupTitle, g.ContentType)));
             totalChannels = groups.Sum(g => g.Count);
 
             var now = DateTimeOffset.UtcNow;
