@@ -200,7 +200,8 @@
 .film-card-head { position: absolute; z-index: 4; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; pointer-events: none; }
 .film-glass, .film-glass:hover { border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent); background: color-mix(in srgb, var(--surface) 68%, transparent); color: var(--ink); pointer-events: auto; -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5); }
 .film-glass svg { width: 18px; height: 18px; }
-.film-scroll { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+/* flex-basis auto, not 0%: in a dialog with only a max-height Safari sizes a 0% basis to nothing and the sheet collapses. */
+.film-scroll { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
 .film-scroll > * { flex-shrink: 0; }
 
 @media (max-width: 599px) {
