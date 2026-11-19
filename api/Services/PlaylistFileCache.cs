@@ -22,6 +22,8 @@ public sealed class PlaylistFileCache
   private readonly object _sync = new();
   private readonly Dictionary<string, PlaylistSourceFile> _sources = new(StringComparer.Ordinal);
   private readonly Dictionary<string, PlaylistSession> _sessions = new(StringComparer.Ordinal);
+  // Library keys (lib-…) live apart from the editor's sessions, so no editor route ever resolves one.
+  private readonly Dictionary<string, LibrarySession> _librarySessions = new(StringComparer.Ordinal);
   private readonly Dictionary<string, PlaylistOutputFile> _outputs = new(StringComparer.Ordinal);
   private readonly Dictionary<string, string> _outputVariantKeys = new(StringComparer.Ordinal);
   // Failed deletes must remain part of capacity accounting. Otherwise a transient filesystem
@@ -327,6 +329,39 @@ public sealed class PlaylistFileCache
     {
       _sessions[key] = new PlaylistSession(source.SourceKey, _time.GetUtcNow().Add(_entryTtl));
       return key;
+    }
+  }
+
+  /// <summary>A Library key bound to one playlist and one user; the editor's routes do not accept it.</summary>
+  public string CreateLibrarySession(PlaylistSourceFile source, Guid playlistId, string userId)
+  {
+    var key = $"lib-{Guid.NewGuid():N}";
+    lock (_sync)
+    {
+      _librarySessions[key] = new LibrarySession(source.SourceKey, playlistId, userId, _time.GetUtcNow().Add(_entryTtl));
+      return key;
+    }
+  }
+
+  /// <summary>The source of a Library key, only for the playlist and user it was issued to.</summary>
+  public PlaylistSourceFile? TryGetLibrarySource(string libraryKey, Guid playlistId, string userId)
+  {
+    lock (_sync)
+    {
+      if (!_librarySessions.TryGetValue(libraryKey, out var session) || session.ExpiresAtUtc <= _time.GetUtcNow())
+      {
+        _librarySessions.Remove(libraryKey);
+        return null;
+      }
+
+      if (session.PlaylistId != playlistId || !string.Equals(session.UserId, userId, StringComparison.Ordinal) ||
+          !_sources.TryGetValue(session.SourceKey, out var source) || !IsAvailable(source))
+      {
+        return null;
+      }
+
+      source.LastAccessedUtc = _time.GetUtcNow();
+      return source;
     }
   }
 
@@ -727,6 +762,11 @@ public sealed class PlaylistFileCache
     foreach (var session in _sessions.Where(x => x.Value.ExpiresAtUtc <= now).Select(x => x.Key).ToList())
     {
       _sessions.Remove(session);
+    }
+
+    foreach (var session in _librarySessions.Where(x => x.Value.ExpiresAtUtc <= now).Select(x => x.Key).ToList())
+    {
+      _librarySessions.Remove(session);
     }
 
     foreach (var output in _outputs.Values
@@ -1312,6 +1352,8 @@ public sealed class PlaylistDiskReservation : IDisposable
 }
 
 internal sealed record PlaylistSession(string SourceKey, DateTimeOffset ExpiresAtUtc);
+
+internal sealed record LibrarySession(string SourceKey, Guid PlaylistId, string UserId, DateTimeOffset ExpiresAtUtc);
 
 internal sealed record PendingDeleteFile(string FilePath, long LengthBytes);
 
