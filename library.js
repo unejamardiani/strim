@@ -665,7 +665,7 @@
     } else {
       const rating = f?.rating > 0 ? f.rating.toFixed(1) : '';
       const meta = f ? (f.genres || []).slice(0, 3).join(' · ') : entry.group;
-      top = h('div', { class: 'film-stage' }, poster(ctx, f?.posterUrl, `Poster of ${title.textContent}`, 'film-poster'),
+      top = h('div', { class: 'film-stage' }, filmBackdrop(ctx, f?.posterUrl), poster(ctx, f?.posterUrl, `Poster of ${title.textContent}`, 'film-poster'),
         f ? h('p', { class: 'film-kicker', dataset: { type: 'Movies' } }, h('span', { class: 'dot', 'aria-hidden': 'true' }), f.year ? `Film · ${f.year}` : 'Film') : null,
         title, meta ? h('p', { class: 'film-meta', text: meta }) : null,
         h('div', { class: 'film-actions' }, rating ? [
@@ -704,6 +704,21 @@
       overview.after(more);
     }
     title.focus();
+  }
+
+  // Design A (#367): a blurred copy of the same poster washes the stage and fades into the card. Same URL as the <img>,
+  // so no extra request or host; set through CSSOM, which the CSP allows. It fades in once the image has loaded and
+  // goes away if the image fails, so a broken poster never leaves a coloured smear.
+  function filmBackdrop(ctx, url) {
+    if (!url) return null;
+    const el = ctx.h('div', { class: 'film-backdrop', 'aria-hidden': 'true' });
+    el.style.setProperty('--film-art', `url(${JSON.stringify(url)})`);
+    const probe = new Image();
+    probe.referrerPolicy = 'no-referrer';
+    probe.addEventListener('load', () => el.classList.add('is-loaded'), { once: true });
+    probe.addEventListener('error', () => el.remove(), { once: true });
+    probe.src = url;
+    return el;
   }
 
   // The poster as given by the API, lazy; none or a failed image keeps the same box with the Movies diamond.

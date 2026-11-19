@@ -29,6 +29,18 @@ public class LibraryFilmCardUiTests
   }
 
   [Fact]
+  public void AMatchedCard_HasTheBlurredPosterBackdrop_FromTheSameUrl()
+  {
+    var card = Card();
+    Assert.Contains("top = h('div', { class: 'film-stage' }, filmBackdrop(ctx, f?.posterUrl), poster(", card);
+    Assert.Contains("el.style.setProperty('--film-art', `url(${JSON.stringify(url)})`);", card);
+    Assert.Contains("probe.addEventListener('error', () => el.remove(), { once: true });", card);
+    var css = Read("library.css");
+    Assert.Contains(".film-backdrop { position: absolute; z-index: -2; inset: -70px -70px 90px; background: var(--film-art) center / cover; filter: blur(44px) saturate(1.5);", css);
+    Assert.Contains(".film-stage:has(> .film-backdrop)::before {", css);
+  }
+
+  [Fact]
   public void TheScrollArea_TakesItsContentHeight_SoSafariDoesNotCollapseTheSheet()
   {
     // 19 Nov 2026: with `flex: 1` (a 0% basis) the phone sheet had no height in iOS Safari; only the backdrop showed.

@@ -221,9 +221,12 @@
   .page:has(> .film-card[open]) .library-browse > .library-open { position: static; max-height: none; }
 }
 
-/* Stage: poster, kicker, title, genres, then rating and marks, centred. The blurred backdrop comes later. */
+/* Stage: the blurred poster backdrop, then poster, kicker, title, genres, rating and marks, centred. */
 .film-stage, .film-load { display: flex; flex-direction: column; align-items: center; text-align: center; }
-.film-stage { padding: 52px 24px 22px; }
+.film-stage { position: relative; isolation: isolate; overflow: hidden; padding: 52px 24px 22px; }
+.film-backdrop { position: absolute; z-index: -2; inset: -70px -70px 90px; background: var(--film-art) center / cover; filter: blur(44px) saturate(1.5); opacity: 0; transform: scale(1.06); transition: opacity .7s ease, transform 1.2s cubic-bezier(.2, 1, .3, 1); }
+.film-backdrop.is-loaded { opacity: 1; transform: none; }
+.film-stage:has(> .film-backdrop)::before { content: ""; position: absolute; z-index: -1; inset: 0; background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 18%, transparent) 0%, color-mix(in srgb, var(--surface) 46%, transparent) 46%, var(--surface) 84%); }
 .film-load { gap: 14px; padding: 58px 24px 24px; }
 .film-choose p, .film-body p { margin: 0; }
 .film-poster { display: block; width: var(--film-poster-w); height: auto; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 16px; box-shadow: var(--film-poster-shadow); outline: 1px solid rgba(255,255,255,.16); outline-offset: -1px; }
@@ -289,6 +292,7 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .film-tile.is-absent .film-tile-meta { color: var(--ink-3); }
 @media (prefers-reduced-motion: reduce) {
   .film-rail { scroll-behavior: auto; }
+  .film-backdrop { transition: none; transform: none; }
   button.film-tile .film-tile-poster { transition: none; }
 }
 
