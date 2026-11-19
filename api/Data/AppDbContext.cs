@@ -14,6 +14,8 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
 
   public DbSet<Playlist> Playlists => Set<Playlist>();
 
+  public DbSet<TitleMark> TitleMarks => Set<TitleMark>();
+
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
     base.OnModelCreating(modelBuilder);
@@ -53,6 +55,28 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
       entity.Property(p => p.AccountCheckedUtc).HasColumnName("accountcheckedutc");
       entity.HasIndex(p => new { p.OwnerId, p.UpdatedAt });
       entity.HasIndex(p => p.ShareCode).HasFilter("\"sharecode\" IS NOT NULL");
+    });
+
+    // Matches the SQL in Database.EnsureTitleMarksSchema. Uniqueness of (userid, kind, titlekey, year), with a
+    // null year as its own value, comes from two partial unique indexes that SQL always creates.
+    modelBuilder.Entity<TitleMark>(entity =>
+    {
+      entity.ToTable("titlemarks");
+      entity.HasKey(m => m.Id);
+      entity.Property(m => m.Id).HasColumnName("id");
+      entity.Property(m => m.UserId).IsRequired().HasMaxLength(450).HasColumnName("userid");
+      entity.Property(m => m.Kind).IsRequired().HasMaxLength(16).HasColumnName("kind");
+      entity.Property(m => m.TitleKey).IsRequired().HasMaxLength(256).HasColumnName("titlekey");
+      entity.Property(m => m.Year).HasColumnName("year");
+      entity.Property(m => m.DisplayTitle).IsRequired().HasMaxLength(256).HasColumnName("displaytitle");
+      entity.Property(m => m.Seen).HasColumnName("seen");
+      entity.Property(m => m.Rating).HasColumnName("rating");
+      entity.Property(m => m.FilmDbId).HasMaxLength(64).HasColumnName("filmdbid");
+      entity.Property(m => m.CreatedUtc).HasColumnName("createdutc");
+      entity.Property(m => m.UpdatedUtc).HasColumnName("updatedutc");
+      entity.HasIndex(m => m.UserId).HasDatabaseName("IX_titlemarks_userid");
+      entity.HasOne<IdentityUser>().WithMany().HasForeignKey(m => m.UserId)
+        .HasConstraintName("FK_titlemarks_AspNetUsers_userid").OnDelete(DeleteBehavior.Cascade);
     });
   }
 
