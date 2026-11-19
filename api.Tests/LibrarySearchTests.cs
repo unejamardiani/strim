@@ -97,7 +97,7 @@ public class LibrarySearchTests
     var js = Read("main.js");
     var run = Between(js, "async function runSearch(ed)", "function renderSearchResults(ed)");
     Assert.Contains("const hideDisabled = ed.filter.show === 'kept';", run);
-    Assert.Contains("body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled], hideDisabled },", run);
+    Assert.Contains("body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled], hideDisabled, lang: lang || null },", run);
     Assert.DoesNotContain("contentTypes", run);
     // main.js calls the search endpoint from the editor and hands the Library one read-only function.
     Assert.Equal(2, Regex.Matches(js, Regex.Escape("api('/playlist/search'")).Count);
