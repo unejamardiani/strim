@@ -11,8 +11,9 @@ namespace Api.Endpoints;
 public sealed record LibraryFilmCard(
   string Status, LibraryFilmDetails? Film, IReadOnlyList<LibraryFilmCandidate>? Candidates, LibraryFilmMarks Marks);
 
+/// <param name="PosterUrl">The poster on TMDB's image host (<see cref="TmdbPosterUrl"/>); the browser loads it directly.</param>
 public sealed record LibraryFilmDetails(
-  int Id, string? Title, int? Year, string? PosterPath, double Rating, IReadOnlyList<string> Genres, string? Overview,
+  int Id, string? Title, int? Year, string? PosterUrl, double Rating, IReadOnlyList<string> Genres, string? Overview,
   IReadOnlyList<LibrarySimilarFilm> Similar);
 
 /// <summary>A similar film from TMDB; when <paramref name="InList"/>, the list entry that holds it.</summary>
@@ -20,10 +21,10 @@ public sealed record LibraryFilmDetails(
 /// <param name="GroupKey">The group key the editor toggles.</param>
 /// <param name="Enabled">Whether the entry's group is switched on.</param>
 public sealed record LibrarySimilarFilm(
-  int Id, string? Title, int? Year, string? PosterPath, bool InList, bool Seen,
+  int Id, string? Title, int? Year, string? PosterUrl, bool InList, bool Seen,
   string? Entry = null, string? Group = null, string? GroupKey = null, bool? Enabled = null);
 
-public sealed record LibraryFilmCandidate(int Id, string? Title, int? Year, string? PosterPath);
+public sealed record LibraryFilmCandidate(int Id, string? Title, int? Year, string? PosterUrl);
 
 /// <param name="Rating">-1, 0 or 1, as stored on the mark.</param>
 public sealed record LibraryFilmMarks(bool Seen, int Rating);
@@ -83,7 +84,7 @@ public static class LibraryEndpoints
         if (ClearMatch(key, results) is not { } match)
         {
           var candidates = results.Take(MaxCandidates)
-            .Select(r => new LibraryFilmCandidate(r.Id, r.Title, YearOf(r.ReleaseDate), r.PosterPath)).ToList();
+            .Select(r => new LibraryFilmCandidate(r.Id, r.Title, YearOf(r.ReleaseDate), TmdbPosterUrl.From(r.PosterPath))).ToList();
           return Results.Ok(new LibraryFilmCard(Choose, null, candidates, marks));
         }
         movieId = match.Id;
@@ -94,7 +95,7 @@ public static class LibraryEndpoints
       if (details.Status != TmdbStatus.Ok) return Results.Ok(new LibraryFilmCard(Unavailable, null, null, marks));
       var film = details.Value!;
       return Results.Ok(new LibraryFilmCard(Matched, new LibraryFilmDetails(
-        film.Id, film.Title, YearOf(film.ReleaseDate), film.PosterPath, film.VoteAverage,
+        film.Id, film.Title, YearOf(film.ReleaseDate), TmdbPosterUrl.From(film.PosterPath), film.VoteAverage,
         (film.Genres ?? []).Select(g => g.Name).OfType<string>().ToList(), film.Overview,
         Similar(film.Similar?.Results ?? [], userMarks, IndexOf(pipeline, cacheKey), disabledGroups,
           includeDisabled != true, hideSeen == true)), null, marks));
@@ -127,13 +128,14 @@ public static class LibraryEndpoints
 
     var similar = films.Select((f, i) =>
     {
+      var poster = TmdbPosterUrl.From(f.PosterPath);
       var seen = keysPerFilm[i].Any(seenKeys.Contains);
       var matches = keysPerFilm[i].Select(k => found?.GetValueOrDefault(k)).OfType<PlaylistSearchMatch>().ToList();
       var entry = matches.FirstOrDefault(m => m.Enabled) ?? matches.FirstOrDefault();
       var year = YearOf(f.ReleaseDate);
       return entry is null
-        ? new LibrarySimilarFilm(f.Id, f.Title, year, f.PosterPath, false, seen)
-        : new LibrarySimilarFilm(f.Id, f.Title, year, f.PosterPath, true, seen, entry.Name, entry.OutputGroup, entry.GroupKey, entry.Enabled);
+        ? new LibrarySimilarFilm(f.Id, f.Title, year, poster, false, seen)
+        : new LibrarySimilarFilm(f.Id, f.Title, year, poster, true, seen, entry.Name, entry.OutputGroup, entry.GroupKey, entry.Enabled);
     });
     // OrderBy is stable, so TMDB's order holds within each part.
     return similar.Where(s => !hideSeen || !s.Seen).OrderBy(s => s.InList ? 0 : 1).ToList();
