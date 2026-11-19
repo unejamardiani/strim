@@ -27,6 +27,20 @@ two partial unique indexes make a null year its own value: `IX_titlemarks_userid
 `Database.EnsureTitleMarksSchema` creates the table and all three indexes with `IF NOT EXISTS` on every start, for
 SQLite and PostgreSQL.
 
+### Playlist shares (`playlistshares`)
+
+Approved by the owner on 19 Nov 2026 (epic #373): one row per person a playlist is shared with read-only.
+Columns: `id`, `playlistid`, `label` (the owner's name for the person, at most 100 characters), `role` (default
+`viewer`, the only role for now), `tokenhash` (SHA-256 hex of the invitation token, null once accepted),
+`tokenexpiresutc`, `vieweruserid`, `createdutc`, `acceptedutc` and `lastopenedutc` (both nullable). Status is
+derived: accepted when `vieweruserid` is set, expired when `tokenexpiresutc` has passed, otherwise invited; revoking
+and leaving delete the row. `playlistid` references `playlists ("Id")` and `vieweruserid` references
+`AspNetUsers (Id)`, both `ON DELETE CASCADE`, so shares go with the playlist and with the viewer's account.
+Indexes: `IX_playlistshares_playlistid`, `IX_playlistshares_vieweruserid`, unique `IX_playlistshares_tokenhash` on
+`(tokenhash) WHERE tokenhash IS NOT NULL` and unique `IX_playlistshares_playlistid_vieweruserid` on
+`(playlistid, vieweruserid) WHERE vieweruserid IS NOT NULL`. `Database.EnsurePlaylistSharesSchema` creates the
+table and indexes with `IF NOT EXISTS` on every start, for SQLite and PostgreSQL.
+
 ## Limitations of Current Approach
 
 ### 1. No Migration History
