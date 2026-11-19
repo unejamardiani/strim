@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Api.Data;
-using Api.Models;
 using Api.Services;
 using Api.Tests.Integration;
 using Microsoft.AspNetCore.Hosting;
@@ -133,11 +132,12 @@ public sealed class LibraryFilmCardTests
   public async Task StoredId_SkipsSearch()
   {
     await using var host = await TestHost.StartAsync(Token, _ => Json(MatrixDetails));
-    host.AddMark("the matrix", 1999, seen: true, rating: 1, filmDbId: "603");
+    await host.AddMarkAsync("DE - The Matrix (1999)", seen: true, rating: 1, filmDbId: "603");
 
     var card = await host.CardAsync("The Matrix (1999) HD");
 
     Assert.Equal("matched", card.GetProperty("status").GetString());
+    Assert.True(card.GetProperty("marks").GetProperty("seen").GetBoolean());
     Assert.Equal("/3/movie/603", Assert.Single(host.TmdbRequests).AbsolutePath);
   }
 
@@ -188,7 +188,7 @@ public sealed class LibraryFilmCardTests
     Assert.False(unmarked.GetProperty("seen").GetBoolean());
     Assert.Equal(0, unmarked.GetProperty("rating").GetInt32());
 
-    host.AddMark("the matrix", 1999, seen: true, rating: -1, filmDbId: null);
+    await host.AddMarkAsync("The Matrix (1999) 4K", seen: true, rating: -1, filmDbId: null);
     var marks = (await host.CardAsync("The Matrix (1999)")).GetProperty("marks");
     Assert.True(marks.GetProperty("seen").GetBoolean());
     Assert.Equal(-1, marks.GetProperty("rating").GetInt32());
@@ -253,17 +253,13 @@ public sealed class LibraryFilmCardTests
       return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
     }
 
-    public void AddMark(string titleKey, int? year, bool seen, int rating, string? filmDbId)
+    /// <summary>Marks a film through PUT /api/marks; the TMDB id has no route yet (S5), so it is set in the database.</summary>
+    public async Task AddMarkAsync(string name, bool seen, int rating, string? filmDbId)
     {
+      Assert.Equal(HttpStatusCode.OK, (await Client.SendAsync(HttpMethod.Put, "/api/marks", new { name, kind = "film", seen, rating })).StatusCode);
       using var scope = Factory.Services.CreateScope();
       var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-      var now = DateTimeOffset.UtcNow;
-      db.TitleMarks.Add(new TitleMark
-      {
-        Id = Guid.NewGuid(), UserId = db.Users.Single(u => u.UserName == UserName).Id, Kind = "film",
-        TitleKey = titleKey, Year = year, DisplayTitle = "The Matrix", Seen = seen, Rating = rating,
-        FilmDbId = filmDbId, CreatedUtc = now, UpdatedUtc = now,
-      });
+      Assert.Single(db.TitleMarks.ToList()).FilmDbId = filmDbId;
       db.SaveChanges();
     }
 

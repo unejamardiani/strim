@@ -52,8 +52,7 @@ public static class LibraryEndpoints
       var key = isFilm && !AdultGroupRule.IsAdultGroupTitle(group) ? MarkKey.From(name, MarkKind.Film) : null;
       if (key is null) return Results.Ok(new LibraryFilmCard(NotApplicable, null, null, new LibraryFilmMarks(false, 0)));
 
-      var mark = await db.TitleMarks.AsNoTracking().FirstOrDefaultAsync(
-        m => m.UserId == userId && m.Kind == "film" && m.TitleKey == key.Title && m.Year == key.Year, ct);
+      var mark = await db.TitleMarks.AsNoTracking().FirstOrDefaultAsync(m => m.UserId == userId && m.TitleKey == key.Key, ct);
       var marks = new LibraryFilmMarks(mark?.Seen ?? false, mark?.Rating ?? 0);
 
       int movieId;
