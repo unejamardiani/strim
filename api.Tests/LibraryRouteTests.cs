@@ -11,7 +11,7 @@ namespace Api.Tests;
 public class LibraryRouteTests
 {
   private const string Csp =
-    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: http://localhost:5000 http://127.0.0.1:5000; form-action 'self'; base-uri 'self';\" />";
+    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://image.tmdb.org; connect-src 'self' https: http://localhost:5000 http://127.0.0.1:5000; form-action 'self'; base-uri 'self';\" />";
 
   private static string Read(string file) => File.ReadAllText(Path.Combine(StrimAppFactory.RepositoryRoot(), file));
 
