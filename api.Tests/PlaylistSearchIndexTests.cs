@@ -254,6 +254,42 @@ public class PlaylistSearchIndexTests
     Assert.Equal(61, all.HiddenCount);
   }
 
+  [Fact]
+  public async Task Search_ContentTypesAndLanguages_Intersect()
+  {
+    var index = await Analyze("""
+      #EXTM3U
+      #EXTINF:-1 group-title="Films On",DE: Star Film One
+      https://example.com/movie/u/p/1.mkv
+      #EXTINF:-1 group-title="Films On",FR: Star Film Two
+      https://example.com/movie/u/p/2.mkv
+      #EXTINF:-1 group-title="Films Off",DE: Star Film Three
+      https://example.com/movie/u/p/3.mkv
+      #EXTINF:-1 group-title="Shows",DE: Star Show S01E01
+      https://example.com/series/u/p/4.mkv
+      #EXTINF:-1 group-title="Live",DE: Star Live
+      https://example.com/live/u/p/5.ts
+      #EXTINF:-1 group-title="Films On",Star Film Plain
+      https://example.com/movie/u/p/6.mkv
+      """);
+    var films = Types(PlaylistContentType.Movies);
+
+    // Type, language and the toggle together: only German films of groups that are on; the German film of the off
+    // group is counted as hidden, the French film, the series and the channel are not counted at all.
+    var kept = index.Search("star", Set("Films Off"), 50, hideDisabled: true, contentTypes: films, languages: ["de"]);
+    Assert.Equal(new[] { "DE: Star Film One" }, kept.Matches.Select(m => m.Name));
+    Assert.Equal((1, 1), (kept.Total, kept.HiddenCount));
+
+    // With the switched-off groups included, the off film joins and is marked off.
+    var withOff = index.Search("star", Set("Films Off"), 50, hideDisabled: false, contentTypes: films, languages: ["de"]);
+    Assert.Equal(new[] { ("DE: Star Film One", true), ("DE: Star Film Three", false) }, withOff.Matches.Select(m => (m.Name, m.Enabled)));
+    Assert.Equal(0, withOff.HiddenCount);
+
+    // Each filter alone keeps more than the combination.
+    Assert.Equal(4, index.Search("star", Set("Films Off"), 50, contentTypes: films).Matches.Count);
+    Assert.Equal(4, index.Search("star", Set("Films Off"), 50, languages: ["de"]).Matches.Count);
+  }
+
   // 60 live channels, then films in an off and an on group, then series, all matching "star".
   private static string MixedTypes()
   {
