@@ -151,6 +151,35 @@ public class MarkKeyTests
   }
 
   [Fact]
+  public void StandaloneUpperCaseTitle_IsNotAPrefix()
+  {
+    Assert.Equal(Film("Mist (2020)").Key, Film("MIST (2020)").Key);
+    Assert.Equal("film:2020:mist", Film("MIST (2020)").Key);
+    Assert.Equal("film::dark", Film("DARK").Key);
+    Assert.Equal("film:2020:mist", Film("DE - MIST (2020)").Key);
+  }
+
+  [Theory]
+  [InlineData("DE  - Lantern (2020)")]
+  [InlineData("DE - Lantern (2020)")]
+  [InlineData("Lantern (  2020  )")]
+  [InlineData("DE\t-  Lantern   [ 2020 ]")]
+  public void RepeatedWhitespace_DoesNotChangePrefixOrYear(string name)
+  {
+    Assert.Equal("film:2020:lantern", Film(name).Key);
+    Assert.Equal("Lantern", Film(name).DisplayTitle);
+  }
+
+  [Fact]
+  public void TrailingYearBeforeBracketNoise_IsStillTheYear()
+  {
+    Assert.Equal(Film("Lantern 2020").Key, Film("Lantern 2020 [Multi-Sub]").Key);
+    Assert.Equal("film:2020:lantern", Film("Lantern 2020 [Multi-Sub]").Key);
+    Assert.Equal("film:2020:lantern 1999", Film("Lantern 1999 (2020) [Multi-Sub]").Key);
+    Assert.Equal(2020, Film("Lantern 1999 [2020]").Year);
+  }
+
+  [Fact]
   public void LowerCaseWordsAtTheStart_AreNotPrefixes()
   {
     Assert.Equal("Up", Film("Up (2009)").DisplayTitle);
