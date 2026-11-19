@@ -571,11 +571,10 @@
   function filmDialog(ctx) {
     const { h, icon } = ctx;
     const { signal } = ctx.controller;
-    const head = h('div', { class: 'film-card-head' },
-      h('span', { class: 'film-card-kind', dataset: { type: 'Movies' } },
-        h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { class: 'field-label', text: 'Film' })),
-      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: () => el.close() }, icon('close')));
-    const el = h('dialog', { class: 'sheet film-card', 'aria-labelledby': 'film-card-title' }, head, h('div', { class: 'film-card-body' }));
+    // The head floats over the stage: the left slot is Back from a similar film (#368), the right one Close.
+    const head = h('div', { class: 'film-card-head' }, h('span'),
+      h('button', { class: 'icon-btn film-glass', type: 'button', 'aria-label': 'Close', onclick: () => el.close() }, icon('close')));
+    const el = h('dialog', { class: 'sheet film-card', 'aria-labelledby': 'film-card-title' }, head, h('div', { class: 'film-scroll' }));
     el.addEventListener('click', (e) => { if (e.target === el) el.close(); });
     el.addEventListener('close', () => filmClosed(ctx));
     // A new mode closes and reopens the card with the same content; the close handler sees it open again.
@@ -587,23 +586,6 @@
       if (e.key === 'Escape' && el.open && !el.matches(':modal') && here) el.close();
     }, { signal });
     signal.addEventListener('abort', () => { card.pending?.abort(); el.close(); }, { once: true });
-    // Swipe down on the phone sheet's head: more than 96px closes, less springs back.
-    let start = null;
-    head.addEventListener('pointerdown', (e) => {
-      if (window.innerWidth >= 600 || e.target.closest('button')) return;
-      start = e.clientY;
-      head.setPointerCapture(e.pointerId);
-    });
-    head.addEventListener('pointermove', (e) => {
-      if (start !== null && !matchMedia('(prefers-reduced-motion: reduce)').matches) el.style.transform = `translateY(${Math.max(0, e.clientY - start)}px)`;
-    });
-    const release = (e) => {
-      const far = start !== null && e.type === 'pointerup' && e.clientY - start > 96;
-      start = null;
-      el.style.transform = '';
-      if (far) el.close();
-    };
-    for (const type of ['pointerup', 'pointercancel']) head.addEventListener(type, release);
     ctx.root.append(el);
     return el;
   }
@@ -647,45 +629,48 @@
   function renderFilm(ctx, answer) {
     const { h, icon } = ctx;
     const entry = card.film;
-    const body = card.el.querySelector('.film-card-body');
+    const scroll = card.el.querySelector('.film-scroll');
     const f = answer?.status === 'matched' ? answer.film : null;
     const choose = answer?.status === 'choose' && answer.candidates?.length > 0;
     const title = h('h2', { class: choose ? 'film-state-title' : 'film-title', id: 'film-card-title', tabindex: '-1',
       text: choose ? 'Which film is it?' : f?.title || entry.name });
-    const nodes = [];
-    if (choose) {
-      nodes.push(h('div', { class: 'film-state' }, title, h('p', { text: `More than one film fits "${entry.name}".` })),
-        h('ul', { class: 'film-list' }, answer.candidates.map((c) => h('li', { class: 'film-row' },
-          poster(ctx, c.posterUrl, '', 'film-thumb'),
-          h('span', { class: 'film-row-text' }, h('span', { class: 'film-row-title', text: c.title || entry.name }),
-            h('span', { class: 'film-row-meta', text: c.year ? String(c.year) : 'Year unknown' }))))));
-    } else {
-      const skel = (width) => h('span', { class: `skel skel-line skel-${width}`, 'aria-hidden': 'true' });
-      const rating = f?.rating > 0 ? f.rating.toFixed(1) : '';
-      const info = !answer ? [skel(55), skel(80)] : !f ? [h('p', { class: 'film-row-meta', text: entry.group })] : [
-        h('p', { class: 'film-facts' }, f.year ? h('span', { class: 'film-year', text: String(f.year) }) : null,
-          rating ? h('span', { class: 'film-rating', role: 'img', 'aria-label': `TMDB rating ${rating} out of 10` },
-            icon('star'), h('b', { text: rating }), h('span', { text: '/10 TMDB' })) : null),
-        f.genres?.length ? h('ul', { class: 'film-genres' }, f.genres.slice(0, 4).map((g) => h('li', { class: 'film-genre', text: g }))) : null];
-      nodes.push(h('div', { class: 'film-details' }, poster(ctx, f?.posterUrl, `Poster of ${title.textContent}`, 'film-poster', !answer),
-        h('div', { class: 'film-info' }, title, ...info)));
-    }
-    nodes.push(cardMarks(ctx, entry, answer));
+    const marksEl = cardMarks(ctx, entry, answer);
+    const body = h('div', { class: 'film-body' });
+    let top;
     if (!answer) {
-      nodes.push(h('div', { class: 'film-overview' }, [100, 100, 80].map((w) => h('span', { class: `skel skel-line skel-${w}`, 'aria-hidden': 'true' }))),
+      top = h('div', { class: 'film-load' }, h('div', { class: 'film-poster skel', 'aria-hidden': 'true' }), title,
+        h('span', { class: 'skel skel-line', 'aria-hidden': 'true' }), marksEl,
         h('span', { class: 'sr-only', role: 'status', text: 'Loading film details' }));
-    } else if (f?.overview) {
-      nodes.push(h('p', { class: 'film-overview is-clamped', text: f.overview }));
-    } else if (!f && answer.status !== 'choose') {
-      const failed = answer.status === 'failed';
-      const retry = failed || answer.status === 'unavailable';
-      nodes.push(h('div', { class: failed ? 'notice error' : 'notice', role: failed ? 'alert' : null },
-        h('p', { text: FILM_NOTES[answer.status] || FILM_NOTES.failed }),
-        retry ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadFilm(ctx) }, 'Try again') : null));
+    } else if (choose) {
+      // #367 lists the candidates only; choosing one is #368.
+      top = h('div', { class: 'film-choose' }, title, h('p', { class: 'film-choose-text', text: `More than one film fits "${entry.name}".` }),
+        h('ul', { class: 'film-grid' }, answer.candidates.map((c) => h('li', { class: 'film-tile' },
+          poster(ctx, c.posterUrl, '', 'film-tile-poster'),
+          h('span', { class: 'film-tile-title', text: c.title || entry.name }),
+          h('span', { class: 'film-tile-meta', text: c.year ? String(c.year) : 'Year unknown' })))),
+        marksEl);
+    } else {
+      const rating = f?.rating > 0 ? f.rating.toFixed(1) : '';
+      const meta = f ? (f.genres || []).slice(0, 3).join(' · ') : entry.group;
+      top = h('div', { class: 'film-stage' }, poster(ctx, f?.posterUrl, `Poster of ${title.textContent}`, 'film-poster'),
+        f ? h('p', { class: 'film-kicker', dataset: { type: 'Movies' } }, h('span', { class: 'dot', 'aria-hidden': 'true' }), f.year ? `Film · ${f.year}` : 'Film') : null,
+        title, meta ? h('p', { class: 'film-meta', text: meta }) : null,
+        h('div', { class: 'film-actions' }, rating ? [
+          h('span', { class: 'film-rating', role: 'img', 'aria-label': `TMDB rating ${rating} out of 10` }, icon('star'), h('b', { text: rating }), h('span', { text: 'TMDB' })),
+          h('span', { class: 'film-sep', 'aria-hidden': 'true' })] : null, marksEl));
+      if (f?.overview) body.append(h('p', { class: 'film-overview is-clamped', text: f.overview }));
+      if (!f) {
+        const failed = answer.status === 'failed';
+        const retry = failed || answer.status === 'unavailable';
+        body.append(h('div', { class: failed ? 'notice error' : 'notice', role: failed ? 'alert' : null },
+          h('p', { text: FILM_NOTES[answer.status === 'choose' ? 'notFound' : answer.status] || FILM_NOTES.failed }),
+          retry ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadFilm(ctx) }, 'Try again') : null));
+      }
     }
-    if (answer?.tmdbData) nodes.push(filmCredit(ctx));
-    body.setAttribute('aria-busy', String(!answer));
-    body.replaceChildren(...nodes);
+    if (answer?.tmdbData) body.append(filmCredit(ctx));
+    card.el.setAttribute('aria-busy', String(!answer));
+    scroll.replaceChildren(top, body);
+    scroll.scrollTop = 0;
     const overview = body.querySelector('.film-overview.is-clamped');
     if (overview && overview.scrollHeight > overview.clientHeight) {
       const more = h('button', { class: 'film-more', type: 'button', 'aria-expanded': 'false', text: 'More', onclick: () => {
@@ -699,15 +684,15 @@
   }
 
   // The poster as given by the API, lazy; none or a failed image keeps the same box with the Movies diamond.
-  function poster(ctx, url, alt, cls, loading) {
-    const empty = () => ctx.h('div', { class: `${cls} ${cls}-empty${loading ? ' skel' : ''}`, 'aria-hidden': 'true' });
+  function poster(ctx, url, alt, cls) {
+    const empty = () => ctx.h('div', { class: `${cls} film-poster-empty`, 'aria-hidden': 'true' });
     if (!url) return empty();
     const img = ctx.h('img', { class: cls, alt, width: 342, height: 513, loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', src: url });
     img.addEventListener('error', () => img.replaceWith(empty()), { once: true });
     return img;
   }
 
-  // The #298 controls with labels; they share the state by mark key, so the rows repaint with them. In a modal card
+  // The #298 controls as an icon capsule; they share the state by mark key, so the rows repaint with them. In a modal card
   // a failure shows inside the card for 5 s, because the toasts lie under the dialog's top layer.
   function cardMarks(ctx, entry, answer) {
     const now = marks.get(entry.markKey) || { seen: false, rating: 0 };
@@ -717,17 +702,11 @@
     const toast = (text, options) => {
       if (!card.el.matches(':modal')) return ctx.toast(text, options);
       const note = ctx.h('div', { class: 'notice error', role: 'alert', text });
-      card.el.querySelector('.film-card-body').prepend(note);
+      card.el.querySelector('.film-body')?.prepend(note);
       setTimeout(() => note.remove(), 5000);
     };
     const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: 'Movies', markKey: entry.markKey, ...given });
     el.classList.add('film-marks');
-    ['Seen', 'Thumbs up', 'Thumbs down'].forEach((label, i) => {
-      const b = el.children[i];
-      b.className = 'btn film-mark';
-      b.setAttribute('aria-label', label);
-      b.append(label);
-    });
     if (given.seen !== now.seen || given.rating !== now.rating) syncRows(ctx, entry.markKey, given);
     return el;
   }

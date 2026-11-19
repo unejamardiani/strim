@@ -51,7 +51,12 @@ public class LibraryFilmCardUiTests
     Assert.Contains("failed: 'The film details could not be loaded.',", card);
     // The #298 controls and their shared state, so a change in the card repaints the rows.
     Assert.Contains("const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: 'Movies', markKey: entry.markKey, ...given });", card);
-    Assert.Contains("if (answer?.tmdbData) nodes.push(filmCredit(ctx));", card);
+    Assert.Contains("if (answer?.tmdbData) body.append(filmCredit(ctx));", card);
+    // The approved layout: a glass Close, a kicker, the icon-only marks capsule and a grid of candidate tiles.
+    Assert.Contains("h('button', { class: 'icon-btn film-glass', type: 'button', 'aria-label': 'Close'", card);
+    Assert.Contains("f.year ? `Film · ${f.year}` : 'Film'", card);
+    Assert.DoesNotContain("b.append(label)", card);
+    Assert.Contains(".film-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;", Read("library.css"));
     Assert.Contains("the mark controls and, for films, the name, which opens the film card.", Read("DESIGN.md"));
   }
 }

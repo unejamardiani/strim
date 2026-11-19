@@ -139,12 +139,14 @@ Film card (#367): only with TMDB on (`/api/config`), a film row's name is a butt
 its tap target (hover tint, 16px chevron from 768px, `.is-open` tint and 3px `--accent` inset). Series,
 channels and, with TMDB off, every row stay text and nothing about TMDB shows. One `<dialog>`: the
 app's sheet below 1100px (bottom sheet with handle below 600px, 520px centred from 600px), from 1100px
-a 420px side pane beside the list that does not block the page. It loads once on open. Body: 2:3
-poster (108px, 132px in the pane; Movies-diamond box when missing), title (26px/800), year, rating
-("7.6 /10 TMDB"), up to four genre pills, the marks as labelled Seen, Thumbs up, Thumbs down buttons sharing
-the rows' state, the overview clamped to 5 lines with More/Less; "choose" lists the candidates; other
-states and failures show a short notice. With TMDB data, TMDB's logo, credit line and notice end it.
-Close, Escape, backdrop, a swipe down on the phone or Back close it without moving the page.
+a 420px side pane beside the list that does not block the page. A glass Close circle floats top right.
+It loads once on open (a skeleton poster, the entry name and the marks). The stage is centred: 2:3
+poster (200px, 208px in the pane; Movies-diamond box when missing), kicker "Film · year", title
+(Bricolage 36px/800), up to three genres joined by " · ", then the TMDB rating and the marks capsule
+(Seen, Thumbs up, Thumbs down as 36px icon buttons sharing the rows' state). The overview is clamped
+to 3 lines with More/Less. "choose" lists the candidates as a 3-column grid of poster tiles; other
+states and failures show the entry name, its group and a short notice. With TMDB data, TMDB's logo,
+credit line and notice end it. Close, Escape, backdrop or Back close it without moving the page.
 
 Marks (#298): every film and series row (search results and group entries) ends with three round
 icon buttons, Seen (check), Thumbs up and Thumbs down, `--control-h` square (46px on phones, 42px
