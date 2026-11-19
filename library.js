@@ -44,7 +44,7 @@
         h('span', { class: 'num', text: fmt(on.length) }), ` of ${plural(result.groups.length, 'group')} on, `,
         h('span', { class: 'num', text: fmt(entries) }), ` of ${plural(result.totalChannels, 'entry', 'entries')} in your list`),
       h('p', { class: 'field-hint', text: 'The Library only reads your list. To change what the player link serves, edit the groups.' })),
-    searchSection(ctx, result, browse.refresh),
+    searchSection(ctx, result, browse.refresh, browse.reload),
     browse.el);
   }
 
@@ -59,10 +59,14 @@
 
   // Kept for this page session only: a reload starts again with the groups that are on.
   let includeOff = false;
+  // The mark filters (#297, #298), for this page session only like the toggle.
+  let hideSeen = false;
+  let likedOnly = false;
 
   // The same search as the editor's Everything, read-only: by default only the groups that are on.
   // onToggle tells the browse view that the shared toggle changed.
-  function searchSection(ctx, list, onToggle) {
+  // onMarkFilter tells the browse view that a mark filter changed.
+  function searchSection(ctx, list, onToggle, onMarkFilter) {
     const { h } = ctx;
     // The editor's language filter (#266) on its own host: the choice lives for this view only, like the editor's.
     const host = { searchLang: [], searchLanguages: [], onLangChoice: () => run() };
@@ -98,6 +102,20 @@
         onToggle();
       },
     }, 'Include switched-off groups');
+    const markFilter = (label, get, set) => {
+      const b = h('button', {
+        class: 'btn btn-sm library-toggle', type: 'button', 'aria-pressed': String(get()),
+        onclick: () => {
+          set(!get());
+          b.setAttribute('aria-pressed', String(get()));
+          run();
+          onMarkFilter();
+        },
+      }, label);
+      return b;
+    };
+    const seenFilter = markFilter('Hide seen', () => hideSeen, (v) => { hideSeen = v; });
+    const likedFilter = markFilter('Liked only', () => likedOnly, (v) => { likedOnly = v; });
 
     ctx.controller.signal.addEventListener('abort', () => clearTimeout(state.timer), { once: true });
     // On a phone the labels that do not fit wait behind "+N", as in the editor; a new width fits them again.
@@ -105,7 +123,7 @@
     run();
     return h('section', { class: 'library-search' },
       input,
-      h('div', { class: 'library-filters' }, types, toggle),
+      h('div', { class: 'library-filters' }, types, toggle, seenFilter, likedFilter),
       h('section', { class: 'card search-results', 'aria-label': 'Search results' },
         h('div', { class: 'search-head' }, results.head, filter.bar),
         filter.panel,
@@ -134,6 +152,8 @@
     const body = { cacheKey: list.cacheKey, query: state.query, disabledGroups: [...list.disabled], hideDisabled };
     if (contentTypes.length) body.contentTypes = contentTypes;
     if (lang) body.lang = lang;
+    if (hideSeen) body.hideSeen = true;
+    if (likedOnly) body.liked = true;
     show('Searching…');
     let found;
     try {
@@ -149,10 +169,13 @@
     }
     const matches = found.matches || [];
     const hidden = hideDisabled && Number.isInteger(found.hiddenCount) ? found.hiddenCount : 0;
-    const left = hidden > 0 ? `${plural(hidden, 'match', 'matches')} in switched-off groups` : '';
+    const seen = hideSeen && Number.isInteger(found.seenHiddenCount) ? found.seenHiddenCount : 0;
+    const left = [hidden > 0 ? `${plural(hidden, 'match', 'matches')} in switched-off groups` : '',
+      seen > 0 ? `${plural(seen, 'seen match', 'seen matches')} hidden` : ''].filter(Boolean).join(' · ');
     let text = 'Nothing matches your search.';
     if (matches.length) text = [plural(matches.length, 'match', 'matches'), left].filter(Boolean).join(' · ');
     else if (left) text = `Nothing in your list. ${left}.`;
+    else if (likedOnly) text = 'Nothing you liked matches your search.';
     else if (lang) text = 'Nothing matches your search in the chosen languages.';
     if (matches.some((m) => m.languageSource === 'title')) text += ' · Labels from the title';
     const nodes = [];
@@ -160,6 +183,58 @@
     if (found.hasMore === true) nodes.push(h('p', { class: 'search-more', text: 'More matches, refine your search.' }));
     show(text, ...nodes);
     ctx.fitSearchLanguages(results.body);
+  }
+
+  // Marks (#298): seen and thumbs on a film or series, stored per user by the marks API that main.js hands in; they
+  // never touch the playlist. The state is kept by mark key, so every variant of a title in the view shows the same.
+  const MARK_KINDS = { Movies: 'film', Series: 'series' };
+  const marks = new Map();
+
+  // Channels and names without a title have no mark key and get no controls.
+  function markControls(ctx, entry) {
+    const kind = MARK_KINDS[entry.contentType];
+    if (!entry.markKey || !kind) return null;
+    const { h, icon } = ctx;
+    const key = entry.markKey;
+    marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0 });
+    // Tapping an active control again undoes it.
+    const control = (label, name, next) => h('button', {
+      class: 'icon-btn library-mark', type: 'button', 'aria-label': label, title: label, 'aria-pressed': 'false',
+      onclick: () => setMark(ctx, entry.name, kind, key, next(marks.get(key))),
+    }, icon(name));
+    const el = h('span', { class: 'library-marks', role: 'group', 'aria-label': 'Your marks', dataset: { key } },
+      control('Seen', 'check', (m) => ({ ...m, seen: !m.seen })),
+      control('Thumbs up', 'up', (m) => ({ ...m, rating: m.rating === 1 ? 0 : 1 })),
+      control('Thumbs down', 'down', (m) => ({ ...m, rating: m.rating === -1 ? 0 : -1 })));
+    paintMarks(el);
+    return el;
+  }
+
+  function paintMarks(el) {
+    const m = marks.get(el.dataset.key);
+    const [seen, up, down] = el.children;
+    seen.setAttribute('aria-pressed', String(m.seen));
+    up.setAttribute('aria-pressed', String(m.rating === 1));
+    down.setAttribute('aria-pressed', String(m.rating === -1));
+  }
+
+  // Shown at once on every row of the title; a failed request puts the mark back and says so.
+  async function setMark(ctx, name, kind, key, next) {
+    const before = marks.get(key);
+    const repaint = () => {
+      for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
+    };
+    marks.set(key, next);
+    repaint();
+    try {
+      await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating });
+    } catch (err) {
+      // A later tap on the same title already replaced this change.
+      if (marks.get(key) !== next) return;
+      marks.set(key, before);
+      repaint();
+      ctx.toast(`The mark was not changed. ${err.message || ''}`.trim(), { error: true });
+    }
   }
 
   // Browse (#287): the analysed groups by type, then in playlist order. Opening one pages through its
@@ -213,7 +288,7 @@
       for (const b of groupsEl.querySelectorAll('.library-group')) if (b.dataset.key === key) b.focus();
     };
 
-    const open = (g) => {
+    const open = (g, scroll = true) => {
       const view = {
         group: g, offset: 0,
         count: h('p', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') }),
@@ -229,7 +304,7 @@
         h('div', { class: 'card' }, view.list, view.foot));
       groupsEl.hidden = true;
       entriesEl.hidden = false;
-      el.scrollIntoView({ block: 'start' });
+      if (scroll) el.scrollIntoView({ block: 'start' });
       loadPage(view);
     };
 
@@ -238,7 +313,10 @@
       view.foot.replaceChildren(status(view.offset ? 'Loading more…' : 'Loading entries…'));
       let page;
       try {
-        page = await ctx.groupEntries({ cacheKey: list.cacheKey, group: view.group.key, offset: view.offset, limit: PAGE_SIZE }, ctx.controller.signal);
+        const params = { cacheKey: list.cacheKey, group: view.group.key, offset: view.offset, limit: PAGE_SIZE };
+        if (hideSeen) params.hideSeen = true;
+        if (likedOnly) params.liked = true;
+        page = await ctx.groupEntries(params, ctx.controller.signal);
       } catch (err) {
         if (view !== state.open || ctx.controller.signal.aborted) return;
         view.foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
@@ -247,13 +325,16 @@
         return;
       }
       if (view !== state.open || !ctx.isCurrent()) return;
-      const names = page.names || [];
-      view.list.append(...names.map((name) => h('li', { class: 'library-hit' }, h('span', { class: 'search-hit-name', text: name }))));
+      const names = page.entries || [];
+      view.list.append(...names.map((e) => h('li', { class: 'library-hit' }, h('span', { class: 'search-hit-name', text: e.name }), markControls(ctx, e))));
       view.offset += names.length;
       view.count.textContent = plural(page.total, 'entry', 'entries');
       const done = names.length === 0 || view.offset >= page.total;
       if (!done) view.foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'More'));
-      else view.foot.replaceChildren(status(page.total === 0 ? 'No entries in this group.' : `All ${fmt(page.total)} shown`));
+      else {
+        const seen = hideSeen && page.seenHiddenCount > 0 ? ` · ${plural(page.seenHiddenCount, 'seen entry', 'seen entries')} hidden` : '';
+        view.foot.replaceChildren(status((page.total === 0 ? 'No entries in this group.' : `All ${fmt(page.total)} shown`) + seen));
+      }
     };
 
     // The shared toggle: an open group stays open unless it is off and switched-off groups are left out again.
@@ -261,12 +342,14 @@
       renderGroups();
       if (state.open && !includeOff && list.disabled.has(state.open.group.key)) close();
     };
+    // A mark filter loads the open group again from its first page.
+    const reload = () => { if (state.open) open(state.open.group, false); };
     renderGroups();
-    return { el, refresh };
+    return { el, refresh, reload };
   }
 
-  // A result is text only: name with the editor's language labels (#265), group and type, and 'Off' for an entry
-  // of a group that is off.
+  // A result is text with the editor's language labels (#265), group and type, 'Off' for an entry of a group that
+  // is off, and the mark controls for a film or series (#298).
   function hit(ctx, m) {
     const { h } = ctx;
     const type = TYPE_LABELS[m.contentType] ? m.contentType : 'Live';
@@ -277,7 +360,8 @@
           h('span', { class: 'search-hit-name', text: m.name }),
           ctx.searchLanguages(m)),
         h('span', { class: 'search-hit-meta', text: `${m.group} · ${TYPE_LABELS[type]}` })),
-      m.enabled === false ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
+      m.enabled === false ? h('span', { class: 'search-badge off', text: 'Off' }) : null,
+      markControls(ctx, m));
   }
 
   window.StrimLibrary = { mount };

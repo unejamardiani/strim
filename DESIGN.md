@@ -132,7 +132,17 @@ Purpose: find what a saved playlist holds, films, series and channels, without e
 playlist card's Library action opens it; Edit groups in its head goes back to the editor.
 
 Read-only: nothing in the Library changes the playlist or what the player link serves. It has no
-switches, no bulk action, no Save and no dock; results and entries are text, not controls.
+switches, no bulk action, no Save and no dock; results and entries are text, not controls, except
+the mark controls below.
+
+Marks (#298): every film and series row (search results and group entries) ends with three round
+icon buttons, Seen (check), Thumbs up and Thumbs down, `--control-h` square (46px on phones, 42px
+from 768px) with `aria-pressed`. A pressed control has the `--accent-soft` fill; tapping it again
+undoes it. A mark is the user's, not the playlist's: it is stored at once and shows on every variant
+of the title in the view. A failed request puts the mark back and shows an error toast. Channels and
+names without a title get no controls. Two more toggles next to "Include switched-off groups",
+"Hide seen" and "Liked only", filter the search and the open group for the page session; with Hide
+seen on, the count of seen matches left out is shown. The editor shows no marks.
 
 My list by default: the Library shows the entries of the groups that are on. One toggle, "Include
 switched-off groups", adds the groups that are off and marks their groups and entries "Off". It is

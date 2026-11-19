@@ -40,6 +40,30 @@
   border-top: 1px solid var(--line);
 }
 
+.library-entries .library-hit > .search-hit-name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Marks (#298): seen, thumbs up and thumbs down at the end of a film or series row, phone-sized tap targets.
+   A pressed control is tangerine-tinted; tapping it again undoes it. */
+.library-marks {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  margin-right: -8px;
+}
+
+.library-mark {
+  width: var(--control-h);
+  height: var(--control-h);
+}
+
+.library-mark[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
 /* Browse (#287): one card per type with its groups; an open group replaces the list with its entries. */
 .library-browse {
   display: flex;

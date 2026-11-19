@@ -62,7 +62,7 @@ public class LibrarySearchTests
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
     Assert.Contains("return { groups: ed.groups, disabled: ed.disabled, totalChannels: ed.totalChannels, cacheKey: ed.cacheKey };", show);
     Assert.Contains("searchHint,", show);
-    Assert.Contains("search: (body, signal) => api('/playlist/search', { method: 'POST', body, signal }),", show);
+    Assert.Contains("search: (body, signal) => api('/library/search', { method: 'POST', body, signal }),", show);
   }
 
   [Fact]
@@ -150,8 +150,9 @@ public class LibrarySearchTests
     Assert.Contains("const hideDisabled = ed.filter.show === 'kept';", run);
     Assert.Contains("body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled], hideDisabled, lang: lang || null },", run);
     Assert.DoesNotContain("contentTypes", run);
-    // main.js calls the search endpoint from the editor and hands the Library one read-only function.
-    Assert.Equal(2, Regex.Matches(js, Regex.Escape("api('/playlist/search'")).Count);
+    // main.js calls the editor's search endpoint from the editor only; the Library gets its marks search (#297).
+    Assert.Single(Regex.Matches(js, Regex.Escape("api('/playlist/search'")));
+    Assert.Single(Regex.Matches(js, Regex.Escape("api('/library/search'")));
     Assert.DoesNotContain("/playlist/search", Read("library.js"));
   }
 }
