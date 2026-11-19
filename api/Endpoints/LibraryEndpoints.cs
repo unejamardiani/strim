@@ -46,20 +46,15 @@ public sealed record LibrarySeriesCard(
 
 public sealed record LibrarySeriesContext(int? Season, int? Episode);
 
-/// <param name="State">returning, ended, cancelled, upcoming or null.</param>
-/// <param name="InList">What the list holds of the series; null without an index.</param>
+/// <summary>State: returning, ended, cancelled, upcoming or null. InList: null without an index.</summary>
 public sealed record LibrarySeriesDetails(
   int Id, string? Title, int? FirstYear, int? LastYear, string? State, int? SeasonCount, int? EpisodeCount,
   string? Network, string? PosterUrl, double Rating, IReadOnlyList<string> Genres, string? Overview,
   LibrarySeriesInList? InList, IReadOnlyList<LibrarySimilarFilm> Similar);
 
-/// <param name="Episodes">Distinct numbered episodes across all seasons.</param>
-/// <param name="Unnumbered">Distinct entry names without an episode number.</param>
 public sealed record LibrarySeriesInList(int Episodes, int Unnumbered, IReadOnlyList<LibrarySeriesSeason> Seasons);
 
-/// <param name="Total">TMDB's episode count, or null when TMDB does not know the season.</param>
-/// <param name="Count">The list's distinct episodes of the season.</param>
-/// <param name="Episodes">The list's episode numbers, sorted and cut at <see cref="LibraryEndpoints.MaxEpisodesPerSeason"/>.</param>
+/// <summary>Total from TMDB (null when unknown); count and the sorted, cut episode numbers from the list.</summary>
 public sealed record LibrarySeriesSeason(int Season, int? Total, int Count, IReadOnlyList<int> Episodes);
 
 /// <summary>Read-only Library routes; nothing here changes a playlist.</summary>
@@ -117,13 +112,13 @@ public static class LibraryEndpoints
         if (search.Status != TmdbStatus.Ok) return Card(Unavailable, null, null, marks);
         var results = search.Value!.Results ?? [];
         if (results.Count == 0) return Card(NotFound, null, null, marks);
-        if (ClearMatch(key, results) is not { } match)
+        if (ClearMatchId(key, results.Select(r => (r.Id, r.Title, r.ReleaseDate))) is not { } match)
         {
           var candidates = results.Take(MaxCandidates)
             .Select(r => new LibraryFilmCandidate(r.Id, r.Title, YearOf(r.ReleaseDate), TmdbPosterUrl.From(r.PosterPath))).ToList();
           return Card(Choose, null, candidates, marks);
         }
-        movieId = match.Id;
+        movieId = match;
       }
 
       var details = await tmdb.GetMovieWithSimilarAsync(movieId, ct);
@@ -230,10 +225,7 @@ public static class LibraryEndpoints
     db.TitleMarks.AsNoTracking().Where(m => m.UserId == userId)
       .Select(m => new FilmMark(m.TitleKey, m.Seen, m.Rating, m.FilmDbId)).ToListAsync(ct);
 
-  /// <summary>
-  /// TMDB's seasons joined with the list's: <c>total</c> from TMDB, <c>count</c> and <c>episodes</c> from the list.
-  /// Season 0 (specials) appears only when the list has it.
-  /// </summary>
+  /// <summary>TMDB's seasons joined with the list's; season 0 (specials) appears only when the list has it.</summary>
   private static LibrarySeriesInList InList(PlaylistSeriesResult found, IReadOnlyList<TmdbTvSeason>? tmdbSeasons)
   {
     var totals = new Dictionary<int, int?>();
@@ -249,11 +241,8 @@ public static class LibraryEndpoints
 
   private static string? StateOf(string? status) => status switch
   {
-    "Returning Series" => "returning",
-    "Ended" => "ended",
-    "Canceled" or "Cancelled" => "cancelled",
-    "In Production" or "Planned" or "Pilot" => "upcoming",
-    _ => null,
+    "Returning Series" => "returning", "Ended" => "ended", "Canceled" or "Cancelled" => "cancelled",
+    "In Production" or "Planned" or "Pilot" => "upcoming", _ => null,
   };
 
   /// <summary>
@@ -331,10 +320,6 @@ public static class LibraryEndpoints
   /// The clear-match rule: exactly one result whose title, normalised like <see cref="MarkKey"/>, equals the key's
   /// title, and whose release year equals the key's year when the key has one. Anything else is a choice.
   /// </summary>
-  internal static TmdbMovieSummary? ClearMatch(MarkKey key, IReadOnlyList<TmdbMovieSummary> results) =>
-    ClearMatchId(key, results.Select(r => (r.Id, r.Title, r.ReleaseDate))) is { } id ? results.First(r => r.Id == id) : null;
-
-  /// <summary>The same rule for any result list: titles and first dates (release or first air).</summary>
   private static int? ClearMatchId(MarkKey key, IEnumerable<(int Id, string? Title, string? Date)> results)
   {
     var same = results.Where(r => r.Id > 0 && r.Title is not null && MarkKey.NormaliseTitle(r.Title) == key.Title
