@@ -138,7 +138,8 @@ public sealed class TmdbClient
     }
     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
     {
-      throw;
+      // A fresh exception: the transport's message and inner exceptions can echo request details.
+      throw new OperationCanceledException("The TMDB request was cancelled.", cancellationToken);
     }
     catch (Exception ex)
     {
