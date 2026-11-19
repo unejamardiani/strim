@@ -16,6 +16,8 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
 
   public DbSet<TitleMark> TitleMarks => Set<TitleMark>();
 
+  public DbSet<PlaylistShare> PlaylistShares => Set<PlaylistShare>();
+
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
     base.OnModelCreating(modelBuilder);
@@ -77,6 +79,33 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
       entity.HasIndex(m => m.UserId).HasDatabaseName("IX_titlemarks_userid");
       entity.HasOne<IdentityUser>().WithMany().HasForeignKey(m => m.UserId)
         .HasConstraintName("FK_titlemarks_AspNetUsers_userid").OnDelete(DeleteBehavior.Cascade);
+    });
+
+    // Matches the SQL in Database.EnsurePlaylistSharesSchema.
+    modelBuilder.Entity<PlaylistShare>(entity =>
+    {
+      entity.ToTable("playlistshares");
+      entity.HasKey(s => s.Id);
+      entity.Property(s => s.Id).HasColumnName("id");
+      entity.Property(s => s.PlaylistId).HasColumnName("playlistid");
+      entity.Property(s => s.Label).IsRequired().HasMaxLength(100).HasColumnName("label");
+      entity.Property(s => s.Role).IsRequired().HasMaxLength(16).HasDefaultValue("viewer").HasColumnName("role");
+      entity.Property(s => s.TokenHash).HasMaxLength(64).HasColumnName("tokenhash");
+      entity.Property(s => s.TokenExpiresUtc).HasColumnName("tokenexpiresutc");
+      entity.Property(s => s.ViewerUserId).HasMaxLength(450).HasColumnName("vieweruserid");
+      entity.Property(s => s.CreatedUtc).HasColumnName("createdutc");
+      entity.Property(s => s.AcceptedUtc).HasColumnName("acceptedutc");
+      entity.Property(s => s.LastOpenedUtc).HasColumnName("lastopenedutc");
+      entity.HasIndex(s => s.PlaylistId).HasDatabaseName("IX_playlistshares_playlistid");
+      entity.HasIndex(s => s.ViewerUserId).HasDatabaseName("IX_playlistshares_vieweruserid");
+      entity.HasIndex(s => s.TokenHash).IsUnique().HasFilter("\"tokenhash\" IS NOT NULL")
+        .HasDatabaseName("IX_playlistshares_tokenhash");
+      entity.HasIndex(s => new { s.PlaylistId, s.ViewerUserId }).IsUnique().HasFilter("\"vieweruserid\" IS NOT NULL")
+        .HasDatabaseName("IX_playlistshares_playlistid_vieweruserid");
+      entity.HasOne<Playlist>().WithMany().HasForeignKey(s => s.PlaylistId)
+        .HasConstraintName("FK_playlistshares_playlists_playlistid").OnDelete(DeleteBehavior.Cascade);
+      entity.HasOne<IdentityUser>().WithMany().HasForeignKey(s => s.ViewerUserId)
+        .HasConstraintName("FK_playlistshares_AspNetUsers_vieweruserid").OnDelete(DeleteBehavior.Cascade);
     });
   }
 

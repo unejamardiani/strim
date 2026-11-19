@@ -77,6 +77,7 @@ public static class Database
     db.Database.EnsureCreated();
     EnsureIdentitySchema(db, logger);
     EnsureTitleMarksSchema(db, logger);
+    EnsurePlaylistSharesSchema(db, logger);
 
     if (db.Database.IsNpgsql())
     {
@@ -178,6 +179,69 @@ public static class Database
     catch (Exception ex)
     {
       logger.LogWarning(ex, "Failed to ensure the title marks schema: {Message}", ex.Message);
+    }
+  }
+
+  /// <summary>
+  /// The playlist shares table on SQLite (epic #373, approved by the owner on 19 Nov 2026). A share goes with its
+  /// playlist and with the account that accepted it. Two partial unique indexes keep a token hash single and one
+  /// accepted share per viewer and playlist; open invitations (no viewer) and accepted ones (no hash) never collide.
+  /// </summary>
+  public const string SqlitePlaylistSharesSql = @"
+        CREATE TABLE IF NOT EXISTS playlistshares (
+          id TEXT NOT NULL PRIMARY KEY,
+          playlistid TEXT NOT NULL,
+          label TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'viewer',
+          tokenhash TEXT NULL,
+          tokenexpiresutc TEXT NULL,
+          vieweruserid TEXT NULL,
+          createdutc TEXT NOT NULL,
+          acceptedutc TEXT NULL,
+          lastopenedutc TEXT NULL,
+          CONSTRAINT FK_playlistshares_playlists_playlistid FOREIGN KEY (playlistid) REFERENCES playlists (Id) ON DELETE CASCADE,
+          CONSTRAINT FK_playlistshares_AspNetUsers_vieweruserid FOREIGN KEY (vieweruserid) REFERENCES AspNetUsers (Id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS IX_playlistshares_playlistid ON playlistshares (playlistid);
+        CREATE INDEX IF NOT EXISTS IX_playlistshares_vieweruserid ON playlistshares (vieweruserid);
+        CREATE UNIQUE INDEX IF NOT EXISTS IX_playlistshares_tokenhash ON playlistshares (tokenhash) WHERE tokenhash IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS IX_playlistshares_playlistid_vieweruserid ON playlistshares (playlistid, vieweruserid) WHERE vieweruserid IS NOT NULL;
+      ";
+
+  /// <summary>The same table on PostgreSQL, with quoted identifiers as in <see cref="TryEnsurePostgresIdentity"/>.</summary>
+  public const string PostgresPlaylistSharesSql = @"
+        CREATE TABLE IF NOT EXISTS ""playlistshares"" (
+          ""id"" uuid NOT NULL PRIMARY KEY,
+          ""playlistid"" uuid NOT NULL,
+          ""label"" varchar(100) NOT NULL,
+          ""role"" varchar(16) NOT NULL DEFAULT 'viewer',
+          ""tokenhash"" varchar(64) NULL,
+          ""tokenexpiresutc"" timestamp with time zone NULL,
+          ""vieweruserid"" varchar(450) NULL,
+          ""createdutc"" timestamp with time zone NOT NULL,
+          ""acceptedutc"" timestamp with time zone NULL,
+          ""lastopenedutc"" timestamp with time zone NULL,
+          CONSTRAINT ""FK_playlistshares_playlists_playlistid"" FOREIGN KEY (""playlistid"") REFERENCES ""playlists""(""Id"") ON DELETE CASCADE,
+          CONSTRAINT ""FK_playlistshares_AspNetUsers_vieweruserid"" FOREIGN KEY (""vieweruserid"") REFERENCES ""AspNetUsers""(""Id"") ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_playlistshares_playlistid"" ON ""playlistshares"" (""playlistid"");
+        CREATE INDEX IF NOT EXISTS ""IX_playlistshares_vieweruserid"" ON ""playlistshares"" (""vieweruserid"");
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_playlistshares_tokenhash"" ON ""playlistshares"" (""tokenhash"") WHERE ""tokenhash"" IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_playlistshares_playlistid_vieweruserid"" ON ""playlistshares"" (""playlistid"", ""vieweruserid"") WHERE ""vieweruserid"" IS NOT NULL;
+      ";
+
+  private static void EnsurePlaylistSharesSchema(AppDbContext db, ILogger logger)
+  {
+    var isNpgsql = db.Database.IsNpgsql();
+    if (!isNpgsql && !db.Database.IsSqlite()) return;
+    try
+    {
+      db.Database.ExecuteSqlRaw(isNpgsql ? PostgresPlaylistSharesSql : SqlitePlaylistSharesSql);
+      logger.LogDebug("Playlist shares schema ensured");
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to ensure the playlist shares schema: {Message}", ex.Message);
     }
   }
 
