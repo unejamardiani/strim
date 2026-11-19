@@ -782,6 +782,8 @@ function newEditor(playlist) {
     filter: { query: '', type: 'all', show: readGroupShow(playlist?.id), sort: 'provider' },
     searchMode: 'groups', // groups | everything
     search: null, // Everything results: { status, query, matches, hasMore, message }
+    searchLang: [], // Languages and prefix tags the Everything search keeps (lang=), as the API reports them
+    searchLanguages: [], // { value, kind, count } from the last search response
     view: [],
     // Groups toggled since the view was built; they stay in it until a filter, the query or the mode changes.
     pinned: new Set(),
@@ -939,6 +941,7 @@ function applyAnalysis(ed, analysis, { sample }) {
   ed.cacheKey = analysis.cacheKey;
   ed.reportCounts = null;
   ed.search = null;
+  ed.searchLanguages = [];
   ed.totalChannels = analysis.totalChannels || groups.reduce((sum, g) => sum + g.count, 0);
   ed.expirationUtc = analysis.expirationUtc || null;
   // The API rejects a status over 32 characters (varchar(32)); drop only the status so the save still works.
@@ -1207,6 +1210,9 @@ const picker = {
   typeButtons: null,
   showButtons: null,
   results: null,
+  searchStatus: null,
+  searchBody: null,
+  langFilter: null,
   modes: null,
   everything: null,
   highlight: null,
@@ -1357,7 +1363,13 @@ function pickerNodes(ed) {
     picker.adultSwitch ? h('label', { class: 'adult-switch' }, 'Hide adult groups', picker.adultSwitch) : null,
     h('div', { class: 'bulk' }, picker.allOnButton, picker.allOffButton)));
 
-  picker.results = h('section', { class: 'card search-results', 'aria-label': 'Search results', hidden: ed.searchMode !== 'everything' });
+  picker.searchStatus = h('div', { class: 'search-head-status' });
+  picker.searchBody = h('div');
+  picker.langFilter = langFilterNodes(ed);
+  picker.results = h('section', { class: 'card search-results', 'aria-label': 'Search results', hidden: ed.searchMode !== 'everything' },
+    h('div', { class: 'search-head' }, picker.searchStatus, picker.langFilter.bar),
+    picker.langFilter.panel,
+    picker.searchBody);
 
   return [
     h('section', { class: 'picker-toolbar', 'aria-label': 'Group filters' }, rows),
@@ -1884,7 +1896,8 @@ async function runSearch(ed) {
     renderSearchResults(ed);
     return;
   }
-  if (ed.search?.status === 'done' && ed.search.query === query && ed.search.hideDisabled === hideDisabled) {
+  const lang = ed.searchLang.join(',');
+  if (ed.search?.status === 'done' && ed.search.query === query && ed.search.hideDisabled === hideDisabled && ed.search.lang === lang) {
     renderSearchResults(ed);
     return;
   }
@@ -1895,14 +1908,17 @@ async function runSearch(ed) {
   try {
     const result = await api('/playlist/search', {
       method: 'POST',
-      body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled], hideDisabled },
+      body: { cacheKey: ed.cacheKey, query, disabledGroups: [...ed.disabled], hideDisabled, lang: lang || null },
       signal: controller.signal,
     });
     if (searchController !== controller) return;
     ed.search = {
-      status: 'done', query, hideDisabled, matches: result.matches || [], hasMore: result.hasMore === true,
+      status: 'done', query, hideDisabled, lang, matches: result.matches || [], hasMore: result.hasMore === true,
       hiddenCount: hideDisabled && Number.isInteger(result.hiddenCount) ? result.hiddenCount : 0,
     };
+    if (Array.isArray(result.languages)) {
+      ed.searchLanguages = result.languages.filter((l) => l && typeof l.value === 'string' && l.value);
+    }
   } catch (err) {
     if (isAbort(err) || searchController !== controller) return;
     ed.search = { status: 'error', query, message: err.message || 'Search failed.' };
@@ -1917,12 +1933,15 @@ function renderSearchResults(ed) {
   if (!panel || picker.ed !== ed) return;
   const s = ed.search || { status: 'hint', message: searchHint('') };
   const status = (text) => h('p', { class: 'search-status', role: 'status', text });
+  renderLangFilter(ed);
   if (s.status === 'hint') {
-    panel.replaceChildren(status(s.message));
+    picker.searchStatus.replaceChildren(status(s.message));
+    picker.searchBody.replaceChildren();
     return;
   }
   if (s.status === 'error') {
-    panel.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+    picker.searchStatus.replaceChildren();
+    picker.searchBody.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
       h('p', { text: s.message }),
       h('div', { class: 'row-actions' },
         h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadGroups(ed, ed.sourceUrl, { sample: ed.isSample }) }, 'Analyse again'),
@@ -1939,10 +1958,12 @@ function renderSearchResults(ed) {
   else if (hidden > 0) text = `All ${plural(hidden, 'match', 'matches')} are in switched-off groups. Choose All to see them.`;
   // The row labels name their source once here as well, so the note stays visible on a phone.
   if (s.status !== 'loading' && matches.some((m) => m.languageSource === 'title')) text += ' · Labels from the title';
-  const nodes = [status(text)];
+  if (s.status === 'done' && !matches.length && !hidden && ed.searchLang.length) text = 'Nothing matches your search in the chosen languages.';
+  picker.searchStatus.replaceChildren(status(text));
+  const nodes = [];
   if (matches.length) nodes.push(h('ul', { class: 'search-list' }, matches.map((m) => searchHit(ed, m))));
   if (s.status === 'done' && s.hasMore) nodes.push(h('p', { class: 'search-more', text: 'More matches, refine your search.' }));
-  panel.replaceChildren(...nodes);
+  picker.searchBody.replaceChildren(...nodes);
   syncSearchBadges(ed);
 }
 
@@ -1961,6 +1982,82 @@ function searchHit(ed, m) {
       searchLanguages(m)),
     h('span', { class: 'search-hit-meta', text: `${m.group} · No. ${fmt(m.position)} · ${type}` })),
   h('span', { class: 'search-badge' })));
+}
+
+// The language filter (#266): one chip that opens a short list of the languages and prefix tags the API reports
+// for the analysed list. A change runs the search again from the first result; × clears the choice in one tap.
+function langFilterNodes(ed) {
+  const label = h('span', { class: 'lang-filter-value' });
+  const panel = h('div', {
+    class: 'lang-panel', id: 'search-lang-panel', role: 'group', 'aria-label': 'Filter on tags from the title', hidden: true,
+  });
+  const toggle = h('button', {
+    class: 'lang-filter-toggle', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'search-lang-panel',
+    title: 'Filters on tags from the title',
+    onclick: () => setLangPanel(panel.hidden),
+  }, 'Language', label, h('span', { class: 'sr-only', text: ', tags from the title' }));
+  const clear = h('button', {
+    class: 'lang-filter-clear', type: 'button', 'aria-label': 'Clear the language filter', hidden: true,
+    onclick: () => {
+      toggle.focus();
+      setLangChoice(ed, []);
+    },
+  }, '×');
+  const setLangPanel = (open) => {
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  panel.addEventListener('change', () => {
+    setLangChoice(ed, [...panel.querySelectorAll('input:checked')].map((i) => i.value));
+  });
+  panel.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    setLangPanel(false);
+    toggle.focus();
+  });
+  const bar = h('div', { class: 'lang-filter', hidden: true }, toggle, clear);
+  return { bar, toggle, label, clear, panel, setLangPanel };
+}
+
+function setLangChoice(ed, values) {
+  ed.searchLang = values;
+  renderLangFilter(ed);
+  runSearch(ed);
+}
+
+const langText = (l) => (l.kind === 'tag' ? l.value : l.value.toUpperCase());
+
+function renderLangFilter(ed) {
+  const f = picker.langFilter;
+  if (!f) return;
+  const chosen = new Set(ed.searchLang);
+  // A choice the new list no longer reports stays offered, so it can still be switched off.
+  const known = ed.searchLanguages.concat(ed.searchLang
+    .filter((v) => !ed.searchLanguages.some((l) => l.value === v)).map((value) => ({ value, kind: 'tag' })));
+  f.bar.hidden = !known.length;
+  if (!known.length) f.setLangPanel(false);
+  const active = known.filter((l) => chosen.has(l.value)).map(langText);
+  f.label.textContent = active.length ? `: ${active.join(', ')}` : '';
+  f.toggle.classList.toggle('is-active', active.length > 0);
+  f.clear.hidden = !active.length;
+  // The options are rebuilt only when the offer changes, so focus stays on the box that was just ticked.
+  const signature = JSON.stringify(known.map((l) => [l.value, l.kind, l.count]));
+  if (f.panel.dataset.signature !== signature) {
+    f.panel.dataset.signature = signature;
+    const option = (l) => h('label', { class: 'lang-option' },
+      h('input', { type: 'checkbox', value: l.value }),
+      langText(l),
+      Number.isInteger(l.count) ? h('span', { class: 'count', text: fmt(l.count) }) : null);
+    const section = (title, items) => (items.length
+      ? [h('p', { class: 'lang-panel-title', text: title }), h('div', { class: 'lang-options' }, items.map(option))]
+      : []);
+    f.panel.replaceChildren(
+      h('p', { class: 'lang-panel-note', text: 'Filters on tags read from the title, not on provider details.' }),
+      ...section('Languages from titles', known.filter((l) => l.kind !== 'tag')),
+      ...section('Tags from titles', known.filter((l) => l.kind === 'tag')));
+  }
+  for (const box of f.panel.querySelectorAll('input')) box.checked = chosen.has(box.value);
 }
 
 const codes = (list) => (Array.isArray(list) ? list.filter((c) => typeof c === 'string' && c) : []);

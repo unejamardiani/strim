@@ -1166,6 +1166,123 @@ select.input {
   margin: 12px;
 }
 
+/* Language filter (#266): the chip shares the status line, and the open list stays short, so the first result
+   stays on the first screen of a phone. */
+.search-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+}
+
+.search-head-status {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lang-filter {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  max-width: 60%;
+}
+
+.lang-filter-toggle,
+.lang-filter-clear {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lang-filter-toggle {
+  min-width: 0;
+  padding: 0 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lang-filter-toggle.is-active {
+  border-color: var(--accent);
+  background: var(--pill-on);
+  color: var(--ink);
+}
+
+.lang-filter-clear {
+  flex: none;
+  width: 38px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.lang-filter-toggle:hover,
+.lang-filter-clear:hover {
+  color: var(--ink);
+}
+
+.lang-panel {
+  max-height: 132px;
+  overflow-y: auto;
+  padding: 0 18px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lang-panel-note,
+.lang-panel-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.lang-panel-title {
+  margin-top: 6px;
+  font-weight: 700;
+}
+
+.lang-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lang-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lang-option:has(input:checked) {
+  background: var(--pill-on);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.lang-option input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.lang-option .count {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
 .search-list {
   list-style: none;
   margin: 0;
