@@ -64,8 +64,11 @@
   // onToggle tells the browse view that the shared toggle changed.
   function searchSection(ctx, list, onToggle) {
     const { h } = ctx;
-    const state = { query: '', type: 'all', timer: 0, seq: 0 };
-    const results = h('div', { class: 'card search-results' });
+    // The editor's language filter (#266) on its own host: the choice lives for this view only, like the editor's.
+    const host = { searchLang: [], searchLanguages: [], onLangChoice: () => run() };
+    const filter = ctx.languageFilter(host);
+    const state = { query: '', type: 'all', timer: 0, seq: 0, host, filter };
+    const results = { head: h('div', { class: 'search-head-status' }), body: h('div') };
     const run = () => runSearch(ctx, list, state, results);
     const schedule = () => { clearTimeout(state.timer); state.timer = setTimeout(run, 300); };
 
@@ -97,11 +100,16 @@
     }, 'Include switched-off groups');
 
     ctx.controller.signal.addEventListener('abort', () => clearTimeout(state.timer), { once: true });
+    // On a phone the labels that do not fit wait behind "+N", as in the editor; a new width fits them again.
+    window.addEventListener('resize', () => ctx.fitSearchLanguages(results.body), { signal: ctx.controller.signal });
     run();
     return h('section', { class: 'library-search' },
       input,
       h('div', { class: 'library-filters' }, types, toggle),
-      results);
+      h('section', { class: 'card search-results', 'aria-label': 'Search results' },
+        h('div', { class: 'search-head' }, results.head, filter.bar),
+        filter.panel,
+        results.body));
   }
 
   async function runSearch(ctx, list, state, results) {
@@ -109,35 +117,49 @@
     clearTimeout(state.timer);
     const seq = ++state.seq;
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
+    // Shows the status beside the language chip and the results below the chip's open list.
+    const show = (head, ...nodes) => {
+      results.head.replaceChildren(...(head ? [status(head)] : []));
+      results.body.replaceChildren(...nodes);
+      state.filter.render();
+    };
     const hint = ctx.searchHint(state.query);
     if (hint) {
-      results.replaceChildren(status(hint));
+      show(hint);
       return;
     }
     const hideDisabled = !includeOff;
     const contentTypes = TYPES.find((t) => t.value === state.type).types;
+    const lang = state.host.searchLang.join(',');
     const body = { cacheKey: list.cacheKey, query: state.query, disabledGroups: [...list.disabled], hideDisabled };
     if (contentTypes.length) body.contentTypes = contentTypes;
-    results.replaceChildren(status('Searching…'));
+    if (lang) body.lang = lang;
+    show('Searching…');
     let found;
     try {
       found = await ctx.search(body, ctx.controller.signal);
     } catch (err) {
       if (seq !== state.seq || ctx.controller.signal.aborted) return;
-      results.replaceChildren(h('div', { class: 'notice error', role: 'alert', text: err.message || 'Search failed.' }));
+      show('', h('div', { class: 'notice error', role: 'alert', text: err.message || 'Search failed.' }));
       return;
     }
     if (seq !== state.seq || !ctx.isCurrent()) return;
+    if (Array.isArray(found.languages)) {
+      state.host.searchLanguages = found.languages.filter((l) => l && typeof l.value === 'string' && l.value);
+    }
     const matches = found.matches || [];
     const hidden = hideDisabled && Number.isInteger(found.hiddenCount) ? found.hiddenCount : 0;
     const left = hidden > 0 ? `${plural(hidden, 'match', 'matches')} in switched-off groups` : '';
     let text = 'Nothing matches your search.';
     if (matches.length) text = [plural(matches.length, 'match', 'matches'), left].filter(Boolean).join(' · ');
     else if (left) text = `Nothing in your list. ${left}.`;
-    const nodes = [status(text)];
-    if (matches.length) nodes.push(h('ul', { class: 'search-list' }, matches.map((m) => hit(h, m))));
+    else if (lang) text = 'Nothing matches your search in the chosen languages.';
+    if (matches.some((m) => m.languageSource === 'title')) text += ' · Labels from the title';
+    const nodes = [];
+    if (matches.length) nodes.push(h('ul', { class: 'search-list' }, matches.map((m) => hit(ctx, m))));
     if (found.hasMore === true) nodes.push(h('p', { class: 'search-more', text: 'More matches, refine your search.' }));
-    results.replaceChildren(...nodes);
+    show(text, ...nodes);
+    ctx.fitSearchLanguages(results.body);
   }
 
   // Browse (#287): the analysed groups by type, then in playlist order. Opening one pages through its
@@ -243,13 +265,17 @@
     return { el, refresh };
   }
 
-  // A result is text only: name, group and type, and 'Off' for an entry of a group that is off.
-  function hit(h, m) {
+  // A result is text only: name with the editor's language labels (#265), group and type, and 'Off' for an entry
+  // of a group that is off.
+  function hit(ctx, m) {
+    const { h } = ctx;
     const type = TYPE_LABELS[m.contentType] ? m.contentType : 'Live';
     return h('li', { class: 'library-hit', dataset: { type } },
       h('span', { class: 'dot', 'aria-hidden': 'true' }),
       h('span', { class: 'search-hit-text' },
-        h('span', { class: 'search-hit-name', text: m.name }),
+        h('span', { class: 'search-hit-line' },
+          h('span', { class: 'search-hit-name', text: m.name }),
+          ctx.searchLanguages(m)),
         h('span', { class: 'search-hit-meta', text: `${m.group} · ${TYPE_LABELS[type]}` })),
       m.enabled === false ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
   }

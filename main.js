@@ -1104,6 +1104,14 @@ function showLibrary(playlist) {
     // The editor's Everything search endpoint; it only reads the analysed list.
     searchHint,
     search: (body, signal) => api('/playlist/search', { method: 'POST', body, signal }),
+    // The editor's language labels and language filter (#265, #266), passed in rather than copied. The filter works
+    // on a host shaped like the editor's state (searchLang, searchLanguages) and calls host.onLangChoice on a change.
+    searchLanguages,
+    fitSearchLanguages,
+    languageFilter: (host) => {
+      host.langFilter = langFilterNodes(host);
+      return { bar: host.langFilter.bar, panel: host.langFilter.panel, render: () => renderLangFilter(host) };
+    },
     // One page of a group's names (#215), read-only like the search.
     groupEntries: (params, signal) => api(`/playlist/group-entries?${new URLSearchParams(params)}`, { signal }),
   });
@@ -1995,9 +2003,9 @@ function renderSearchResults(ed) {
 // removed), so a screen reader still hears every one and the source note.
 const PHONE_RESULTS = window.matchMedia('(max-width: 767px)');
 
-function fitSearchLanguages() {
-  if (!picker.results) return;
-  for (const strip of picker.results.querySelectorAll('.search-langs')) {
+function fitSearchLanguages(root = picker.results) {
+  if (!root) return;
+  for (const strip of root.querySelectorAll('.search-langs')) {
     for (const extra of strip.querySelectorAll('.lang-more, .lang-part')) extra.remove();
     const chips = [...strip.querySelectorAll('.lang-chip')];
     for (const chip of chips) chip.classList.remove('lang-chip-off');
@@ -2116,13 +2124,15 @@ function langFilterNodes(ed) {
 function setLangChoice(ed, values) {
   ed.searchLang = values;
   renderLangFilter(ed);
-  runSearch(ed);
+  // The Library's filter host searches on its own; the editor's state has no onLangChoice.
+  if (ed.onLangChoice) ed.onLangChoice();
+  else runSearch(ed);
 }
 
 const langText = (l) => (l.kind === 'tag' ? l.value : l.value.toUpperCase());
 
 function renderLangFilter(ed) {
-  const f = picker.langFilter;
+  const f = ed.langFilter || picker.langFilter;
   if (!f) return;
   const chosen = new Set(ed.searchLang);
   // A choice the new list no longer reports stays offered, so it can still be switched off.
