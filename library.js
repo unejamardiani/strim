@@ -381,7 +381,7 @@
 
   function myMarks(ctx) {
     const { h, fmt, plural } = ctx;
-    const view = { filter: 'all', seq: 0, shown: new Set(), total: 0, done: false };
+    const view = { filter: 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1 };
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
     const count = h('p', { class: 'search-hit-meta' });
     const list = h('ol', { class: 'search-list' });
@@ -407,13 +407,17 @@
     };
 
     // The next page starts after the marks shown now; marks a page repeats after a remove or an undo are skipped.
+    // A mark set in the search or a group moves to the top and shifts every position, so a page can add nothing
+    // new: the list then moves on to the next page at once instead of asking for the same page again.
     const loadPage = async () => {
       const seq = view.seq;
       foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
       let page;
+      let requested;
       try {
         const filter = MARK_FILTERS.find((f) => f.value === view.filter).params;
-        page = await ctx.listMarks({ ...filter, page: Math.floor(view.shown.size / MARKS_PAGE) + 1, pageSize: MARKS_PAGE }, ctx.controller.signal);
+        requested = Math.max(Math.floor(view.shown.size / MARKS_PAGE) + 1, view.minPage);
+        page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
       } catch (err) {
         if (seq !== view.seq || ctx.controller.signal.aborted) return;
         foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
@@ -423,13 +427,20 @@
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
       const items = page.items || [];
+      let added = 0;
       for (const m of items) {
         if (view.shown.has(m.key)) continue;
         view.shown.add(m.key);
         list.append(row(m));
+        added += 1;
       }
       view.total = page.total;
       view.done = items.length < MARKS_PAGE || view.shown.size >= page.total;
+      if (!view.done && added === 0) {
+        view.minPage = requested + 1;
+        loadPage();
+        return;
+      }
       paint();
     };
 
@@ -489,6 +500,7 @@
       view.shown = new Set();
       view.total = 0;
       view.done = false;
+      view.minPage = 1;
       count.textContent = '';
       list.replaceChildren();
       loadPage();

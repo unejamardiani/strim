@@ -31,12 +31,25 @@ public class LibraryMyMarksTests
 
     var section = MyMarks();
     Assert.Contains("const MARKS_PAGE = 50;", section);
-    Assert.Contains("page = await ctx.listMarks({ ...filter, page: Math.floor(view.shown.size / MARKS_PAGE) + 1, pageSize: MARKS_PAGE }, ctx.controller.signal);", section);
+    Assert.Contains("requested = Math.max(Math.floor(view.shown.size / MARKS_PAGE) + 1, view.minPage);", section);
+    Assert.Contains("page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);", section);
     Assert.Contains("if (view.shown.has(m.key)) continue;", section);
     Assert.Contains("h('button', { class: 'btn btn-sm', type: 'button', onclick: loadPage }, 'More')", section);
 
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
     Assert.Contains("listMarks: (params, signal) => api(`/marks?${new URLSearchParams(params)}`, { signal }),", show);
+  }
+
+  [Fact]
+  public void APageThatAddsNoNewRow_MovesOnToTheNextPage()
+  {
+    // A mark set in the search or a group goes to the top and shifts every position by one, so the page computed
+    // from the shown count can repeat only marks already shown; More must not ask for that page forever.
+    var load = Between(MyMarks(), "const loadPage = async () => {", "const row = (m) => {");
+    Assert.Contains("added += 1;", load);
+    Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        loadPage();\n        return;\n      }", load.ReplaceLineEndings("\n"));
+    Assert.True(load.IndexOf("view.done = items.length", StringComparison.Ordinal) < load.IndexOf("if (!view.done && added === 0)", StringComparison.Ordinal));
+    Assert.Contains("view.minPage = 1;", Between(MyMarks(), "const start = () => {", "start();"));
   }
 
   [Fact]
