@@ -49,14 +49,18 @@ public sealed class PlaylistSearchIndex
   /// <paramref name="contentTypes"/> or <paramref name="languages"/> not empty, matches of other types, or without
   /// one of the languages or prefix tags (compared case-insensitively), are skipped before anything else.
   /// <c>Total</c> counts every match that is neither skipped nor hidden, also those past the limit.
+  /// <paramref name="markFilter"/> (the Library's marks) runs last: it skips a match or hides it as seen, counted in
+  /// <c>SeenHiddenCount</c>.
   /// </summary>
   public PlaylistSearchResult Search(
     string? query, ISet<string> disabledGroups, int limit, bool hideDisabled = false,
-    IReadOnlySet<PlaylistContentType>? contentTypes = null, IReadOnlyCollection<string>? languages = null)
+    IReadOnlySet<PlaylistContentType>? contentTypes = null, IReadOnlyCollection<string>? languages = null,
+    Func<string, PlaylistContentType, MarkVerdict>? markFilter = null)
   {
     var folded = PlaylistSearchText.Fold(query).AsSpan();
     var matches = new List<PlaylistSearchMatch>();
     var hidden = 0;
+    var seenHidden = 0;
     var total = 0;
     if (folded.IsEmpty || limit <= 0) return new PlaylistSearchResult(matches, false);
     // Decided once per combination in the shared table, so the scan tests one bool per entry.
@@ -88,18 +92,22 @@ public sealed class PlaylistSearchIndex
           hidden++;
           continue;
         }
+        var name = markFilter is null ? null : new string(text[(tab + 1)..(at - 1)]);
+        var verdict = name is null ? MarkVerdict.Keep : markFilter!(name, slot.ContentType);
+        if (verdict == MarkVerdict.HideSeen) seenHidden++;
+        if (verdict != MarkVerdict.Keep) continue;
         // Matches past the cap are still counted, so Total and HiddenCount stay complete.
         if (total++ >= limit) continue;
 
         matches.Add(new PlaylistSearchMatch(
-          new string(text[(tab + 1)..(at - 1)]), slot.OutputGroup, slot.GroupKey, slot.ContentType, Field(entry, 2), enabled)
+          name ?? new string(text[(tab + 1)..(at - 1)]), slot.OutputGroup, slot.GroupKey, slot.ContentType, Field(entry, 2), enabled)
         {
           Languages = _languages[Field(entry, 3)],
         });
       }
     }
 
-    return new PlaylistSearchResult(matches, total > limit, hidden) { Total = total };
+    return new PlaylistSearchResult(matches, total > limit, hidden) { Total = total, SeenHiddenCount = seenHidden };
   }
 
   /// <summary>Rarer prefix tags still filter but are not offered, so odd prefixes do not clutter the choice.</summary>
@@ -114,11 +122,15 @@ public sealed class PlaylistSearchIndex
   /// <summary>
   /// The display names of the entries under <paramref name="groupKey"/> in source order, skipping
   /// <paramref name="offset"/> and returning at most <paramref name="limit"/>, with the group's total.
-  /// Only the page's names are copied; the rest of the group is counted.
+  /// Only the page's names are copied; the rest of the group is counted. With <paramref name="markFilter"/>, every
+  /// name is read, and entries it skips or hides as seen take no place in the offset, the page or the total.
   /// </summary>
-  public PlaylistGroupEntriesResult GroupEntries(string groupKey, int offset, int limit)
+  public PlaylistGroupEntriesResult GroupEntries(
+    string groupKey, int offset, int limit, Func<string, PlaylistContentType, MarkVerdict>? markFilter = null)
   {
     var names = new List<string>();
+    var types = new List<PlaylistContentType>();
+    var seenHidden = 0;
     var inGroup = _slots.Select(s => string.Equals(s.GroupKey, groupKey, StringComparison.OrdinalIgnoreCase)).ToArray();
     if (!inGroup.Contains(true)) return new PlaylistGroupEntriesResult(names, 0);
 
@@ -129,16 +141,27 @@ public sealed class PlaylistSearchIndex
       for (var entry = _chunkFirstEntry[c]; entry < end; entry++)
       {
         if (!inGroup[Field(entry, 1)]) continue;
+        var type = _slots[Field(entry, 1)].ContentType;
+        var name = markFilter is null ? null : NameAt(c, entry);
+        var verdict = name is null ? MarkVerdict.Keep : markFilter!(name, type);
+        if (verdict == MarkVerdict.HideSeen) seenHidden++;
+        if (verdict != MarkVerdict.Keep) continue;
         if (total++ < offset || names.Count >= limit) continue;
 
-        var text = _chunks[c].AsSpan(0, _chunkUsed[c]);
-        var start = Field(entry, 0);
-        var name = text[(start + text[start..].IndexOf('\t') + 1)..];
-        names.Add(new string(name[..name.IndexOf('\n')]));
+        names.Add(name ?? NameAt(c, entry));
+        types.Add(type);
       }
     }
 
-    return new PlaylistGroupEntriesResult(names, total);
+    return new PlaylistGroupEntriesResult(names, total) { Types = types, SeenHiddenCount = seenHidden };
+  }
+
+  private string NameAt(int chunk, int entry)
+  {
+    var text = _chunks[chunk].AsSpan(0, _chunkUsed[chunk]);
+    var start = Field(entry, 0);
+    var name = text[(start + text[start..].IndexOf('\t') + 1)..];
+    return new string(name[..name.IndexOf('\n')]);
   }
 
   /// <summary>Records one entry; false once the index exceeds its budget and should be dropped.</summary>
@@ -316,7 +339,13 @@ public sealed record PlaylistSearchResult(IReadOnlyList<PlaylistSearchMatch> Mat
 {
   /// <summary>Every match that passed the filters and is not hidden, also those past the limit.</summary>
   public int Total { get; init; }
+
+  /// <summary>Matches the mark filter hid as seen, also those past the limit.</summary>
+  public int SeenHiddenCount { get; init; }
 }
+
+/// <summary>What a mark filter does with an entry: keep it, skip it, or hide it as seen (counted).</summary>
+public enum MarkVerdict { Keep, Skip, HideSeen }
 
 /// <param name="Value">An ISO 639-1 language (de) or a prefix tag as written (UK, EX-YU).</param>
 /// <param name="Kind"><c>language</c> or <c>tag</c>.</param>
@@ -325,7 +354,14 @@ public sealed record PlaylistSearchLanguageCount(string Value, string Kind, int 
 
 /// <param name="Names">The display names of one page of the group's entries, in source order.</param>
 /// <param name="Total">The number of entries in the whole group.</param>
-public sealed record PlaylistGroupEntriesResult(IReadOnlyList<string> Names, int Total);
+public sealed record PlaylistGroupEntriesResult(IReadOnlyList<string> Names, int Total)
+{
+  /// <summary>The content type of each name.</summary>
+  public IReadOnlyList<PlaylistContentType> Types { get; init; } = [];
+
+  /// <summary>Entries of the group the mark filter hid as seen.</summary>
+  public int SeenHiddenCount { get; init; }
+}
 
 /// <param name="Name">The entry's display name.</param>
 /// <param name="OutputGroup">The group-title the generated file writes for the entry.</param>

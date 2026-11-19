@@ -99,4 +99,36 @@ public record PlaylistSearchResponse(
 /// <param name="Total">Number of entries in the whole group.</param>
 public record PlaylistGroupEntriesResponse(string GroupKey, int Offset, int Limit, IReadOnlyList<string> Names, int Total);
 
+/// <summary>The Library search: the editor search's fields and the caller's mark options.</summary>
+/// <param name="HideSeen">Leaves out titles the caller marked seen and counts them in SeenHiddenCount.</param>
+/// <param name="Liked">Returns only titles the caller gave a thumbs up.</param>
+public record LibrarySearchRequest(
+  string? CacheKey, string? Query, List<string>? DisabledGroups, bool? HideDisabled = null, List<string>? ContentTypes = null,
+  string? Lang = null, bool? HideSeen = null, bool? Liked = null)
+{
+  public PlaylistSearchRequest ToSearch() => new(CacheKey, Query, DisabledGroups, HideDisabled, ContentTypes, Lang);
+}
+
+/// <summary>A search match with the caller's mark (see <see cref="PlaylistSearchMatchResult"/>).</summary>
+/// <param name="MarkKey">The film or series mark key; null for live channels and names without a title.</param>
+/// <param name="Rating">-1, 0 or 1. Seen and Rating are null when the caller has no mark on the title.</param>
+public record LibrarySearchMatchResult(
+  string Name, string Group, string GroupKey, int Position, string ContentType, bool Enabled,
+  IReadOnlyList<string> AudioLanguages, IReadOnlyList<string> SubtitleLanguages, IReadOnlyList<string> Markers,
+  IReadOnlyList<string> PrefixTags, string? LanguageSource, string? MarkKey, bool? Seen, int? Rating);
+
+/// <param name="SeenHiddenCount">Matches left out because hideSeen was set; 0 otherwise.</param>
+public record LibrarySearchResponse(
+  List<LibrarySearchMatchResult> Matches, bool HasMore, int HiddenCount, int SeenHiddenCount, int Total,
+  IReadOnlyList<Api.Services.PlaylistSearchLanguageCount> Languages);
+
+/// <summary>One group entry with the caller's mark; the fields as in <see cref="LibrarySearchMatchResult"/>.</summary>
+public record LibraryGroupEntry(string Name, string ContentType, string? MarkKey, bool? Seen, int? Rating);
+
+/// <summary>A page as in <see cref="PlaylistGroupEntriesResponse"/>, with Entries holding the marks.</summary>
+/// <param name="Total">Entries of the group after the mark options; SeenHiddenCount as in the Library search.</param>
+public record LibraryGroupEntriesResponse(
+  string GroupKey, int Offset, int Limit, IReadOnlyList<string> Names, IReadOnlyList<LibraryGroupEntry> Entries,
+  int Total, int SeenHiddenCount);
+
 public record PlaylistFilterResult(string Text, int TotalChannels, int KeptChannels, DateTimeOffset? ExpirationUtc = null);

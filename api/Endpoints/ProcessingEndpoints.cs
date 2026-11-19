@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Api.Configuration;
 using Api.Data;
 using Api.Models;
@@ -213,7 +214,20 @@ public static class ProcessingEndpoints
     }).RequireCsrfToken().RequireRateLimiting(Security.RateLimits.Fetch);
 
     // Read-only: searches the index the analysis keeps in memory, so it needs no job gate.
-    app.MapPost("/api/playlist/search", (PlaylistSearchRequest input, PlaylistPipeline pipeline) =>
+    app.MapPost("/api/playlist/search", (PlaylistSearchRequest input, PlaylistPipeline pipeline) => Search(input, pipeline))
+      .RequireRateLimiting(Security.RateLimits.Fetch);
+
+    // The Library's read-only search and group entries: the editor's answers with the caller's marks (one query per
+    // request), and options to hide seen titles or keep only liked ones. The editor routes stay unchanged.
+    var library = app.MapGroup("/api/library").RequireAuthorization().RequireRateLimiting(Security.RateLimits.Fetch);
+    library.MapPost("/search", async (LibrarySearchRequest input, ClaimsPrincipal user, AppDbContext db, PlaylistPipeline pipeline, CancellationToken ct) =>
+      Search(input.ToSearch(), pipeline, await LibraryMarks.LoadAsync(db, user.UserId()!, ct), input.HideSeen == true, input.Liked == true));
+    library.MapGet("/group-entries", async (string? cacheKey, string? group, int? offset, int? limit, bool? hideSeen, bool? liked,
+      ClaimsPrincipal user, AppDbContext db, PlaylistPipeline pipeline, CancellationToken ct) =>
+      GroupEntries(cacheKey, group, offset, limit, pipeline, await LibraryMarks.LoadAsync(db, user.UserId()!, ct), hideSeen == true, liked == true));
+
+    // With marks, the search answers the Library's shape.
+    static IResult Search(PlaylistSearchRequest input, PlaylistPipeline pipeline, LibraryMarks? marks = null, bool hideSeen = false, bool liked = false)
     {
       if (string.IsNullOrWhiteSpace(input.CacheKey))
         return Results.BadRequest(new { error = "Provide a cacheKey." });
@@ -249,18 +263,23 @@ public static class ProcessingEndpoints
 
       var disabled = new HashSet<string>(input.DisabledGroups ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
       var result = index.Search(
-        input.Query, disabled, Limits.MaxSearchResults, input.HideDisabled == true, contentTypes, languages);
+        input.Query, disabled, Limits.MaxSearchResults, input.HideDisabled == true, contentTypes, languages, marks?.Filter(hideSeen, liked));
+      if (marks is not null) return Results.Ok(LibrarySearch(result, marks, index.LanguageCounts));
       return Results.Ok(new PlaylistSearchResponse(
         result.Matches.Select(m => new PlaylistSearchMatchResult(
           m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled,
           m.Languages.Audio, m.Languages.Subtitles, m.Languages.Markers, m.Languages.PrefixTags,
           m.Languages.Source)).ToList(),
         result.HasMore, result.HiddenCount, result.Total, index.LanguageCounts));
-    }).RequireRateLimiting(Security.RateLimits.Fetch);
+    }
 
     // Read-only like the search: one page of a group's display names from the same index, so the
     // browser never receives the whole playlist. A limit above the search's page size is clamped.
     app.MapGet("/api/playlist/group-entries", (string? cacheKey, string? group, int? offset, int? limit, PlaylistPipeline pipeline) =>
+      GroupEntries(cacheKey, group, offset, limit, pipeline)).RequireRateLimiting(Security.RateLimits.Fetch);
+
+    static IResult GroupEntries(
+      string? cacheKey, string? group, int? offset, int? limit, PlaylistPipeline pipeline, LibraryMarks? marks = null, bool hideSeen = false, bool liked = false)
     {
       if (string.IsNullOrWhiteSpace(cacheKey))
         return Results.BadRequest(new { error = "Provide a cacheKey." });
@@ -278,9 +297,10 @@ public static class ProcessingEndpoints
         return Results.BadRequest(new { error = "Search is not available for this playlist because it is too large." });
 
       var page = Math.Min(limit ?? Limits.MaxSearchResults, Limits.MaxSearchResults);
-      var result = index.GroupEntries(group, offset ?? 0, page);
+      var result = index.GroupEntries(group, offset ?? 0, page, marks?.Filter(hideSeen, liked));
+      if (marks is not null) return Results.Ok(LibraryGroupEntries(group, offset ?? 0, page, result, marks));
       return Results.Ok(new PlaylistGroupEntriesResponse(group, offset ?? 0, page, result.Names, result.Total));
-    }).RequireRateLimiting(Security.RateLimits.Fetch);
+    }
 
     // The random, short-lived output key is a capability issued only after a source was processed,
     // so this stays anonymous and works for editors who are not signed in.
@@ -361,6 +381,28 @@ public static class ProcessingEndpoints
 
     return app;
   }
+
+  private static LibrarySearchResponse LibrarySearch(
+    PlaylistSearchResult result, LibraryMarks marks, IReadOnlyList<PlaylistSearchLanguageCount> languages) => new(
+    result.Matches.Select(m =>
+    {
+      var (key, seen, rating) = marks.Lookup(m.Name, m.ContentType);
+      return new LibrarySearchMatchResult(
+        m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled,
+        m.Languages.Audio, m.Languages.Subtitles, m.Languages.Markers, m.Languages.PrefixTags,
+        m.Languages.Source, key, seen, rating);
+    }).ToList(),
+    result.HasMore, result.HiddenCount, result.SeenHiddenCount, result.Total, languages);
+
+  private static LibraryGroupEntriesResponse LibraryGroupEntries(
+    string group, int offset, int page, PlaylistGroupEntriesResult result, LibraryMarks marks) => new(
+    group, offset, page, result.Names,
+    result.Names.Select((name, i) =>
+    {
+      var (key, seen, rating) = marks.Lookup(name, result.Types[i]);
+      return new LibraryGroupEntry(name, result.Types[i].ToString(), key, seen, rating);
+    }).ToList(),
+    result.Total, result.SeenHiddenCount);
 
   private static string ShareFileName(Playlist playlist) =>
     $"{playlist.SourceName ?? playlist.Name ?? "playlist"}-filtered.m3u";
