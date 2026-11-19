@@ -72,6 +72,10 @@ public class LibraryFilmCardUiTests
     Assert.Contains("onclick: () => openSimilar(ctx, s, i)", card);
     Assert.Contains("card.film = { name: s.entry, group: s.group, cacheKey: card.film.cacheKey, markKey: `similar:${s.entry}`", card);
     Assert.Contains("'aria-label': `Back to ${prev.title}`, onclick: () => filmBack(ctx)", card);
+    // Back from a loading or failed inner card copies the tile's own Seen back, not a placeholder.
+    var seed = card.IndexOf("if (!marks.has(card.film.markKey)) marks.set(card.film.markKey, { seen: s.seen === true, rating: 0 });", StringComparison.Ordinal);
+    Assert.True(seed >= 0 && seed < card.IndexOf("function filmBack(ctx)", StringComparison.Ordinal));
+    Assert.Contains("prev.similar.seen = marks.get(card.film.markKey)?.seen ?? prev.similar.seen;", card);
     // Back renders the stored card without a request and puts the focus on the tapped tile.
     Assert.Contains("renderFilm(ctx, prev.answer);", card);
     Assert.Contains("rail?.querySelector(`[data-i=\"${prev.tile}\"]`)?.focus({ preventScroll: true });", card);

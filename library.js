@@ -777,6 +777,8 @@
     card.stack.push({ film: card.film, answer: card.answer, title: card.answer.film.title || card.film.name, similar: s, tile: i,
       top: scroll.scrollTop, rail: scroll.querySelector('.film-rail')?.scrollLeft || 0 });
     card.film = { name: s.entry, group: s.group, cacheKey: card.film.cacheKey, markKey: `similar:${s.entry}`, off: s.enabled === false };
+    // The local key starts from the tile, so Back from a card still loading or failed keeps the tile's Seen.
+    if (!marks.has(card.film.markKey)) marks.set(card.film.markKey, { seen: s.seen === true, rating: 0 });
     loadFilm(ctx);
   }
 
