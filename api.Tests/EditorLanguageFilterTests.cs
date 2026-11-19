@@ -68,12 +68,27 @@ public class EditorLanguageFilterTests
   }
 
   [Fact]
-  public void Styles_UseTokens_AndKeepTheOpenListShort()
+  public void Styles_UseTokens_ControlHeights_AndKeepTheOpenListToOneRow()
   {
     var css = Read("app.css");
+    // The open list is one row that scrolls sideways, so opening it or ticking options adds one control row and
+    // the first result stays on a 360 x 640 phone screen (#351).
     var block = Between(css, ".lang-panel {", "}");
-    Assert.Contains("max-height: 132px;", block);
-    Assert.Contains("overflow-y: auto;", block);
+    Assert.Contains("flex-wrap: nowrap;", block);
+    Assert.Contains("overflow-x: auto;", block);
+    Assert.DoesNotContain("max-height", block);
+    Assert.Contains("flex-wrap: nowrap;", Between(css, ".lang-options {", "}"));
+    Assert.Contains("white-space: nowrap;", Between(css, ".lang-panel-note,\n.lang-panel-title {", "}"));
+    // A longer choice in the chip truncates the status line instead of wrapping it onto a second line.
+    Assert.Contains("white-space: nowrap;", Between(css, ".search-head-status {", "}"));
+
+    // Chip, clear button and options use DESIGN.md's control height (46px on phones, 42px from 768px).
+    Assert.Contains("min-height: var(--control-h);", Between(css, ".lang-filter-clear {", "}"));
+    Assert.Contains("width: var(--control-h);", Between(css, "}\n\n.lang-filter-clear {", "}\n\n"));
+    Assert.Contains("min-height: var(--control-h);", Between(css, ".lang-option {", "}"));
+    var langCss = Between(css, "/* Language filter (#266)", ".search-list {");
+    Assert.DoesNotMatch(new Regex(@"(min-)?height:\s*3\dpx"), langCss);
+
     var active = Between(css, ".lang-filter-toggle.is-active {", "}");
     Assert.Contains("var(--accent)", active);
     Assert.DoesNotContain("style=\"", Read("app.html"));
