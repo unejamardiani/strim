@@ -23,7 +23,7 @@ public record FilmMatchRequest(string? Name, JsonElement? TmdbId);
 /// <list type="bullet">
 /// <item><c>PUT /api/marks</c> sets or updates a mark; a mark that ends up unseen and unrated is removed (204).</item>
 /// <item><c>PUT /api/marks/film-match</c> stores (or, with a null id, clears) the TMDB film the user picked for a
-/// film's card; 404 without a TMDB token.</item>
+/// film's card; 404 without a TMDB token. <c>PUT /api/marks/series-match</c> does the same for a series.</item>
 /// <item><c>DELETE /api/marks/{key}</c> removes a mark by its key (404 when the caller has none).</item>
 /// <item><c>GET /api/marks?seen=&amp;rating=&amp;page=&amp;pageSize=</c> lists the caller's marks, newest change first.</item>
 /// </list>
@@ -117,54 +117,12 @@ public static class MarkEndpoints
 
     // The card's "choose" answer lists TMDB candidates; the picked id is kept on the film's mark, so the card uses it
     // from then on without a search. Only the id is stored; nothing goes to TMDB here.
-    mutations.MapPut("/film-match", async (FilmMatchRequest input, ClaimsPrincipal user, AppDbContext db, TmdbClient tmdb) =>
-    {
-      if (!tmdb.IsEnabled) return Results.NotFound();
-      if (string.IsNullOrWhiteSpace(input.Name) || input.Name.Length > MaxNameLength)
-      {
-        return Results.BadRequest(new { error = $"Give an entry name of at most {MaxNameLength} characters." });
-      }
-      var clear = input.TmdbId is null or { ValueKind: JsonValueKind.Null };
-      int? tmdbId = !clear && input.TmdbId!.Value.ValueKind == JsonValueKind.Number
-        && input.TmdbId.Value.TryGetInt32(out var parsed) && parsed > 0 ? parsed : null;
-      if (!clear && tmdbId is null)
-      {
-        return Results.BadRequest(new { error = "The TMDB id must be a positive whole number." });
-      }
-      if (MarkKey.From(input.Name, MarkKind.Film) is not { } key)
-      {
-        return Results.BadRequest(new { error = "The entry name holds no title." });
-      }
-
-      var userId = user.UserId()!;
-      var mark = await db.TitleMarks.FirstOrDefaultAsync(m => m.UserId == userId && m.TitleKey == key.Key);
-      var filmDbId = tmdbId?.ToString(CultureInfo.InvariantCulture);
-      if (filmDbId is null && (mark is null || (!mark.Seen && mark.Rating == 0)))
-      {
-        // Clearing the choice of a mark that holds nothing else leaves no row behind, like the undo above.
-        if (mark is not null)
-        {
-          db.TitleMarks.Remove(mark);
-          await db.SaveChangesAsync();
-        }
-        return Results.NoContent();
-      }
-
-      var now = DateTimeOffset.UtcNow;
-      if (mark is null)
-      {
-        if (await db.TitleMarks.CountAsync(m => m.UserId == userId) >= MaxMarksPerUser) return LimitReached();
-        mark = new TitleMark
-        {
-          Id = Guid.NewGuid(), UserId = userId, Kind = KindText(MarkKind.Film), TitleKey = key.Key, Year = key.Year,
-          DisplayTitle = key.DisplayTitle, CreatedUtc = now,
-        };
-        db.TitleMarks.Add(mark);
-      }
-      mark.FilmDbId = filmDbId;
-      mark.UpdatedUtc = now;
-      return await SaveAsync(db, mark);
-    });
+    mutations.MapPut("/film-match", (FilmMatchRequest input, ClaimsPrincipal user, AppDbContext db, TmdbClient tmdb) =>
+      MatchAsync(MarkKind.Film, input, user, db, tmdb));
+    // The same for a series' card: the TMDB tv id goes into the same column of the series mark (film and tv ids
+    // overlap, so every reader filters by kind).
+    mutations.MapPut("/series-match", (FilmMatchRequest input, ClaimsPrincipal user, AppDbContext db, TmdbClient tmdb) =>
+      MatchAsync(MarkKind.Series, input, user, db, tmdb));
 
     mutations.MapDelete("/{key}", async (string key, ClaimsPrincipal user, AppDbContext db) =>
     {
@@ -174,6 +132,56 @@ public static class MarkEndpoints
     });
 
     return app;
+  }
+
+  private static async Task<IResult> MatchAsync(
+    MarkKind kind, FilmMatchRequest input, ClaimsPrincipal user, AppDbContext db, TmdbClient tmdb)
+  {
+    if (!tmdb.IsEnabled) return Results.NotFound();
+    if (string.IsNullOrWhiteSpace(input.Name) || input.Name.Length > MaxNameLength)
+    {
+      return Results.BadRequest(new { error = $"Give an entry name of at most {MaxNameLength} characters." });
+    }
+    var clear = input.TmdbId is null or { ValueKind: JsonValueKind.Null };
+    int? tmdbId = !clear && input.TmdbId!.Value.ValueKind == JsonValueKind.Number
+      && input.TmdbId.Value.TryGetInt32(out var parsed) && parsed > 0 ? parsed : null;
+    if (!clear && tmdbId is null)
+    {
+      return Results.BadRequest(new { error = "The TMDB id must be a positive whole number." });
+    }
+    if (MarkKey.From(input.Name, kind) is not { } key)
+    {
+      return Results.BadRequest(new { error = "The entry name holds no title." });
+    }
+
+    var userId = user.UserId()!;
+    var mark = await db.TitleMarks.FirstOrDefaultAsync(m => m.UserId == userId && m.TitleKey == key.Key);
+    var filmDbId = tmdbId?.ToString(CultureInfo.InvariantCulture);
+    if (filmDbId is null && (mark is null || (!mark.Seen && mark.Rating == 0)))
+    {
+      // Clearing the choice of a mark that holds nothing else leaves no row behind, like the undo of PUT /api/marks.
+      if (mark is not null)
+      {
+        db.TitleMarks.Remove(mark);
+        await db.SaveChangesAsync();
+      }
+      return Results.NoContent();
+    }
+
+    var now = DateTimeOffset.UtcNow;
+    if (mark is null)
+    {
+      if (await db.TitleMarks.CountAsync(m => m.UserId == userId) >= MaxMarksPerUser) return LimitReached();
+      mark = new TitleMark
+      {
+        Id = Guid.NewGuid(), UserId = userId, Kind = KindText(kind), TitleKey = key.Key, Year = key.Year,
+        DisplayTitle = key.DisplayTitle, CreatedUtc = now,
+      };
+      db.TitleMarks.Add(mark);
+    }
+    mark.FilmDbId = filmDbId;
+    mark.UpdatedUtc = now;
+    return await SaveAsync(db, mark);
   }
 
   private static IResult LimitReached() => Results.Problem(
