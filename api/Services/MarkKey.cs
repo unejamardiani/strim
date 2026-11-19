@@ -167,6 +167,9 @@ public sealed record MarkKey(string Key, string Title, int? Year, string Display
     return result.ToString();
   }
 
+  /// <summary>A title normalised and cut the way <see cref="Title"/> is, to compare names from elsewhere.</summary>
+  internal static string NormaliseTitle(string text) => Cut(Normalise(text));
+
   // Lower case without diacritics; anything but letters and digits becomes a single space.
   private static string Normalise(string text)
   {
