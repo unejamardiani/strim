@@ -6,7 +6,9 @@ using Api.Configuration;
 using Api.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Api.Tests;
@@ -77,10 +79,24 @@ public class TmdbClientTests
     Assert.Equal(TmdbStatus.Unavailable, result.Status);
     Assert.Single(handler.Requests);
 
-    // The registered primary handler does not follow redirects on its own either.
-    Assert.False(TmdbServices.CreatePrimaryHandler().AllowAutoRedirect);
-    Assert.NotNull(new ServiceCollection().AddStrimTmdb().BuildServiceProvider()
-      .GetRequiredService<IHttpClientFactory>().CreateClient(TmdbClient.HttpClientName));
+    // The primary handler the named client is actually built with does not follow redirects either.
+    var options = new ServiceCollection().AddStrimTmdb().BuildServiceProvider()
+      .GetRequiredService<IOptionsMonitor<HttpClientFactoryOptions>>().Get(TmdbClient.HttpClientName);
+    var builder = new InspectingHandlerBuilder();
+    foreach (var configure in options.HttpMessageHandlerBuilderActions)
+    {
+      configure(builder);
+    }
+    var primary = Assert.IsType<SocketsHttpHandler>(builder.PrimaryHandler);
+    Assert.False(primary.AllowAutoRedirect);
+  }
+
+  private sealed class InspectingHandlerBuilder : HttpMessageHandlerBuilder
+  {
+    public override string? Name { get; set; } = TmdbClient.HttpClientName;
+    public override HttpMessageHandler PrimaryHandler { get; set; } = new HttpClientHandler();
+    public override IList<DelegatingHandler> AdditionalHandlers { get; } = [];
+    public override HttpMessageHandler Build() => PrimaryHandler;
   }
 
   [Fact]
@@ -151,6 +167,21 @@ public class TmdbClientTests
     Assert.All(logger.Lines, line => Assert.DoesNotContain(Token, line));
     var argument = await Assert.ThrowsAnyAsync<ArgumentException>(() => client.SearchMovieAsync(" ", null, default));
     Assert.DoesNotContain(Token, argument.ToString());
+
+    // The caller cancels while the transport throws a cancellation that echoes the header.
+    using var caller = new CancellationTokenSource();
+    var cancelling = CreateClient(new StubHandler(request =>
+    {
+      caller.Cancel();
+      throw new OperationCanceledException("cancelled " + request.Headers.Authorization,
+        new HttpRequestException("inner " + request.Headers.Authorization), caller.Token);
+    }), logger: logger);
+    var cancelled = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+      () => cancelling.GetMovieWithSimilarAsync(3, caller.Token));
+    Assert.DoesNotContain(Token, cancelled.ToString());
+    Assert.Null(cancelled.InnerException);
+    Assert.Equal(caller.Token, cancelled.CancellationToken);
+    Assert.All(logger.Lines, line => Assert.DoesNotContain(Token, line));
   }
 
   [Fact]
