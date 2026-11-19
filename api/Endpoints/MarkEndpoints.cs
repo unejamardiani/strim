@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Security.Claims;
+using System.Text.Json;
 using Api.Data;
 using Api.Models;
 using Api.Services;
@@ -10,10 +12,18 @@ namespace Api.Endpoints;
 public record MarkRequest(string? Name, string? Kind, bool? Seen, int? Rating);
 
 /// <summary>
+/// Confirms the TMDB film for an entry name; a null id clears the choice. The id is read as raw JSON so that a
+/// string, fraction or negative number is a 400 from the handler rather than a binding failure.
+/// </summary>
+public record FilmMatchRequest(string? Name, JsonElement? TmdbId);
+
+/// <summary>
 /// A signed-in user's film and series marks, the same for every playlist and device. Marks are keyed by
 /// <see cref="MarkKey"/>, derived on the server from the entry name, and never touch a playlist or player link.
 /// <list type="bullet">
 /// <item><c>PUT /api/marks</c> sets or updates a mark; a mark that ends up unseen and unrated is removed (204).</item>
+/// <item><c>PUT /api/marks/film-match</c> stores (or, with a null id, clears) the TMDB film the user picked for a
+/// film's card; 404 without a TMDB token.</item>
 /// <item><c>DELETE /api/marks/{key}</c> removes a mark by its key (404 when the caller has none).</item>
 /// <item><c>GET /api/marks?seen=&amp;rating=&amp;page=&amp;pageSize=</c> lists the caller's marks.</item>
 /// </list>
@@ -76,8 +86,8 @@ public static class MarkEndpoints
       var seen = input.Seen ?? mark?.Seen ?? false;
       var rating = input.Rating ?? mark?.Rating ?? 0;
 
-      // Undo: an unseen, unrated mark is no mark, so no row stays behind.
-      if (!seen && rating == 0)
+      // Undo: an unseen, unrated mark without a confirmed film is no mark, so no row stays behind.
+      if (!seen && rating == 0 && mark?.FilmDbId is null)
       {
         if (mark is not null)
         {
@@ -90,12 +100,7 @@ public static class MarkEndpoints
       var now = DateTimeOffset.UtcNow;
       if (mark is null)
       {
-        if (await db.TitleMarks.CountAsync(m => m.UserId == userId) >= MaxMarksPerUser)
-        {
-          return Results.Problem(
-            $"You have reached the limit of {MaxMarksPerUser} marks. Remove a mark to add a new one.",
-            statusCode: StatusCodes.Status409Conflict);
-        }
+        if (await db.TitleMarks.CountAsync(m => m.UserId == userId) >= MaxMarksPerUser) return LimitReached();
         mark = new TitleMark
         {
           Id = Guid.NewGuid(), UserId = userId, Kind = KindText(kind), TitleKey = key.Key, Year = key.Year,
@@ -106,16 +111,58 @@ public static class MarkEndpoints
       mark.Seen = seen;
       mark.Rating = rating;
       mark.UpdatedUtc = now;
-      try
+      return await SaveAsync(db, mark);
+    });
+
+    // The card's "choose" answer lists TMDB candidates; the picked id is kept on the film's mark, so the card uses it
+    // from then on without a search. Only the id is stored; nothing goes to TMDB here.
+    mutations.MapPut("/film-match", async (FilmMatchRequest input, ClaimsPrincipal user, AppDbContext db, TmdbClient tmdb) =>
+    {
+      if (!tmdb.IsEnabled) return Results.NotFound();
+      if (string.IsNullOrWhiteSpace(input.Name) || input.Name.Length > MaxNameLength)
       {
-        await db.SaveChangesAsync();
+        return Results.BadRequest(new { error = $"Give an entry name of at most {MaxNameLength} characters." });
       }
-      catch (DbUpdateException)
+      var clear = input.TmdbId is null or { ValueKind: JsonValueKind.Null };
+      int? tmdbId = !clear && input.TmdbId!.Value.ValueKind == JsonValueKind.Number
+        && input.TmdbId.Value.TryGetInt32(out var parsed) && parsed > 0 ? parsed : null;
+      if (!clear && tmdbId is null)
       {
-        // Two requests created the same mark at once; the unique index kept one.
-        return Results.Problem("The mark changed at the same time. Please retry.", statusCode: StatusCodes.Status409Conflict);
+        return Results.BadRequest(new { error = "The TMDB id must be a positive whole number." });
       }
-      return Results.Ok(ToDto(mark));
+      if (MarkKey.From(input.Name, MarkKind.Film) is not { } key)
+      {
+        return Results.BadRequest(new { error = "The entry name holds no title." });
+      }
+
+      var userId = user.UserId()!;
+      var mark = await db.TitleMarks.FirstOrDefaultAsync(m => m.UserId == userId && m.TitleKey == key.Key);
+      var filmDbId = tmdbId?.ToString(CultureInfo.InvariantCulture);
+      if (filmDbId is null && (mark is null || (!mark.Seen && mark.Rating == 0)))
+      {
+        // Clearing the choice of a mark that holds nothing else leaves no row behind, like the undo above.
+        if (mark is not null)
+        {
+          db.TitleMarks.Remove(mark);
+          await db.SaveChangesAsync();
+        }
+        return Results.NoContent();
+      }
+
+      var now = DateTimeOffset.UtcNow;
+      if (mark is null)
+      {
+        if (await db.TitleMarks.CountAsync(m => m.UserId == userId) >= MaxMarksPerUser) return LimitReached();
+        mark = new TitleMark
+        {
+          Id = Guid.NewGuid(), UserId = userId, Kind = KindText(MarkKind.Film), TitleKey = key.Key, Year = key.Year,
+          DisplayTitle = key.DisplayTitle, CreatedUtc = now,
+        };
+        db.TitleMarks.Add(mark);
+      }
+      mark.FilmDbId = filmDbId;
+      mark.UpdatedUtc = now;
+      return await SaveAsync(db, mark);
     });
 
     mutations.MapDelete("/{key}", async (string key, ClaimsPrincipal user, AppDbContext db) =>
@@ -126,6 +173,24 @@ public static class MarkEndpoints
     });
 
     return app;
+  }
+
+  private static IResult LimitReached() => Results.Problem(
+    $"You have reached the limit of {MaxMarksPerUser} marks. Remove a mark to add a new one.",
+    statusCode: StatusCodes.Status409Conflict);
+
+  private static async Task<IResult> SaveAsync(AppDbContext db, TitleMark mark)
+  {
+    try
+    {
+      await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+      // Two requests created the same mark at once; the unique index kept one.
+      return Results.Problem("The mark changed at the same time. Please retry.", statusCode: StatusCodes.Status409Conflict);
+    }
+    return Results.Ok(ToDto(mark));
   }
 
   private static MarkKind? ParseKind(string? kind) => kind switch
@@ -145,6 +210,7 @@ public static class MarkEndpoints
     year = mark.Year,
     seen = mark.Seen,
     rating = mark.Rating,
+    tmdbId = int.TryParse(mark.FilmDbId, NumberStyles.None, CultureInfo.InvariantCulture, out var id) ? id : (int?)null,
     updatedUtc = mark.UpdatedUtc,
   };
 }
