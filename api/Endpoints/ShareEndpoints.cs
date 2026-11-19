@@ -31,6 +31,8 @@ public record AcceptShareRequest(string? Token);
 /// <item><c>GET /api/shares/mine</c> lists the playlists shared with the caller: name, owner and entry count only.</item>
 /// <item><c>DELETE /api/shares/mine/{playlistId}</c> leaves a share.</item>
 /// </list>
+/// The owner or an accepted viewer: <c>POST /api/playlists/{id}/library/open</c> resolves the source through the
+/// pipeline and returns a <c>lib-</c> key bound to playlist and user, which no editor route accepts.
 /// Neither the token, its hash nor the label is ever logged.
 /// </summary>
 public static class ShareEndpoints
@@ -38,6 +40,7 @@ public static class ShareEndpoints
   public const int MaxSharesPerPlaylist = 10;
   public const int MaxLabelLength = 100;
   public static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
+  public const string ViewerLoadFailure = "The list cannot be loaded right now";
 
   public static IEndpointRouteBuilder MapShareEndpoints(this IEndpointRouteBuilder app)
   {
@@ -172,6 +175,69 @@ public static class ShareEndpoints
       logger.LogInformation("User {UserId} left playlist {PlaylistId}", userId, playlistId);
       return Results.NoContent();
     });
+
+    app.MapPost("/api/playlists/{id:guid}/library/open", async (
+      Guid id, HttpContext context, ClaimsPrincipal user, AppDbContext db, PlaylistPipeline pipeline, PlaylistJobGate jobGate) =>
+    {
+      var userId = user.UserId()!;
+      // One query: the owner or an accepted viewer, else the same 404 as for a stranger.
+      var access = await db.Playlists.AsNoTracking()
+        .Where(p => p.Id == id && (p.OwnerId == userId || db.PlaylistShares.Any(s => s.PlaylistId == p.Id && s.ViewerUserId == userId)))
+        .Select(p => new
+        {
+          p.Name, p.SourceUrl, p.DisabledGroups, IsOwner = p.OwnerId == userId,
+          Share = db.PlaylistShares.Where(s => s.PlaylistId == p.Id && s.ViewerUserId == userId)
+            .Select(s => new { s.Id, s.LastOpenedUtc }).FirstOrDefault(),
+        }).FirstOrDefaultAsync(context.RequestAborted);
+      if (access is null) return Results.NotFound();
+
+      var job = await jobGate.TryEnterAsync(context.RequestAborted);
+      if (job is null) return EndpointHelpers.Busy();
+
+      await using (job)
+      {
+        try
+        {
+          if (string.IsNullOrWhiteSpace(access.SourceUrl)) throw new InvalidOperationException("Playlist is missing sourceUrl.");
+          var source = await pipeline.GetSourceAsync(access.SourceUrl, context.RequestAborted);
+          var analysis = await pipeline.GetAnalysisAsync(source, context.RequestAborted);
+          var groups = PlaylistProcessor.ToGroupResults(analysis.Groups);
+          var totalChannels = analysis.TotalChannels;
+          if (!access.IsOwner)
+          {
+            // A viewer sees the visible groups only; the hidden ones come from the database, never the request.
+            // A stored plain group-title hides every content type of that title, as in the player link.
+            var disabled = new HashSet<string>(access.DisabledGroups ?? [], StringComparer.OrdinalIgnoreCase);
+            groups = PlaylistProcessor.ToGroupResults(
+              analysis.Groups.Where(g => !PlaylistProcessor.IsDisabled(disabled, g.GroupTitle, g.ContentType)));
+            totalChannels = groups.Sum(g => g.Count);
+
+            var now = DateTimeOffset.UtcNow;
+            if (access.Share is { } share && (share.LastOpenedUtc is null || share.LastOpenedUtc <= now.AddHours(-1)))
+            {
+              await db.PlaylistShares.Where(s => s.Id == share.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(s => s.LastOpenedUtc, now), context.RequestAborted);
+            }
+          }
+
+          var libraryKey = pipeline.Cache.CreateLibrarySession(source, id, userId);
+          return Results.Ok(new
+          {
+            libraryKey, name = access.Name, role = access.IsOwner ? "owner" : "viewer", totalChannels, groups,
+          });
+        }
+        catch (Exception ex) when (!access.IsOwner)
+        {
+          // An upstream message can name the provider's host, so a viewer gets one neutral message.
+          logger.LogWarning(ex, "Library of playlist {PlaylistId} could not be opened for viewer {UserId}", id, userId);
+          return Results.Problem(ViewerLoadFailure, statusCode: StatusCodes.Status502BadGateway);
+        }
+        catch (Exception ex)
+        {
+          return EndpointHelpers.PlaylistFailure(ex, logger, "open");
+        }
+      }
+    }).RequireAuthorization().RequireCsrfToken().RequireRateLimiting(Security.RateLimits.Fetch);
 
     return app;
   }
