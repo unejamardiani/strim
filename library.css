@@ -209,7 +209,7 @@
 }
 
 @media (min-width: 1100px) {
-  .film-card { --film-poster-w: 132px; position: fixed; top: calc(var(--topbar-h) + 12px); bottom: 18px; right: max(18px, calc((100vw - 1440px) / 2 + 18px)); inset-inline-start: auto; z-index: 25; width: var(--film-pane-w); max-width: none; max-height: none; margin: 0; border: 1px solid var(--card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+  .film-card { --film-poster-w: 132px; position: fixed; top: calc(var(--topbar-h) + 12px); bottom: 18px; right: max(18px, calc((100vw - 1440px) / 2 + 18px)); inset-inline-start: auto; z-index: 25; width: var(--film-pane-w); height: auto; max-width: none; max-height: none; margin: 0; border: 1px solid var(--card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
   .page:has(> .film-card[open]), body:has(.film-card[open]) .site-links { padding-right: calc(18px + var(--film-pane-w) + 24px); }
 }
 
