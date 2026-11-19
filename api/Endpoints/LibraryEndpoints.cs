@@ -12,7 +12,16 @@ public sealed record LibraryFilmCard(
   string Status, LibraryFilmDetails? Film, IReadOnlyList<LibraryFilmCandidate>? Candidates, LibraryFilmMarks Marks);
 
 public sealed record LibraryFilmDetails(
-  int Id, string? Title, int? Year, string? PosterPath, double Rating, IReadOnlyList<string> Genres, string? Overview);
+  int Id, string? Title, int? Year, string? PosterPath, double Rating, IReadOnlyList<string> Genres, string? Overview,
+  IReadOnlyList<LibrarySimilarFilm> Similar);
+
+/// <summary>A similar film from TMDB; when <paramref name="InList"/>, the list entry that holds it.</summary>
+/// <param name="Group">The group-title the player shows for the entry.</param>
+/// <param name="GroupKey">The group key the editor toggles.</param>
+/// <param name="Enabled">Whether the entry's group is switched on.</param>
+public sealed record LibrarySimilarFilm(
+  int Id, string? Title, int? Year, string? PosterPath, bool InList, bool Seen,
+  string? Entry = null, string? Group = null, string? GroupKey = null, bool? Enabled = null);
 
 public sealed record LibraryFilmCandidate(int Id, string? Title, int? Year, string? PosterPath);
 
@@ -38,21 +47,26 @@ public static class LibraryEndpoints
     // The card for one entry the Library shows. Only the cleaned title and year from MarkKey (or a stored TMDB id)
     // go to TMDB; the entry's name and group are only read here. Without a TMDB token the route does not exist.
     app.MapGet("/api/playlists/{id:guid}/library/film-card", async (
-      Guid id, string? name, string? group, string? type, ClaimsPrincipal user, AppDbContext db, TmdbClient tmdb,
-      CancellationToken ct) =>
+      Guid id, string? name, string? group, string? type, string? cacheKey, bool? includeDisabled, bool? hideSeen,
+      ClaimsPrincipal user, AppDbContext db, TmdbClient tmdb, PlaylistPipeline pipeline, CancellationToken ct) =>
     {
       if (!tmdb.IsEnabled) return Results.NotFound();
       if (string.IsNullOrWhiteSpace(name) || name.Length > MaxEntryTextLength || group?.Length > MaxEntryTextLength)
         return Results.BadRequest(new { error = "Provide the entry's name and group." });
 
       var userId = user.UserId();
-      if (!await db.Playlists.AnyAsync(p => p.Id == id && p.OwnerId == userId, ct)) return Results.NotFound();
+      var disabledGroups = await db.Playlists.Where(p => p.Id == id && p.OwnerId == userId)
+        .Select(p => p.DisabledGroups).FirstOrDefaultAsync(ct);
+      if (disabledGroups is null) return Results.NotFound();
 
       var isFilm = string.Equals(type, nameof(PlaylistContentType.Movies), StringComparison.OrdinalIgnoreCase);
       var key = isFilm && !AdultGroupRule.IsAdultGroupTitle(group) ? MarkKey.From(name, MarkKind.Film) : null;
       if (key is null) return Results.Ok(new LibraryFilmCard(NotApplicable, null, null, new LibraryFilmMarks(false, 0)));
 
-      var mark = await db.TitleMarks.AsNoTracking().FirstOrDefaultAsync(m => m.UserId == userId && m.TitleKey == key.Key, ct);
+      // One query for every mark: the card's own, and the seen marks and stored TMDB ids of the similar films.
+      var userMarks = await db.TitleMarks.AsNoTracking().Where(m => m.UserId == userId)
+        .Select(m => new FilmMark(m.TitleKey, m.Seen, m.Rating, m.FilmDbId)).ToListAsync(ct);
+      var mark = userMarks.FirstOrDefault(m => m.TitleKey == key.Key);
       var marks = new LibraryFilmMarks(mark?.Seen ?? false, mark?.Rating ?? 0);
 
       int movieId;
@@ -81,10 +95,57 @@ public static class LibraryEndpoints
       var film = details.Value!;
       return Results.Ok(new LibraryFilmCard(Matched, new LibraryFilmDetails(
         film.Id, film.Title, YearOf(film.ReleaseDate), film.PosterPath, film.VoteAverage,
-        (film.Genres ?? []).Select(g => g.Name).OfType<string>().ToList(), film.Overview), null, marks));
+        (film.Genres ?? []).Select(g => g.Name).OfType<string>().ToList(), film.Overview,
+        Similar(film.Similar?.Results ?? [], userMarks, IndexOf(pipeline, cacheKey), disabledGroups,
+          includeDisabled != true, hideSeen == true)), null, marks));
     }).RequireAuthorization().RequireRateLimiting(Security.RateLimits.General);
 
     return app;
+  }
+
+  /// <summary>
+  /// The similar films of a card, those in the list first, each part in TMDB's order. Each film is found by its
+  /// <see cref="MarkKey"/> from title and year, or by the key of a mark that stores its TMDB id, in one pass over the
+  /// index for all films. Without an index (no or an expired cacheKey) no film is in the list.
+  /// </summary>
+  internal static List<LibrarySimilarFilm> Similar(
+    IReadOnlyList<TmdbMovieSummary> results, IReadOnlyList<FilmMark> marks, PlaylistSearchIndex? index,
+    IEnumerable<string> disabledGroups, bool hideDisabled, bool hideSeen)
+  {
+    var films = results.Where(r => r.Id > 0).DistinctBy(r => r.Id).ToList();
+    var keysPerFilm = films.Select(f =>
+    {
+      var year = YearOf(f.ReleaseDate);
+      var derived = MarkKey.From(year is null ? f.Title : $"{f.Title} ({year})", MarkKind.Film)?.Key;
+      var id = f.Id.ToString(CultureInfo.InvariantCulture);
+      var stored = marks.Where(m => m.FilmDbId == id).Select(m => m.TitleKey);
+      return (derived is null ? stored : stored.Prepend(derived)).Distinct(StringComparer.Ordinal).ToList();
+    }).ToList();
+    var found = index?.FindFilms(keysPerFilm.SelectMany(k => k).ToHashSet(StringComparer.Ordinal),
+      new HashSet<string>(disabledGroups, StringComparer.OrdinalIgnoreCase), hideDisabled);
+    var seenKeys = marks.Where(m => m.Seen).Select(m => m.TitleKey).ToHashSet(StringComparer.Ordinal);
+
+    var similar = films.Select((f, i) =>
+    {
+      var seen = keysPerFilm[i].Any(seenKeys.Contains);
+      var matches = keysPerFilm[i].Select(k => found?.GetValueOrDefault(k)).OfType<PlaylistSearchMatch>().ToList();
+      var entry = matches.FirstOrDefault(m => m.Enabled) ?? matches.FirstOrDefault();
+      var year = YearOf(f.ReleaseDate);
+      return entry is null
+        ? new LibrarySimilarFilm(f.Id, f.Title, year, f.PosterPath, false, seen)
+        : new LibrarySimilarFilm(f.Id, f.Title, year, f.PosterPath, true, seen, entry.Name, entry.OutputGroup, entry.GroupKey, entry.Enabled);
+    });
+    // OrderBy is stable, so TMDB's order holds within each part.
+    return similar.Where(s => !hideSeen || !s.Seen).OrderBy(s => s.InList ? 0 : 1).ToList();
+  }
+
+  internal sealed record FilmMark(string TitleKey, bool Seen, int Rating, string? FilmDbId);
+
+  private static PlaylistSearchIndex? IndexOf(PlaylistPipeline pipeline, string? cacheKey)
+  {
+    if (string.IsNullOrWhiteSpace(cacheKey) || cacheKey.Length > MaxEntryTextLength) return null;
+    var source = pipeline.Cache.TryGetSessionSource(cacheKey);
+    return source is null ? null : pipeline.Cache.TryGetAnalysis(source)?.SearchIndex;
   }
 
   /// <summary>
