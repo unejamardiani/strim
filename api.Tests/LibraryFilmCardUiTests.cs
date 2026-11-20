@@ -18,7 +18,7 @@ public class LibraryFilmCardUiTests
   {
     var card = Card();
     Assert.Contains("const opensCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Movies' && !!e.markKey;", card);
-    Assert.Contains("if (!opens(ctx, e)) return ctx.h('span', { class: 'search-hit-name', text: e.name });", card);
+    Assert.Contains("if (!opens(ctx, e)) return ctx.h('span', { class: 'lib-title' }, title);", card);
     Assert.Contains("const params = { name: film.name, group: film.group, type: 'Movies', cacheKey: film.cacheKey, includeDisabled: includeOff, hideSeen };", card);
     Assert.Contains("answer = await ctx.filmCard(params, own.signal);", card);
     Assert.Contains("h('span', { class: 'sr-only', role: 'status', text: `Loading ${word(entry)} details` })", card);

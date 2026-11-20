@@ -40,8 +40,10 @@ public class LibraryMarkControlsTests
 
     // Search results and group entries both carry the controls.
     var library = Read("library.js");
-    Assert.Contains("markControls(ctx, m));", Between(library, "function hit(", "window.StrimLibrary"));
-    Assert.Contains("filmName(ctx, e, view.group.title, list.cacheKey), filmChevron(ctx, e),\n        groupChip(ctx, e.group || view.group.title), markControls(ctx, e))", library);
+    Assert.Contains("return row(ctx, m, m.group, cacheKey,", Between(library, "function hit(", "window.StrimLibrary"));
+    Assert.Contains("view.list.append(...names.map((e) => row(ctx, e, view.group.title, list.cacheKey, null, null)));", library);
+    Assert.Contains("rowMarks(ctx, e),", Between(library, "function row(", "window.StrimLibrary"));
+    Assert.Contains("const capsule = markControls(ctx, entry);", Between(library, "function rowMarks(", "async function setMark("));
     Assert.Contains("const names = page.entries || [];", library);
 
     // The icons exist; the tap target is the phone control height.
@@ -87,9 +89,9 @@ public class LibraryMarkControlsTests
     var library = Read("library.js");
     Assert.Contains("let hideSeen = false;\n  let likedOnly = false;", library);
     var section = Between(library, "function searchSection(", "async function runSearch(");
-    Assert.Contains("const seenFilter = markFilter('Hide seen', () => hideSeen, (v) => { hideSeen = v; });", section);
-    Assert.Contains("const likedFilter = markFilter('Liked only', () => likedOnly, (v) => { likedOnly = v; });", section);
-    Assert.Contains("h('div', { class: 'library-filters' }, types, seenFilter, likedFilter),", section);
+    Assert.Contains("const seenFilter = markFilter('Unseen', () => hideSeen, (v) => { hideSeen = v; });", section);
+    Assert.Contains("const likedFilter = markFilter('Liked', () => likedOnly, (v) => { likedOnly = v; });", section);
+    Assert.Contains("types, h('span', { class: 'lib-chip-sep', 'aria-hidden': 'true' }), seenFilter, likedFilter),", section);
     Assert.Contains("run();\n          onMarkFilter();", section);
 
     var run = Between(library, "async function runSearch(", "// Marks (#298)");
@@ -129,7 +131,7 @@ public class LibraryMarkControlsTests
     var section = Between(design, "### Library (", "\n### ").Replace("\n", " ");
     Assert.Contains("Marks (#298):", section);
     foreach (var phrase in new[] { "Seen (check), Thumbs up and Thumbs down", "`--control-h`", "`aria-pressed`", "tapping it again undoes it",
-      "every variant", "puts the mark back", "\"Hide seen\" and \"Liked only\"", "The editor shows no marks." })
+      "every variant", "puts the mark back", "\"Unseen\" and \"Liked\"", "The editor shows no marks." })
       Assert.Contains(phrase, section);
     Assert.Single(Regex.Matches(section, Regex.Escape("Read-only: nothing in the Library changes the playlist")));
   }

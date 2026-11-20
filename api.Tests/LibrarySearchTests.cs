@@ -53,9 +53,9 @@ public class LibrarySearchTests
     Assert.Contains("if (contentTypes.length) body.contentTypes = contentTypes;", run);
     Assert.Contains("found = await ctx.search(body, ctx.controller.signal);", run);
 
-    // Picking a type searches again; the pills are the editor's segmented control.
+    // Picking a type chip (#419) searches again.
     var section = Between(library, "function searchSection(", "async function runSearch(");
-    Assert.Contains("h('div', { class: 'pills', role: 'group', 'aria-label': 'Type' });", section);
+    Assert.Contains("const types = TYPES.map((option) => h('button', {", section);
     Assert.Contains("state.type = option.value;", section);
   }
 
@@ -100,10 +100,9 @@ public class LibrarySearchTests
   {
     var library = Read("library.js");
     var hit = Between(library, "function hit(", "window.StrimLibrary");
-    Assert.Contains("h('li', { class: 'library-hit', dataset: { type } },", hit);
-    // A film's name opens the film card (#367) outside hit(); every other name stays text.
-    Assert.Contains("filmName(ctx, m, m.group, cacheKey),", hit);
-    Assert.Contains("h('span', { class: 'search-hit-meta', text: `${m.group} · ${TYPE_LABELS[type]}` })", hit);
+    // The row (#419) is built outside hit(); a film's name opens the film card (#367) there, every other name stays text.
+    Assert.Contains("return row(ctx, m, m.group, cacheKey, [h('span', { class: 'lib-where' }, where), ctx.searchLanguages(m)],", hit);
+    Assert.Contains(": [h('b', { text: m.group }), ` · ${TYPE_LABELS[type]}`];", hit);
     Assert.Contains("const TYPE_LABELS = { Live: 'Channel', Movies: 'Film', Series: 'Series' };", library);
     foreach (var control in new[] { "'button'", "'a'", "'input'", "onclick", "href", "role: 'switch'" })
       Assert.DoesNotContain(control, hit);
@@ -114,8 +113,7 @@ public class LibrarySearchTests
   {
     var library = Read("library.js");
     var hit = Between(library, "function hit(", "window.StrimLibrary");
-    Assert.Contains("h('span', { class: 'search-hit-line' },", hit);
-    Assert.Contains("ctx.searchLanguages(m)),", hit);
+    Assert.Contains("ctx.searchLanguages(m)]", hit);
     // The labels and their phone fitting are the editor's functions, handed over by main.js (no import, #285).
     foreach (var copied in new[] { "lang-chip", "languageSource === 'title') return", "Audio ", "import " })
       Assert.DoesNotContain(copied, library);

@@ -165,17 +165,15 @@
       oninput: () => { state.query = input.value.trim(); schedule(); },
       onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
     });
-    const types = h('div', { class: 'pills', role: 'group', 'aria-label': 'Type' });
-    for (const option of TYPES) {
-      types.append(h('button', {
-        type: 'button', 'aria-pressed': String(option.value === state.type), dataset: { value: option.value },
-        onclick: () => {
-          state.type = option.value;
-          for (const b of types.children) b.setAttribute('aria-pressed', String(b.dataset.value === option.value));
-          run();
-        },
-      }, option.label));
-    }
+    // One chip row (#419): the types are a single choice, Unseen and Liked toggles; it scrolls sideways, never wraps.
+    const types = TYPES.map((option) => h('button', {
+      class: 'lib-chip', type: 'button', 'aria-pressed': String(option.value === state.type), dataset: { value: option.value },
+      onclick: () => {
+        state.type = option.value;
+        for (const b of types) b.setAttribute('aria-pressed', String(b.dataset.value === option.value));
+        run();
+      },
+    }, option.label));
     // "Include switched-off groups" in the ⋯ menu (#418) runs the search and refreshes the groups; a viewer has no
     // menu and nothing to include.
     ctx.onIncludeOff = () => {
@@ -184,7 +182,7 @@
     };
     const markFilter = (label, get, set) => {
       const b = h('button', {
-        class: 'btn btn-sm library-toggle', type: 'button', 'aria-pressed': String(get()),
+        class: 'lib-chip is-toggle', type: 'button', 'aria-pressed': String(get()),
         onclick: () => {
           set(!get());
           b.setAttribute('aria-pressed', String(get()));
@@ -194,8 +192,8 @@
       }, label);
       return b;
     };
-    const seenFilter = markFilter('Hide seen', () => hideSeen, (v) => { hideSeen = v; });
-    const likedFilter = markFilter('Liked only', () => likedOnly, (v) => { likedOnly = v; });
+    const seenFilter = markFilter('Unseen', () => hideSeen, (v) => { hideSeen = v; });
+    const likedFilter = markFilter('Liked', () => likedOnly, (v) => { likedOnly = v; });
 
     ctx.controller.signal.addEventListener('abort', () => clearTimeout(state.timer), { once: true });
     // On a phone the labels that do not fit wait behind "+N", as in the editor; a new width fits them again.
@@ -203,7 +201,8 @@
     run();
     return h('section', { class: 'library-search' },
       input,
-      h('div', { class: 'library-filters' }, types, seenFilter, likedFilter),
+      h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Filters' },
+        types, h('span', { class: 'lib-chip-sep', 'aria-hidden': 'true' }), seenFilter, likedFilter),
       h('section', { class: 'card search-results', 'aria-label': 'Search results' },
         h('div', { class: 'search-head' }, results.head, filter.bar),
         filter.panel,
@@ -297,6 +296,32 @@
     seen.setAttribute('aria-pressed', String(m.seen));
     up.setAttribute('aria-pressed', String(m.rating === 1));
     down.setAttribute('aria-pressed', String(m.rating === -1));
+    // The row's phone controls (#419) and its dimmed title follow the capsule.
+    const row = el.closest('.lib-row');
+    if (!row) return;
+    row.classList.toggle('is-seen', m.seen);
+    const quick = row.querySelector('.lib-quick');
+    const [like, seenButton] = quick.children;
+    seenButton.setAttribute('aria-pressed', String(m.seen));
+    like.dataset.rating = String(m.rating);
+    like.children[0].toggleAttribute('hidden', m.rating !== 1);
+    like.children[1].toggleAttribute('hidden', m.rating !== -1);
+    quick.setAttribute('aria-label', { 1: 'Your marks, liked', '-1': 'Your marks, disliked' }[m.rating] || 'Your marks');
+  }
+
+  // A row's marks (#419): below 768px the liked glyph and one Seen button, from 768px the capsule. Thumbs are set in
+  // the card; the Seen button toggles seen with the same call as the capsule.
+  function rowMarks(ctx, entry) {
+    const capsule = markControls(ctx, entry);
+    if (!capsule) return null;
+    const { h, icon } = ctx;
+    const key = entry.markKey;
+    const seen = h('button', {
+      class: 'lib-seen', type: 'button', 'aria-label': 'Seen', 'aria-pressed': 'false',
+      onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, { ...marks.get(key), seen: !marks.get(key).seen }),
+    }, icon('check'));
+    const like = h('span', { class: 'lib-like', 'aria-hidden': 'true' }, icon('up'), icon('down'));
+    return [h('span', { class: 'lib-quick', role: 'group' }, like, seen), capsule];
   }
 
   // Shown at once on every row of the title; a failed request puts the mark back and says so.
@@ -414,8 +439,7 @@
       }
       if (view !== state.open || !ctx.isCurrent()) return;
       const names = page.entries || [];
-      view.list.append(...names.map((e) => h('li', { class: 'library-hit' }, filmName(ctx, e, view.group.title, list.cacheKey), filmChevron(ctx, e),
-        groupChip(ctx, e.group || view.group.title), markControls(ctx, e))));
+      view.list.append(...names.map((e) => row(ctx, e, view.group.title, list.cacheKey, null, null)));
       view.offset += names.length;
       view.count.textContent = plural(page.total, 'entry', 'entries');
       const done = names.length === 0 || view.offset >= page.total;
@@ -437,23 +461,33 @@
     return { el, refresh, reload };
   }
 
-  // A result is text with the editor's language labels (#265), group and type, 'Off' for an entry of a group that
-  // is off, and the mark controls for a film or series (#298).
+  // A result is text: its meta line holds group and type, then the editor's language labels (#265); 'Off' marks an
+  // entry of a group that is off.
   function hit(ctx, m, cacheKey) {
     const { h } = ctx;
     const type = TYPE_LABELS[m.contentType] ? m.contentType : 'Live';
-    return h('li', { class: 'library-hit', dataset: { type } },
-      h('span', { class: 'dot', 'aria-hidden': 'true' }),
-      h('span', { class: 'search-hit-text' },
-        h('span', { class: 'search-hit-line' },
-          filmName(ctx, m, m.group, cacheKey),
-          ctx.searchLanguages(m)),
-        isViewer(ctx) ? h('span', { class: 'search-hit-meta' }, groupLabel(ctx, m.group), h('span', { text: TYPE_LABELS[type] }))
-          : h('span', { class: 'search-hit-meta', text: `${m.group} · ${TYPE_LABELS[type]}` })),
-      m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null,
-      filmChevron(ctx, m),
-      groupChip(ctx, m.group),
-      markControls(ctx, m));
+    const where = isViewer(ctx) ? [groupLabel(ctx, m.group), h('span', { text: TYPE_LABELS[type] })]
+      : [h('b', { text: m.group }), ` · ${TYPE_LABELS[type]}`];
+    return row(ctx, m, m.group, cacheKey, [h('span', { class: 'lib-where' }, where), ctx.searchLanguages(m)],
+      m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
+  }
+
+  // The row (#419) of a search result or a group entry: type marker, title and year, the meta line (none for a
+  // group's entries), the Off badge, the viewer's group chip, the marks of a film or series (#298) and, when the row
+  // opens a card, the chevron.
+  function row(ctx, e, group, cacheKey, meta, badge) {
+    const { h } = ctx;
+    const type = TYPE_LABELS[e.contentType] ? e.contentType : 'Live';
+    const li = h('li', { class: 'lib-row', dataset: { type } },
+      h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),
+      h('span', { class: 'lib-text' }, filmName(ctx, e, group, cacheKey), h('span', { class: 'lib-meta' }, meta)),
+      badge,
+      groupChip(ctx, e.group || group),
+      rowMarks(ctx, e),
+      filmChevron(ctx, e));
+    const capsule = li.querySelector('.library-marks');
+    if (capsule) paintMarks(capsule);
+    return li;
   }
 
   // mount() runs only after this file has run to its end, so My marks below may follow the export.
@@ -695,22 +729,25 @@
     s.seasonCount ? `${s.seasonCount} ${s.seasonCount === 1 ? 'season' : 'seasons'}` : '',
     s.episodeCount ? `${s.episodeCount} ${s.episodeCount === 1 ? 'episode' : 'episodes'}` : '', s.network].filter(Boolean).join(' · ');
 
+  // The title line (#419): the name without a trailing "(YYYY)", then the year; the full name stays the button's name.
   function filmName(ctx, e, group, cacheKey) {
-    if (!opens(ctx, e)) return ctx.h('span', { class: 'search-hit-name', text: e.name });
+    const year = /^(.+?)\s*\((\d{4})\)$/.exec(e.name.trim());
+    const title = year ? [year[1], ctx.h('span', { class: 'y', text: year[2] })] : [e.name];
+    if (!opens(ctx, e)) return ctx.h('span', { class: 'lib-title' }, title);
     const film = { name: e.name, group: group || '', cacheKey, markKey: e.markKey, off: e.enabled === false, type: opensSeriesCard(ctx, e) ? 'Series' : 'Movies' };
     const button = ctx.h('button', {
-      class: 'search-hit-name library-film-open', type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
-      dataset: { name: film.name, group: film.group }, text: e.name, onclick: () => openFilm(ctx, film, button),
-    });
+      class: 'lib-title library-film-open', type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-label': e.name,
+      dataset: { name: film.name, group: film.group }, onclick: () => openFilm(ctx, film, button),
+    }, title);
     return button;
   }
 
-  const filmChevron = (ctx, e) => (opens(ctx, e) ? ctx.h('span', { class: 'library-film-chevron' }, ctx.icon('chevron')) : null);
+  const filmChevron = (ctx, e) => (opens(ctx, e) ? ctx.h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, ctx.icon('chevron')) : null);
 
   function markOpen(ctx, button) {
     for (const b of ctx.root.querySelectorAll('.library-film-open')) {
       b.setAttribute('aria-expanded', String(b === button));
-      b.closest('.library-hit')?.classList.toggle('is-open', b === button);
+      b.closest('.lib-row')?.classList.toggle('is-open', b === button);
     }
   }
 

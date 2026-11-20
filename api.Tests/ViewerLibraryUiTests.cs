@@ -56,23 +56,22 @@ public class ViewerLibraryUiTests
 
     // No switched-off toggle, no Off badges and "this list" in the viewer's copy.
     Assert.DoesNotContain("libraryMenu", Between(library, "function viewerCover(ctx)", "function accessGone("));
-    Assert.Contains("m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null,", library);
+    Assert.Contains("m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);", library);
     Assert.Contains("const listWord = (ctx) => (isViewer(ctx) ? 'this list' : 'your list');", library);
     Assert.Contains("`${f.similar.filter((s) => s.inList).length} in ${listWord(ctx)}`", library);
     Assert.Contains("if (isViewer(ctx)) return groupsEl.replaceChildren(...groupTiles(ctx, sorted, open));", library);
     // The group on every item, and as the first row of the film card.
-    Assert.Contains("groupChip(ctx, m.group),", library);
-    Assert.Contains("groupChip(ctx, e.group || view.group.title), markControls(ctx, e)", library);
+    Assert.Contains("groupChip(ctx, e.group || group),", library);
     Assert.Contains("h('span', null, h('small', { text: 'In group' }), h('b', { text: entry.group })),", library);
     // Row marks use the film card's capsule in both Libraries.
     Assert.Contains("const el = h('span', { class: 'library-marks film-marks', role: 'group',", library);
 
     var css = Read("library.css");
-    Assert.Contains(".library-hit .film-marks button { width: 32px; height: 32px;", css);
+    Assert.Contains(".lib-row .film-marks button { width: 32px; height: 32px;", css);
     Assert.Contains(".group-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 190px;", css);
     // Below 600px no chip before the marks, neither in search hits nor in a group's entries.
     Assert.Contains("@media (max-width: 599px) { .library-search .group-chip, .library-entries .group-chip { display: none; } }", css);
-    Assert.Contains("@media (min-width: 600px) { .search-hit-meta .group-label { display: none; } }", css);
+    Assert.Contains("@media (min-width: 600px) { .lib-meta .group-label { display: none; } }", css);
     Assert.Contains(".library-cover .cover-name { font-size: 48px; letter-spacing: -.045em; }", css);
     Assert.Contains("@media (max-width: 599px) { .group-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }", css);
     Assert.Contains(".film-card.is-viewer { --film-poster-w: 244px; }", css);
