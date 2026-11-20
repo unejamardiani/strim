@@ -41,7 +41,22 @@ public class LibraryGroupViewUiTests
     Assert.Contains("window.scrollTo(0, 0);", Open());
     Assert.DoesNotContain("scrollIntoView", library);
     Assert.Contains("h('a', { class: 'lib-ib', href: `${view.base}/groups?type=${groupType}`, 'aria-label': 'All groups' }, icon('back'))", Open());
-    Assert.Contains("if (b.dataset.key === o.group.key) b.focus();", Between(browse, "const close = () => {", "const open = "));
+    // The mounted address's query (a reload or pasted address) reaches show() and so open(); show() takes it as given.
+    Assert.Contains("show(ctx.sub, ctx.query);", Between(library, "function mount(ctx)", "function show(sub, query)"));
+    Assert.Contains("view.groupQuery = query || '';", show);
+    Assert.Contains("return open(g, new URLSearchParams(raw));", Between(browse, "view.groupRoute = (raw) => {", "\n    };"));
+    // Back focuses the row of the group that was open after the list is drawn again, not before.
+    Assert.Contains("return o.group.key;", Between(browse, "const close = () => {", "const focusRow = "));
+    Assert.DoesNotContain("focus()", Between(browse, "const close = () => {", "const focusRow = "));
+    Assert.Contains("if (b.dataset.key === key) b.focus();", Between(browse, "const focusRow = (key) => {", "};"));
+    var route = Between(browse, "view.groupRoute = (raw) => {", "\n    };");
+    var closed = route.IndexOf("const was = close();", StringComparison.Ordinal);
+    var drawn = route.IndexOf("renderGroups();", StringComparison.Ordinal);
+    var focused = route.IndexOf("focusRow(was);", StringComparison.Ordinal);
+    Assert.True(closed >= 0 && drawn > closed && focused > drawn, "groupRoute must close, redraw, then focus the row.");
+    var refresh = Between(browse, "const refresh = () => {", "};");
+    Assert.True(refresh.IndexOf("renderGroups();", StringComparison.Ordinal) is var r && r >= 0 && refresh.IndexOf("focusRow(was);", StringComparison.Ordinal) > r,
+      "refresh must redraw before it focuses the row.");
   }
 
   [Fact]

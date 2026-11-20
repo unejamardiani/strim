@@ -31,7 +31,7 @@
     // The marks (#299) do not hang on the playlist, so they show even when it has no source or fails to load.
     panels.marks.append(myMarks(ctx));
     root.replaceChildren(...head, panels.search, panels.groups, panels.marks);
-    show(ctx.sub);
+    show(ctx.sub, ctx.query);
     if (!isViewer(ctx) && !playlist.sourceUrl) {
       ctx.listState = 'none';
       inPanels(ctx, () => h('div', { class: 'notice' }, 'This playlist has no source URL. Add one in the editor to see what it holds.'));
@@ -638,7 +638,7 @@
       // Back on the tab with the open group's own address: it stays as it is.
       if (g && state.open?.group === g && location.hash === state.open.hash) return;
       if (g) return open(g, new URLSearchParams(raw));
-      close();
+      const was = close();
       const type = new URLSearchParams(raw).get('type');
       if (GROUP_TYPES.some((t) => t.value === type)) groupType = type;
       if (key !== null) {
@@ -646,6 +646,7 @@
         ctx.toast('That group is not in this list any more.', { error: true });
       }
       renderGroups();
+      focusRow(was);
     };
 
     // From 1100px the open group's row stays visible beside its entries, tinted.
@@ -653,19 +654,23 @@
       for (const b of groupsEl.querySelectorAll('.is-group')) b.classList.toggle('is-open', b.dataset.key === state.open?.group.key);
     };
 
-    // Back to the group list, with the focus on the group that was open; its pending page or filter is dropped.
+    // Back to the group list; its pending page or filter is dropped. close() returns the key of the group that was
+    // open, and the caller focuses its row with focusRow() once the list is drawn again (a redraw drops the focus).
     const stop = (o) => { o.seq += 1; o.observer?.disconnect(); clearTimeout(o.timer); };
     ctx.controller.signal.addEventListener('abort', () => { if (state.open) stop(state.open); }, { once: true });
     const close = () => {
       const o = state.open;
-      if (!o) return;
+      if (!o) return null;
       stop(o);
       state.open = null;
       el.classList.remove('has-open');
       openEl.hidden = true;
       openEl.replaceChildren();
       markOpenGroup();
-      for (const b of groupsEl.querySelectorAll('.is-group')) if (b.dataset.key === o.group.key) b.focus();
+      return o.group.key;
+    };
+    const focusRow = (key) => {
+      for (const b of groupsEl.querySelectorAll('.is-group')) if (b.dataset.key === key) b.focus();
     };
 
     // Opening a group stores its current count on this device; its badge goes the next time the list is drawn. The
@@ -789,8 +794,9 @@
 
     // The shared toggle: an open group stays open unless it is off and switched-off groups are left out again.
     const refresh = () => {
-      if (state.open && !includeOff && list.disabled.has(state.open.group.key)) close();
+      const was = state.open && !includeOff && list.disabled.has(state.open.group.key) ? close() : null;
       renderGroups();
+      focusRow(was);
     };
     // A mark filter loads the open group again from its first page.
     const reload = () => { if (state.open) loadGroup(state.open); };
