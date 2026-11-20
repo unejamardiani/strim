@@ -92,6 +92,7 @@ const ICONS = {
   chevron: '<path d="M9 6l6 6-6 6"/>',
   star: '<path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>',
   book: '<path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H19v13H6.5A1.5 1.5 0 0 0 5 18.5zM5 18.5A1.5 1.5 0 0 0 6.5 20H19"/>',
+  people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>',
 };
 
 function icon(name) {
@@ -287,6 +288,7 @@ async function loadSession() {
   state.providers = providers.status === 'fulfilled' && Array.isArray(providers.value) ? providers.value : [];
   state.user = me.status === 'fulfilled' ? me.value : null;
   state.tmdbEnabled = config.status === 'fulfilled' && config.value?.tmdbEnabled === true;
+  state.shareAccessNote = config.status === 'fulfilled' ? String(config.value?.shareAccessNote || '').trim() : '';
   showTmdbAttribution(state.tmdbEnabled);
   if (state.user) await loadPlaylists();
 }
@@ -452,8 +454,8 @@ let libraryController = null;
 
 function parseRoute() {
   const path = location.hash.replace(/^#/, '') || '/';
-  const match = /^\/p\/([0-9a-f-]{36})(\/library)?$/i.exec(path);
-  if (match) return { name: match[2] ? 'library' : 'playlist', id: match[1].toLowerCase() };
+  const match = /^\/p\/([0-9a-f-]{36})(\/library|\/sharing)?$/i.exec(path);
+  if (match) return { name: match[2] ? match[2].slice(1).toLowerCase() : 'playlist', id: match[1].toLowerCase() };
   const invite = /^\/invite(?:\/([^/?#]+))?$/.exec(path);
   if (invite) return { name: 'invite', token: invite[1] || '' };
   if (path === '/new') return { name: 'new' };
@@ -527,6 +529,7 @@ function route() {
     return;
   }
   if (target.name === 'library') return showLibrary(playlist);
+  if (target.name === 'sharing') return showSharing(playlist);
   showEditor(playlist);
 }
 
@@ -535,7 +538,7 @@ function closeSheets() {
 }
 
 // A report that arrives after its sheet closed must not overwrite whatever the sheet shows next.
-menuDialog.addEventListener('close', () => { reportRequest += 1; });
+menuDialog.addEventListener('close', () => { reportRequest += 1; menuDialog.classList.remove('confirm'); });
 
 for (const dialog of [accountDialog, menuDialog]) {
   dialog.addEventListener('click', (e) => {
@@ -665,7 +668,8 @@ function playlistCard(playlist) {
       h('div', null,
         h('h2', { class: 'playlist-title' }, h('a', { href: `#/p/${playlist.id}`, text: playlist.name || 'Untitled' })),
         playlistMeta(playlist),
-        playlistFacts(playlist.id)),
+        playlistFacts(playlist.id),
+        sharingLine(playlist.id)),
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Actions for ${playlist.name}`, onclick: () => openPlaylistMenu(playlist.id) }, icon('more'))),
     linkBox(playlist),
     h('div', { class: 'row-actions' },
@@ -694,6 +698,7 @@ function openPlaylistMenu(id) {
   menuBody.replaceChildren(h('div', { class: 'menu' },
     inEditor ? null : item('list', 'Edit groups', () => navigate(`#/p/${playlist.id}`)),
     inLibrary ? null : item('book', 'Library', () => navigate(`#/p/${playlist.id}/library`)),
+    current.name === 'sharing' ? null : item('people', 'Share', () => navigate(`#/p/${playlist.id}/sharing`)),
     active ? item('copy', 'Copy player link', () => { menuDialog.close(); copyText(shareUrl(playlist)); }) : null,
     active ? h('a', { class: 'menu-item', href: shareUrl(playlist), download: fileName(playlist.name), onclick: () => menuDialog.close() },
       menuIcon('download'), h('span', { class: 'grow', text: 'Download .m3u' })) : null,
@@ -768,6 +773,225 @@ async function deletePlaylist(playlist) {
     if (state.editor?.id === playlist.id) closeEditor();
     if (parseRoute().name === 'home') showHome();
     else navigate('#/', { replace: true });
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+// ---------- Sharing (#381) ----------
+
+const MAX_SHARES = 10; // ShareEndpoints.MaxSharesPerPlaylist.
+// One word per status; every action is the same DELETE, only "Remove" asks first.
+const SHARE_STATUS = { accepted: ['is-active', 'Active', 'Remove', 'Access removed'], invited: ['is-invited', 'Invited', 'Withdraw', 'Invite withdrawn'], expired: ['is-expired', 'Expired', 'Delete', 'Invite deleted'] };
+let sharing = null;
+
+// "Last opened" is written at most once an hour, so it is never shown more precisely than that.
+function lastOpened(value) {
+  if (!value) return 'Not yet';
+  const hours = Math.floor((Date.now() - new Date(value).getTime()) / 3600000);
+  if (hours < 1) return 'Within the hour';
+  return hours < 48 ? `${hours} h ago` : `${Math.floor(hours / 24)} d ago`;
+}
+
+function shareAvatar(s, size = '') {
+  const tone = ['', ' t-live', ' t-movies'][pick(`${s.id}:tone`, 3)];
+  return h('span', { class: `share-avatar${tone}${s.status === 'accepted' ? '' : ' is-open'}${size}`, 'aria-hidden': 'true', text: (s.label || '?').charAt(0) });
+}
+
+// The account or invite state, the access and the last opening of one share, for the table and the phone rows.
+function shareFacts(s) {
+  const left = s.expiresUtc ? plural(Math.max(0, Math.ceil((new Date(s.expiresUtc) - Date.now()) / 86400000)), 'day') : '';
+  if (s.status === 'accepted') {
+    const since = s.acceptedUtc ? `since ${new Date(s.acceptedUtc).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : '';
+    const opened = s.lastOpenedUtc ? `opened ${lastOpened(s.lastOpenedUtc).toLowerCase()}` : 'not opened yet';
+    return { account: s.viewerName || '', access: since, opened: lastOpened(s.lastOpenedUtc), row: `${s.viewerName || s.label} · ${opened}` };
+  }
+  if (s.status === 'invited') {
+    const fresh = s.id === sharing?.newId ? 'Created just now' : 'Not used yet';
+    return { account: 'Not used yet', access: `${left} left`, opened: 'Not yet', row: `${fresh} · ${left} left` };
+  }
+  const ran = `Link ran out ${relativeTime(s.expiresUtc)}`;
+  return { account: 'Link ran out', access: ran, opened: 'Not yet', row: ran };
+}
+
+// The entry under a playlist card's facts: faces and a count once the shares are known, otherwise "Share".
+function sharingLine(id) {
+  const line = h('a', { class: 'sharing-line', href: `#/p/${id}/sharing` }, icon('people'), 'Share', icon('chevron'));
+  api(`/playlists/${id}/shares`).then((shares) => {
+    const people = shares.filter((s) => s.status === 'accepted').length;
+    const open = shares.filter((s) => s.status === 'invited').length;
+    const text = [people ? `Shared with ${plural(people, 'person', 'people')}` : '', open ? plural(open, 'open invite') : ''].filter(Boolean).join(', ');
+    if (text) line.replaceChildren(h('span', { class: 'share-stack' }, shares.slice(0, 3).map((s) => shareAvatar(s, ' is-sm'))), text, icon('chevron'));
+  }).catch(() => {});
+  return line;
+}
+
+function showSharing(playlist) {
+  clearInterval(loadingTimer);
+  teardownPicker();
+  setActionBar(false);
+  document.title = `${playlist.name || 'Playlist'} · Sharing · Strim`;
+  // The invite link (token) lives only in this object and the node that shows it; leaving the page drops both.
+  sharing = { playlist, shares: null, error: '', link: null, newId: null, full: false, draft: '' };
+  renderSharing();
+  loadShares(sharing);
+  if (!state.overview.size) loadOverview().then(renderSharing);
+}
+
+async function loadShares(sh) {
+  try {
+    sh.shares = await api(`/playlists/${sh.playlist.id}/shares`);
+    sh.error = '';
+  } catch (err) {
+    sh.error = err.message;
+  }
+  if (sh === sharing) renderSharing();
+}
+
+function renderSharing() {
+  const target = parseRoute();
+  if (!sharing || target.name !== 'sharing' || target.id !== sharing.playlist.id) return;
+  const { playlist } = sharing;
+  app.replaceChildren(h('div', { class: 'sharing-page' },
+    h('div', { class: 'sharing-head' },
+      h('a', { class: 'icon-btn', href: '#/', 'aria-label': 'Back to playlists' }, icon('back')),
+      h('div', null, h('span', { class: 'eyebrow', text: 'Sharing' }), h('h1', { class: 'page-title', text: playlist.name || 'Untitled' })),
+      h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}` }, icon('list'), 'Edit groups'),
+      h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}/library` }, icon('book'), 'Library')),
+    h('div', { class: 'sharing-grid' }, sharingPeople(), h('div', { class: 'sharing-side' }, sharingInvite(), sharingGets()))));
+}
+
+function sharingPeople() {
+  const { shares, error } = sharing;
+  const card = h('section', { class: 'card sharing-people' });
+  if (error || !shares) {
+    card.append(error
+      ? h('div', { class: 'notice error' }, h('p', { text: error }), h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { sharing.error = ''; renderSharing(); loadShares(sharing); } }, 'Try again')))
+      : h('p', { class: 'secondary', text: 'Loading people' }));
+    return card;
+  }
+  if (!shares.length) {
+    card.append(h('div', { class: 'share-empty' },
+      h('span', { class: 'share-stack', 'aria-hidden': 'true' }, [1, 2, 3].map(() => h('span', { class: 'share-avatar is-open' }))),
+      h('h3', { text: 'Only you so far' }),
+      h('p', { text: 'Invite someone and they can browse this list in their own Strim account.' })));
+    return card;
+  }
+  const on = shares.filter((s) => s.status === 'accepted').length;
+  const open = shares.filter((s) => s.status === 'invited').length;
+  const tag = (s) => h('span', { class: `share-tag ${SHARE_STATUS[s.status][0]}`, text: SHARE_STATUS[s.status][1] });
+  const action = (s) => h('button', { class: `btn btn-xs ${s.status === 'accepted' ? 'btn-danger-quiet' : 'btn-quiet'}`, type: 'button',
+    'aria-label': `${SHARE_STATUS[s.status][2]} ${s.label}`, onclick: () => (s.status === 'accepted' ? confirmRemove(s) : deleteShare(s)) }, SHARE_STATUS[s.status][2]);
+  const who = (s, sub, extra) => h('div', { class: 'share-who' }, h('span', { class: 'share-name' }, h('span', { text: s.label }), extra), h('span', { class: 'share-sub', text: sub }));
+  card.append(
+    h('div', { class: 'sharing-people-head' }, h('h2', { text: 'People' }),
+      h('span', { class: 'share-seats' }, h('i', { 'aria-hidden': 'true' }, Array.from({ length: MAX_SHARES }, (_, i) => h('b', { class: i < on ? 'on' : i < on + open ? 'open' : null }))),
+        `${shares.length} of ${MAX_SHARES} places`)),
+    // The table on wider screens; the CSS swaps it for the people rows on a phone.
+    h('table', { class: 'share-table' },
+      h('thead', null, h('tr', null, ['Person', 'Status', 'Access', 'Last opened'].map((t) => h('th', { text: t })), h('th', null, h('span', { class: 'sr-only', text: 'Action' })))),
+      h('tbody', null, shares.map((s) => {
+        const f = shareFacts(s);
+        return h('tr', { class: s.id === sharing.newId ? 'is-new' : null },
+          h('td', null, h('div', { class: 'share-person' }, shareAvatar(s), who(s, f.account))),
+          h('td', null, tag(s)), h('td', { text: f.access }), h('td', { text: f.opened }), h('td', null, action(s)));
+      }))),
+    h('div', { class: 'share-list' }, shares.map((s) =>
+      h('div', { class: `share-row${s.id === sharing.newId ? ' is-new' : ''}` }, shareAvatar(s), who(s, shareFacts(s).row, tag(s)), action(s)))));
+  return card;
+}
+
+function sharingInvite() {
+  const { link, shares } = sharing;
+  const card = h('section', { class: 'card sharing-card is-invite' });
+  if (link) {
+    card.append(h('h2', { text: `Send this to ${link.label}` }),
+      h('div', { class: 'share-link' },
+        h('span', { class: 'share-link-label', text: `Invite link for ${link.label}` }),
+        h('div', { class: 'link-box' }, h('div', { class: 'link-url', title: link.url, text: link.url }),
+          h('button', { class: 'btn btn-primary', type: 'button', onclick: () => copyText(link.url) }, icon('copy'), 'Copy')),
+        h('p', { class: 'share-once' }, icon('clock'), h('span', null, h('b', { text: 'Shown only now.' }),
+          ' Copy it before you close this. If it gets lost, withdraw the invite and create a new one.'))),
+      h('ol', { class: 'share-steps' },
+        h('li', null, h('span', null, h('b', { text: 'Send it yourself,' }), ' by any messenger.')),
+        h('li', null, h('span', null, h('b', { text: link.label }), ' signs in or creates an account.')),
+        h('li', null, h('span', null, 'They accept, and ', h('b', { text: sharing.playlist.name || 'the list' }), ' shows up in their lists.'))),
+      h('button', { class: 'btn', type: 'button', onclick: () => { sharing.link = null; sharing.newId = null; renderSharing(); } }, 'Invite someone else'));
+    return card;
+  }
+  card.append(h('h2', { text: 'Invite someone' }));
+  if (sharing.full || (shares && shares.length >= MAX_SHARES)) {
+    card.append(h('div', { class: 'notice' }, 'All 10 places are taken. Remove someone or delete an old invite to invite someone else.'));
+    return card;
+  }
+  const hint = h('p', { class: 'field-hint', hidden: true, text: 'Give a name first' });
+  const input = h('input', { class: 'input', type: 'text', maxlength: '100', value: sharing.draft, placeholder: 'A name, for example Mira', autocomplete: 'off', 'aria-label': 'Name, only for you',
+    oninput: (e) => { sharing.draft = e.target.value; hint.hidden = true; } });
+  const button = h('button', { class: 'btn btn-primary', type: 'submit', disabled: !shares }, 'Create invite link');
+  card.append(
+    h('form', { class: 'field', onsubmit: (e) => { e.preventDefault(); createShare(input, button, hint); } },
+      h('label', { class: 'field-label' }, 'Name, only for you'), h('div', { class: 'share-invite' }, input, button), hint),
+    h('p', { class: 'share-hint', text: 'You get a link to send yourself; it works once, for 7 days.' }),
+    state.shareAccessNote ? h('p', { class: 'share-hint', text: state.shareAccessNote }) : null);
+  return card;
+}
+
+function sharingGets() {
+  const item = state.overview.get(sharing.playlist.id);
+  const checks = ['Browse and search the groups you switched on', 'Open film and series cards', 'Keep their own seen and thumbs marks'];
+  return h('section', { class: 'card sharing-card' },
+    h('h2', { text: 'What they get' }),
+    h('ul', { class: 'share-checks' }, checks.map((text) => h('li', null, icon('check'), text)),
+      h('li', { class: 'no' }, icon('close'), 'No player link, no source, no changes to the list')),
+    item?.groupCount != null && item.groupsOn != null
+      ? h('p', { class: 'share-facts' }, h('span', null, h('b', { text: `${fmt(item.groupsOn)} of ${fmt(item.groupCount)}` }), ' groups are on'),
+        h('a', { href: `#/p/${sharing.playlist.id}` }, 'Edit groups'))
+      : null);
+}
+
+async function createShare(input, button, hint) {
+  const label = input.value.trim();
+  if (!label) { hint.hidden = false; input.focus(); return; }
+  const sh = sharing;
+  button.disabled = true;
+  try {
+    const result = await api(`/playlists/${sh.playlist.id}/shares`, { method: 'POST', body: { label } });
+    sh.shares = [result.share, ...sh.shares];
+    sh.newId = result.share.id;
+    sh.link = { label: result.share.label, url: `${location.origin}${location.pathname}#/invite/${result.inviteToken}` };
+    sh.draft = '';
+    toast('Invite created');
+  } catch (err) {
+    if (err.status === 409) sh.full = true;
+    else toast(err.message, { error: true });
+  }
+  if (sh === sharing) renderSharing();
+}
+
+function confirmRemove(s) {
+  const keep = h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => menuDialog.close() }, 'Keep');
+  menuTitle.textContent = `Remove ${s.label}?`;
+  menuBody.replaceChildren(
+    h('div', { class: 'confirm-who' }, shareAvatar(s), h('div', { class: 'share-who' },
+      h('span', { class: 'share-name', text: s.label }), h('span', { class: 'share-sub', text: s.viewerName || '' }))),
+    h('p', { text: `${s.viewerName || s.label} loses ${sharing.playlist.name || 'this list'} at once, also in a Library that is open right now. Their own marks stay with them. To let them back in, create a new invite.` }),
+    h('div', { class: 'row-actions' }, keep,
+      h('button', { class: 'btn btn-danger', type: 'button', onclick: () => { menuDialog.close(); deleteShare(s); } }, 'Remove access')));
+  menuDialog.classList.add('confirm');
+  if (!menuDialog.open) menuDialog.showModal();
+  keep.focus();
+}
+
+async function deleteShare(s) {
+  const sh = sharing;
+  try {
+    await api(`/playlists/${sh.playlist.id}/shares/${s.id}`, { method: 'DELETE' });
+    sh.shares = sh.shares.filter((x) => x.id !== s.id);
+    sh.full = false;
+    if (sh.newId === s.id) { sh.newId = null; sh.link = null; }
+    toast(SHARE_STATUS[s.status][3]);
+    if (sh === sharing) renderSharing();
   } catch (err) {
     toast(err.message, { error: true });
   }
