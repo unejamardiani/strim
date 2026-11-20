@@ -29,8 +29,8 @@ public class LibraryRouteTests
   {
     var js = Read("main.js");
     var parse = Between(js, "function parseRoute()", "function navigate(");
-    Assert.Contains("const match = /^\\/p\\/([0-9a-f-]{36})(\\/library)?$/i.exec(path);", parse);
-    Assert.Contains("if (match) return { name: match[2] ? 'library' : 'playlist', id: match[1].toLowerCase() };", parse);
+    Assert.Contains("const match = /^\\/p\\/([0-9a-f-]{36})(\\/library|\\/sharing)?$/i.exec(path);", parse);
+    Assert.Contains("if (match) return { name: match[2] ? match[2].slice(1).toLowerCase() : 'playlist', id: match[1].toLowerCase() };", parse);
 
     var route = Between(js, "function route()", "function closeSheets()");
     Assert.Contains("if (target.name === 'library') return showLibrary(playlist);", route);
