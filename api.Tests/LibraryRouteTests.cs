@@ -192,4 +192,12 @@ public class LibraryRouteTests
     Assert.DoesNotContain("<style", html);
     Assert.DoesNotContain("style=", html);
   }
+
+  [Fact]
+  public async Task TitlesRoute_WithoutSession_Answers401()
+  {
+    using var app = new StrimAppFactory();
+    var response = await app.CreateClient().GetAsync($"/api/playlists/{Guid.NewGuid()}/library/titles?cacheKey=any");
+    Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+  }
 }

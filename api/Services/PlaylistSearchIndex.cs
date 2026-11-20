@@ -322,6 +322,31 @@ public sealed class PlaylistSearchIndex
     return new PlaylistTitlesResult(titles.OrderBy(t => t.Entry).Select(t => t.Build()).ToList(), hidden);
   }
 
+  public const int TitlesMemoSize = 4;
+  private readonly List<(string Key, PlaylistTitlesResult Result)> _titlesMemo = new();
+
+  /// <summary><see cref="Titles"/> from a memo of the last <see cref="TitlesMemoSize"/> distinct questions, so paging does not scan again.</summary>
+  public PlaylistTitlesResult MemoTitles(PlaylistTitleQuery query, ISet<string> disabledGroups, bool hideDisabled)
+  {
+    static string Set(IEnumerable<string>? values) =>
+      string.Join('\u001e', (values ?? []).Select(v => v.ToUpperInvariant()).Distinct().Order(StringComparer.Ordinal));
+    var key = string.Join('\u001f', PlaylistSearchText.Fold(query.Query), query.GroupKey is null ? "\0" : query.GroupKey.ToUpperInvariant(),
+      Set(query.ContentTypes?.Select(t => t.ToString())), query.Keys is null ? "\0" : Set(query.Keys), Set(disabledGroups), hideDisabled);
+    lock (_titlesMemo)
+    {
+      var hit = _titlesMemo.FindIndex(m => m.Key == key);
+      if (hit >= 0) return _titlesMemo[hit].Result;
+    }
+
+    var result = Titles(query, disabledGroups, hideDisabled);
+    lock (_titlesMemo)
+    {
+      if (_titlesMemo.All(m => m.Key != key)) _titlesMemo.Add((key, result));
+      if (_titlesMemo.Count > TitlesMemoSize) _titlesMemo.RemoveAt(0);
+    }
+    return result;
+  }
+
   private sealed class TitleBuilder(MarkKey? mark)
   {
     public int Entry { get; set; } = -1;

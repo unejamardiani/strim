@@ -197,6 +197,7 @@ public static class LibraryEndpoints
         Arrange(titles, keys, found?.Similar, userMarks, hideSeen == true)), null, marks);
     }).RequireAuthorization().RequireRateLimiting(Security.RateLimits.General);
 
+    app.MapLibraryTitlesEndpoints();
     return app;
   }
 
@@ -206,10 +207,10 @@ public static class LibraryEndpoints
   private static bool IsEntryText(string? name, string? group) =>
     !string.IsNullOrWhiteSpace(name) && name.Length <= MaxEntryTextLength && !(group?.Length > MaxEntryTextLength);
 
-  private sealed record CardAccess(IReadOnlyList<string> DisabledGroups, bool HideDisabled, PlaylistSearchIndex? Index);
+  internal sealed record CardAccess(IReadOnlyList<string> DisabledGroups, bool HideDisabled, PlaylistSearchIndex? Index) { public bool IsOwner { get; init; } }
 
   /// <summary>The owner or an accepted viewer in one query, else null (the same 404 as for a stranger).</summary>
-  private static async Task<CardAccess?> AccessAsync(Guid id, string userId, string? cacheKey, string? libraryKey,
+  internal static async Task<CardAccess?> AccessAsync(Guid id, string userId, string? cacheKey, string? libraryKey,
     bool? includeDisabled, AppDbContext db, PlaylistPipeline pipeline, CancellationToken ct)
   {
     var access = await db.Playlists.AsNoTracking()
@@ -219,7 +220,7 @@ public static class LibraryEndpoints
     // An editor cacheKey only counts for the owner; a Library key only for the playlist and user it was issued to.
     var index = !string.IsNullOrWhiteSpace(libraryKey) ? LibraryIndexOf(pipeline, libraryKey, id, userId)
       : access.IsOwner ? IndexOf(pipeline, cacheKey) : null;
-    return new CardAccess(access.DisabledGroups ?? [], !access.IsOwner || includeDisabled != true, index);
+    return new CardAccess(access.DisabledGroups ?? [], !access.IsOwner || includeDisabled != true, index) { IsOwner = access.IsOwner };
   }
 
   private static Task<List<FilmMark>> MarksAsync(AppDbContext db, string userId, CancellationToken ct) =>
