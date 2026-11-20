@@ -59,7 +59,8 @@ public class ViewerLibraryUiTests
     Assert.Contains("m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);", library);
     Assert.Contains("const listWord = (ctx) => (isViewer(ctx) ? 'this list' : 'your list');", library);
     Assert.Contains("`${f.similar.filter((s) => s.inList).length} in ${listWord(ctx)}`", library);
-    Assert.Contains("if (isViewer(ctx)) return groupsEl.replaceChildren(...groupTiles(ctx, sorted, open));", library);
+    // The viewer gets the owner's group list (#422), without the owner's "No group is on" copy.
+    Assert.Contains("if (!isViewer(ctx)) nodes.push(status('No group is on. Include switched-off groups to browse them.'));", library);
     // The group on every item, and as the first row of the film card.
     Assert.Contains("groupChip(ctx, e.group || group),", library);
     Assert.Contains("h('span', null, h('small', { text: 'In group' }), h('b', { text: entry.group })),", library);
@@ -73,7 +74,6 @@ public class ViewerLibraryUiTests
     Assert.Contains("@media (max-width: 599px) { .library-search .group-chip, .library-entries .group-chip { display: none; } }", css);
     Assert.Contains("@media (min-width: 600px) { .lib-meta .group-label { display: none; } }", css);
     Assert.Contains(".library-cover .cover-name { font-size: 48px; letter-spacing: -.045em; }", css);
-    Assert.Contains("@media (max-width: 599px) { .group-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }", css);
     Assert.Contains(".film-card.is-viewer { --film-poster-w: 244px; }", css);
     Assert.Contains("  folder: '<path", main);
   }

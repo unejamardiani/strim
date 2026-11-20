@@ -81,8 +81,11 @@ public class LibraryRouteTests
       Assert.DoesNotContain(forbidden, library);
     // "switch" as a word or role; the copy may name "switched-off groups" (#286).
     Assert.DoesNotMatch(@"\bswitch\b", library);
-    foreach (var forbidden in new[] { "checkbox", "bulk", "Bulk", "Save", "dock", "action-bar", "setActionBar", "localStorage" })
+    foreach (var forbidden in new[] { "checkbox", "bulk", "Bulk", "Save", "dock", "action-bar", "setActionBar" })
       Assert.DoesNotContain(forbidden, library);
+    // The only stored value is this device's group counts for the "+N new" badge (#422), never the playlist.
+    Assert.Equal(2, Regex.Matches(library, Regex.Escape("localStorage.") + @"\w+Item\(countsKey\(ctx\)").Count);
+    Assert.Equal(2, Regex.Matches(library, "localStorage").Count);
 
     // main.js hides the dock and the picker before the Library renders.
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");

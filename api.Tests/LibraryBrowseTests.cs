@@ -31,10 +31,9 @@ public class LibraryBrowseTests
     var library = Read("library.js");
     var browse = Browse();
     Assert.Contains("const BROWSE_ORDER = ['Movies', 'Series', 'Live'];", browse);
-    Assert.Contains("const BROWSE_HEADINGS = { Movies: 'Films', Series: 'Series', Live: 'Channels' };", browse);
     Assert.Contains("const sorted = [...shown].sort((a, b) => BROWSE_ORDER.indexOf(a.type) - BROWSE_ORDER.indexOf(b.type) || a.index - b.index);", browse);
-    Assert.Contains("h('span', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') })", browse);
-    Assert.Contains("h('h3', { class: 'field-label', text: BROWSE_HEADINGS[g.type] })", browse);
+    // The chips and rows (#422) are pinned in LibraryGroupsUiTests.
+    Assert.Contains("h('span', { class: 'lib-meta', text: plural(g.count, t.one, t.many) })", browse);
 
     // The groups are the ones the Library loaded once; the browse view has the Groups tab, the search its own (#418).
     var load = Between(library, "async function load(", "const TYPES = [");
@@ -71,6 +70,10 @@ public class LibraryBrowseTests
 
   private const string PinnedOpenAndLoadPage = """
         const open = (g, scroll = true) => {
+          if (state.seen[g.key] !== g.count) {
+            state.seen = { ...state.seen, [g.key]: g.count };
+            writeCounts(ctx, list, state.seen);
+          }
           const view = {
             group: g, offset: 0,
             count: h('p', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') }),
@@ -78,6 +81,7 @@ public class LibraryBrowseTests
             foot: h('div', { class: 'library-foot' }),
           };
           state.open = view;
+          markOpenGroup();
           entriesEl.replaceChildren(
             h('div', { class: 'library-entries-head' },
               h('button', { class: 'btn btn-sm', type: 'button', onclick: close }, icon('back'), 'All groups'),

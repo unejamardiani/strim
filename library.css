@@ -72,7 +72,7 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   color: var(--ink);
 }
 
-/* Browse (#287): one card per type with its groups; an open group replaces the list with its entries. */
+/* Browse (#287): the chosen type's groups (#422); an open group replaces the list with its entries. */
 .library-browse {
   display: flex;
   flex-direction: column;
@@ -95,11 +95,6 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 .library-browse .card {
   padding: 0;
   overflow: hidden;
-}
-
-.library-type .field-label {
-  margin: 0;
-  padding: 12px 18px 8px;
 }
 
 .library-entries-head {
@@ -421,16 +416,14 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
   .library-cover .cover-name { font-size: 36px; }
 }
 
-/* Browse groups as tiles under a head per type; two columns on a phone. */
-.group-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-.group-tile { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 14px 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow-card); color: inherit; font: inherit; text-align: start; cursor: pointer; }
-.group-tile-top { display: flex; align-items: center; justify-content: space-between; }
-.group-tile-top svg { width: 15px; height: 15px; color: var(--ink-3); }
-.group-tile b { display: block; font: 800 18px/1.15 var(--font-display); letter-spacing: -.03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.group-tile small { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.type-head { display: flex; align-items: center; gap: 9px; margin: 6px 0 0; font-size: 13px; font-weight: 750; color: var(--ink-2); padding-left: 4px; }
-.type-head span.n { font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-@media (max-width: 599px) { .group-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* The Groups tab (#422): type chips, then one list of the chosen type's groups, 12px below; a row is the button
+   that opens its group, with "Off" and the per-device "+N new" badges. */
+.library-groups > .lib-chips { margin-top: 0; }
+.lib-new { flex-shrink: 0; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font-size: 11.5px; font-weight: 800; }
+.lib-off { flex-shrink: 0; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: 11.5px; font-weight: 700; }
+.lib-row.is-group { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; text-align: left; font: inherit; color: inherit; }
+.lib-row.is-group:hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+@media (min-width: 1100px) { .lib-row.is-group.is-open { background: color-mix(in srgb, var(--surface-2) 70%, transparent); box-shadow: inset 3px 0 0 var(--accent); } }
 
 /* States of the viewer's Library */
 .library-gone { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; }
