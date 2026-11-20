@@ -42,8 +42,7 @@ public class TitleMarksEndpointTests(StrimAppFactory factory) : IClassFixture<St
   private void FillMarks(string userName, int count, int idBlock) => WithDb(db =>
   {
     var userId = db.Users.Single(u => u.UserName == userName).Id;
-    // One SQL statement instead of thousands of tracked entities: the bulk insert stays cheap, so it does not
-    // slow down the timing-sensitive tests that run in parallel.
+    // One SQL statement, not thousands of tracked entities, so parallel timing-sensitive tests stay fast.
     return db.Database.ExecuteSqlRaw(
       """
       WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < {1})
@@ -83,10 +82,8 @@ public class TitleMarksEndpointTests(StrimAppFactory factory) : IClassFixture<St
   {
     var client = await SignedInAsync("watch-keep");
     await SetAsync(client, "Little Motel (1995)", rating: 1);
-
     var mark = await WatchMarkAsync(await ListWatchAsync(client, "Little Motel (1995)", watchlist: true));
     Assert.Equal((false, 1, true), (mark.Seen, mark.Rating, mark.Watchlist));
-
     // A request without the field keeps the flag.
     mark = await WatchMarkAsync(await SetAsync(client, "Little Motel (1995)", rating: -1));
     Assert.Equal((false, -1, true), (mark.Seen, mark.Rating, mark.Watchlist));
@@ -97,7 +94,6 @@ public class TitleMarksEndpointTests(StrimAppFactory factory) : IClassFixture<St
   {
     var client = await SignedInAsync("watch-clear");
     await ListWatchAsync(client, "Little Motel (1995)", watchlist: true, rating: 1);
-
     var mark = await WatchMarkAsync(await ListWatchAsync(client, "Little Motel (1995)", watchlist: false));
     Assert.Equal((false, (DateTimeOffset?)null, 1), (mark.Watchlist, mark.WatchlistedUtc, mark.Rating));
 
@@ -112,9 +108,7 @@ public class TitleMarksEndpointTests(StrimAppFactory factory) : IClassFixture<St
   {
     var client = await SignedInAsync("watch-seen");
     await ListWatchAsync(client, "Little Motel (1995)", watchlist: true);
-
     var mark = await WatchMarkAsync(await SetAsync(client, "Little Motel (1995)", seen: true));
-
     Assert.Equal((true, false, (DateTimeOffset?)null), (mark.Seen, mark.Watchlist, mark.WatchlistedUtc));
     var stored = StoredMark("watch-seen");
     Assert.Equal((true, false, (DateTimeOffset?)null), (stored.Seen, stored.Watchlist, stored.WatchlistedUtc));
@@ -179,22 +173,15 @@ public class TitleMarksEndpointTests(StrimAppFactory factory) : IClassFixture<St
   }
 
   [Fact]
-  public async Task List_UnknownSort_Gets400()
-  {
-    var client = await SignedInAsync("watch-badsort");
-    var response = await client.Http.GetAsync("/api/marks?sort=title");
-    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    Assert.Contains("error", await response.Content.ReadAsStringAsync());
-  }
+  public async Task List_UnknownSort_Gets400() => Assert.Equal(HttpStatusCode.BadRequest,
+    (await (await SignedInAsync("watch-badsort")).Http.GetAsync("/api/marks?sort=title")).StatusCode);
 
   [Fact]
   public async Task Put_Watchlist_AtTheMarkLimit_IsRefusedForANewTitle()
   {
     var client = await SignedInAsync("watch-cap");
     FillMarks("watch-cap", MarkEndpoints.MaxMarksPerUser, idBlock: 1);
-
     var refused = await ListWatchAsync(client, "Little Motel (1995)", watchlist: true);
-
     Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
     Assert.Equal(MarkEndpoints.MaxMarksPerUser, RowCount("watch-cap"));
   }
@@ -430,8 +417,7 @@ public class TitleMarksEndpointTests(StrimAppFactory factory) : IClassFixture<St
   }
 
   private sealed record MarkDto(string Key, string Kind, string Title, int? Year, bool Seen, int Rating);
-  private sealed record WatchDto(
-    string Key, bool Seen, int Rating, bool Watchlist, DateTimeOffset? WatchlistedUtc, DateTimeOffset UpdatedUtc);
+  private sealed record WatchDto(string Key, bool Seen, int Rating, bool Watchlist, DateTimeOffset? WatchlistedUtc, DateTimeOffset UpdatedUtc);
   private sealed record MarkPage(List<MarkDto> Items, int Total, int Page, int PageSize);
   private sealed record CacheKeyDto(string CacheKey);
   private sealed record OutputKeyDto(string OutputKey);

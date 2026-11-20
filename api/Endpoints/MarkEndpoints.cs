@@ -21,7 +21,8 @@ public record FilmMatchRequest(string? Name, JsonElement? TmdbId);
 /// A signed-in user's film and series marks, the same for every playlist and device. Marks are keyed by
 /// <see cref="MarkKey"/>, derived on the server from the entry name, and never touch a playlist or player link.
 /// <list type="bullet">
-/// <item><c>PUT /api/marks</c> sets or updates a mark; a mark that ends up unseen and unrated is removed (204).</item>
+/// <item><c>PUT /api/marks</c> sets or updates a mark; a mark left unseen, unrated, off the watchlist and without a
+/// confirmed film is removed (204).</item>
 /// <item><c>PUT /api/marks/film-match</c> stores (or, with a null id, clears) the TMDB film the user picked for a
 /// film's card; 404 without a TMDB token. <c>PUT /api/marks/series-match</c> does the same for a series.</item>
 /// <item><c>DELETE /api/marks/{key}</c> removes a mark by its key (404 when the caller has none).</item>
