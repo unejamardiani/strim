@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Api.Tests.Integration;
 using Xunit;
@@ -11,6 +13,20 @@ namespace Api.Tests;
 /// </summary>
 public class LibrarySearchTests
 {
+  [Fact]
+  public async Task Search_CarriesTheWatchlistFlag()
+  {
+    using var app = new StrimAppFactory();
+    var (client, cacheKey) = await LibraryMarksTests.WatchlistedAsync(app, "search-watch");
+
+    var response = await client.Http.PostAsJsonAsync("/api/library/search", new { cacheKey, query = "matrix" });
+    var flags = LibraryMarksTests.WatchlistFlags((await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("matches"));
+
+    Assert.Equal("true", flags["DE - The Matrix (1999) 4K"]);
+    Assert.Equal("false", flags["The Matrix Reloaded (2003)"]);
+    Assert.Equal("null", flags["Matrix Stories S01E02"]);
+  }
+
   private static string Read(string file) => File.ReadAllText(Path.Combine(StrimAppFactory.RepositoryRoot(), file));
 
   private static string Between(string source, string start, string end)

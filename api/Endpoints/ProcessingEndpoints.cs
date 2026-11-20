@@ -415,11 +415,11 @@ public static class ProcessingEndpoints
     PlaylistSearchResult result, LibraryMarks marks, IReadOnlyList<PlaylistSearchLanguageCount> languages) => new(
     result.Matches.Select(m =>
     {
-      var (key, seen, rating) = marks.Lookup(m.Name, m.ContentType);
+      var (key, seen, rating, watchlist) = marks.Lookup(m.Name, m.ContentType);
       return new LibrarySearchMatchResult(
         m.Name, m.OutputGroup, m.GroupKey, m.Position, m.ContentType.ToString(), m.Enabled,
         m.Languages.Audio, m.Languages.Subtitles, m.Languages.Markers, m.Languages.PrefixTags,
-        m.Languages.Source, key, seen, rating);
+        m.Languages.Source, key, seen, rating, watchlist);
     }).ToList(),
     result.HasMore, result.HiddenCount, result.SeenHiddenCount, result.Total, languages);
 
@@ -428,8 +428,8 @@ public static class ProcessingEndpoints
     group, offset, page, result.Names,
     result.Names.Select((name, i) =>
     {
-      var (key, seen, rating) = marks.Lookup(name, result.Types[i]);
-      return new LibraryGroupEntry(name, result.Types[i].ToString(), key, seen, rating, result.Groups[i]);
+      var (key, seen, rating, watchlist) = marks.Lookup(name, result.Types[i]);
+      return new LibraryGroupEntry(name, result.Types[i].ToString(), key, seen, rating, result.Groups[i], watchlist);
     }).ToList(),
     result.Total, result.SeenHiddenCount);
 

@@ -84,6 +84,23 @@ public class SharedLibraryReadTests(StrimAppFactory factory) : IClassFixture<Str
   }
 
   [Fact]
+  public async Task Viewer_SeesOwnWatchlistFlag_NotTheOwners()
+  {
+    var owner = await SignedInAsync("watch-owner");
+    var playlistId = await CreatePlaylistAsync(owner);
+    var viewer = await ViewerOfAsync(owner, playlistId, "watch-viewer");
+    await owner.SendAsync(HttpMethod.Put, "/api/marks", new { name = "Tatort S01E01", kind = "series", watchlist = true });
+    var key = await OpenAsync(viewer, playlistId);
+
+    var before = Matches(await OkJsonAsync(SearchAsync(viewer, playlistId, key, "Tatort"))).Single();
+    Assert.Equal(JsonValueKind.Null, before.GetProperty("watchlist").ValueKind);
+
+    await viewer.SendAsync(HttpMethod.Put, "/api/marks", new { name = "Tatort S01E01", kind = "series", watchlist = true });
+    var after = Matches(await OkJsonAsync(SearchAsync(viewer, playlistId, key, "Tatort"))).Single();
+    Assert.True(after.GetProperty("watchlist").GetBoolean());
+  }
+
+  [Fact]
   public async Task Viewer_AskingForSwitchedOffGroups_GetsNone()
   {
     var owner = await SignedInAsync("hidden-owner");

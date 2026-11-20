@@ -198,6 +198,20 @@ public class LibraryBrowseTests
     Assert.Equal(Enumerable.Range(1, 120).Select(i => $"News {i}"), shown);
   }
 
+  [Fact]
+  public async Task GroupEntries_CarryTheWatchlistFlag()
+  {
+    using var app = new StrimAppFactory();
+    var (client, cacheKey) = await LibraryMarksTests.WatchlistedAsync(app, "browse-watch");
+
+    var body = await client.Http.GetFromJsonAsync<System.Text.Json.JsonElement>(
+      $"/api/library/group-entries?cacheKey={Uri.EscapeDataString(cacheKey)}&group=Films");
+    var flags = LibraryMarksTests.WatchlistFlags(body.GetProperty("entries"));
+
+    Assert.Equal(("true", "true", "false", "null"), (flags["DE - The Matrix (1999) 4K"], flags["EN| The Matrix (1999) [FHD]"],
+      flags["The Matrix Reloaded (2003)"], flags["[Matrix] 4K"]));
+  }
+
   private sealed record AnalysisDto(string CacheKey);
   private sealed record EntriesDto(List<string> Names, int Total);
   private sealed record ErrorDto(string Error);

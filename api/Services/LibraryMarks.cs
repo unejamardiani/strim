@@ -8,19 +8,19 @@ namespace Api.Services;
 /// <c>MarkEndpoints.MaxMarksPerUser</c>). Entries are matched by <see cref="MarkKey"/>, so every variant of a film
 /// shows the same mark. Live channels and names without a title have no key and no mark.
 /// </summary>
-public sealed class LibraryMarks(Dictionary<string, (bool Seen, int Rating)> marks)
+public sealed class LibraryMarks(Dictionary<string, (bool Seen, int Rating, bool Watchlist)> marks)
 {
   public static async Task<LibraryMarks> LoadAsync(AppDbContext db, string userId, CancellationToken cancellationToken)
   {
     var rows = await db.TitleMarks.Where(m => m.UserId == userId)
-      .Select(m => new { m.TitleKey, m.Seen, m.Rating }).ToListAsync(cancellationToken);
-    var byKey = new Dictionary<string, (bool, int)>(rows.Count, StringComparer.Ordinal);
-    foreach (var row in rows) byKey.TryAdd(row.TitleKey, (row.Seen, row.Rating));
+      .Select(m => new { m.TitleKey, m.Seen, m.Rating, m.Watchlist }).ToListAsync(cancellationToken);
+    var byKey = new Dictionary<string, (bool, int, bool)>(rows.Count, StringComparer.Ordinal);
+    foreach (var row in rows) byKey.TryAdd(row.TitleKey, (row.Seen, row.Rating, row.Watchlist));
     return new LibraryMarks(byKey);
   }
 
   /// <summary>The entry's mark key (null for live channels and names without a title) and, when marked, its mark.</summary>
-  public (string? Key, bool? Seen, int? Rating) Lookup(string name, PlaylistContentType type)
+  public (string? Key, bool? Seen, int? Rating, bool? Watchlist) Lookup(string name, PlaylistContentType type)
   {
     var key = type switch
     {
@@ -28,7 +28,7 @@ public sealed class LibraryMarks(Dictionary<string, (bool Seen, int Rating)> mar
       PlaylistContentType.Series => MarkKey.From(name, MarkKind.Series)?.Key,
       _ => null,
     };
-    return key is not null && marks.TryGetValue(key, out var mark) ? (key, mark.Seen, mark.Rating) : (key, null, null);
+    return key is not null && marks.TryGetValue(key, out var mark) ? (key, mark.Seen, mark.Rating, mark.Watchlist) : (key, null, null, null);
   }
 
   /// <summary>
@@ -42,7 +42,7 @@ public sealed class LibraryMarks(Dictionary<string, (bool Seen, int Rating)> mar
     if (!hideSeen && !liked) return null;
     return (name, type) =>
     {
-      var (_, seen, rating) = Lookup(name, type);
+      var (_, seen, rating, _) = Lookup(name, type);
       if (liked && rating != 1) return MarkVerdict.Skip;
       return hideSeen && seen == true ? MarkVerdict.HideSeen : MarkVerdict.Keep;
     };
