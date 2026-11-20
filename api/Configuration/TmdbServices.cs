@@ -12,6 +12,7 @@ public static class TmdbServices
     // Process-local and in memory only: one cache for the app's lifetime.
     services.AddSingleton<TmdbCache>();
     services.AddSingleton<TmdbClient>();
+    services.AddSingleton<LibraryPosterMemo>();
     services.AddHttpClient(TmdbClient.HttpClientName, client =>
       {
         client.BaseAddress = TmdbClient.BaseAddress;
