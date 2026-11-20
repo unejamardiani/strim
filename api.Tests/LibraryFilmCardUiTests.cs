@@ -86,9 +86,9 @@ public class LibraryFilmCardUiTests
   {
     var card = Card();
     Assert.Contains("if (f?.similar?.length) body.append(similarFilms(ctx, f));", card);
-    Assert.Contains("`${f.similar.filter((s) => s.inList).length} in your list`", card);
+    Assert.Contains("`${f.similar.filter((s) => s.inList).length} in ${listWord(ctx)}`", card);
     Assert.Contains("h('div', { class: 'film-tile is-absent' }, art, title,", card);
-    Assert.Contains("[s.year, 'Not in your list'].filter(Boolean).join(' · ')", card);
+    Assert.Contains("[s.year, `Not in ${listWord(ctx)}`].filter(Boolean).join(' · ')", card);
     Assert.Contains("[s.title, s.year, `in ${s.group}`, off ? 'group off' : '', s.seen ? 'seen' : '']", card);
     Assert.Contains("onclick: () => openSimilar(ctx, s, i)", card);
     Assert.Contains("card.film = { name: s.entry, group: s.group, cacheKey: card.film.cacheKey, markKey: `similar:${s.entry}`", card);
