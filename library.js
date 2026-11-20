@@ -211,6 +211,7 @@
     ctx.onIncludeOff = () => {
       run();
       onToggle();
+      view.marksRelookup?.();
     };
     const markFilter = (label, get, set) => {
       const b = h('button', {
@@ -471,17 +472,25 @@
     el.title = label;
   }
 
-  // Shown at once on every row of the title; a failed request puts the mark back and says so.
+  // Shown at once on every row of the title; a failed request puts the mark back and says so. Writes for one title
+  // go out in order (#424), so an Undo never overtakes the change it undoes.
+  const writes = new Map();
   async function setMark(ctx, name, kind, key, next) {
     const before = marks.get(key);
     const repaint = () => {
       for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
       view?.marksChanged?.(key, marks.get(key));
     };
+    const lane = keyAlias.get(key) || key;
+    const prior = writes.get(lane);
+    let done;
+    writes.set(lane, new Promise((resolve) => { done = resolve; }));
     marks.set(key, next);
     repaint();
     try {
+      await prior;
       const saved = await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating, watchlist: next.watchlist });
+      done();
       // The server's watchlist (#414) is taken over, unless a later tap already replaced this change.
       if (saved && marks.get(key) === next && saved.watchlist !== next.watchlist) {
         marks.set(key, { ...next, watchlist: saved.watchlist === true });
@@ -492,8 +501,9 @@
       if (real && real !== key) {
         keyAlias.set(key, real);
         syncRows(ctx, real, marks.get(key));
-      }
+      } else if (!real && key.startsWith('similar:')) view?.marksStale?.(); // cleared at once: 204, no key to sync
     } catch (err) {
+      done();
       // A later tap on the same title already replaced this change.
       if (marks.get(key) !== next) return;
       marks.set(key, before);
@@ -796,10 +806,12 @@
     };
     view.marksView = (raw) => {
       const value = new URLSearchParams(raw || '').get('view');
-      if (!MARK_VIEWS.some((v) => v.value === value) || value === state.view) return keep();
-      state.view = value;
-      start();
+      const other = MARK_VIEWS.some((v) => v.value === value) && value !== state.view;
+      if (other) state.view = value;
+      return other || state.stale ? start() : keep();
     };
+    // A mark this tab cannot place (no loaded row, or no key yet): it loads again now or when it is shown next.
+    view.marksStale = () => (view.panels.marks.hidden ? (state.stale = true) : start());
 
     // The head line and the active chip count the view; with every row gone the view's empty state.
     const paint = () => {
@@ -821,7 +833,7 @@
       let requested;
       try {
         const filter = option().params;
-        requested = Math.max(Math.floor(state.shown.size / MARKS_PAGE) + 1, state.minPage);
+        requested = Math.max(Math.floor((state.shown.size + state.skipped.size) / MARKS_PAGE) + 1, state.minPage);
         page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
       } catch (err) {
         if (seq !== state.seq || ctx.controller.signal.aborted) return;
@@ -834,16 +846,19 @@
       const items = page.items || [];
       const added = [];
       for (const m of items) {
-        if (state.shown.has(m.key) || rows.has(m.key)) continue;
+        if (state.shown.has(m.key) || rows.has(m.key) || state.skipped.has(m.key)) continue;
+        // A record kept only for its confirmed TMDB match is no mark: no row, not counted.
+        if (!option().fits(m)) { state.skipped.add(m.key); continue; }
         state.shown.add(m.key);
-        const li = markRow(m, null);
-        rows.set(m.key, { li, m });
+        const li = markRow(m, null, true);
+        rows.set(m.key, { li, m, t: null });
         list.append(li);
         added.push(m.key);
       }
-      state.total = page.total;
-      state.done = items.length < MARKS_PAGE || state.shown.size >= page.total;
-      if (added.length) lookup(added, seq);
+      state.total = page.total - state.skipped.size;
+      state.done = items.length < MARKS_PAGE || state.shown.size + state.skipped.size >= page.total;
+      const keys = items.map((m) => m.key);
+      if (keys.length) { state.pages.push(keys); lookup(keys, seq); }
       if (!state.done && added.length === 0) {
         state.minPage = requested + 1;
         loadPage();
@@ -868,18 +883,18 @@
       try {
         found = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys });
       } catch (err) {
-        accessGone(ctx, err);
+        if (seq === state.seq && ctx.isCurrent() && !ctx.controller.signal.aborted) accessGone(ctx, err);
         return;
       }
       if (seq !== state.seq || !ctx.isCurrent()) return;
       for (const key of keys) {
         const r = rows.get(key);
-        const t = found?.titles?.[key];
-        if (!r || !t) continue;
-        const li = markRow(r.m, t);
+        const t = found?.titles?.[key] || null;
+        if (!r || (!t && !r.t)) continue;
+        const li = markRow(r.m, t, false);
         li.hidden = r.li.hidden;
         r.li.replaceWith(li);
-        r.li = li;
+        Object.assign(r, { li, t });
       }
     };
     view.marksListReady = () => {
@@ -887,12 +902,15 @@
       waiting = [];
       for (const [keys, seq] of pages) if (seq === state.seq) lookup(keys, seq);
     };
+    view.marksRelookup = () => state.pages.forEach((keys) => lookup(keys, state.seq));
 
     // A row: type marker, title and year from the mark, where it is or "Not in this list", the rows' controls set
     // under "<title> (<year>)" as Undo does, and the chevron, hidden on a row that opens nothing so controls align.
-    const markRow = (m, t) => {
+    const markRow = (m, t, fresh) => {
       const type = m.kind === 'series' ? 'Series' : 'Movies';
-      const now = marks.get(m.key) || m;
+      // A fresh page shows the server's mark; a rebuild keeps the live mark object, so a save in flight stays its own.
+      const live = marks.get(m.key);
+      const now = fresh || !live ? m : live;
       const entry = { name: markName(m), title: m.title, year: m.year, contentType: type, markKey: m.key, seen: now.seen, rating: now.rating, watchlist: now.watchlist };
       // The card opens with the lookup's entry name and group; a title not in the list opens nothing.
       const card = t ? { ...entry, name: t.name, enabled: t.enabled } : { ...entry, markKey: null };
@@ -902,6 +920,7 @@
         h('span', { class: 'lib-text' }, filmName(ctx, card, t?.group, ctx.list?.cacheKey), h('span', { class: 'lib-meta' }, meta)),
         rowMarks(ctx, entry),
         h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));
+      if (!fresh && live) marks.set(m.key, live);
       paintMarks(li.querySelector('.library-marks'));
       return li;
     };
@@ -909,10 +928,15 @@
     // Every change of a mark passes here from setMark: a row that no longer fits leaves and Undo sets r.m again; a
     // row that fits again (after Undo or a failed request) comes back in its place.
     view.marksChanged = (key, mark) => {
+      if (key.startsWith('similar:')) return;
       const r = rows.get(key);
-      if (!r || !r.li.isConnected) return;
+      // A title marked elsewhere that now fits this view but has no row yet: the tab loads again.
+      if (!r) return option().fits(mark) ? view.marksStale() : undefined;
+      if (!r.li.isConnected) return;
       const fits = option().fits(mark);
       if (fits) r.m = { ...r.m, seen: mark.seen, rating: mark.rating, watchlist: mark.watchlist };
+      // Newest change first: a visible row whose mark changed moves to the top (the Watchlist keeps its order).
+      if (fits && !r.li.hidden && state.view !== 'watchlist') list.prepend(r.li);
       if (fits === !r.li.hidden) return;
       r.li.hidden = !fits;
       state.total += fits ? 1 : -1;
@@ -923,9 +947,12 @@
       // A hidden tab updates its rows and count silently.
       if (fits || view.panels.marks.hidden) return;
       const text = state.view === 'watchlist' ? `${r.m.title} is off your watchlist` : `Mark on ${r.m.title} removed`;
-      ctx.toast(text, { action: { label: 'Undo', onClick: () => {
+      const undo = () => ctx.toast(text, { action: { label: 'Undo', onClick: () => {
         if (r.li.hidden) setMark(ctx, markName(r.m), r.m.kind, key, { seen: r.m.seen, rating: r.m.rating, watchlist: r.m.watchlist });
       } } });
+      // Behind a modal card the page is inert: the toast waits until the card closes.
+      if (card.el?.matches(':modal')) card.el.addEventListener('close', () => { if (r.li.hidden) undo(); }, { once: true });
+      else undo();
     };
 
     const start = () => {
@@ -935,6 +962,7 @@
       state.total = 0;
       state.done = false;
       state.minPage = 1;
+      Object.assign(state, { skipped: new Set(), pages: [], stale: false });
       rows.clear();
       for (const b of chips) b.setAttribute('aria-pressed', String(b.dataset.value === state.view));
       keep();
@@ -953,10 +981,10 @@
 
   // A mark saved under another key shows on the rows of the same title in the search and the open group.
   function syncRows(ctx, key, mark) {
+    view?.marksChanged?.(key, mark);
     if (!marks.has(key)) return;
     marks.set(key, mark);
     for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
-    view?.marksChanged?.(key, mark);
   }
 
   // The viewer's head (#383): the list's cover as on its "Shared with you" card, filled from library/open.
