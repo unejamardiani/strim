@@ -29,14 +29,16 @@ public sealed class FilmCardEndpointTests
     var similar = Assert.Single(film.GetProperty("similar").EnumerateArray());
     Assert.Equal(JsonValueKind.Null, similar.GetProperty("posterUrl").ValueKind);
 
-    // No route of the app serves images: no poster or image route, and nothing that produces an image type.
+    // No route of the app serves images: no poster or image route, and nothing that produces an image type. The one
+    // exception is the Library's posters route, which answers poster addresses as JSON (LibraryPostersEndpointTests).
     var endpoints = host.Factory.Services.GetServices<EndpointDataSource>().SelectMany(s => s.Endpoints)
       .OfType<RouteEndpoint>().ToList();
     Assert.NotEmpty(endpoints);
     foreach (var endpoint in endpoints)
     {
       var pattern = endpoint.RoutePattern.RawText ?? "";
-      Assert.DoesNotContain("poster", pattern, StringComparison.OrdinalIgnoreCase);
+      if (pattern != "/api/playlists/{id:guid}/library/posters")
+        Assert.DoesNotContain("poster", pattern, StringComparison.OrdinalIgnoreCase);
       Assert.DoesNotContain("image", pattern, StringComparison.OrdinalIgnoreCase);
       Assert.DoesNotContain("tmdb", pattern, StringComparison.OrdinalIgnoreCase);
       var produces = endpoint.Metadata.OfType<Microsoft.AspNetCore.Http.Metadata.IProducesResponseTypeMetadata>()

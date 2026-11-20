@@ -198,6 +198,7 @@ public static class LibraryEndpoints
     }).RequireAuthorization().RequireRateLimiting(Security.RateLimits.General);
 
     app.MapLibraryTitlesEndpoints();
+    app.MapLibraryPostersEndpoints();
     return app;
   }
 
@@ -322,7 +323,7 @@ public static class LibraryEndpoints
   /// The clear-match rule: exactly one result whose title, normalised like <see cref="MarkKey"/>, equals the key's
   /// title, and whose release year equals the key's year when the key has one. Anything else is a choice.
   /// </summary>
-  private static int? ClearMatchId(MarkKey key, IEnumerable<(int Id, string? Title, string? Date)> results)
+  internal static int? ClearMatchId(MarkKey key, IEnumerable<(int Id, string? Title, string? Date)> results)
   {
     var same = results.Where(r => r.Id > 0 && r.Title is not null && MarkKey.NormaliseTitle(r.Title) == key.Title
       && (key.Year is null || YearOf(r.Date) == key.Year)).Take(2).ToList();
