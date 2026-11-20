@@ -132,7 +132,7 @@ at the bottom. Cards keep DOM order, so reading and tab order run left to right,
 ### Library (`#/p/<id>/library`: library.js + library.css)
 
 Purpose: find what a saved playlist holds, films, series and channels, without editing it. The
-playlist card's Library action opens it; Edit groups in its head goes back to the editor.
+playlist card's Library action opens it; Edit groups in its ⋯ menu goes back to the editor.
 
 Read-only: nothing in the Library changes the playlist or what the player link serves. It has no
 switches, no bulk action, no Save and no dock; results and entries are text, not controls, except
@@ -190,7 +190,7 @@ icon buttons, Seen (check), Thumbs up and Thumbs down, `--control-h` square (46p
 from 768px) with `aria-pressed`. A pressed control has the `--accent-soft` fill; tapping it again
 undoes it. A mark is the user's, not the playlist's: it is stored at once and shows on every variant
 of the title in the view. A failed request puts the mark back and shows an error toast. Channels and
-names without a title get no controls. Two more toggles next to "Include switched-off groups",
+names without a title get no controls. Two toggles next to the type pills,
 "Hide seen" and "Liked only", filter the search and the open group for the page session; with Hide
 seen on, the count of seen matches left out is shown. The editor shows no marks.
 
@@ -202,20 +202,35 @@ Remove button at `--control-h`. Remove asks no confirmation: the row goes at onc
 Undo, which sets the same mark again and puts the row back in its place. With no marks it says so
 and how to mark a title.
 
-My list by default: the Library shows the entries of the groups that are on. One toggle, "Include
-switched-off groups", adds the groups that are off and marks their groups and entries "Off". It is
+My list by default: the Library shows the entries of the groups that are on. One switch in the ⋯
+menu, "Include switched-off groups", adds the groups that are off and marks their groups and entries "Off". It is
 kept for the page session only. With the toggle off, the count of left-out matches and the number of
 hidden groups are shown.
 
+Tabs and routes (#418): Search, Groups and Marks, each with its own address:
+`#/p/<id>/library/search|groups|marks` for the owner, `#/shared/<id>/search|groups|marks` for an
+invited viewer. The root and an unknown tab open Search and replace the address. Tabs are links,
+the active one with `aria-current="page"`; a tab change keeps the loaded list, the typed query, an
+open group and the loaded marks (the panels stay in the DOM, hidden), scrolls to the top and, from
+the keyboard, moves the focus to the tab's first field or heading. Marks shows at once; Search and
+Groups show the loading card or the error inside their panel.
+
+Head (owner): back (36px, quiet), kicker "Library" and the playlist name on one line with an
+ellipsis (Bricolage 800, 26px, 32px from 768px), the tabs from 768px, and ⋯ (36px, `--surface-2`).
+⋯ opens the app's sheet titled with the playlist name: "25 of 38 groups on · 59,060 of 119,070
+entries in your list" ("Loading the list" before), the read-only hint, Edit groups and the
+"Include switched-off groups" switch. A viewer keeps the cover as the head, without ⋯, the tabs
+under it.
+
 ```
 ┌──────────────────────────────┐
-│ Head                         │  back · playlist name · Edit groups
-│ Summary card                 │  groups on, entries in your list, read-only hint
-│ Search                       │  field · type pills (All/Films/Series/Channels) · toggle
+│ Head                         │  ‹ · LIBRARY / playlist name · tabs (from 768px) · ⋯
+│ Search tab                   │  field · type pills (All/Films/Series/Channels) · mark filters
 │                              │  results card: name, group · type, Off badge
-│ Browse groups                │  one card per type (Films, Series, Channels), playlist order
+│ Groups tab: Browse groups    │  one card per type (Films, Series, Channels), playlist order
 │   open group                 │  All groups · title · count, entries card, More
-│ My marks                     │  filter pills · count, marks card (title, meta, Remove), More
+│ Marks tab: My marks          │  filter pills · count, marks card (title, meta, Remove), More
+│ Tab bar (below 768px)        │  floating, dock colours: Search · Groups · Marks
 │ Film card                    │  sheet, or side pane from 1100px: poster, facts, marks, overview
 └──────────────────────────────┘
 ```
@@ -224,14 +239,19 @@ Search: the editor's search, read-only, 300ms after typing; a result shows name,
 Browse: the groups by type, then in playlist order; opening one pages its entries 50 at a time with
 More until all are shown.
 
-Phone layout (below 1100px): one 760px column. An open group replaces the group list; All groups
-returns to the list with the focus on the group that was open.
+Phone layout (below 1100px): one 760px column. Below 768px the tabs are a floating bar at the
+bottom (62px, 24px radius, the dock's inverted colours, icon over label, the active tab tinted with
+an `--accent` icon); the footer pads 104px to scroll clear of it, and an open film card's backdrop
+covers it. From 768px they are a segmented control in the head (owner) or in a row under the cover
+(viewer). An open group replaces the group list; All groups returns to the list with the focus on
+the group that was open.
 
 Wide Library (from 1100px, CSS only): once the groups are loaded the page widens to a 1440px
 maximum (same 18px padding). While a group is open, Browse becomes two columns with a 24px gap,
 `minmax(300px, 0.4fr) minmax(0, 1fr)`: left the group list, which stays shown, right the open
-group's entries, sticky below the top bar and scrolling within the screen height. Head, summary,
-search and the Browse title span the width; with no group open the list keeps the full width.
+group's entries, sticky below the top bar and scrolling within the screen height. The head with the
+segmented tabs, the search and the Browse title span the width; with no group open the list keeps
+the full width.
 
 ### Site (`/`, guides: site.css)
 

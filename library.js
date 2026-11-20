@@ -4,27 +4,105 @@
 
 (() => {
   // ctx.controller is aborted by main.js when the route leaves the Library, so a pending load stops waiting.
+  // The tabs (#418): each one a link to its own route, its content a panel that stays in the DOM while hidden.
+  const TABS = [
+    { name: 'search', label: 'Search', icon: 'search' },
+    { name: 'groups', label: 'Groups', icon: 'grid' },
+    { name: 'marks', label: 'Marks', icon: 'check' },
+  ];
+  // The Library on screen: its ctx, tab links, panels and open tab, for show().
+  let view = null;
+
   function mount(ctx) {
     const { root, playlist, h, icon, controller } = ctx;
-    // A viewer (#383) gets the list's cover as the head: no "Edit groups", the owner's name once the list is open.
+    const base = isViewer(ctx) ? `#/shared/${playlist.id}` : `#/p/${playlist.id}/library`;
+    const nav = h('nav', { class: 'lib-tabs', 'aria-label': 'Library' },
+      TABS.map((t) => h('a', { href: `${base}/${t.name}`, dataset: { tab: t.name } }, icon(t.icon), t.label)));
+    const panels = Object.fromEntries(TABS.map((t) => [t.name, h('section', { class: 'lib-panel', dataset: { tab: t.name }, hidden: true })]));
+    view = { ctx, nav, panels, tab: null, byKeyboard: false };
+    // A link activated by keyboard clicks with detail 0; show() then moves the focus into the tab.
+    nav.addEventListener('click', (e) => { view.byKeyboard = e.detail === 0; });
+    // A viewer (#383) gets the list's cover as the head and the tabs under it; no ⋯ menu, nothing would be in it.
     if (isViewer(ctx)) ctx.cover = viewerCover(ctx);
-    const head = ctx.cover?.el || h('div', { class: 'editor-head library-head' },
-      h('a', { class: 'icon-btn', href: '#/', 'aria-label': 'Back to playlists' }, icon('back')),
-      h('h1', { class: 'page-title', text: playlist.name || 'Untitled' }),
-      h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}` }, icon('list'), 'Edit groups'));
-    const body = h('div');
-    // My marks (#299) do not hang on the playlist, so they show even when it has no source or fails to load.
-    root.replaceChildren(head, body, myMarks(ctx));
+    const head = ctx.cover ? [ctx.cover.el, h('div', { class: 'lib-tabs-row' }, nav)] : [ownerHead(ctx, nav)];
+    // The marks (#299) do not hang on the playlist, so they show even when it has no source or fails to load.
+    panels.marks.append(myMarks(ctx));
+    root.replaceChildren(...head, panels.search, panels.groups, panels.marks);
+    show(ctx.sub);
     if (!isViewer(ctx) && !playlist.sourceUrl) {
-      body.replaceChildren(h('div', { class: 'notice' }, 'This playlist has no source URL. Add one in the editor to see what it holds.'));
+      ctx.listState = 'none';
+      inPanels(ctx, () => h('div', { class: 'notice' }, 'This playlist has no source URL. Add one in the editor to see what it holds.'));
       return;
     }
-    load(ctx, body, controller);
+    load(ctx, controller);
   }
 
-  async function load(ctx, body, own) {
-    const { h, fmt, plural } = ctx;
-    body.replaceChildren(h('div', { class: 'card loading-card' },
+  // Opens a tab of the Library on screen; main.js calls it for a tab change instead of mounting again.
+  function show(sub) {
+    if (!view) return;
+    const name = String(sub || '').split('/')[0];
+    const tab = TABS.some((t) => t.name === name) ? name : 'search';
+    for (const a of view.nav.children) {
+      if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    }
+    for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;
+    if (view.tab === tab) return;
+    const first = view.tab !== null;
+    view.tab = tab;
+    window.scrollTo(0, 0);
+    if (!first || !view.byKeyboard) return;
+    view.byKeyboard = false;
+    const target = view.panels[tab].querySelector('input, h2, h3');
+    if (target && target.tagName !== 'INPUT') target.tabIndex = -1;
+    target?.focus();
+  }
+
+  // Search and Groups both wait on the list, so both show its loading card, error or notice.
+  function inPanels(ctx, make) {
+    for (const panel of [view.panels.search, view.panels.groups]) panel.replaceChildren(make());
+  }
+
+  // The owner's head (#418): back, the name on one line, the tabs (a segmented control from 768px) and ⋯.
+  function ownerHead(ctx, nav) {
+    const { h, icon, playlist } = ctx;
+    const name = playlist.name || 'Untitled';
+    return h('header', { class: 'lib-head' },
+      h('a', { class: 'lib-ib is-quiet', href: '#/', 'aria-label': 'Back to playlists' }, icon('back')),
+      h('div', { class: 'lib-head-text' },
+        h('p', { class: 'lib-kicker', text: 'Library' }),
+        h('h1', { class: 'lib-name', text: name, title: name })),
+      nav,
+      h('button', { class: 'lib-ib', type: 'button', 'aria-label': 'More', 'aria-haspopup': 'dialog', onclick: () => libraryMenu(ctx) }, icon('more')));
+  }
+
+  // The ⋯ menu: what the list holds, the way to the editor and "Include switched-off groups".
+  function libraryMenu(ctx) {
+    const { h, icon, fmt, plural, playlist } = ctx;
+    const list = ctx.list;
+    let facts = { none: 'This playlist has no source URL', failed: 'The list could not be loaded' }[ctx.listState] || 'Loading the list';
+    if (list) {
+      const on = list.groups.filter((g) => !list.disabled.has(g.key));
+      const entries = on.reduce((sum, g) => sum + g.count, 0);
+      facts = `${fmt(on.length)} of ${plural(list.groups.length, 'group')} on · ${fmt(entries)} of ${plural(list.totalChannels, 'entry', 'entries')} in your list`;
+    }
+    const toggle = h('input', {
+      class: 'toggle', type: 'checkbox', role: 'switch', checked: includeOff,
+      onchange: (e) => { includeOff = e.target.checked; ctx.onIncludeOff?.(); },
+    });
+    ctx.openMenu(playlist.name || 'Untitled', [
+      h('p', { class: 'lib-menu-facts' }, facts,
+        h('small', { text: 'The Library only reads your list. To change what the player link serves, edit the groups.' })),
+      h('a', { class: 'menu-item', href: `#/p/${playlist.id}` },
+        h('span', { class: 'mi-icon' }, icon('list')), h('span', { class: 'grow', text: 'Edit groups' })),
+      h('label', { class: 'menu-item' }, h('span', { class: 'grow', text: 'Include switched-off groups' }), toggle),
+    ]);
+  }
+
+  async function load(ctx, own) {
+    const { h } = ctx;
+    ctx.listState = 'loading';
+    inPanels(ctx, () => h('div', { class: 'card loading-card' },
       h('span', { class: 'spinner', 'aria-hidden': 'true' }),
       h('div', { class: 'grow', text: isViewer(ctx) ? 'Loading the list' : 'Loading the playlist from your provider' })));
     let result;
@@ -33,30 +111,20 @@
     } catch (err) {
       if (own.signal.aborted || !ctx.isCurrent()) return;
       if (accessGone(ctx, err)) return;
+      ctx.listState = 'failed';
       // A viewer gets the server's neutral message, never the provider's.
-      body.replaceChildren(h('div', { class: 'notice error' },
+      inPanels(ctx, () => h('div', { class: 'notice error' },
         isViewer(ctx) ? h('p', null, h('b', { text: 'The list cannot be loaded right now' }), ' ', err.message || '') : h('p', { text: ctx.errorMessage(err) }),
         h('div', { class: 'row-actions' },
-          h('button', { class: 'btn btn-sm', type: 'button', onclick: () => load(ctx, body, own) }, 'Try again'))));
+          h('button', { class: 'btn btn-sm', type: 'button', onclick: () => load(ctx, own) }, 'Try again'))));
       return;
     }
     if (own.signal.aborted || !ctx.isCurrent()) return;
-    if (isViewer(ctx)) {
-      ctx.cover.fill(result);
-      const browse = browseSection(ctx, result);
-      body.replaceChildren(searchSection(ctx, result, browse.refresh, browse.reload), browse.el);
-      return;
-    }
-    const on = result.groups.filter((g) => !result.disabled.has(g.key));
-    const entries = on.reduce((sum, g) => sum + g.count, 0);
+    if (isViewer(ctx)) ctx.cover.fill(result);
+    ctx.list = result;
     const browse = browseSection(ctx, result);
-    body.replaceChildren(h('section', { class: 'card' },
-      h('p', null,
-        h('span', { class: 'num', text: fmt(on.length) }), ` of ${plural(result.groups.length, 'group')} on, `,
-        h('span', { class: 'num', text: fmt(entries) }), ` of ${plural(result.totalChannels, 'entry', 'entries')} in your list`),
-      h('p', { class: 'field-hint', text: 'The Library only reads your list. To change what the player link serves, edit the groups.' })),
-    searchSection(ctx, result, browse.refresh, browse.reload),
-    browse.el);
+    view.panels.search.replaceChildren(searchSection(ctx, result, browse.refresh, browse.reload));
+    view.panels.groups.replaceChildren(browse.el);
   }
 
   // The type control's choices and the content types each one sends; All sends none.
@@ -108,16 +176,12 @@
         },
       }, option.label));
     }
-    // A viewer sees only the groups the owner left on, so there is nothing to include.
-    const toggle = isViewer(ctx) ? null : h('button', {
-      class: 'btn btn-sm library-toggle', type: 'button', 'aria-pressed': String(includeOff),
-      onclick: () => {
-        includeOff = !includeOff;
-        toggle.setAttribute('aria-pressed', String(includeOff));
-        run();
-        onToggle();
-      },
-    }, 'Include switched-off groups');
+    // "Include switched-off groups" in the ⋯ menu (#418) runs the search and refreshes the groups; a viewer has no
+    // menu and nothing to include.
+    ctx.onIncludeOff = () => {
+      run();
+      onToggle();
+    };
     const markFilter = (label, get, set) => {
       const b = h('button', {
         class: 'btn btn-sm library-toggle', type: 'button', 'aria-pressed': String(get()),
@@ -139,7 +203,7 @@
     run();
     return h('section', { class: 'library-search' },
       input,
-      h('div', { class: 'library-filters' }, types, toggle, seenFilter, likedFilter),
+      h('div', { class: 'library-filters' }, types, seenFilter, likedFilter),
       h('section', { class: 'card search-results', 'aria-label': 'Search results' },
         h('div', { class: 'search-head' }, results.head, filter.bar),
         filter.panel,
@@ -393,7 +457,7 @@
   }
 
   // mount() runs only after this file has run to its end, so My marks below may follow the export.
-  window.StrimLibrary = { mount };
+  window.StrimLibrary = { mount, show };
 
   // My marks (#299): every film and series the user marked, newest change first, including titles that are in no
   // playlist any more. A row is plain text, never a link to an entry. Remove asks nothing and offers Undo, which sets

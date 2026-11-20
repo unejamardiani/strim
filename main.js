@@ -94,6 +94,8 @@ const ICONS = {
   star: '<path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>',
   book: '<path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H19v13H6.5A1.5 1.5 0 0 0 5 18.5zM5 18.5A1.5 1.5 0 0 0 6.5 20H19"/>',
   people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
 };
 
 function icon(name) {
@@ -452,15 +454,23 @@ function afterAuthChange() {
 
 let currentHash = location.hash;
 let libraryController = null;
+// The Library on screen ({ name: 'library' | 'shared', id }), so a tab change (#418) keeps it instead of remounting.
+let libraryMounted = null;
+const LIBRARY_TABS = ['search', 'groups', 'marks'];
+
+// The rest of a Library route after its root (#418), the tab name lower-cased.
+const librarySub = (rest) => (rest || '').replace(/^[^/]*/, (tab) => tab.toLowerCase());
 
 function parseRoute() {
   const path = location.hash.replace(/^#/, '') || '/';
-  const match = /^\/p\/([0-9a-f-]{36})(\/library|\/sharing)?$/i.exec(path);
-  if (match) return { name: match[2] ? match[2].slice(1).toLowerCase() : 'playlist', id: match[1].toLowerCase() };
+  const library = /^\/p\/([0-9a-f-]{36})\/library(?:\/([^?#]*))?(?:\?(.*))?$/i.exec(path);
+  if (library) return { name: 'library', id: library[1].toLowerCase(), sub: librarySub(library[2]), query: library[3] || '' };
+  const match = /^\/p\/([0-9a-f-]{36})(\/sharing)?$/i.exec(path);
+  if (match) return { name: match[2] ? 'sharing' : 'playlist', id: match[1].toLowerCase() };
   const invite = /^\/invite(?:\/([^/?#]+))?$/.exec(path);
   if (invite) return { name: 'invite', token: invite[1] || '' };
-  const shared = /^\/shared\/([0-9a-f-]{36})$/i.exec(path);
-  if (shared) return { name: 'shared', id: shared[1].toLowerCase() };
+  const shared = /^\/shared\/([0-9a-f-]{36})(?:\/([^?#]*))?(?:\?(.*))?$/i.exec(path);
+  if (shared) return { name: 'shared', id: shared[1].toLowerCase(), sub: librarySub(shared[2]), query: shared[3] || '' };
   if (path === '/new') return { name: 'new' };
   return { name: 'home' };
 }
@@ -502,10 +512,18 @@ window.addEventListener('beforeunload', (e) => {
 function route() {
   if (!state.ready) return;
   closeSheets();
+  const target = parseRoute();
+  if (target.name === 'library' || target.name === 'shared') target.sub = libraryTab(target);
+  // A tab change in the Library on screen (#418) keeps it: no new load, the typed query and an open group stay.
+  if (state.user && libraryController && !libraryController.signal.aborted
+    && libraryMounted?.name === target.name && libraryMounted.id === target.id) {
+    window.StrimLibrary.show(target.sub, target.query);
+    return;
+  }
   // Leaving the Library cancels its wait; the editor keeps its own load and shares a pending analysis.
   libraryController?.abort();
   libraryController = null;
-  const target = parseRoute();
+  libraryMounted = null;
   // An invitation link (#382): the token leaves the address at once and waits in this tab's sessionStorage.
   if (target.name === 'invite' && target.token) {
     setInviteToken(target.token);
@@ -535,6 +553,16 @@ function route() {
   if (target.name === 'library') return showLibrary(playlist);
   if (target.name === 'sharing') return showSharing(playlist);
   showEditor(playlist);
+}
+
+// The Library opens Search for its root and for an unknown tab (#418), and the address says so.
+function libraryTab(target) {
+  if (LIBRARY_TABS.includes(target.sub.split('/')[0])) return target.sub;
+  const base = target.name === 'shared' ? `#/shared/${target.id}` : `#/p/${target.id}/library`;
+  const hash = `${base}/search${target.query ? `?${target.query}` : ''}`;
+  history.replaceState(null, '', hash);
+  currentHash = hash;
+  return 'search';
 }
 
 function closeSheets() {
@@ -1493,6 +1521,8 @@ function showLibrary(playlist) {
   setActionBar(false);
   document.title = `${playlist.name || 'Playlist'} · Library · Strim`;
   libraryController = new AbortController();
+  const target = parseRoute();
+  libraryMounted = { name: target.name, id: playlist.id };
   window.StrimLibrary.mount({
     root: app,
     controller: libraryController,
@@ -1501,6 +1531,13 @@ function showLibrary(playlist) {
     icon,
     fmt,
     plural,
+    // The tab to open (#418) and the app's sheet for the Library's ⋯ menu.
+    sub: target.sub,
+    openMenu: (title, nodes) => {
+      menuTitle.textContent = title;
+      menuBody.replaceChildren(h('div', { class: 'menu' }, nodes));
+      if (!menuDialog.open) menuDialog.showModal();
+    },
     isCurrent: () => {
       const target = parseRoute();
       return target.name === 'library' && target.id === playlist.id;

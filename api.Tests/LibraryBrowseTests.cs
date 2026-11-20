@@ -36,10 +36,10 @@ public class LibraryBrowseTests
     Assert.Contains("h('span', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') })", browse);
     Assert.Contains("h('h3', { class: 'field-label', text: BROWSE_HEADINGS[g.type] })", browse);
 
-    // The groups are the ones the Library loaded once; the browse view sits next to the search.
+    // The groups are the ones the Library loaded once; the browse view has the Groups tab, the search its own (#418).
     var load = Between(library, "async function load(", "const TYPES = [");
     Assert.Contains("const browse = browseSection(ctx, result);", load);
-    Assert.Contains("searchSection(ctx, result, browse.refresh, browse.reload),\n    browse.el);", load);
+    Assert.Contains("view.panels.search.replaceChildren(searchSection(ctx, result, browse.refresh, browse.reload));\n    view.panels.groups.replaceChildren(browse.el);", load);
     Assert.Single(Regex.Matches(library, Regex.Escape("ctx.loadGroups(")));
 
     // index and type are the playlist position and the content type main.js derives from the analysis.
@@ -55,8 +55,8 @@ public class LibraryBrowseTests
     // One toggle for search and browse.
     Assert.Single(Regex.Matches(library, Regex.Escape("'Include switched-off groups'")));
     var section = Between(library, "function searchSection(", "async function runSearch(");
-    Assert.Contains("includeOff = !includeOff;", section);
-    Assert.Contains("run();\n        onToggle();", section);
+    Assert.Contains("run();\n      onToggle();", section);
+    Assert.Contains("includeOff = e.target.checked; ctx.onIncludeOff?.();", Between(library, "function libraryMenu(ctx)", "async function load("));
 
     Assert.Contains("const shown = list.groups.filter((g) => withOff || !list.disabled.has(g.key));", browse);
     Assert.Contains("return { sorted, hidden: list.groups.length - shown.length };", browse);

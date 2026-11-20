@@ -29,8 +29,9 @@ public class LibraryRouteTests
   {
     var js = Read("main.js");
     var parse = Between(js, "function parseRoute()", "function navigate(");
-    Assert.Contains("const match = /^\\/p\\/([0-9a-f-]{36})(\\/library|\\/sharing)?$/i.exec(path);", parse);
-    Assert.Contains("if (match) return { name: match[2] ? match[2].slice(1).toLowerCase() : 'playlist', id: match[1].toLowerCase() };", parse);
+    Assert.Contains("const library = /^\\/p\\/([0-9a-f-]{36})\\/library(?:\\/([^?#]*))?(?:\\?(.*))?$/i.exec(path);", parse);
+    Assert.Contains("const match = /^\\/p\\/([0-9a-f-]{36})(\\/sharing)?$/i.exec(path);", parse);
+    Assert.Contains("if (match) return { name: match[2] ? 'sharing' : 'playlist', id: match[1].toLowerCase() };", parse);
 
     var route = Between(js, "function route()", "function closeSheets()");
     Assert.Contains("if (target.name === 'library') return showLibrary(playlist);", route);
@@ -57,7 +58,9 @@ public class LibraryRouteTests
   {
     var library = Read("library.js");
     Assert.Single(Regex.Matches(library, Regex.Escape("href: `#/p/${playlist.id}`")));
-    Assert.DoesNotContain("/library`", library);
+    // The Library links to itself only through its tabs (#418).
+    Assert.Single(Regex.Matches(library, Regex.Escape("/library`")));
+    Assert.Contains("const base = isViewer(ctx) ? `#/shared/${playlist.id}` : `#/p/${playlist.id}/library`;", library);
 
     var head = Between(Read("main.js"), "function editorHead(ed, playlist)", "function linkCard(");
     Assert.Single(Regex.Matches(head, Regex.Escape("href: `#/p/${playlist.id}/library`")));
@@ -66,7 +69,12 @@ public class LibraryRouteTests
   [Fact]
   public void Library_MakesNoStateChangingCall_AndRendersNoEditingControls()
   {
-    var library = Read("library.js");
+    var full = Read("library.js");
+    // The ⋯ menu (#418) holds the one switch, "Include switched-off groups", which only changes what the Library shows.
+    var menu = Between(full, "function libraryMenu(ctx)", "async function load(");
+    Assert.Single(Regex.Matches(menu, Regex.Escape("type: 'checkbox', role: 'switch'")));
+    Assert.Contains("onchange: (e) => { includeOff = e.target.checked; ctx.onIncludeOff?.(); },", menu);
+    var library = full.Replace(menu, "");
     Assert.DoesNotMatch(@"\b(PUT|PATCH|DELETE|POST)\b", library);
     Assert.DoesNotMatch(@"\b(fetch|XMLHttpRequest|sendBeacon|api)\s*\(", library);
     foreach (var forbidden in new[] { "/api/playlists", "/playlists", "/playlist/generate", "regenerate-code", "toggle-active", "auto-refresh" })
@@ -102,7 +110,7 @@ public class LibraryRouteTests
     Assert.DoesNotContain("restoreFilters", library);
     // The only global the Library sets at load time.
     Assert.Single(Regex.Matches(library, @"window\.\w+\s*="));
-    Assert.Contains("window.StrimLibrary = { mount };", library);
+    Assert.Contains("window.StrimLibrary = { mount, show };", library);
   }
 
   [Fact]
@@ -143,7 +151,10 @@ public class LibraryRouteTests
 
     // Leaving the Library cancels its wait before the next route joins; the Library uses main.js's controller.
     var route = Between(js, "function route()", "function closeSheets()");
-    Assert.True(route.IndexOf("libraryController?.abort();", StringComparison.Ordinal) < route.IndexOf("const target = parseRoute();", StringComparison.Ordinal));
+    var abort = route.IndexOf("libraryController?.abort();", StringComparison.Ordinal);
+    Assert.True(abort > 0);
+    foreach (var next in new[] { "showLibrary(playlist)", "showSharedLibrary(target.id)", "showEditor(", "showHome()" })
+      Assert.True(abort < route.IndexOf(next, StringComparison.Ordinal), next);
     var show = Between(js, "function showLibrary(playlist)", "function linkCard(");
     Assert.Contains("libraryController = new AbortController();", show);
     Assert.Contains("controller: libraryController,", show);
