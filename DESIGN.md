@@ -211,13 +211,21 @@ circle, Movies diamond, Series square), the name without a trailing "(YYYY)" and
 `--ink-2` and the type word (search results only, then the language labels), "Off", the marks and,
 for a row that opens a card, the chevron.
 
-My marks (#299): a section below Browse groups lists every mark of the user, newest change first,
-50 at a time with More, including titles no longer in any playlist. It shows even when the playlist
-does not load. Pills filter it to All, Seen, Liked or Disliked. A row is plain text, never a link to
-an entry: display title, then year (when known) · Film or Series · Seen · Liked or Disliked, and a
-Remove button at `--control-h`. Remove asks no confirmation: the row goes at once and a toast offers
-Undo, which sets the same mark again and puts the row back in its place. With no marks it says so
-and how to mark a title.
+My marks (#299, the Marks tab since #424): every film and series the user marked, including titles
+no longer in any playlist; it shows even when the playlist does not load. The sticky block holds the
+head, "My marks" with "65 marks · newest change first" below it (the Watchlist view: "14 titles ·
+newest first"), and the single-choice chips Watchlist, All, Seen, Liked, Disliked (the tab opens on
+All, the active chip carries the view's count); the list follows 6px below, 50 marks a page, the
+next one loading 600px before the end. The view is kept in the address as `marks?view=…`, replaced.
+A row (`.lib-row`) has the type marker, title and year from the mark, and a meta line: in the list
+the group (a series: bold "S1–S3 · 21 episodes" · group), otherwise "Not in this list" (also while
+the list loads or fails); one titles lookup per page answers it. Its controls are the rows' (the
+liked glyph and Seen below 768px, the Watchlist button and capsule from 768px). A row in the list
+opens its film or series card and ends with the chevron; any other row keeps the chevron hidden so
+the controls line up. There is no Remove button: a row whose mark becomes empty or no longer fits
+the view leaves at once, the count drops, and a toast ("Mark on <title> removed", in the Watchlist
+view "<title> is off your watchlist") offers Undo, which sets the previous mark again and puts the
+row back in its place. Each view has its empty state. From 1100px the list is at most 920px wide.
 
 My list by default: the Library shows the entries of the groups that are on. One switch in the ⋯
 menu, "Include switched-off groups", adds the groups that are off and marks their groups and entries "Off". It is
@@ -246,7 +254,7 @@ under it.
 │                              │  results card: rows (name and year, group · type, Off, marks)
 │ Groups tab: Browse groups    │  type chips with group counts, one list of rows, playlist order
 │   open group                 │  All groups · title · count, entries card, More
-│ Marks tab: My marks          │  filter pills · count, marks card (title, meta, Remove), More
+│ Marks tab: My marks          │  head and count · view chips, rows (in the list or not, marks)
 │ Tab bar (below 768px)        │  floating, dock colours: Search · Groups · Marks
 │ Film card                    │  sheet, or side pane from 1100px: poster, facts, marks, overview
 └──────────────────────────────┘

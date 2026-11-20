@@ -43,16 +43,6 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 /* Below 600px the result status takes its own line and the Language chip goes below it. */
 @media (max-width: 599px) { .library-search .search-head { flex-direction: column; align-items: stretch; gap: 8px; } }
 
-/* My marks rows: text, not a control, with the search row's look. */
-.library-hit {
-  min-height: var(--row-h);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 14px 8px 18px;
-  border-top: 1px solid var(--line);
-}
-
 /* Marks (#298): seen, thumbs up and thumbs down at the end of a film or series row, phone-sized tap targets.
    A pressed control is tangerine-tinted; tapping it again undoes it. */
 .library-marks {
@@ -114,35 +104,6 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 .library-foot .btn,
 .library-foot .notice {
   margin: 12px 18px;
-}
-
-/* My marks (#299): every mark of the user, plain text rows with a Remove button, below Browse. */
-.library-mylist {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  margin-top: 22px;
-}
-
-.library-mylist > .card {
-  align-self: stretch;
-  padding: 0;
-  overflow: hidden;
-}
-
-.library-mylist > .card > .search-hit-meta {
-  margin: 0;
-  padding: 12px 18px 8px;
-}
-
-.library-mylist .search-hit-name {
-  overflow-wrap: anywhere;
-}
-
-.library-mylist .library-hit > .btn {
-  flex-shrink: 0;
-  min-height: var(--control-h);
 }
 
 /* Wide Library (#288, the editor's 1100px breakpoint): once the groups are loaded the page widens to
@@ -424,6 +385,15 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .lib-row.is-group { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; text-align: left; font: inherit; color: inherit; }
 .lib-row.is-group:hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
 @media (min-width: 1100px) { .lib-row.is-group.is-open { background: color-mix(in srgb, var(--surface-2) 70%, transparent); box-shadow: inset 3px 0 0 var(--accent); } }
+
+/* The Marks tab (#424): head and view chips in the sticky block, the list 6px below; a row that opens nothing keeps
+   its chevron hidden so the controls line up. From 1100px the list is at most 920px wide. */
+.lib-ghead h2 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 800; letter-spacing: -.035em; }
+.lib-ghead p { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.lib-ghead p:empty { display: none; }
+.library-mylist > .lib-list { margin-top: 6px; }
+.lib-row.is-static .lib-chev { visibility: hidden; }
+@media (min-width: 1100px) { .library-mylist { max-width: 920px; } }
 
 /* States of the viewer's Library */
 .library-gone { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; }

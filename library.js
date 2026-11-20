@@ -58,6 +58,7 @@
       else a.removeAttribute('aria-current');
     }
     for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;
+    if (tab === 'marks') view.marksView?.(query);
     if (view.tab === tab) return;
     const first = view.tab !== null;
     view.tab = tab;
@@ -133,6 +134,7 @@
     if (own.signal.aborted || !ctx.isCurrent()) return;
     if (isViewer(ctx)) ctx.cover.fill(result);
     ctx.list = result;
+    view.marksListReady?.();
     const browse = browseSection(ctx, result);
     view.panels.search.replaceChildren(searchSection(ctx, result, browse.refresh, browse.reload));
     view.panels.groups.replaceChildren(browse.el);
@@ -474,6 +476,7 @@
     const before = marks.get(key);
     const repaint = () => {
       for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
+      view?.marksChanged?.(key, marks.get(key));
     };
     marks.set(key, next);
     repaint();
@@ -752,152 +755,199 @@
   // mount() runs only after this file has run to its end, so My marks below may follow the export.
   window.StrimLibrary = { mount, show };
 
-  // My marks (#299): every film and series the user marked, newest change first, including titles that are in no
-  // playlist any more. A row is plain text, never a link to an entry. Remove asks nothing and offers Undo, which sets
-  // the same mark again with the set call; main.js sends both with the CSRF token.
-  const MARK_FILTERS = [
-    { value: 'all', label: 'All', params: {} },
-    { value: 'seen', label: 'Seen', params: { seen: true } },
-    { value: 'liked', label: 'Liked', params: { rating: 1 } },
-    { value: 'disliked', label: 'Disliked', params: { rating: -1 } },
+  // The Marks tab (#424): every film and series the user marked, also titles in no playlist, in five views. A row
+  // says whether its title is in this list (one titles lookup per page) and then opens its card; its controls are the
+  // rows' (#419, #420). A row whose mark no longer fits the view leaves at once, with Undo in the toast.
+  const MARK_VIEWS = [
+    { value: 'watchlist', label: 'Watchlist', params: { watchlist: true, sort: 'watchlisted' }, fits: (m) => m.watchlist === true,
+      empty: 'Nothing on your watchlist yet. Add a film or series with the bookmark in its card.' },
+    { value: 'all', label: 'All', params: {}, fits: (m) => m.seen || m.rating !== 0 || m.watchlist === true,
+      empty: 'No marks yet. Mark a film or series as seen, or give it a thumb, in the search or a group.' },
+    { value: 'seen', label: 'Seen', params: { seen: true }, fits: (m) => m.seen, empty: 'No marks of this kind.' },
+    { value: 'liked', label: 'Liked', params: { rating: 1 }, fits: (m) => m.rating === 1, empty: 'No marks of this kind.' },
+    { value: 'disliked', label: 'Disliked', params: { rating: -1 }, fits: (m) => m.rating === -1, empty: 'No marks of this kind.' },
   ];
   const MARKS_PAGE = 50;
+  const markName = (m) => (m.year ? `${m.title} (${m.year})` : m.title);
 
   function myMarks(ctx) {
-    const { h, fmt, plural } = ctx;
-    const view = { filter: 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1 };
-    const status = (text) => h('p', { class: 'search-status', role: 'status', text });
-    const count = h('p', { class: 'search-hit-meta' });
+    const { h, icon, fmt, plural } = ctx;
+    const asked = String(ctx.sub || '').startsWith('marks') ? new URLSearchParams(ctx.query || '').get('view') : null;
+    const state = { view: MARK_VIEWS.some((v) => v.value === asked) ? asked : 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, observer: null };
+    // rows: mark key → { li, m }, m the last mark that fitted the view; waiting: pages loaded before the list.
+    const rows = new Map();
+    let waiting = [];
+    const option = () => MARK_VIEWS.find((v) => v.value === state.view);
+    const status = (text) => h('p', { class: 'search-status lib-status', role: 'status', text });
+    const line = h('p');
     const list = h('ol', { class: 'search-list' });
     const foot = h('div', { class: 'library-foot' });
-    const pills = h('div', { class: 'pills', role: 'group', 'aria-label': 'Show marks' });
-    for (const option of MARK_FILTERS) {
-      pills.append(h('button', {
-        type: 'button', 'aria-pressed': String(option.value === view.filter), dataset: { value: option.value },
-        onclick: () => {
-          view.filter = option.value;
-          for (const b of pills.children) b.setAttribute('aria-pressed', String(b.dataset.value === option.value));
-          start();
-        },
-      }, option.label));
-    }
+    const sentinel = h('div', { 'aria-hidden': 'true' });
+    const chips = MARK_VIEWS.map((v) => h('button', {
+      class: 'lib-chip', type: 'button', 'aria-pressed': String(v.value === state.view), dataset: { value: v.value },
+      onclick: () => { state.view = v.value; start(); },
+    }, v.label, h('span', { class: 'n' })));
 
-    const paint = () => {
-      count.textContent = plural(view.total, 'mark');
-      if (!view.done) foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: loadPage }, 'More'));
-      else if (view.total > 0) foot.replaceChildren(status(`All ${fmt(view.total)} shown`));
-      else if (view.filter === 'all') foot.replaceChildren(status('No marks yet. Mark a film or series as seen, or give it a thumb, in the search or a group.'));
-      else foot.replaceChildren(status('No marks of this kind.'));
+    // The address (#424): #/…/marks?view=…, replaced, never a new entry, so Home can link to a view.
+    const keep = () => {
+      const hash = `${view.base}/marks?view=${state.view}`;
+      view.nav.querySelector('[data-tab="marks"]').href = hash;
+      if (!view.panels.marks.hidden && location.hash !== hash) history.replaceState(history.state, '', hash);
+    };
+    view.marksView = (raw) => {
+      const value = new URLSearchParams(raw || '').get('view');
+      if (!MARK_VIEWS.some((v) => v.value === value) || value === state.view) return keep();
+      state.view = value;
+      start();
     };
 
-    // The next page starts after the marks shown now; marks a page repeats after a remove or an undo are skipped.
+    // The head line and the active chip count the view; with every row gone the view's empty state.
+    const paint = () => {
+      const ready = state.done || state.shown.size > 0;
+      line.textContent = !ready ? '' : state.view === 'watchlist' ? `${plural(state.total, 'title')} · newest first`
+        : `${plural(state.total, 'mark')} · newest change first`;
+      for (const b of chips) b.lastElementChild.textContent = ready && b.dataset.value === state.view ? fmt(state.total) : '';
+      if (state.done) foot.replaceChildren(...(state.total > 0 ? [] : [status(option().empty)]));
+    };
+
+    // The next page starts after the marks shown now; marks a page repeats after a change or an undo are skipped.
     // A mark set in the search or a group moves to the top and shifts every position, so a page can add nothing
     // new: the list then moves on to the next page at once instead of asking for the same page again.
     const loadPage = async () => {
-      const seq = view.seq;
-      foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
+      const seq = state.seq;
+      state.observer?.disconnect();
+      foot.replaceChildren(status(state.shown.size ? 'Loading more…' : 'Loading your marks…'));
       let page;
       let requested;
       try {
-        const filter = MARK_FILTERS.find((f) => f.value === view.filter).params;
-        requested = Math.max(Math.floor(view.shown.size / MARKS_PAGE) + 1, view.minPage);
+        const filter = option().params;
+        requested = Math.max(Math.floor(state.shown.size / MARKS_PAGE) + 1, state.minPage);
         page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
       } catch (err) {
-        if (seq !== view.seq || ctx.controller.signal.aborted) return;
+        if (seq !== state.seq || ctx.controller.signal.aborted) return;
         foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
           h('p', { text: err.message || 'Your marks could not be loaded.' }),
           h('button', { class: 'btn btn-sm', type: 'button', onclick: loadPage }, 'Try again')));
         return;
       }
-      if (seq !== view.seq || !ctx.isCurrent()) return;
+      if (seq !== state.seq || !ctx.isCurrent()) return;
       const items = page.items || [];
-      let added = 0;
+      const added = [];
       for (const m of items) {
-        if (view.shown.has(m.key)) continue;
-        view.shown.add(m.key);
-        list.append(row(m));
-        added += 1;
+        if (state.shown.has(m.key)) continue;
+        state.shown.add(m.key);
+        const li = markRow(m, null);
+        rows.set(m.key, { li, m });
+        list.append(li);
+        added.push(m.key);
       }
-      view.total = page.total;
-      view.done = items.length < MARKS_PAGE || view.shown.size >= page.total;
-      if (!view.done && added === 0) {
-        view.minPage = requested + 1;
+      state.total = page.total;
+      state.done = items.length < MARKS_PAGE || state.shown.size >= page.total;
+      if (added.length) lookup(added, seq);
+      if (!state.done && added.length === 0) {
+        state.minPage = requested + 1;
         loadPage();
         return;
       }
+      foot.replaceChildren();
       paint();
+      if (state.done) return;
+      // The next page once the sentinel comes within 600px of the screen.
+      foot.append(sentinel);
+      state.observer = new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) loadPage(); }, { rootMargin: '600px' });
+      state.observer.observe(sentinel);
     };
 
-    const row = (m) => {
-      const meta = [m.year, m.kind === 'series' ? 'Series' : 'Film', m.seen ? 'Seen' : '',
-        { 1: 'Liked', '-1': 'Disliked' }[m.rating] || ''].filter(Boolean).join(' · ');
-      const li = h('li', { class: 'library-hit' },
-        h('span', { class: 'search-hit-text' },
-          h('span', { class: 'search-hit-name', text: m.title }),
-          h('span', { class: 'search-hit-meta', text: meta })),
-        h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Remove the mark on ${m.title}`, onclick: () => remove(m, li) }, 'Remove'));
+    // In this list: one lookup per page once the list is loaded; a key the answer lacks stays "Not in this list".
+    const lookup = async (keys, seq) => {
+      if (!ctx.list) {
+        waiting.push([keys, seq]);
+        return;
+      }
+      let found;
+      try {
+        found = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys });
+      } catch (err) {
+        accessGone(ctx, err);
+        return;
+      }
+      if (seq !== state.seq || !ctx.isCurrent()) return;
+      for (const key of keys) {
+        const r = rows.get(key);
+        const t = found?.titles?.[key];
+        if (!r || !t) continue;
+        const li = markRow(r.m, t);
+        li.hidden = r.li.hidden;
+        r.li.replaceWith(li);
+        r.li = li;
+      }
+    };
+    view.marksListReady = () => {
+      const pages = waiting;
+      waiting = [];
+      for (const [keys, seq] of pages) if (seq === state.seq) lookup(keys, seq);
+    };
+
+    // A row: type marker, title and year from the mark, where it is or "Not in this list", the rows' controls set
+    // under "<title> (<year>)" as Undo does, and the chevron, hidden on a row that opens nothing so controls align.
+    const markRow = (m, t) => {
+      const type = m.kind === 'series' ? 'Series' : 'Movies';
+      const now = marks.get(m.key) || m;
+      const entry = { name: markName(m), title: m.title, year: m.year, contentType: type, markKey: m.key, seen: now.seen, rating: now.rating, watchlist: now.watchlist };
+      // The card opens with the lookup's entry name and group; a title not in the list opens nothing.
+      const card = t ? { ...entry, name: t.name, enabled: t.enabled } : { ...entry, markKey: null };
+      const meta = !t ? 'Not in this list' : type === 'Series' ? [h('b', { text: seasonsLine(ctx, t) }), ' · ', t.group] : t.group;
+      const li = h('li', { class: opens(ctx, card) ? 'lib-row' : 'lib-row is-static', dataset: { type, key: m.key } },
+        h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),
+        h('span', { class: 'lib-text' }, filmName(ctx, card, t?.group, ctx.list?.cacheKey), h('span', { class: 'lib-meta' }, meta)),
+        rowMarks(ctx, entry),
+        h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));
+      paintMarks(li.querySelector('.library-marks'));
       return li;
     };
 
-    // The row goes at once and comes back on a failure; it stays hidden in place so Undo puts it back there.
-    const remove = async (m, li) => {
-      li.hidden = true;
-      try {
-        await ctx.removeMark(m.key);
-      } catch (err) {
-        // 404: the mark is already gone, for example removed on another device.
-        if (err.status !== 404) {
-          li.hidden = false;
-          ctx.toast(`The mark was not removed. ${err.message || ''}`.trim(), { error: true });
-          return;
-        }
-      }
-      syncRows(ctx, m.key, { seen: false, rating: 0, watchlist: false });
-      if (!li.isConnected) return;
-      view.shown.delete(m.key);
-      view.total -= 1;
+    // Every change of a mark passes here from setMark: a row that no longer fits leaves and Undo sets r.m again; a
+    // row that fits again (after Undo or a failed request) comes back in its place.
+    view.marksChanged = (key, mark) => {
+      const r = rows.get(key);
+      if (!r || !r.li.isConnected) return;
+      const fits = option().fits(mark);
+      if (fits) r.m = { ...r.m, seen: mark.seen, rating: mark.rating, watchlist: mark.watchlist };
+      if (fits === !r.li.hidden) return;
+      r.li.hidden = !fits;
+      state.total += fits ? 1 : -1;
       paint();
-      ctx.toast(`Mark on ${m.title} removed`, { action: { label: 'Undo', onClick: () => undo(m, li) } });
-    };
-
-    const undo = async (m, li) => {
-      if (!li.hidden || li.dataset.restoring) return;
-      li.dataset.restoring = 'true';
-      let mark;
-      try {
-        mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });
-      } catch (err) {
-        delete li.dataset.restoring;
-        ctx.toast(`The mark was not restored. ${err.message || ''}`.trim(), { error: true });
-        return;
-      }
-      syncRows(ctx, mark.key, { seen: mark.seen, rating: mark.rating, watchlist: mark.watchlist === true });
-      if (!li.isConnected || view.shown.has(mark.key)) return;
-      li.replaceWith(row(mark));
-      view.shown.add(mark.key);
-      view.total += 1;
-      paint();
+      if (fits) return;
+      const text = state.view === 'watchlist' ? `${r.m.title} is off your watchlist` : `Mark on ${r.m.title} removed`;
+      ctx.toast(text, { action: { label: 'Undo', onClick: () => {
+        if (r.li.hidden) setMark(ctx, markName(r.m), r.m.kind, key, { seen: r.m.seen, rating: r.m.rating, watchlist: r.m.watchlist });
+      } } });
     };
 
     const start = () => {
-      view.seq += 1;
-      view.shown = new Set();
-      view.total = 0;
-      view.done = false;
-      view.minPage = 1;
-      count.textContent = '';
+      state.seq += 1;
+      state.observer?.disconnect();
+      state.shown = new Set();
+      state.total = 0;
+      state.done = false;
+      state.minPage = 1;
+      rows.clear();
+      for (const b of chips) b.setAttribute('aria-pressed', String(b.dataset.value === state.view));
+      keep();
+      paint();
       list.replaceChildren();
       loadPage();
     };
+    ctx.controller.signal.addEventListener('abort', () => state.observer?.disconnect(), { once: true });
     start();
     return h('section', { class: 'library-mylist', 'aria-label': 'My marks' },
-      h('h2', { class: 'library-title', text: 'My marks' }),
-      h('p', { class: 'field-hint', text: 'Every film and series you marked, newest change first, also titles no longer in a playlist.' }),
-      pills,
-      h('div', { class: 'card' }, count, list, foot));
+      h('div', { class: 'lib-sticky' },
+        h('div', { class: 'lib-ghead' }, h('h2', { text: 'My marks' }), line),
+        h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Show marks' }, chips)),
+      h('div', { class: 'lib-list' }, list, foot));
   }
 
-  // A remove or an undo in My marks shows on the rows of the same title in the search and the open group.
+  // A mark saved under another key shows on the rows of the same title in the search and the open group.
   function syncRows(ctx, key, mark) {
     if (!marks.has(key)) return;
     marks.set(key, mark);
