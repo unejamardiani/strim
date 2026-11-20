@@ -79,6 +79,25 @@ public sealed class LibraryFilmMatchTests
     Assert.Single(host.Marks());
   }
 
+  [Theory]
+  [InlineData("/api/marks/film-match", "film", "The Matrix (1999)")]
+  [InlineData("/api/marks/series-match", "series", "Dark (2017)")]
+  public async Task Clear_KeepsAWatchlistedMark(string route, string kind, string name)
+  {
+    await using var host = await Host.StartAsync(Token);
+    await host.Client.SendAsync(HttpMethod.Put, "/api/marks", new { name, kind, watchlist = true });
+    Assert.Equal(HttpStatusCode.OK, (await host.Client.SendAsync(HttpMethod.Put, route, new { name, tmdbId = 603 })).StatusCode);
+
+    var cleared = await host.Client.SendAsync(HttpMethod.Put, route, new { name, tmdbId = (int?)null });
+
+    Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+    var body = JsonDocument.Parse(await cleared.Content.ReadAsStringAsync()).RootElement;
+    Assert.True(body.GetProperty("watchlist").GetBoolean());
+    Assert.Equal(JsonValueKind.Null, body.GetProperty("tmdbId").ValueKind);
+    var mark = Assert.Single(host.Marks());
+    Assert.Equal((true, (string?)null), (mark.Watchlist, mark.FilmDbId));
+  }
+
   [Fact]
   public async Task Confirm_PastTheCap_Refused()
   {
