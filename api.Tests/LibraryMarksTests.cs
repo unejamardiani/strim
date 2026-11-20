@@ -41,6 +41,31 @@ public class LibraryMarksTests(StrimAppFactory factory) : IClassFixture<StrimApp
     return (client, await AnalyzeAsync(client, Playlist));
   }
 
+  /// <summary>A new user with "DE - The Matrix (1999) 4K" on the watchlist and the Reloaded seen, and the list analysed.</summary>
+  internal static async Task<(ApiClient Client, string CacheKey)> WatchlistedAsync(StrimAppFactory app, string userName)
+  {
+    var client = new ApiClient(app.CreateClient());
+    await client.RegisterAsync(userName);
+    (await client.SendAsync(HttpMethod.Put, "/api/marks", new { name = "The Matrix (1999)", kind = "film", watchlist = true }))
+      .EnsureSuccessStatusCode();
+    await MarkAsync(client, "The Matrix Reloaded (2003)", "film", seen: true, rating: 0);
+    return (client, await AnalyzeAsync(client, Playlist));
+  }
+
+  /// <summary>Each entry's watchlist field as raw JSON ("true", "false" or "null") by name.</summary>
+  internal static Dictionary<string, string> WatchlistFlags(JsonElement items) =>
+    items.EnumerateArray().ToDictionary(e => e.GetProperty("name").GetString()!, e => e.GetProperty("watchlist").GetRawText());
+
+  [Fact]
+  public void Lookup_ReturnsTheWatchlistFlag()
+  {
+    var marks = new LibraryMarks(new() { ["film:1999:the matrix"] = (false, 0, true), ["film:2003:the matrix reloaded"] = (true, 1, false) });
+
+    Assert.Equal(("film:1999:the matrix", false, 0, true), marks.Lookup("The Matrix (1999)", PlaylistContentType.Movies));
+    Assert.Equal(("film:2003:the matrix reloaded", true, 1, false), marks.Lookup("The Matrix Reloaded (2003)", PlaylistContentType.Movies));
+    Assert.Null(marks.Lookup("Heat (1995)", PlaylistContentType.Movies).Watchlist);
+  }
+
   private static async Task MarkAsync(ApiClient client, string name, string kind, bool seen, int rating) =>
     (await client.SendAsync(HttpMethod.Put, "/api/marks", new { name, kind, seen, rating })).EnsureSuccessStatusCode();
 
@@ -201,9 +226,9 @@ public class LibraryMarksTests(StrimAppFactory factory) : IClassFixture<StrimApp
     db.Database.ExecuteSqlRaw(
       """
       WITH RECURSIVE n(i) AS (SELECT 2 UNION ALL SELECT i + 2 FROM n WHERE i + 2 <= {1})
-      INSERT INTO titlemarks (id, userid, kind, titlekey, year, displaytitle, seen, rating, filmdbid, createdutc, updatedutc)
+      INSERT INTO titlemarks (id, userid, kind, titlekey, year, displaytitle, seen, rating, filmdbid, watchlist, createdutc, updatedutc)
       SELECT printf('00000000-0000-0000-0001-%012d', i), {0}, 'film', 'film:2001:film ' || i, 2001, 'Film ' || i,
-             1, 0, NULL, strftime('%Y-%m-%d %H:%M:%S+00:00', 'now'), strftime('%Y-%m-%d %H:%M:%S+00:00', 'now')
+             1, 0, NULL, 0, strftime('%Y-%m-%d %H:%M:%S+00:00', 'now'), strftime('%Y-%m-%d %H:%M:%S+00:00', 'now')
       FROM n
       """,
       db.Users.Single(u => u.UserName == userName).Id, films);

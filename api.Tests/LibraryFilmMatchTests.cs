@@ -79,6 +79,25 @@ public sealed class LibraryFilmMatchTests
     Assert.Single(host.Marks());
   }
 
+  [Theory]
+  [InlineData("/api/marks/film-match", "film", "The Matrix (1999)")]
+  [InlineData("/api/marks/series-match", "series", "Dark (2017)")]
+  public async Task Clear_KeepsAWatchlistedMark(string route, string kind, string name)
+  {
+    await using var host = await Host.StartAsync(Token);
+    await host.Client.SendAsync(HttpMethod.Put, "/api/marks", new { name, kind, watchlist = true });
+    Assert.Equal(HttpStatusCode.OK, (await host.Client.SendAsync(HttpMethod.Put, route, new { name, tmdbId = 603 })).StatusCode);
+
+    var cleared = await host.Client.SendAsync(HttpMethod.Put, route, new { name, tmdbId = (int?)null });
+
+    Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+    var body = JsonDocument.Parse(await cleared.Content.ReadAsStringAsync()).RootElement;
+    Assert.True(body.GetProperty("watchlist").GetBoolean());
+    Assert.Equal(JsonValueKind.Null, body.GetProperty("tmdbId").ValueKind);
+    var mark = Assert.Single(host.Marks());
+    Assert.Equal((true, (string?)null), (mark.Watchlist, mark.FilmDbId));
+  }
+
   [Fact]
   public async Task Confirm_PastTheCap_Refused()
   {
@@ -87,9 +106,9 @@ public sealed class LibraryFilmMatchTests
     host.WithDb(db => db.Database.ExecuteSqlRaw(
       """
       WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < {1})
-      INSERT INTO titlemarks (id, userid, kind, titlekey, year, displaytitle, seen, rating, filmdbid, createdutc, updatedutc)
+      INSERT INTO titlemarks (id, userid, kind, titlekey, year, displaytitle, seen, rating, filmdbid, watchlist, createdutc, updatedutc)
       SELECT printf('00000000-0000-0000-0000-%012d', i), {0}, 'film', 'film::filler ' || i, NULL, 'Filler ' || i,
-             1, 0, NULL, strftime('%Y-%m-%d %H:%M:%S+00:00', 'now'), strftime('%Y-%m-%d %H:%M:%S+00:00', 'now')
+             1, 0, NULL, 0, strftime('%Y-%m-%d %H:%M:%S+00:00', 'now'), strftime('%Y-%m-%d %H:%M:%S+00:00', 'now')
       FROM n
       """,
       db.Users.Single(u => u.UserName == host.UserName).Id, MarkEndpoints.MaxMarksPerUser - 1));

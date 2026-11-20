@@ -33,7 +33,8 @@ public sealed record LibrarySimilarFilm(
 public sealed record LibraryFilmCandidate(int Id, string? Title, int? Year, string? PosterUrl);
 
 /// <param name="Rating">-1, 0 or 1, as stored on the mark.</param>
-public sealed record LibraryFilmMarks(bool Seen, int Rating);
+/// <param name="Watchlist">Whether the title is on the user's watchlist.</param>
+public sealed record LibraryFilmMarks(bool Seen, int Rating, bool Watchlist);
 
 /// <summary>A series' TMDB facts, the user's marks and the season and episode of the row the card was opened for.</summary>
 public sealed record LibrarySeriesCard(
@@ -94,12 +95,12 @@ public static class LibraryEndpoints
 
       var isFilm = string.Equals(type, nameof(PlaylistContentType.Movies), StringComparison.OrdinalIgnoreCase);
       var key = isFilm && !AdultGroupRule.IsAdultGroupTitle(group) ? MarkKey.From(name, MarkKind.Film) : null;
-      if (key is null) return Card(NotApplicable, null, null, new LibraryFilmMarks(false, 0));
+      if (key is null) return Card(NotApplicable, null, null, new LibraryFilmMarks(false, 0, false));
 
       // One query for every mark: the card's own, and the seen marks and stored TMDB ids of the similar films.
       var userMarks = await MarksAsync(db, userId, ct);
       var mark = userMarks.FirstOrDefault(m => m.TitleKey == key.Key);
-      var marks = new LibraryFilmMarks(mark?.Seen ?? false, mark?.Rating ?? 0);
+      var marks = new LibraryFilmMarks(mark?.Seen ?? false, mark?.Rating ?? 0, mark?.Watchlist ?? false);
 
       int movieId;
       if (int.TryParse(mark?.FilmDbId, NumberStyles.None, CultureInfo.InvariantCulture, out var storedId) && storedId > 0)
@@ -151,11 +152,11 @@ public static class LibraryEndpoints
 
       var isSeries = string.Equals(type, nameof(PlaylistContentType.Series), StringComparison.OrdinalIgnoreCase);
       var key = isSeries && !AdultGroupRule.IsAdultGroupTitle(group) ? MarkKey.From(name, MarkKind.Series) : null;
-      if (key is null) return Card(NotApplicable, null, null, new LibraryFilmMarks(false, 0));
+      if (key is null) return Card(NotApplicable, null, null, new LibraryFilmMarks(false, 0, false));
 
       var userMarks = await MarksAsync(db, userId, ct);
       var mark = userMarks.FirstOrDefault(m => m.TitleKey == key.Key);
-      var marks = new LibraryFilmMarks(mark?.Seen ?? false, mark?.Rating ?? 0);
+      var marks = new LibraryFilmMarks(mark?.Seen ?? false, mark?.Rating ?? 0, mark?.Watchlist ?? false);
 
       int tvId;
       if (int.TryParse(mark?.FilmDbId, NumberStyles.None, CultureInfo.InvariantCulture, out var storedId) && storedId > 0)
@@ -223,7 +224,7 @@ public static class LibraryEndpoints
 
   private static Task<List<FilmMark>> MarksAsync(AppDbContext db, string userId, CancellationToken ct) =>
     db.TitleMarks.AsNoTracking().Where(m => m.UserId == userId)
-      .Select(m => new FilmMark(m.TitleKey, m.Seen, m.Rating, m.FilmDbId)).ToListAsync(ct);
+      .Select(m => new FilmMark(m.TitleKey, m.Seen, m.Rating, m.Watchlist, m.FilmDbId)).ToListAsync(ct);
 
   /// <summary>TMDB's seasons joined with the list's; season 0 (specials) appears only when the list has it.</summary>
   private static LibrarySeriesInList InList(PlaylistSeriesResult found, IReadOnlyList<TmdbTvSeason>? tmdbSeasons)
@@ -307,7 +308,7 @@ public static class LibraryEndpoints
     return source is null ? null : pipeline.Cache.TryGetAnalysis(source)?.SearchIndex;
   }
 
-  internal sealed record FilmMark(string TitleKey, bool Seen, int Rating, string? FilmDbId);
+  internal sealed record FilmMark(string TitleKey, bool Seen, int Rating, bool Watchlist, string? FilmDbId);
 
   private static PlaylistSearchIndex? IndexOf(PlaylistPipeline pipeline, string? cacheKey)
   {

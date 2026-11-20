@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Api.Endpoints;
 
 /// <summary>Sets a mark from an entry name; a null field keeps the stored value (seen false, rating 0 for a new mark).</summary>
-public record MarkRequest(string? Name, string? Kind, bool? Seen, int? Rating);
+public record MarkRequest(string? Name, string? Kind, bool? Seen, int? Rating, bool? Watchlist = null);
 
 /// <summary>
 /// Confirms the TMDB film for an entry name; a null id clears the choice. The id is read as raw JSON so that a
@@ -21,11 +21,13 @@ public record FilmMatchRequest(string? Name, JsonElement? TmdbId);
 /// A signed-in user's film and series marks, the same for every playlist and device. Marks are keyed by
 /// <see cref="MarkKey"/>, derived on the server from the entry name, and never touch a playlist or player link.
 /// <list type="bullet">
-/// <item><c>PUT /api/marks</c> sets or updates a mark; a mark that ends up unseen and unrated is removed (204).</item>
+/// <item><c>PUT /api/marks</c> sets or updates a mark; a mark left unseen, unrated, off the watchlist and without a
+/// confirmed film is removed (204).</item>
 /// <item><c>PUT /api/marks/film-match</c> stores (or, with a null id, clears) the TMDB film the user picked for a
 /// film's card; 404 without a TMDB token. <c>PUT /api/marks/series-match</c> does the same for a series.</item>
 /// <item><c>DELETE /api/marks/{key}</c> removes a mark by its key (404 when the caller has none).</item>
-/// <item><c>GET /api/marks?seen=&amp;rating=&amp;page=&amp;pageSize=</c> lists the caller's marks, newest change first.</item>
+/// <item><c>GET /api/marks?seen=&amp;rating=&amp;watchlist=&amp;sort=&amp;page=&amp;pageSize=</c> lists the caller's marks,
+/// newest change first, or with <c>sort=watchlisted</c> newest on the watchlist first.</item>
 /// </list>
 /// </summary>
 public static class MarkEndpoints
@@ -41,25 +43,28 @@ public static class MarkEndpoints
     var marks = app.MapGroup("/api/marks").RequireAuthorization();
     var mutations = marks.MapGroup("").RequireCsrfToken();
 
-    marks.MapGet("", async (bool? seen, int? rating, int? page, int? pageSize, ClaimsPrincipal user, AppDbContext db) =>
+    marks.MapGet("", async (bool? seen, int? rating, bool? watchlist, string? sort, int? page, int? pageSize,
+      ClaimsPrincipal user, AppDbContext db) =>
     {
       var size = pageSize ?? DefaultPageSize;
       var number = page ?? 1;
-      if (number < 1 || size < 1 || size > MaxPageSize || rating is < -1 or > 1)
+      if (number < 1 || size < 1 || size > MaxPageSize || rating is < -1 or > 1 || sort is not (null or "watchlisted"))
       {
-        return Results.BadRequest(new { error = $"Give page >= 1, pageSize 1 to {MaxPageSize} and rating -1, 0 or 1." });
+        return Results.BadRequest(new { error = $"Give page >= 1, pageSize 1 to {MaxPageSize}, rating -1, 0 or 1 and sort=watchlisted or none." });
       }
 
       var userId = user.UserId();
       var query = db.TitleMarks.Where(m => m.UserId == userId);
       if (seen is { } s) query = query.Where(m => m.Seen == s);
       if (rating is { } r) query = query.Where(m => m.Rating == r);
+      if (watchlist is { } w) query = query.Where(m => m.Watchlist == w);
       // Newest change first (#299). SQLite cannot ORDER BY DateTimeOffset, so the caller's marks (at most
       // MaxMarksPerUser) are sorted in memory, as the playlist list is.
       var all = await query.ToListAsync();
-      var items = all
-        .OrderByDescending(m => m.UpdatedUtc).ThenBy(m => m.TitleKey, StringComparer.Ordinal)
-        .Skip((number - 1) * size).Take(size);
+      var ordered = sort == "watchlisted"
+        ? all.OrderByDescending(m => m.WatchlistedUtc)
+        : all.OrderByDescending(m => m.UpdatedUtc);
+      var items = ordered.ThenBy(m => m.TitleKey, StringComparer.Ordinal).Skip((number - 1) * size).Take(size);
       return Results.Ok(new { items = items.Select(ToDto), total = all.Count, page = number, pageSize = size });
     });
 
@@ -86,9 +91,11 @@ public static class MarkEndpoints
       var mark = await db.TitleMarks.FirstOrDefaultAsync(m => m.UserId == userId && m.TitleKey == key.Key);
       var seen = input.Seen ?? mark?.Seen ?? false;
       var rating = input.Rating ?? mark?.Rating ?? 0;
+      // Seen wins: a seen title leaves the watchlist in the same save, whatever the request says.
+      var watchlist = !seen && (input.Watchlist ?? mark?.Watchlist ?? false);
 
-      // Undo: an unseen, unrated mark without a confirmed film is no mark, so no row stays behind.
-      if (!seen && rating == 0 && mark?.FilmDbId is null)
+      // Undo: an unseen, unrated, unlisted mark without a confirmed film is no mark, so no row stays behind.
+      if (!seen && rating == 0 && !watchlist && mark?.FilmDbId is null)
       {
         if (mark is not null)
         {
@@ -111,6 +118,8 @@ public static class MarkEndpoints
       }
       mark.Seen = seen;
       mark.Rating = rating;
+      mark.WatchlistedUtc = !watchlist ? null : mark.Watchlist ? mark.WatchlistedUtc ?? now : now;
+      mark.Watchlist = watchlist;
       mark.UpdatedUtc = now;
       return await SaveAsync(db, mark);
     });
@@ -157,7 +166,7 @@ public static class MarkEndpoints
     var userId = user.UserId()!;
     var mark = await db.TitleMarks.FirstOrDefaultAsync(m => m.UserId == userId && m.TitleKey == key.Key);
     var filmDbId = tmdbId?.ToString(CultureInfo.InvariantCulture);
-    if (filmDbId is null && (mark is null || (!mark.Seen && mark.Rating == 0)))
+    if (filmDbId is null && (mark is null || (!mark.Seen && mark.Rating == 0 && !mark.Watchlist)))
     {
       // Clearing the choice of a mark that holds nothing else leaves no row behind, like the undo of PUT /api/marks.
       if (mark is not null)
@@ -219,6 +228,8 @@ public static class MarkEndpoints
     year = mark.Year,
     seen = mark.Seen,
     rating = mark.Rating,
+    watchlist = mark.Watchlist,
+    watchlistedUtc = mark.WatchlistedUtc,
     tmdbId = int.TryParse(mark.FilmDbId, NumberStyles.None, CultureInfo.InvariantCulture, out var id) ? id : (int?)null,
     updatedUtc = mark.UpdatedUtc,
   };

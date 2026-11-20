@@ -29,6 +29,12 @@ public class TitleMark
   /// <summary>The TMDB id the user confirmed for the film (<c>PUT /api/marks/film-match</c>), or null.</summary>
   public string? FilmDbId { get; set; }
 
+  /// <summary>On the user's watchlist. Marking the title seen clears it.</summary>
+  public bool Watchlist { get; set; }
+
+  /// <summary>When the title was put on the watchlist; null while it is not on it.</summary>
+  public DateTimeOffset? WatchlistedUtc { get; set; }
+
   public DateTimeOffset CreatedUtc { get; set; }
 
   public DateTimeOffset UpdatedUtc { get; set; }

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Globalization;
 using Api.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -137,6 +138,8 @@ public static class Database
           seen INTEGER NOT NULL,
           rating INTEGER NOT NULL,
           filmdbid TEXT NULL,
+          watchlist INTEGER NOT NULL DEFAULT 0,
+          watchlistedutc TEXT NULL,
           createdutc TEXT NOT NULL,
           updatedutc TEXT NOT NULL,
           CONSTRAINT FK_titlemarks_AspNetUsers_userid FOREIGN KEY (userid) REFERENCES AspNetUsers (Id) ON DELETE CASCADE
@@ -158,6 +161,8 @@ public static class Database
           ""seen"" boolean NOT NULL,
           ""rating"" integer NOT NULL,
           ""filmdbid"" varchar(64) NULL,
+          ""watchlist"" boolean NOT NULL DEFAULT false,
+          ""watchlistedutc"" timestamp with time zone NULL,
           ""createdutc"" timestamp with time zone NOT NULL,
           ""updatedutc"" timestamp with time zone NOT NULL,
           CONSTRAINT ""FK_titlemarks_AspNetUsers_userid"" FOREIGN KEY (""userid"") REFERENCES ""AspNetUsers""(""Id"") ON DELETE CASCADE
@@ -165,7 +170,16 @@ public static class Database
         CREATE INDEX IF NOT EXISTS ""IX_titlemarks_userid"" ON ""titlemarks"" (""userid"");
         CREATE UNIQUE INDEX IF NOT EXISTS ""IX_titlemarks_userid_kind_titlekey_year"" ON ""titlemarks"" (""userid"", ""kind"", ""titlekey"", ""year"") WHERE ""year"" IS NOT NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS ""IX_titlemarks_userid_kind_titlekey_noyear"" ON ""titlemarks"" (""userid"", ""kind"", ""titlekey"") WHERE ""year"" IS NULL;
+        ALTER TABLE ""titlemarks"" ADD COLUMN IF NOT EXISTS ""watchlist"" boolean NOT NULL DEFAULT false;
+        ALTER TABLE ""titlemarks"" ADD COLUMN IF NOT EXISTS ""watchlistedutc"" timestamp with time zone NULL;
       ";
+
+  /// <summary>Columns added to <c>titlemarks</c> after it was created; SQLite has no ADD COLUMN IF NOT EXISTS.</summary>
+  private static readonly (string Name, string Definition)[] SqliteTitleMarksPatches =
+  [
+    ("watchlist", "INTEGER NOT NULL DEFAULT 0"),
+    ("watchlistedutc", "TEXT NULL"),
+  ];
 
   private static void EnsureTitleMarksSchema(AppDbContext db, ILogger logger)
   {
@@ -174,11 +188,33 @@ public static class Database
     try
     {
       db.Database.ExecuteSqlRaw(isNpgsql ? PostgresTitleMarksSql : SqliteTitleMarksSql);
+      if (!isNpgsql) PatchSqliteTitleMarks(db);
       logger.LogDebug("Title marks schema ensured");
     }
     catch (Exception ex)
     {
       logger.LogWarning(ex, "Failed to ensure the title marks schema: {Message}", ex.Message);
+    }
+  }
+
+  private static void PatchSqliteTitleMarks(AppDbContext db)
+  {
+    var connection = db.Database.GetDbConnection();
+    db.Database.OpenConnection();
+    try
+    {
+      foreach (var (name, definition) in SqliteTitleMarksPatches)
+      {
+        using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('titlemarks') WHERE name = '{name}';";
+        if (Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture) > 0) continue;
+        command.CommandText = $"ALTER TABLE titlemarks ADD COLUMN {name} {definition};";
+        command.ExecuteNonQuery();
+      }
+    }
+    finally
+    {
+      db.Database.CloseConnection();
     }
   }
 

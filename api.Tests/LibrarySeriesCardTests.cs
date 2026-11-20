@@ -126,6 +126,16 @@ public sealed class LibrarySeriesCardTests
   }
 
   [Fact]
+  public async Task Card_MarksCarryTheWatchlistFlag()
+  {
+    await using var host = await TestHost.StartAsync(Token, Tmdb);
+    Assert.False((await CardAsync(host, "Dark S01E01")).GetProperty("marks").GetProperty("watchlist").GetBoolean());
+
+    await host.Client.SendAsync(HttpMethod.Put, "/api/marks", new { name = "Dark S01E01", kind = "series", watchlist = true });
+    Assert.True((await CardAsync(host, "Dark S02E03")).GetProperty("marks").GetProperty("watchlist").GetBoolean());
+  }
+
+  [Fact]
   public async Task StoredId_SkipsSearch()
   {
     await using var host = await TestHost.StartAsync(Token, _ => Json(
@@ -135,7 +145,7 @@ public sealed class LibrarySeriesCardTests
     host.SetFilmDbId(host.UserName, "70523");
     var card = await CardAsync(host, "Dark S02E03");
     Assert.Equal("matched", card.GetProperty("status").GetString());
-    Assert.Equal("""{"seen":true,"rating":1}""", card.GetProperty("marks").GetRawText());
+    Assert.Equal("""{"seen":true,"rating":1,"watchlist":false}""", card.GetProperty("marks").GetRawText());
     Assert.Equal("returning", card.GetProperty("series").GetProperty("state").GetString());
     Assert.Equal(JsonValueKind.Null, card.GetProperty("series").GetProperty("lastYear").ValueKind);
     Assert.Equal("/3/tv/70523", Assert.Single(host.TmdbRequests).AbsolutePath);

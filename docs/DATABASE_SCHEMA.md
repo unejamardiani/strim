@@ -20,7 +20,9 @@ This project currently uses `EnsureCreated()` with manual schema patching instea
 The one extra table the owner approved (18 Nov 2026) holds a user's marks on films and series: `id`, `userid`,
 `kind` (`film` or `series`), `titlekey`, `year` (nullable), `displaytitle`, `seen`, `rating` (-1, 0 or 1),
 `filmdbid` (nullable: the confirmed TMDB film id on a film mark, the TMDB tv id on a series mark; film and tv ids
-overlap, so every reader filters by kind), `createdutc`, `updatedutc`. `userid` references `AspNetUsers (Id)` with
+overlap, so every reader filters by kind), `watchlist` (on the user's watchlist, default false; marking the title
+seen clears it), `watchlistedutc` (nullable: when it was put on the watchlist), `createdutc`, `updatedutc`. The two
+watchlist columns are added idempotently to an existing table. `userid` references `AspNetUsers (Id)` with
 `ON DELETE CASCADE`, so the marks go with the account. `IX_titlemarks_userid` indexes the user;
 two partial unique indexes make a null year its own value: `IX_titlemarks_userid_kind_titlekey_year` on
 `(userid, kind, titlekey, year) WHERE year IS NOT NULL` and `IX_titlemarks_userid_kind_titlekey_noyear` on
