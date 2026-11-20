@@ -86,7 +86,7 @@ public class LibrarySeriesCardUiTests
   {
     var card = Card();
     // Only the row the card was opened from carries a context; a similar series opened in place has none.
-    Assert.Contains("seriesInList(ctx, f, card.stack.length === 0 ? answer.context : null)", card);
+    Assert.Contains("seriesInList(ctx, f, card.stack.length === 0 && !entry.collapsed ? answer.context : null)", card);
     Assert.Contains("const here = context?.season != null ? context : null;", card);
     Assert.Contains("const line = here ? h('p', { class: 'series-context' }, 'Opened from ',", card);
     Assert.Contains("here?.season === s.season ? h('span', { class: 'series-here', 'aria-hidden': 'true' }) : null,", card);
@@ -124,7 +124,7 @@ public class LibrarySeriesCardUiTests
     Assert.Contains("markKey: `similar:${s.entry}`, off: s.enabled === false, type: card.film.type };", card);
     Assert.Contains("'aria-label': `Back to ${prev.title}`, onclick: () => filmBack(ctx)", card);
     // The series opened in place has no "Opened from" context.
-    Assert.Contains("seriesInList(ctx, f, card.stack.length === 0 ? answer.context : null)", card);
+    Assert.Contains("seriesInList(ctx, f, card.stack.length === 0 && !entry.collapsed ? answer.context : null)", card);
     Assert.Contains("Similar series and the match (#392):", Read("DESIGN.md"));
   }
 

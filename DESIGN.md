@@ -258,6 +258,15 @@ separator, then the toggles Unseen and Liked, all 34px chips with `aria-pressed`
 `--ink` on `--bg`, an active toggle `--accent-soft`). The row never wraps; it scrolls sideways
 without a visible scrollbar. Below 600px the result status takes its own line and the Language
 chip sits below it.
+Search in sections (#421): one row per title from the titles route, a series as one row (bold
+"S1–S3 · 21 episodes", then the group), a film in several entries as "2 versions". The field (with
+a clear button) and the chip row stick under the top bar; the chips carry the counts of the answer
+("All 17", "Films 12"). All shows up to three sections, Films, Series and Channels, each with its
+count, at most 4 rows and, above 4, "Show all 12 films", which picks that type; from 1100px Films
+is the left column, Series and Channels stack on the right. A single type loads 30 titles at a
+time as the end of the list comes within 600px. The status line names the titles and those left
+out ("7 more in switched-off groups" with "Show them", "3 seen titles hidden"). The query and type
+live in the address, `#/p/<id>/library/search?q=…&type=films`, replaced while typing.
 Browse: the groups by type, then in playlist order; opening one pages its entries 50 at a time with
 More until all are shown.
 

@@ -49,9 +49,9 @@ public class LibrarySearchTests
     Assert.Contains("{ value: 'channels', label: 'Channels', types: ['Live'] },", types);
 
     var run = Between(library, "async function runSearch(", "function hit(");
-    Assert.Contains("const contentTypes = TYPES.find((t) => t.value === state.type).types;", run);
-    Assert.Contains("if (contentTypes.length) body.contentTypes = contentTypes;", run);
-    Assert.Contains("found = await ctx.search(body, ctx.controller.signal);", run);
+    // The titles route (#421) takes the type as types.
+    Assert.Contains("const type = TYPES.find((t) => t.value === state.type);", run);
+    Assert.Contains("types: type.types.join(',')", run);
 
     // Picking a type chip (#419) searches again.
     var section = Between(library, "function searchSection(", "async function runSearch(");
@@ -68,10 +68,10 @@ public class LibrarySearchTests
     Assert.DoesNotContain("sessionStorage", library);
 
     var run = Between(library, "async function runSearch(", "function hit(");
-    Assert.Contains("const hideDisabled = !includeOff;", run);
-    Assert.Contains("const body = { cacheKey: list.cacheKey, query: state.query, disabledGroups: [...list.disabled], hideDisabled };", run);
-    Assert.Contains("const hidden = hideDisabled && !isViewer(ctx) && Number.isInteger(found.hiddenCount) ? found.hiddenCount : 0;", run);
-    Assert.Contains("`${plural(hidden, 'match', 'matches')} in switched-off groups`", run);
+    // The titles route (#421) reads the stored disabled groups itself; the switch asks it to include them.
+    Assert.Contains("includeDisabled: includeOff", run);
+    Assert.Contains("const hidden = !isViewer(ctx) && found.hiddenCount > 0 ? found.hiddenCount : 0;", run);
+    Assert.Contains("`${fmt(hidden)} more in switched-off groups`", run);
     Assert.Contains("else if (left) text = `Nothing in ${listWord(ctx)}. ${left}.`;", run);
 
     // The disabled groups and the cache key are the ones the Library loaded: the stored selection.
@@ -102,7 +102,7 @@ public class LibrarySearchTests
     var hit = Between(library, "function hit(", "window.StrimLibrary");
     // The row (#419) is built outside hit(); a film's name opens the film card (#367) there, every other name stays text.
     Assert.Contains("return row(ctx, m, m.group, cacheKey, [h('span', { class: 'lib-where' }, where), ctx.searchLanguages(m)],", hit);
-    Assert.Contains(": [h('b', { text: m.group }), ` · ${TYPE_LABELS[type]}`];", hit);
+    Assert.Contains("const where = [isViewer(ctx) ? groupLabel(ctx, m.group) : null, ...titleMeta(ctx, m)];", hit);
     Assert.Contains("const TYPE_LABELS = { Live: 'Channel', Movies: 'Film', Series: 'Series' };", library);
     foreach (var control in new[] { "'button'", "'a'", "'input'", "onclick", "href", "role: 'switch'" })
       Assert.DoesNotContain(control, hit);
@@ -141,7 +141,7 @@ public class LibrarySearchTests
     // One request carries the type, the toggle and the language choice together; the offer comes from the response.
     var run = Between(library, "async function runSearch(", "function hit(");
     Assert.Contains("const lang = state.host.searchLang.join(',');", run);
-    Assert.Contains("if (contentTypes.length) body.contentTypes = contentTypes;\n    if (lang) body.lang = lang;", run);
+    Assert.Contains("else params.perType = 4;\n    if (lang) params.lang = lang;", run);
     Assert.Contains("state.host.searchLanguages = found.languages.filter(", run);
     Assert.Contains("state.filter.render();", run);
     Assert.Contains("else if (lang) text = 'Nothing matches your search in the chosen languages.';", run);
