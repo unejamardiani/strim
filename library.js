@@ -363,15 +363,19 @@
     ctx.fitSearchLanguages(results.body);
   }
 
-  // A single type (#421): 30 titles a page, the next one once the sentinel comes within 600px of the screen.
-  function pages(ctx, state, params, first, rowOf, seq) {
+  // A single type (#421) or an open group (#443): 30 titles a page, the next one once the sentinel comes within 600px
+  // of the screen; end, when given, is shown below the rows once everything is loaded.
+  function pages(ctx, state, params, first, rowOf, seq, end) {
     const { h } = ctx;
     const ul = h('ul', { class: 'search-list' }, first.titles.map(rowOf));
     const foot = h('div');
     const sentinel = h('div', { 'aria-hidden': 'true' });
     const watch = (page) => {
       foot.replaceChildren();
-      if (page.hasMore !== true || !page.titles?.length) return;
+      if (page.hasMore !== true || !page.titles?.length) {
+        if (end) foot.append(end);
+        return;
+      }
       foot.append(sentinel);
       state.observer = new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) more(); }, { rootMargin: '600px' });
       state.observer.observe(sentinel);
@@ -513,8 +517,8 @@
     }
   }
 
-  // Browse (#287): the analysed groups by type, then in playlist order. Opening one pages through its
-  // entries with group-entries; the server sends at most 50 names per page.
+  // Browse (#287): the analysed groups by type, then in playlist order. Opening one (#443) pages through its titles
+  // with the titles route, 30 at a time, a series as one row.
   const BROWSE_ORDER = ['Movies', 'Series', 'Live'];
   // The Groups tab's chips (#422), one per type with groups, and the word a group's count takes.
   const GROUP_TYPES = [
@@ -522,7 +526,6 @@
     { value: 'series', type: 'Series', label: 'Series', one: 'episode', many: 'episodes' },
     { value: 'channels', type: 'Live', label: 'Channels', one: 'channel', many: 'channels' },
   ];
-  const PAGE_SIZE = 50;
   // The chosen type is kept for the page session, like the toggles.
   let groupType = null;
 
@@ -569,12 +572,15 @@
 
   function browseSection(ctx, list) {
     const { h, icon, fmt, plural } = ctx;
-    const state = { open: null, seen: seenCounts(ctx, list) };
+    // seq and observer are the open group's paging (#443), as pages() uses them for the search.
+    const state = { open: null, seen: seenCounts(ctx, list), seq: 0, observer: null };
     const groupsEl = h('div', { class: 'library-groups' });
-    const entriesEl = h('div', { class: 'library-open', hidden: true });
-    const el = h('section', { class: 'library-browse' }, h('h2', { class: 'library-title', text: 'Browse groups' }), groupsEl, entriesEl);
+    const entriesEl = h('div', { class: 'lib-groups-main' });
+    // The group list with its title, and the open group: beside each other from 1100px, the open group alone below.
+    const el = h('section', { class: 'library-browse lib-groups-cols' },
+      h('div', { class: 'lib-groups-side' }, h('h2', { class: 'library-title', text: 'Browse groups' }), groupsEl), entriesEl);
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
-    const offBadge = (g) => (list.disabled.has(g.key) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
+    ctx.controller.signal.addEventListener('abort', () => state.observer?.disconnect(), { once: true });
 
     // A group's own address (#442), the list's address and the row of a group.
     const groupHash = (key) => `${view.base}/groups/${encodeURIComponent(key)}`;
@@ -676,69 +682,77 @@
     };
 
     // Back to the group list; the caller focuses the row once renderGroups() has drawn the list again (#442).
+    // An answer still on its way is dropped (seq) and the sentinel stops watching.
     const close = () => {
       state.open = null;
-      entriesEl.hidden = true;
+      state.seq++;
+      state.observer?.disconnect();
       entriesEl.replaceChildren();
-      groupsEl.hidden = false;
+      el.classList.remove('has-open');
       markOpenGroup();
     };
-    // "All groups" goes to the list's address, a history entry; the address handler closes and focuses (#442).
-    const back = () => { location.hash = listHash(); };
 
-    // Opening a group stores its current count on this device; its badge goes the next time the list is drawn.
+    // Opening a group stores its current count on this device; its badge goes the next time the list is drawn. The
+    // sticky head (#443): back to the list's address (a history entry; the address handler closes and focuses, #442),
+    // the title on one line, the group's count and the Off badge.
     const open = (g, scroll = true) => {
       if (state.seen[g.key] !== g.count) {
         state.seen = { ...state.seen, [g.key]: g.count };
         writeCounts(ctx, list, state.seen);
       }
-      const view = {
-        group: g, offset: 0,
-        count: h('p', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') }),
-        list: h('ol', { class: 'search-list library-entries' }),
-        foot: h('div', { class: 'library-foot' }),
-      };
-      state.open = view;
+      const t = GROUP_TYPES.find((x) => x.type === g.type) || GROUP_TYPES[2];
+      const name = g.title || 'Untitled group';
+      const cur = { group: g, t, count: h('p', { text: plural(g.count, t.one, t.many) }), body: h('div') };
+      state.open = cur;
       markOpenGroup();
+      el.classList.add('has-open');
       entriesEl.replaceChildren(
-        h('div', { class: 'library-entries-head' },
-          h('button', { class: 'btn btn-sm', type: 'button', onclick: back }, icon('back'), 'All groups'),
-          h('div', { class: 'grow' }, h('h3', { class: 'library-group-title', text: g.title || 'Untitled group' }), view.count),
-          offBadge(g)),
-        h('div', { class: 'card' }, view.list, view.foot));
-      groupsEl.hidden = true;
-      entriesEl.hidden = false;
-      if (scroll) el.scrollIntoView({ block: 'start' });
-      loadPage(view);
+        h('div', { class: 'lib-sticky' },
+          h('div', { class: 'lib-ghead' },
+            h('a', { class: 'lib-ib', href: `${view.base}/groups?type=${t.value}`, 'aria-label': 'All groups' }, icon('back')),
+            h('div', { class: 'lib-ghead-text' }, h('h2', { text: name, title: name }), cur.count),
+            list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null)),
+        cur.body);
+      if (scroll) window.scrollTo(0, 0);
+      loadGroup(cur);
     };
 
-    // A failed page shows its error below the entries already shown, which stay.
-    const loadPage = async (view) => {
-      view.foot.replaceChildren(status(view.offset ? 'Loading more…' : 'Loading entries…'));
-      let page;
+    // A group's titles (#443): a series as one row with its seasons, a film in several entries with its versions.
+    const groupMeta = (x) => {
+      if (x.contentType === 'Series') return h('b', { text: seasonsLine(ctx, x) });
+      return x.contentType === 'Movies' && x.entries > 1 ? plural(x.entries, 'version') : null;
+    };
+    const entryRow = (x) => row(ctx, x, x.group, list.cacheKey, groupMeta(x), null);
+
+    // The first page replaces what was shown; a failed one shows the error with Try again in place of the rows.
+    const loadGroup = async (cur) => {
+      const seq = ++state.seq;
+      state.observer?.disconnect();
+      const params = { cacheKey: list.cacheKey, includeDisabled: includeOff, group: cur.group.key, offset: 0, limit: 30 };
+      if (hideSeen) params.hideSeen = true;
+      if (likedOnly) params.liked = true;
+      cur.body.replaceChildren(status('Loading entries…'));
+      let first;
       try {
-        const params = { cacheKey: list.cacheKey, group: view.group.key, offset: view.offset, limit: PAGE_SIZE };
-        if (hideSeen) params.hideSeen = true;
-        if (likedOnly) params.liked = true;
-        page = await ctx.groupEntries(params, ctx.controller.signal);
+        first = await ctx.titles(params, ctx.controller.signal);
       } catch (err) {
-        if (view !== state.open || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
-        view.foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+        if (seq !== state.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
+        cur.body.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
           h('p', { text: err.message || 'The entries could not be loaded.' }),
-          h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'Try again')));
+          h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadGroup(cur) }, 'Try again')));
         return;
       }
-      if (view !== state.open || !ctx.isCurrent()) return;
-      const names = page.entries || [];
-      view.list.append(...names.map((e) => row(ctx, e, view.group.title, list.cacheKey, null, null)));
-      view.offset += names.length;
-      view.count.textContent = plural(page.total, 'entry', 'entries');
-      const done = names.length === 0 || view.offset >= page.total;
-      if (!done) view.foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'More'));
-      else {
-        const seen = hideSeen && page.seenHiddenCount > 0 ? ` · ${plural(page.seenHiddenCount, 'seen entry', 'seen entries')} hidden` : '';
-        view.foot.replaceChildren(status((page.total === 0 ? 'No entries in this group.' : `All ${fmt(page.total)} shown`) + seen));
+      if (seq !== state.seq || !ctx.isCurrent()) return;
+      const seen = hideSeen && first.seenHiddenCount > 0 ? ` · ${fmt(first.seenHiddenCount)} seen hidden` : '';
+      cur.count.textContent = plural(cur.group.count, cur.t.one, cur.t.many) + seen;
+      const titles = first.titles || [];
+      const total = Number.isInteger(first.total) ? first.total : titles.length;
+      const foot = (text) => h('p', { class: 'lib-foot', text });
+      if (!titles.length) {
+        cur.body.replaceChildren(foot(hideSeen || likedOnly ? 'Nothing in this group matches.' : 'No entries in this group.'));
+        return;
       }
+      cur.body.replaceChildren(pages(ctx, state, params, first, entryRow, seq, foot(`All ${fmt(total)} shown`)));
     };
 
     // The shared toggle: an open group stays open unless it is off and switched-off groups are left out again; then

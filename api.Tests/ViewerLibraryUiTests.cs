@@ -71,7 +71,7 @@ public class ViewerLibraryUiTests
     Assert.Contains(".lib-row .film-marks button { width: 32px; height: 32px;", css);
     Assert.Contains(".group-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 190px;", css);
     // Below 600px no chip before the marks, neither in search hits nor in a group's entries.
-    Assert.Contains("@media (max-width: 599px) { .library-search .group-chip, .library-entries .group-chip { display: none; } }", css);
+    Assert.Contains("@media (max-width: 599px) { .library-search .group-chip, .lib-groups-main .group-chip { display: none; } }", css);
     Assert.Contains("@media (min-width: 600px) { .lib-meta .group-label { display: none; } }", css);
     Assert.Contains(".library-cover .cover-name { font-size: 48px; letter-spacing: -.045em; }", css);
     Assert.Contains(".film-card.is-viewer { --film-poster-w: 244px; }", css);
@@ -86,7 +86,9 @@ public class ViewerLibraryUiTests
     // library/open is the POST main.js sends with the CSRF token; library.js itself sends no state-changing call.
     Assert.Contains("await api(`${base}/open`, { method: 'POST', signal });", shared);
     Assert.Contains("search: (body, signal) => api(`${base}/search`, { method: 'POST', body: scoped(body), signal }),", shared);
-    Assert.Contains("groupEntries: (params, signal) => api(`${base}/group-entries?${new URLSearchParams(scoped(params))}`, { signal }),", shared);
+    // An open group asks the titles route (#443); the viewer's context has no group-entries loader any more.
+    Assert.Contains("titles: (params, signal) => api(`${base}/titles?${new URLSearchParams(scoped(params))}`, { signal }),", shared);
+    Assert.DoesNotContain("groupEntries", shared);
     Assert.Contains("filmCard: (params, signal) => api(`${base}/film-card?${new URLSearchParams(scoped(params))}`, { signal }),", shared);
     Assert.Contains("seriesCard: (params, signal) => api(`${base}/series-card?${new URLSearchParams(scoped(params))}`, { signal }),", shared);
     // The Library key from library/open replaces the editor's cacheKey; no editor route, no hidden groups from the client.
@@ -110,7 +112,7 @@ public class ViewerLibraryUiTests
     // Any 404 from library/*: the open, the search, a group's page and the film or series card.
     Assert.Contains("if (accessGone(ctx, err)) return;", Between(library, "async function load(", "const TYPES"));
     Assert.Contains("if (seq !== state.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;", library);
-    Assert.Contains("if (view !== state.open || ctx.controller.signal.aborted || accessGone(ctx, err)) return;", library);
+    Assert.Contains("if (seq !== state.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;", library);
     Assert.Contains("if (seq === card.seq && !accessGone(ctx, err)) renderFilm(ctx, { status: 'failed' });", library);
 
     // Loading and unavailable states: the viewer sees the server's neutral message and Try again.

@@ -72,16 +72,16 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   color: var(--ink);
 }
 
-/* Browse (#287): the chosen type's groups (#422); an open group replaces the list with its entries. */
+/* Browse (#287): the chosen type's groups (#422); below 1100px an open group (#443) replaces the list. */
 .library-browse {
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin-top: 22px;
-  scroll-margin-top: 12px;
 }
 
-.library-groups {
+.library-groups,
+.lib-groups-side {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -92,24 +92,15 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   font-size: 17px;
 }
 
-.library-browse .card {
-  padding: 0;
-  overflow: hidden;
-}
+.lib-groups-main:empty { display: none; }
 
-.library-entries-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.library-group-title {
-  margin: 0;
-  font-size: 15px;
-  overflow-wrap: anywhere;
-}
+/* The open group (#443): a sticky head with back, title and count, then its rows and the foot. */
+.lib-ghead { display: flex; align-items: center; gap: 10px; }
+.lib-ghead-text { flex: 1; min-width: 0; }
+.lib-ghead h2 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: -.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-ghead p { margin: 0; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.lib-foot { margin: 0; padding: 12px; border-top: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--ink-3); }
+@media (max-width: 1099px) { .lib-groups-cols.has-open .lib-groups-side { display: none; } }
 
 .library-foot .btn,
 .library-foot .notice {
@@ -146,35 +137,17 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 }
 
 /* Wide Library (#288, the editor's 1100px breakpoint): once the groups are loaded the page widens to
-   1440px, and an open group shows its entries next to the group list instead of replacing it. */
+   1440px, and an open group (#443) shows its entries next to the group list, which keeps its own scroll; the page
+   scrolls the entries. */
 @media (min-width: 1100px) {
   .page:has(.lib-panel) {
     max-width: 1440px;
   }
 
-  .library-browse:has(> .library-open:not([hidden])) {
-    display: grid;
-    grid-template-columns: minmax(300px, 0.4fr) minmax(0, 1fr);
-    gap: 12px 24px;
-    align-items: start;
-  }
-
-  .library-browse > .library-title {
-    grid-column: 1 / -1;
-  }
-
-  /* theme.css hides every [hidden] element with !important, so only an !important override (later in the
-     cascade, scoped to the wide breakpoint) keeps the group list shown next to the open group. */
-  .library-browse > .library-groups[hidden] {
-    display: flex !important;
-  }
-
-  .library-browse > .library-open {
-    position: sticky;
-    top: calc(var(--topbar-h) + 8px);
-    max-height: calc(100vh - var(--topbar-h) - 24px);
-    overflow-y: auto;
-  }
+  .lib-groups-cols.has-open { display: grid; grid-template-columns: minmax(300px, 0.4fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .lib-groups-cols.has-open .lib-groups-side { position: sticky; top: calc(var(--topbar-h) + 12px); max-height: calc(100dvh - var(--topbar-h) - 30px); overflow-y: auto; }
+  .lib-groups-cols.has-open .lib-ghead .lib-ib { display: none; }
+  .lib-groups-cols.has-open .lib-sticky { margin: 0; padding: 0 0 10px; top: calc(var(--topbar-h) + 12px); background: var(--bg); }
 }
 
 /* Film card (#367) and the row (#419) of a search result or a group entry, one rule per line: type marker, title
@@ -241,8 +214,8 @@ body:has(.film-card.is-viewer) { --film-pane-w: 448px; }
 /* From 1100 to 1439px an open pane leaves one Browse column: the open group replaces the group list again. */
 @media (min-width: 1100px) and (max-width: 1439px) {
   .page:has(> .film-card[open]) .library-browse { display: flex; align-items: stretch; }
-  .page:has(> .film-card[open]) .library-browse > .library-groups[hidden] { display: none !important; }
-  .page:has(> .film-card[open]) .library-browse > .library-open { position: static; max-height: none; }
+  .page:has(> .film-card[open]) .lib-groups-cols.has-open .lib-groups-side { display: none; }
+  .page:has(> .film-card[open]) .lib-groups-cols.has-open .lib-ghead .lib-ib { display: grid; }
 }
 
 /* Stage: the blurred poster backdrop, then poster, kicker, title, genres, rating and marks, centred. */
@@ -387,7 +360,7 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .film-tile-meta .group-label svg { width: 11px; height: 11px; }
 @media (min-width: 600px) { .lib-meta .group-label { display: none; } }
 /* Phones: search hits lead their meta line with the group; a group's entries sit under its heading. No chip. */
-@media (max-width: 599px) { .library-search .group-chip, .library-entries .group-chip { display: none; } }
+@media (max-width: 599px) { .library-search .group-chip, .lib-groups-main .group-chip { display: none; } }
 
 /* The viewer's film card: larger poster, and the group as its own row. */
 .film-card.is-viewer { --film-poster-w: 244px; }

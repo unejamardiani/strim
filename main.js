@@ -1569,8 +1569,6 @@ function showLibrary(playlist) {
       host.langFilter = langFilterNodes(host);
       return { bar: host.langFilter.bar, panel: host.langFilter.panel, render: () => renderLangFilter(host) };
     },
-    // One page of a group's entries with their marks (#215, #297), read-only like the search.
-    groupEntries: (params, signal) => api(`/library/group-entries?${new URLSearchParams(params)}`, { signal }),
     // The film card (#367): TMDB facts and the marks of one film entry, only when /api/config reports TMDB on.
     tmdbEnabled: state.tmdbEnabled,
     filmCard: (params, signal) => api(`/playlists/${playlist.id}/library/film-card?${new URLSearchParams(params)}`, { signal }),
@@ -1605,7 +1603,6 @@ function showSharedLibrary(id) {
       return { groups, disabled: new Set(), totalChannels: open.totalChannels, cacheKey: open.libraryKey, name: open.name, ownerName: open.ownerName };
     },
     search: (body, signal) => api(`${base}/search`, { method: 'POST', body: scoped(body), signal }),
-    groupEntries: (params, signal) => api(`${base}/group-entries?${new URLSearchParams(scoped(params))}`, { signal }),
     titles: (params, signal) => api(`${base}/titles?${new URLSearchParams(scoped(params))}`, { signal }),
     filmCard: (params, signal) => api(`${base}/film-card?${new URLSearchParams(scoped(params))}`, { signal }),
     seriesCard: (params, signal) => api(`${base}/series-card?${new URLSearchParams(scoped(params))}`, { signal }),
