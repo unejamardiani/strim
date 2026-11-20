@@ -476,12 +476,12 @@ public static class ProcessingEndpoints
     return null;
   }
 
-  private const int MaxSearchLanguages = 20;
-  private const string LanguageFormat =
+  internal const int MaxSearchLanguages = 20;
+  internal const string LanguageFormat =
     "Give at most 20 languages or tags, separated by commas, each 2 to 5 letters with at most one hyphen (de, UK, EX-YU).";
 
   /// <summary>The shape of a language code or prefix tag: 2 to 5 ASCII letters, at most one hyphen between them.</summary>
-  private static bool IsLanguageCode(string value)
+  internal static bool IsLanguageCode(string value)
   {
     var hyphen = value.IndexOf('-');
     var letters = value.Length - (hyphen < 0 ? 0 : 1);

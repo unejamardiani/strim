@@ -16,9 +16,16 @@ public sealed record LibraryTitleResult(
 public sealed record LibraryTitleCounts(int Movies, int Series, int Live);
 
 /// <summary>Total: titles of the requested types. HiddenCount: only in switched-off groups (0 for a viewer).</summary>
+/// <param name="Languages">The index's language counts, as in the Library search.</param>
 public sealed record LibraryTitlesResponse(
   IReadOnlyList<LibraryTitleResult> Titles, int Total, LibraryTitleCounts Counts, int Offset, int Limit, bool HasMore,
-  int HiddenCount, int SeenHiddenCount);
+  int HiddenCount, int SeenHiddenCount, IReadOnlyList<PlaylistSearchLanguageCount> Languages);
+
+/// <param name="Keys">Mark keys to look up in the visible list.</param>
+public sealed record LibraryTitlesLookupRequest(string? CacheKey, string? LibraryKey, bool? IncludeDisabled, List<string?>? Keys);
+
+/// <param name="Titles">The titles found, by mark key; keys not in the visible list are left out.</param>
+public sealed record LibraryTitlesLookupResponse(IReadOnlyDictionary<string, LibraryTitleResult> Titles);
 
 /// <summary>The read-only titles of a playlist for its owner or an accepted viewer; nothing here changes a playlist.</summary>
 public static class LibraryTitlesEndpoints
@@ -26,6 +33,8 @@ public static class LibraryTitlesEndpoints
   public const int DefaultLimit = 30;
   public const int MaxLimit = 60;
   public const int MaxPerType = 10;
+  public const int MaxLookupKeys = 200;
+  private static readonly string[] Sorts = ["playlist", "title", "year"];
   private const string SessionExpired = "The playlist session expired. Analyze the source again.";
   private const string TooLarge = "Search is not available for this playlist because it is too large.";
   private static readonly PlaylistContentType[] TypeOrder = [PlaylistContentType.Movies, PlaylistContentType.Series, PlaylistContentType.Live];
@@ -35,7 +44,7 @@ public static class LibraryTitlesEndpoints
     // The index is scanned once per distinct question (the index's memo); marks are applied per request.
     app.MapGet("/api/playlists/{id:guid}/library/titles", async (
       Guid id, string? cacheKey, string? libraryKey, bool? includeDisabled, string? group, string? q, string? types,
-      bool? hideSeen, bool? liked, int? perType, int? offset, int? limit,
+      bool? hideSeen, bool? liked, int? perType, int? offset, int? limit, string? sort, string? lang,
       ClaimsPrincipal user, AppDbContext db, PlaylistPipeline pipeline, CancellationToken ct) =>
     {
       if (string.IsNullOrWhiteSpace(cacheKey) && string.IsNullOrWhiteSpace(libraryKey))
@@ -51,6 +60,13 @@ public static class LibraryTitlesEndpoints
         return Results.BadRequest(new { error = $"perType must be between 1 and {MaxPerType}." });
       if (offset < 0 || limit is < 1 or > MaxLimit)
         return Results.BadRequest(new { error = $"Offset must be 0 or more and limit between 1 and {MaxLimit}." });
+      if (sort is not null && !Sorts.Contains(sort, StringComparer.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = $"Unknown sort. Use {string.Join(", ", Sorts)}." });
+      // The Library search's language check and message.
+      var languages = (lang ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+      if (lang?.Length > ProcessingEndpoints.MaxSearchLanguages * 8 || languages.Length > ProcessingEndpoints.MaxSearchLanguages
+        || !languages.All(ProcessingEndpoints.IsLanguageCode))
+        return Results.BadRequest(new { error = ProcessingEndpoints.LanguageFormat });
       var wanted = new HashSet<PlaylistContentType>();
       foreach (var name in (types ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
       {
@@ -66,7 +82,8 @@ public static class LibraryTitlesEndpoints
       if (access.Index is not { } index) return Missing(pipeline, id, userId, cacheKey, libraryKey, access.IsOwner);
       // A viewer's disabled groups come from the database and are always hidden, so a hidden group answers empty.
       var disabled = new HashSet<string>(access.DisabledGroups, StringComparer.OrdinalIgnoreCase);
-      var found = index.MemoTitles(new PlaylistTitleQuery(q, string.IsNullOrWhiteSpace(group) ? null : group.Trim()), disabled, access.HideDisabled);
+      var found = index.MemoTitles(
+        new PlaylistTitleQuery(q, string.IsNullOrWhiteSpace(group) ? null : group.Trim(), Languages: languages), disabled, access.HideDisabled);
       var marks = await LibraryMarks.LoadAsync(db, userId, ct);
       var counts = new Dictionary<PlaylistContentType, int>();
       var kept = new List<LibraryTitleResult>();
@@ -84,6 +101,11 @@ public static class LibraryTitlesEndpoints
         counts[title.ContentType] = counts.GetValueOrDefault(title.ContentType) + 1;
         if (isWanted) kept.Add(Result(title, seen, rating, watchlist));
       }
+      // Sorted per request on the memoised list (OrderBy is stable, so ties keep the source order).
+      if (string.Equals(sort, "title", StringComparison.OrdinalIgnoreCase))
+        kept = kept.OrderBy(t => t.Title, StringComparer.OrdinalIgnoreCase).ToList();
+      else if (string.Equals(sort, "year", StringComparison.OrdinalIgnoreCase))
+        kept = kept.OrderBy(t => t.Year is null).ThenByDescending(t => t.Year).ToList();
 
       var byType = TypeOrder.Select(t => kept.Where(k => k.ContentType == t.ToString()).ToList()).ToList();
       var (pageOffset, pageLimit) = perType is { } n ? (0, n) : (offset ?? 0, limit ?? DefaultLimit);
@@ -93,7 +115,34 @@ public static class LibraryTitlesEndpoints
         page, kept.Count,
         new LibraryTitleCounts(counts.GetValueOrDefault(PlaylistContentType.Movies), counts.GetValueOrDefault(PlaylistContentType.Series),
           counts.GetValueOrDefault(PlaylistContentType.Live)),
-        pageOffset, pageLimit, hasMore, access.IsOwner && access.HideDisabled ? found.HiddenCount : 0, seenHidden));
+        pageOffset, pageLimit, hasMore, access.IsOwner && access.HideDisabled ? found.HiddenCount : 0, seenHidden,
+        index.LanguageCounts));
+    }).RequireAuthorization().RequireRateLimiting(Security.RateLimits.General);
+
+    // Read-only like POST /api/library/search, so no CSRF filter: where marked titles are, in one index scan.
+    app.MapPost("/api/playlists/{id:guid}/library/titles/lookup", async (
+      Guid id, LibraryTitlesLookupRequest input, ClaimsPrincipal user, AppDbContext db, PlaylistPipeline pipeline, CancellationToken ct) =>
+    {
+      if (string.IsNullOrWhiteSpace(input.CacheKey) && string.IsNullOrWhiteSpace(input.LibraryKey))
+        return Results.BadRequest(new { error = "Provide a cacheKey or a libraryKey." });
+      if (input.Keys is not { Count: >= 1 and <= MaxLookupKeys } keys
+        || keys.Any(k => string.IsNullOrEmpty(k) || k.Length > MarkKey.MaxKeyLength))
+        return Results.BadRequest(new { error = $"Give 1 to {MaxLookupKeys} keys of at most {MarkKey.MaxKeyLength} characters." });
+      var userId = user.UserId()!;
+      if (await LibraryEndpoints.AccessAsync(id, userId, input.CacheKey, input.LibraryKey, input.IncludeDisabled, db, pipeline, ct) is not { } access)
+        return Results.NotFound();
+      if (access.Index is not { } index) return Missing(pipeline, id, userId, input.CacheKey, input.LibraryKey, access.IsOwner);
+      var disabled = new HashSet<string>(access.DisabledGroups, StringComparer.OrdinalIgnoreCase);
+      // Not memoised, so a lookup does not push the pages of the Library out of the memo.
+      var found = index.Titles(new PlaylistTitleQuery(Keys: keys.Select(k => k!).ToHashSet(StringComparer.Ordinal)), disabled, access.HideDisabled);
+      var marks = await LibraryMarks.LoadAsync(db, userId, ct);
+      var titles = new Dictionary<string, LibraryTitleResult>(StringComparer.Ordinal);
+      foreach (var title in found.Titles)
+      {
+        var (_, seen, rating, watchlist) = marks.Lookup(title.Name, title.ContentType);
+        titles[title.MarkKey!] = Result(title, seen, rating, watchlist);
+      }
+      return Results.Ok(new LibraryTitlesLookupResponse(titles));
     }).RequireAuthorization().RequireRateLimiting(Security.RateLimits.General);
 
     return app;
