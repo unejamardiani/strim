@@ -77,7 +77,11 @@ public class LibraryMarksTabUiTests
     var keep = Between(library, "function keepMarksAddress(name) {", "\n  }");
     Assert.Contains("const hash = `${view.base}/marks?view=${name}`;", keep);
     Assert.Contains("view.nav.querySelector('[data-tab=\"marks\"]').href = hash;", keep);
-    Assert.Contains("if (!view.panels.marks.hidden && location.hash !== hash) history.replaceState(history.state, '', hash);", keep);
+    // Through the router's replaceAddress, so its hashchange guard knows the address and a link back to the one
+    // replaced (Watchlist, then All, then the Watchlist link again) still switches the view.
+    Assert.Contains("if (!view.panels.marks.hidden && location.hash !== hash) view.ctx.replaceAddress(hash);", keep);
+    Assert.DoesNotContain("history.replaceState", keep);
+    Assert.Contains("history.replaceState(history.state, '', hash);\n      currentHash = hash;", Read("main.js"));
     Assert.DoesNotContain("pushState", keep);
 
     // Read from the address when the tab is built, and whenever show() shows the Marks tab.
@@ -93,6 +97,20 @@ public class LibraryMarksTabUiTests
     Assert.True(show.IndexOf("panel.hidden = key !== tab;", StringComparison.Ordinal) < show.IndexOf("view.ctx.marksView", StringComparison.Ordinal));
     var mount = Between(library, "function mount(ctx)", "function show(sub, query)");
     Assert.True(mount.IndexOf("view = { ctx,", StringComparison.Ordinal) < mount.IndexOf("myMarks(ctx)", StringComparison.Ordinal));
+  }
+
+  [Fact]
+  public void Page_OverlappingARemoveOrUndo_IsAskedAgain()
+  {
+    var section = MyMarks();
+    // A page asked before a Remove or Undo succeeded would bring back the old total: it is dropped and asked again.
+    var load = Between(section, "const loadPage = async () => {", "const row = (m) => {");
+    Assert.Contains("const edits = view.edits;", load);
+    Assert.Contains("if (edits !== view.edits) {\n        loadPage();\n        return;\n      }", load);
+    Assert.True(load.IndexOf("if (edits !== view.edits)", StringComparison.Ordinal) < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
+    Assert.True(load.IndexOf("const edits = view.edits;", StringComparison.Ordinal) < load.IndexOf("await ctx.listMarks", StringComparison.Ordinal));
+    Assert.Contains("view.total -= 1;\n      view.edits += 1;", Between(section, "const remove = async", "const undo = async"));
+    Assert.Contains("view.total += 1;\n      view.edits += 1;", Between(section, "const undo = async", "const start = () => {"));
   }
 
   [Fact]

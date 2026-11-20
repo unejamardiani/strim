@@ -282,7 +282,8 @@
   function keepMarksAddress(name) {
     const hash = `${view.base}/marks?view=${name}`;
     view.nav.querySelector('[data-tab="marks"]').href = hash;
-    if (!view.panels.marks.hidden && location.hash !== hash) history.replaceState(history.state, '', hash);
+    // Through the router (#444), so a later link back to the address it replaced still routes.
+    if (!view.panels.marks.hidden && location.hash !== hash) view.ctx.replaceAddress(hash);
   }
 
   // The chips' counts from the answer's counts; All is their sum, and without a query no counts.
@@ -945,7 +946,7 @@
   function myMarks(ctx) {
     const { h, fmt, plural } = ctx;
     const asked = String(ctx.sub || '').startsWith('marks') ? markViewOf(ctx.query) : null;
-    const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false };
+    const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, edits: 0 };
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
     const count = h('p');
     const list = h('ol', { class: 'search-list' });
@@ -996,6 +997,7 @@
       observer.unobserve(sentinel);
       view.loading = true;
       const seq = view.seq;
+      const edits = view.edits;
       foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
       let page;
       let requested;
@@ -1013,6 +1015,11 @@
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
       view.loading = false;
+      // A Remove or an Undo that succeeded meanwhile makes the page and its total stale: ask again from the marks shown now.
+      if (edits !== view.edits) {
+        loadPage();
+        return;
+      }
       view.loaded = true;
       const items = page.items || [];
       let added = 0;
@@ -1060,6 +1067,7 @@
       if (!li.isConnected) return;
       view.shown.delete(m.key);
       view.total -= 1;
+      view.edits += 1;
       paint();
       ctx.toast(`Mark on ${m.title} removed`, { action: { label: 'Undo', onClick: () => undo(m, li) } });
     };
@@ -1080,6 +1088,7 @@
       li.replaceWith(row(mark));
       view.shown.add(mark.key);
       view.total += 1;
+      view.edits += 1;
       paint();
     };
 
