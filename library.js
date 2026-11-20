@@ -751,9 +751,10 @@
     };
     // A mark filter loads the open group again from its first page.
     const reload = () => { if (state.open) open(state.open.group, false); };
-    renderGroups();
-    // A group address that came while the list was loading (#442).
+    // A group address that came while the list was loading (#442) is applied before the list is first drawn: drawn
+    // with no group open, it would replace the group's address by the list's.
     if (view.tab === 'groups' && view.groupKey !== null) view.groupAddress(view.groupKey, view.groupQuery);
+    else renderGroups();
     return { el, refresh, reload };
   }
 

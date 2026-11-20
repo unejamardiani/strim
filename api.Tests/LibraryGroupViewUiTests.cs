@@ -69,6 +69,22 @@ public class LibraryGroupViewUiTests
   }
 
   [Fact]
+  public void Reload_KeepsTheGroupsAddress()
+  {
+    // A reload or first visit at a group's address: the group opens before the list is first drawn, so the first
+    // renderGroups() finds it open and keepGroupsAddress() leaves the group's address (and its query) alone.
+    var tail = Between(Browse(), "const reload = () => {", "return { el, refresh, reload };");
+    InOrder(tail,
+      "if (view.tab === 'groups' && view.groupKey !== null) view.groupAddress(view.groupKey, view.groupQuery);",
+      "else renderGroups();");
+    // No renderGroups() runs before the pending address is applied.
+    var before = tail[..tail.IndexOf("if (view.tab === 'groups' && view.groupKey !== null)", StringComparison.Ordinal)];
+    Assert.DoesNotContain("renderGroups();", before);
+    // The handler opens the group before it draws the list.
+    InOrder(Between(Handler(), "if (state.open?.group.key === key) return;", "};"), "open(g);", "renderGroups();");
+  }
+
+  [Fact]
   public void MountedAddress_KeepsItsQuery()
   {
     var library = Library();
