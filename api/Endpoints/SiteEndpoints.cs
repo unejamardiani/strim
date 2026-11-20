@@ -27,8 +27,13 @@ public static class SiteEndpoints
     app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 
     // tmdbEnabled tells the frontend whether TMDB data and attribution may appear; never the token itself.
-    app.MapGet("/api/config", (TmdbClient tmdbClient) =>
-      Results.Ok(new { publicShareBaseUrl, tmdbEnabled = tmdbClient.IsEnabled }));
+    // shareAccessNote is the instance's note about its access list for the invite hint (Sharing:AccessNote).
+    app.MapGet("/api/config", (TmdbClient tmdbClient, IConfiguration configuration) =>
+      Results.Ok(new
+      {
+        publicShareBaseUrl, tmdbEnabled = tmdbClient.IsEnabled,
+        shareAccessNote = configuration["Sharing:AccessNote"]?.Trim() ?? "",
+      }));
 
     // The landing page is the default document; the editor lives at /app. The route also matches
     // "/app/", where the page's relative asset paths would resolve under /app/, so redirect that.

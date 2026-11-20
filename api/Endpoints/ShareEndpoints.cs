@@ -166,7 +166,8 @@ public static class ShareEndpoints
           sharedSinceUtc = s.AcceptedUtc,
         }).AsNoTracking().ToListAsync();
       // A handful of rows; sorted in memory like the owner's list.
-      return Results.Ok(rows.OrderBy(r => r.name, StringComparer.OrdinalIgnoreCase));
+      return Results.Ok(rows.OrderBy(r => r.name, StringComparer.OrdinalIgnoreCase)
+        .Select(r => new { r.playlistId, r.name, ownerName = DisplayName(r.ownerName), r.totalChannels, r.sharedSinceUtc }));
     });
 
     viewerMutations.MapDelete("/mine/{playlistId:guid}", async (Guid playlistId, ClaimsPrincipal user, AppDbContext db) =>
@@ -189,6 +190,7 @@ public static class ShareEndpoints
         .Select(p => new
         {
           p.Name, p.SourceUrl, p.DisabledGroups, IsOwner = p.OwnerId == userId,
+          OwnerName = db.Users.Where(u => u.Id == p.OwnerId).Select(u => u.UserName).FirstOrDefault(),
           Share = db.PlaylistShares.Where(s => s.PlaylistId == p.Id && s.ViewerUserId == userId)
             .Select(s => new { s.Id, s.LastOpenedUtc }).FirstOrDefault(),
         }).FirstOrDefaultAsync(context.RequestAborted);
@@ -226,7 +228,8 @@ public static class ShareEndpoints
           var libraryKey = pipeline.Cache.CreateLibrarySession(source, id, userId);
           return Results.Ok(new
           {
-            libraryKey, name = access.Name, role = access.IsOwner ? "owner" : "viewer", totalChannels, groups,
+            libraryKey, name = access.Name, role = access.IsOwner ? "owner" : "viewer",
+            ownerName = DisplayName(access.OwnerName), totalChannels, groups,
           });
         }
         catch (Exception ex) when (!access.IsOwner)
@@ -255,6 +258,16 @@ public static class ShareEndpoints
       .Select(p => new LibraryAccess(p.Id, userId, p.OwnerId != userId, p.DisabledGroups))
       .FirstOrDefaultAsync(ct);
 
+  /// <summary>
+  /// The name shown to other people: a user name that is an e-mail address shows only the part before "@",
+  /// so no response names a whole address. Other names, and null, pass through unchanged.
+  /// </summary>
+  public static string? DisplayName(string? userName)
+  {
+    var at = userName?.IndexOf('@') ?? -1;
+    return at > 0 ? userName![..at] : userName;
+  }
+
   /// <summary>SHA-256 of the token as lowercase hex, the only form of it that is stored.</summary>
   public static string HashToken(string token) =>
     Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
@@ -274,7 +287,7 @@ public static class ShareEndpoints
     createdUtc = share.CreatedUtc,
     expiresUtc = share.ViewerUserId is null ? share.TokenExpiresUtc : null,
     acceptedUtc = share.AcceptedUtc,
-    viewerName,
+    viewerName = DisplayName(viewerName),
     lastOpenedUtc = share.LastOpenedUtc,
   };
 }
