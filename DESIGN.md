@@ -244,7 +244,7 @@ under it.
 │ Head                         │  ‹ · LIBRARY / playlist name · tabs (from 768px) · ⋯
 │ Search tab                   │  field · chip row (All/Films/Series/Channels | Unseen/Liked)
 │                              │  results card: rows (name and year, group · type, Off, marks)
-│ Groups tab: Browse groups    │  one card per type (Films, Series, Channels), playlist order
+│ Groups tab: Browse groups    │  type chips with group counts, one list of rows, playlist order
 │   open group                 │  All groups · title · count, entries card, More
 │ Marks tab: My marks          │  filter pills · count, marks card (title, meta, Remove), More
 │ Tab bar (below 768px)        │  floating, dock colours: Search · Groups · Marks
@@ -269,6 +269,18 @@ out ("7 more in switched-off groups" with "Show them", "3 seen titles hidden"). 
 live in the address, `#/p/<id>/library/search?q=…&type=films`, replaced while typing.
 Browse: the groups by type, then in playlist order; opening one pages its entries 50 at a time with
 More until all are shown.
+Type chips and group rows (#422), owner and viewer alike: a chip row (single choice, the search's
+chips) with "Films 11", "Series 7", "Channels 7", the number of groups of each type, only for types
+that have groups; the first is chosen at the start, the choice kept for the page session and in the
+address, `#/…/groups?type=films|series|channels` (replaced). 12px below, one `.lib-list` of the
+chosen type's groups in playlist order. A row is one button: type marker, title (one line, ellipsis,
+"Untitled group"), meta "5,412 films", "12,840 episodes" or "214 channels" (singular for 1), "Off"
+(`.lib-off`, owner with switched-off groups included), "+12 new" (`.lib-new`) and the chevron.
+"+N new" is per device: `localStorage` `strim.library.counts.<playlistId>` holds `{ groupKey: count }`;
+a group whose count is above the stored one shows the difference. The first load on a device stores
+every count and marks nothing; opening a group stores its count (the badge goes at the next draw);
+groups that no longer exist are dropped when it is written. Unavailable storage or invalid JSON
+shows no badge; nothing is sent to the server. From 1100px the open group's row carries `.is-open`.
 
 Phone layout (below 1100px): one 760px column. Below 768px the tabs are a floating bar at the
 bottom (62px, 24px radius, the dock's inverted colours, icon over label, the active tab tinted with

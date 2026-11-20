@@ -64,7 +64,9 @@ public class LibrarySearchTests
   {
     var library = Read("library.js");
     Assert.Contains("let includeOff = false;", library);
-    Assert.DoesNotContain("localStorage", library);
+    // The toggle is not stored; the only stored value is the per-device group counts (#422).
+    Assert.Equal(2, Regex.Matches(library, "localStorage").Count);
+    Assert.Equal(2, Regex.Matches(library, Regex.Escape("localStorage.") + @"\w+Item\(countsKey\(ctx\)").Count);
     Assert.DoesNotContain("sessionStorage", library);
 
     var run = Between(library, "async function runSearch(", "function hit(");

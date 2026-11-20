@@ -19,8 +19,10 @@
     const nav = h('nav', { class: 'lib-tabs', 'aria-label': 'Library' },
       TABS.map((t) => h('a', { href: `${base}/${t.name}`, dataset: { tab: t.name } }, icon(t.icon), t.label)));
     const panels = Object.fromEntries(TABS.map((t) => [t.name, h('section', { class: 'lib-panel', dataset: { tab: t.name }, hidden: true })]));
-    // query: the search address's "q=…&type=…" (#421), applied once the list is loaded.
-    view = { ctx, nav, panels, base, tab: null, byKeyboard: false, query: ctx.query || '', search: null };
+    // query: the search address's "q=…&type=…" (#421), groupQuery the Groups address's "type=…" (#422), applied once
+    // the list is loaded.
+    const onGroups = String(ctx.sub || '').startsWith('groups');
+    view = { ctx, nav, panels, base, tab: null, byKeyboard: false, query: onGroups ? '' : ctx.query || '', search: null, groupQuery: onGroups ? ctx.query || '' : '', groupType: null };
     // A link activated by keyboard clicks with detail 0; show() then moves the focus into the tab.
     nav.addEventListener('click', (e) => { view.byKeyboard = e.detail === 0; });
     // A viewer (#383) gets the list's cover as the head and the tabs under it; no ⋯ menu, nothing would be in it.
@@ -46,6 +48,10 @@
     if (tab === 'search' && query) {
       view.query = query;
       view.search?.(query);
+    }
+    if (tab === 'groups' && query) {
+      view.groupQuery = query;
+      view.groupType?.(query);
     }
     for (const a of view.nav.children) {
       if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
@@ -496,8 +502,50 @@
   // Browse (#287): the analysed groups by type, then in playlist order. Opening one pages through its
   // entries with group-entries; the server sends at most 50 names per page.
   const BROWSE_ORDER = ['Movies', 'Series', 'Live'];
-  const BROWSE_HEADINGS = { Movies: 'Films', Series: 'Series', Live: 'Channels' };
+  // The Groups tab's chips (#422), one per type with groups, and the word a group's count takes.
+  const GROUP_TYPES = [
+    { value: 'films', type: 'Movies', label: 'Films', one: 'film', many: 'films' },
+    { value: 'series', type: 'Series', label: 'Series', one: 'episode', many: 'episodes' },
+    { value: 'channels', type: 'Live', label: 'Channels', one: 'channel', many: 'channels' },
+  ];
   const PAGE_SIZE = 50;
+  // The chosen type is kept for the page session, like the toggles.
+  let groupType = null;
+
+  // "+N new" (#422): the group counts this device saw last, per playlist, { "<groupKey>": count }. Never sent to the
+  // server. null when nothing is stored, storage is unavailable or the value is not valid: then nothing is new.
+  const countsKey = (ctx) => `strim.library.counts.${ctx.playlist.id}`;
+  function readCounts(ctx) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(countsKey(ctx)));
+      return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Groups that no longer exist are dropped when the object is written.
+  function writeCounts(ctx, list, counts) {
+    const kept = {};
+    for (const g of list.groups) if (Number.isFinite(counts[g.key])) kept[g.key] = counts[g.key];
+    try {
+      localStorage.setItem(countsKey(ctx), JSON.stringify(kept));
+    } catch {
+      // No storage on this device: no badges.
+    }
+  }
+
+  // The first load on a device stores every group's count and marks nothing new.
+  function seenCounts(ctx, list) {
+    const stored = readCounts(ctx);
+    if (stored) return stored;
+    const counts = Object.fromEntries(list.groups.map((g) => [g.key, g.count]));
+    writeCounts(ctx, list, counts);
+    return counts;
+  }
+
+  // A group grew since this device last looked: the difference; no stored value, a lower or the same count: 0.
+  const newSince = (seen, g) => (Number.isFinite(seen[g.key]) && g.count > seen[g.key] ? g.count - seen[g.key] : 0);
 
   function browseGroups(list, withOff) {
     const shown = list.groups.filter((g) => withOff || !list.disabled.has(g.key));
@@ -507,32 +555,74 @@
 
   function browseSection(ctx, list) {
     const { h, icon, fmt, plural } = ctx;
-    const state = { open: null };
+    const state = { open: null, seen: seenCounts(ctx, list) };
     const groupsEl = h('div', { class: 'library-groups' });
     const entriesEl = h('div', { class: 'library-open', hidden: true });
     const el = h('section', { class: 'library-browse' }, h('h2', { class: 'library-title', text: 'Browse groups' }), groupsEl, entriesEl);
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
     const offBadge = (g) => (list.disabled.has(g.key) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
 
+    // A group row (#422), the same for owner and viewer: the whole row is the button that opens the group.
+    const groupRow = (g, t) => {
+      const fresh = newSince(state.seen, g);
+      return h('button', { class: 'lib-row is-group', type: 'button', dataset: { key: g.key, type: g.type }, onclick: () => open(g) },
+        h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type: g.type } }),
+        h('span', { class: 'lib-text' },
+          h('span', { class: 'lib-title', text: g.title || 'Untitled group' }),
+          h('span', { class: 'lib-meta', text: plural(g.count, t.one, t.many) })),
+        list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null,
+        fresh > 0 ? h('span', { class: 'lib-new', text: `+${fmt(fresh)} new` }) : null,
+        h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));
+    };
+
+    // The chips (#422): one per type that has groups, with its number of groups; the list shows the chosen type's
+    // groups in playlist order.
     const renderGroups = () => {
       const { sorted, hidden } = browseGroups(list, includeOff);
-      if (isViewer(ctx)) return groupsEl.replaceChildren(...groupTiles(ctx, sorted, open));
       const nodes = [];
       if (hidden > 0) nodes.push(status(`${plural(hidden, 'switched-off group')} hidden`));
-      if (!sorted.length) nodes.push(status('No group is on. Include switched-off groups to browse them.'));
-      let ul = null;
-      for (const g of sorted) {
-        if (!ul || ul.dataset.type !== g.type) {
-          ul = h('ul', { class: 'search-list', dataset: { type: g.type } });
-          nodes.push(h('div', { class: 'card library-type' }, h('h3', { class: 'field-label', text: BROWSE_HEADINGS[g.type] }), ul));
-        }
-        ul.append(h('li', null, h('button', { class: 'search-hit library-group', type: 'button', dataset: { key: g.key }, onclick: () => open(g) },
-          h('span', { class: 'search-hit-text' },
-            h('span', { class: 'search-hit-name', text: g.title || 'Untitled group' }),
-            h('span', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') })),
-          offBadge(g))));
+      const types = GROUP_TYPES.map((t) => ({ ...t, groups: sorted.filter((g) => g.type === t.type) })).filter((t) => t.groups.length);
+      if (!types.length) {
+        if (!isViewer(ctx)) nodes.push(status('No group is on. Include switched-off groups to browse them.'));
+        return groupsEl.replaceChildren(...nodes);
       }
+      const chosen = types.find((t) => t.value === groupType) || types[0];
+      groupType = chosen.value;
+      keepGroupsAddress();
+      const chips = types.map((t) => h('button', {
+        class: 'lib-chip', type: 'button', 'aria-pressed': String(t === chosen), dataset: { value: t.value },
+        onclick: () => {
+          groupType = t.value;
+          renderGroups();
+          groupsEl.querySelector(`.lib-chip[data-value="${t.value}"]`)?.focus();
+        },
+      }, t.label, h('span', { class: 'n', text: fmt(t.groups.length) })));
+      nodes.unshift(h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Group type' }, chips));
+      nodes.push(h('div', { class: 'lib-list', dataset: { type: chosen.type } }, chosen.groups.map((g) => groupRow(g, chosen))));
       groupsEl.replaceChildren(...nodes);
+      markOpenGroup();
+    };
+
+    // The Groups address (#422): #/…/groups?type=…, replaced, never a new entry.
+    const keepGroupsAddress = () => {
+      const hash = `${view.base}/groups?type=${groupType}`;
+      view.nav.querySelector('[data-tab="groups"]').href = hash;
+      if (view.tab === 'groups' && location.hash !== hash) history.replaceState(history.state, '', hash);
+    };
+    view.groupType = (raw) => {
+      const value = new URLSearchParams(raw).get('type');
+      if (!GROUP_TYPES.some((t) => t.value === value) || value === groupType) return;
+      groupType = value;
+      renderGroups();
+    };
+    if (view.groupQuery) {
+      const value = new URLSearchParams(view.groupQuery).get('type');
+      if (GROUP_TYPES.some((t) => t.value === value)) groupType = value;
+    }
+
+    // From 1100px the open group's row stays visible beside its entries, tinted.
+    const markOpenGroup = () => {
+      for (const b of groupsEl.querySelectorAll('.is-group')) b.classList.toggle('is-open', b.dataset.key === state.open?.group.key);
     };
 
     // Back to the group list, with the focus on the group that was open.
@@ -542,10 +632,16 @@
       entriesEl.hidden = true;
       entriesEl.replaceChildren();
       groupsEl.hidden = false;
-      for (const b of groupsEl.querySelectorAll('.library-group')) if (b.dataset.key === key) b.focus();
+      markOpenGroup();
+      for (const b of groupsEl.querySelectorAll('.is-group')) if (b.dataset.key === key) b.focus();
     };
 
+    // Opening a group stores its current count on this device; its badge goes the next time the list is drawn.
     const open = (g, scroll = true) => {
+      if (state.seen[g.key] !== g.count) {
+        state.seen = { ...state.seen, [g.key]: g.count };
+        writeCounts(ctx, list, state.seen);
+      }
       const view = {
         group: g, offset: 0,
         count: h('p', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') }),
@@ -553,6 +649,7 @@
         foot: h('div', { class: 'library-foot' }),
       };
       state.open = view;
+      markOpenGroup();
       entriesEl.replaceChildren(
         h('div', { class: 'library-entries-head' },
           h('button', { class: 'btn btn-sm', type: 'button', onclick: close }, icon('back'), 'All groups'),
@@ -847,19 +944,6 @@
   const groupChip = (ctx, group) => (isViewer(ctx) && group
     ? ctx.h('span', { class: 'group-chip', title: group }, ctx.icon('folder'), ctx.h('span', { text: group })) : null);
   const groupLabel = (ctx, group) => ctx.h('span', { class: 'group-label' }, ctx.icon('folder'), ctx.h('span', { text: group }));
-
-  // A viewer browses the groups as tiles under a head per type; a tile opens the group like a row does.
-  function groupTiles(ctx, sorted, open) {
-    const { h, icon, plural } = ctx;
-    return BROWSE_ORDER.map((type) => sorted.filter((g) => g.type === type)).filter((gs) => gs.length).flatMap((gs) => [
-      h('h3', { class: 'type-head', dataset: { type: gs[0].type } }, h('span', { class: 'dot', 'aria-hidden': 'true' }),
-        BROWSE_HEADINGS[gs[0].type], h('span', { class: 'n', text: plural(gs.length, 'group') })),
-      h('div', { class: 'group-tiles' }, gs.map((g) => h('button', {
-        class: 'group-tile library-group', type: 'button', dataset: { key: g.key }, onclick: () => open(g),
-      }, h('span', { class: 'group-tile-top' }, h('span', { class: 'dot', 'aria-hidden': 'true', dataset: { type: g.type } }), icon('chevron')),
-      h('span', null, h('b', { text: g.title || 'Untitled group' }), h('small', { text: plural(g.count, 'entry', 'entries') }))))),
-    ]);
-  }
 
   // Film card (#367): a film row's name opens poster and details from TMDB in a <dialog>, a bottom sheet on a phone
   // and a side pane from 1100px. Only when /api/config reports TMDB on; it reads only and never changes the playlist.
