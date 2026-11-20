@@ -74,6 +74,8 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
       entity.Property(m => m.Seen).HasColumnName("seen");
       entity.Property(m => m.Rating).HasColumnName("rating");
       entity.Property(m => m.FilmDbId).HasMaxLength(64).HasColumnName("filmdbid");
+      entity.Property(m => m.Watchlist).HasColumnName("watchlist");
+      entity.Property(m => m.WatchlistedUtc).HasColumnName("watchlistedutc");
       entity.Property(m => m.CreatedUtc).HasColumnName("createdutc");
       entity.Property(m => m.UpdatedUtc).HasColumnName("updatedutc");
       entity.HasIndex(m => m.UserId).HasDatabaseName("IX_titlemarks_userid");

@@ -120,11 +120,12 @@ public record PlaylistLibrarySearchRequest(
 
 /// <summary>A search match with the caller's mark (see <see cref="PlaylistSearchMatchResult"/>).</summary>
 /// <param name="MarkKey">The film or series mark key; null for live channels and names without a title.</param>
-/// <param name="Rating">-1, 0 or 1. Seen and Rating are null when the caller has no mark on the title.</param>
+/// <param name="Rating">-1, 0 or 1. Seen, Rating and Watchlist are null when the caller has no mark on the title.</param>
+/// <param name="Watchlist">Whether the title is on the caller's watchlist.</param>
 public record LibrarySearchMatchResult(
   string Name, string Group, string GroupKey, int Position, string ContentType, bool Enabled,
   IReadOnlyList<string> AudioLanguages, IReadOnlyList<string> SubtitleLanguages, IReadOnlyList<string> Markers,
-  IReadOnlyList<string> PrefixTags, string? LanguageSource, string? MarkKey, bool? Seen, int? Rating);
+  IReadOnlyList<string> PrefixTags, string? LanguageSource, string? MarkKey, bool? Seen, int? Rating, bool? Watchlist);
 
 /// <param name="SeenHiddenCount">Matches left out because hideSeen was set; 0 otherwise.</param>
 public record LibrarySearchResponse(
@@ -133,7 +134,8 @@ public record LibrarySearchResponse(
 
 /// <summary>One group entry with the caller's mark; the fields as in <see cref="LibrarySearchMatchResult"/>.</summary>
 /// <param name="Group">The group-title the player shows for the entry.</param>
-public record LibraryGroupEntry(string Name, string ContentType, string? MarkKey, bool? Seen, int? Rating, string? Group = null);
+public record LibraryGroupEntry(
+  string Name, string ContentType, string? MarkKey, bool? Seen, int? Rating, string? Group = null, bool? Watchlist = null);
 
 /// <summary>A page as in <see cref="PlaylistGroupEntriesResponse"/>, with Entries holding the marks.</summary>
 /// <param name="Total">Entries of the group after the mark options; SeenHiddenCount as in the Library search.</param>

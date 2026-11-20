@@ -87,9 +87,9 @@ public sealed class LibraryFilmMatchTests
     host.WithDb(db => db.Database.ExecuteSqlRaw(
       """
       WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < {1})
-      INSERT INTO titlemarks (id, userid, kind, titlekey, year, displaytitle, seen, rating, filmdbid, createdutc, updatedutc)
+      INSERT INTO titlemarks (id, userid, kind, titlekey, year, displaytitle, seen, rating, filmdbid, watchlist, createdutc, updatedutc)
       SELECT printf('00000000-0000-0000-0000-%012d', i), {0}, 'film', 'film::filler ' || i, NULL, 'Filler ' || i,
-             1, 0, NULL, strftime('%Y-%m-%d %H:%M:%S+00:00', 'now'), strftime('%Y-%m-%d %H:%M:%S+00:00', 'now')
+             1, 0, NULL, 0, strftime('%Y-%m-%d %H:%M:%S+00:00', 'now'), strftime('%Y-%m-%d %H:%M:%S+00:00', 'now')
       FROM n
       """,
       db.Users.Single(u => u.UserName == host.UserName).Id, MarkEndpoints.MaxMarksPerUser - 1));

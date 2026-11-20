@@ -39,12 +39,42 @@ public sealed class TitleMarksSchemaTests : IDisposable
     _services.EnsureStrimSchema();
 
     Assert.Equal(
-      new[] { "createdutc", "displaytitle", "filmdbid", "id", "kind", "rating", "seen", "titlekey", "updatedutc", "userid", "year" },
+      new[] { "createdutc", "displaytitle", "filmdbid", "id", "kind", "rating", "seen", "titlekey", "updatedutc", "userid", "watchlist", "watchlistedutc", "year" },
       Query("SELECT name FROM pragma_table_info('titlemarks') ORDER BY name"));
     Assert.Contains("IX_titlemarks_userid", TitleMarkIndexes());
     Assert.Contains("IX_titlemarks_userid_kind_titlekey_year", TitleMarkIndexes());
     Assert.Contains("IX_titlemarks_userid_kind_titlekey_noyear", TitleMarkIndexes());
     Assert.Equal(new[] { "AspNetUsers|CASCADE" }, Query("SELECT \"table\" || '|' || on_delete FROM pragma_foreign_key_list('titlemarks')"));
+    Assert.Empty(_warnings.Messages);
+  }
+
+  [Fact]
+  public void Schema_HasWatchlistColumns()
+  {
+    _services.EnsureStrimSchema();
+
+    Assert.Equal(new[] { "watchlist|INTEGER|1", "watchlistedutc|TEXT|0" }, Query(
+      "SELECT name, type, \"notnull\" FROM pragma_table_info('titlemarks') WHERE name LIKE 'watchlist%' ORDER BY name"));
+  }
+
+  [Fact]
+  public void Schema_AddsWatchlistColumnsToAnExistingTable()
+  {
+    // The table as it was before the watchlist (#414), with one mark in it.
+    _services.EnsureStrimSchema();
+    Execute("DROP TABLE titlemarks");
+    Execute(Database.SqliteTitleMarksSql
+      .Replace("watchlist INTEGER NOT NULL DEFAULT 0,", "", StringComparison.Ordinal)
+      .Replace("watchlistedutc TEXT NULL,", "", StringComparison.Ordinal));
+    AddUser("user-a");
+    Execute("INSERT INTO titlemarks (id, userid, kind, titlekey, displaytitle, seen, rating, createdutc, updatedutc) " +
+      "VALUES ('00000000-0000-0000-0000-000000000001', 'user-a', 'film', 'film::heat', 'Heat', 1, 0, '2026-11-01', '2026-11-01')");
+    Assert.Empty(Query("SELECT name FROM pragma_table_info('titlemarks') WHERE name LIKE 'watchlist%'"));
+
+    _services.EnsureStrimSchema();
+    _services.EnsureStrimSchema();
+
+    Assert.Equal(new[] { "0|<null>" }, Query("SELECT watchlist, watchlistedutc FROM titlemarks"));
     Assert.Empty(_warnings.Messages);
   }
 
@@ -142,6 +172,10 @@ public sealed class TitleMarksSchemaTests : IDisposable
     }
     Assert.Contains("\"year\" integer NULL", sql);
     Assert.Contains("\"filmdbid\" varchar(64) NULL", sql);
+    Assert.Contains("\"watchlist\" boolean NOT NULL DEFAULT false,", sql);
+    Assert.Contains("\"watchlistedutc\" timestamp with time zone NULL,", sql);
+    Assert.Contains("ALTER TABLE \"titlemarks\" ADD COLUMN IF NOT EXISTS \"watchlist\" boolean NOT NULL DEFAULT false;", sql);
+    Assert.Contains("ALTER TABLE \"titlemarks\" ADD COLUMN IF NOT EXISTS \"watchlistedutc\" timestamp with time zone NULL;", sql);
     Assert.Contains("CONSTRAINT \"FK_titlemarks_AspNetUsers_userid\" FOREIGN KEY (\"userid\") REFERENCES \"AspNetUsers\"(\"Id\") ON DELETE CASCADE", sql);
     Assert.Contains("CREATE INDEX IF NOT EXISTS \"IX_titlemarks_userid\" ON \"titlemarks\" (\"userid\");", sql);
     Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_titlemarks_userid_kind_titlekey_year\" ON \"titlemarks\" (\"userid\", \"kind\", \"titlekey\", \"year\") WHERE \"year\" IS NOT NULL;", sql);

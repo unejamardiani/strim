@@ -221,6 +221,17 @@ public sealed class LibraryFilmCardTests
     Assert.Equal(-1, marks.GetProperty("rating").GetInt32());
   }
 
+  [Fact]
+  public async Task Card_MarksCarryTheWatchlistFlag()
+  {
+    await using var host = await TestHost.StartAsync(Token, request => request.AbsolutePath == "/3/search/movie"
+      ? Json($$"""{"results":[{{Matrix}}]}""") : Json(MatrixDetails));
+    Assert.False((await host.CardAsync("The Matrix (1999)")).GetProperty("marks").GetProperty("watchlist").GetBoolean());
+
+    await host.Client.SendAsync(HttpMethod.Put, "/api/marks", new { name = "The Matrix (1999) 4K", kind = "film", watchlist = true });
+    Assert.True((await host.CardAsync("The Matrix (1999)")).GetProperty("marks").GetProperty("watchlist").GetBoolean());
+  }
+
   // "Films Old" is switched off on the saved playlist, so a viewer never sees Speed.
   private const string FilmList = """
     #EXTM3U
