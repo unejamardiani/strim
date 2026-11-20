@@ -11,7 +11,7 @@ namespace Api.Tests;
 /// <summary>The Library titles route (#416): collapsed titles with the caller's marks, filters, paging and counts.</summary>
 public class LibraryTitlesEndpointTests(StrimAppFactory factory) : IClassFixture<StrimAppFactory>
 {
-  private static readonly string Playlist = "#EXTM3U\n" + string.Concat(new[]
+  internal static readonly string Playlist = "#EXTM3U\n" + string.Concat(new[]
   {
     ("Films", "Heat (1995)", "movie"), ("Films", "Alien (1979)", "movie"), ("Films", "Arrival (2016)", "movie"),
     ("Films", "DE - Heat (1995) 4K", "movie"), ("Serien", "Harbour Lights S01E01", "series"),
@@ -34,8 +34,8 @@ public class LibraryTitlesEndpointTests(StrimAppFactory factory) : IClassFixture
     return (client, (await Json(created)).GetProperty("id").GetGuid(), await AnalyzeAsync(client));
   }
 
-  private static async Task<string> AnalyzeAsync(ApiClient client) => "cacheKey=" + Uri.EscapeDataString(
-    (await Json(await client.PostAsync("/api/playlist/analyze", new { rawText = Playlist }))).GetProperty("cacheKey").GetString()!);
+  private static async Task<string> AnalyzeAsync(ApiClient client, string? rawText = null) => "cacheKey=" + Uri.EscapeDataString(
+    (await Json(await client.PostAsync("/api/playlist/analyze", new { rawText = rawText ?? Playlist }))).GetProperty("cacheKey").GetString()!);
 
   private async Task<(ApiClient Viewer, string Key)> ViewerAsync(ApiClient owner, Guid id)
   {
@@ -227,8 +227,77 @@ public class LibraryTitlesEndpointTests(StrimAppFactory factory) : IClassFixture
     var passes = index.PassCount;
     Assert.Equal("Harbour TV", Titles(await OkAsync(client, id, key + "&q=harbour&limit=1&offset=1")));
     Assert.Equal(passes, index.PassCount);
+    Assert.Equal("Harbour TV", Titles(await OkAsync(client, id, key + "&q=harbour&sort=title&limit=1&offset=1")));
+    Assert.Equal(passes, index.PassCount);
     await OkAsync(client, id, key + "&q=heat");
     Assert.Equal(passes + 1, index.PassCount);
+  }
+
+  [Fact]
+  public async Task Titles_SortTitle_OrdersByTitleIgnoringCase()
+  {
+    var (client, id, _) = await OwnerAsync();
+    var key = await AnalyzeAsync(client, "#EXTM3U\n" + string.Concat(new[] { "zulu (2013)", "Bravo (2001)", "alpha (2000)", "Bravo (2001) 4K", "Charlie (1999)" }
+      .Select((n, i) => $"#EXTINF:-1 group-title=\"Films\",{n}\nhttp://line.example/movie/u/p/{i}.mkv\n")));
+    Assert.Equal("alpha, Bravo, Charlie, zulu", Titles(await OkAsync(client, id, key + "&sort=title")));
+    Assert.Equal("zulu, Bravo, alpha, Charlie", Titles(await OkAsync(client, id, key + "&sort=playlist")));
+  }
+
+  [Fact]
+  public async Task Titles_SortYear_NewestFirstUnknownLast()
+  {
+    var (client, id, key) = await OwnerAsync();
+    Assert.Equal("Arrival, Heat, Alien, Vertigo, Harbour Lights, Night Shift, Harbour TV", Titles(await OkAsync(client, id, key + "&sort=year")));
+  }
+
+  [Fact]
+  public async Task Titles_SortUnknown_Gets400()
+  {
+    var (client, id, key) = await OwnerAsync();
+    var response = await GetAsync(client, id, key + "&sort=rating");
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    Assert.Contains("playlist, title, year", await response.Content.ReadAsStringAsync());
+  }
+
+  [Fact]
+  public async Task Titles_Sort_AppliesBeforePaging()
+  {
+    var (client, id, key) = await OwnerAsync();
+    Assert.Equal("Alien, Arrival, Harbour Lights", Titles(await OkAsync(client, id, key + "&sort=title&limit=3")));
+    var second = await OkAsync(client, id, key + "&sort=title&limit=3&offset=3");
+    Assert.Equal("Harbour TV, Heat, Night Shift", Titles(second));
+    Assert.Equal("4 2 1 7 0 0 true", Counts(second));
+  }
+
+  [Fact]
+  public async Task Titles_Lang_KeepsTitlesWithOneOfTheLanguages()
+  {
+    var (client, id, key) = await OwnerAsync();
+    var body = await OkAsync(client, id, key + "&lang=en,DE");
+    Assert.Equal("Heat", Titles(body));
+    Assert.Equal("\"DE - Heat (1995) 4K\" 1", $"{Field(ByTitle(body)["Heat"], "name")} {Field(ByTitle(body)["Heat"], "entries")}");
+  }
+
+  [Theory]
+  [InlineData("d")]
+  [InlineData("de,e1")]
+  [InlineData("a-b-c")]
+  [InlineData("de,en,fr,it,es,pt,nl,pl,cs,sk,hu,ro,bg,el,tr,ru,uk,sv,da,no,fi")]
+  public async Task Titles_Lang_Invalid_Gets400(string lang)
+  {
+    var (client, id, key) = await OwnerAsync();
+    var response = await GetAsync(client, id, key + "&lang=" + lang);
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    Assert.Equal("Give at most 20 languages or tags, separated by commas, each 2 to 5 letters with at most one hyphen (de, UK, EX-YU).",
+      (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString());
+  }
+
+  [Fact]
+  public async Task Titles_ReturnLanguageCounts()
+  {
+    var (client, id, key) = await OwnerAsync();
+    var languages = (await OkAsync(client, id, key)).GetProperty("languages");
+    Assert.Equal("[{\"value\":\"de\",\"kind\":\"language\",\"count\":1}]", languages.GetRawText());
   }
 
   [Fact]

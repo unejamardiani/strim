@@ -253,7 +253,8 @@ public sealed class PlaylistSearchIndex
   /// series on their series key, across groups unless the query names a group; channels and names without a key
   /// stay one title per entry. A title's first entry prefers an enabled group, otherwise source order, and titles
   /// come in the source order of that entry. With <paramref name="hideDisabled"/>, entries of disabled groups are not
-  /// collected and a title found only there counts once in <c>HiddenCount</c>.
+  /// collected and a title found only there counts once in <c>HiddenCount</c>. Entries without one of the query's
+  /// languages are skipped before anything else.
   /// </summary>
   public PlaylistTitlesResult Titles(PlaylistTitleQuery query, ISet<string> disabledGroups, bool hideDisabled)
   {
@@ -264,6 +265,8 @@ public sealed class PlaylistSearchIndex
         || string.Equals(s.GroupKey, query.GroupKey, StringComparison.OrdinalIgnoreCase))
       && (query.ContentTypes is not { Count: > 0 } || query.ContentTypes.Contains(s.ContentType))).ToArray();
     var keyFilter = query.Keys is { Count: > 0 } ? query.Keys : null;
+    var wanted = query.Languages is { Count: > 0 } ? new HashSet<string>(query.Languages, StringComparer.OrdinalIgnoreCase) : null;
+    var keep = wanted is null ? null : _languages.Select(l => l.FilterValues().Any(wanted.Contains)).ToArray();
     var titles = new List<TitleBuilder>();
     var byKey = new Dictionary<string, TitleBuilder>(StringComparer.Ordinal);
     var hiddenKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -276,7 +279,7 @@ public sealed class PlaylistSearchIndex
       for (var entry = _chunkFirstEntry[c]; entry < end; entry++)
       {
         var slotId = Field(entry, 1);
-        if (!usable[slotId]) continue;
+        if (!usable[slotId] || (keep is not null && !keep[Field(entry, 3)])) continue;
         var start = Field(entry, 0);
         var tab = start + text[start..].IndexOf('\t');
         if (!folded.IsEmpty && text[start..tab].IndexOf(folded) < 0) continue;
@@ -331,7 +334,8 @@ public sealed class PlaylistSearchIndex
     static string Set(IEnumerable<string>? values) =>
       string.Join('\u001e', (values ?? []).Select(v => v.ToUpperInvariant()).Distinct().Order(StringComparer.Ordinal));
     var key = string.Join('\u001f', PlaylistSearchText.Fold(query.Query), query.GroupKey is null ? "\0" : query.GroupKey.ToUpperInvariant(),
-      Set(query.ContentTypes?.Select(t => t.ToString())), query.Keys is null ? "\0" : Set(query.Keys), Set(disabledGroups), hideDisabled);
+      Set(query.ContentTypes?.Select(t => t.ToString())), query.Keys is null ? "\0" : Set(query.Keys), Set(query.Languages),
+      Set(disabledGroups), hideDisabled);
     lock (_titlesMemo)
     {
       var hit = _titlesMemo.FindIndex(m => m.Key == key);
@@ -566,11 +570,13 @@ public sealed record PlaylistSearchResult(IReadOnlyList<PlaylistSearchMatch> Mat
 /// <param name="GroupKey">Only entries of this group key (case-insensitive); titles then collapse inside it.</param>
 /// <param name="ContentTypes">Only entries of these types.</param>
 /// <param name="Keys">Only titles with one of these mark keys.</param>
+/// <param name="Languages">Only entries carrying one of these languages or prefix tags, as a search decides.</param>
 public sealed record PlaylistTitleQuery(
   string? Query = null,
   string? GroupKey = null,
   IReadOnlySet<PlaylistContentType>? ContentTypes = null,
-  IReadOnlySet<string>? Keys = null);
+  IReadOnlySet<string>? Keys = null,
+  IReadOnlyCollection<string>? Languages = null);
 
 /// <summary>One film, series, or uncollapsed entry, read from its first entry (in an enabled group when there is one).</summary>
 /// <param name="Name">The display name of the first entry.</param>
