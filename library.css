@@ -465,5 +465,7 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .lib-list { overflow: hidden; border: 1px solid var(--card-border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-card); }
 .lib-more { display: flex; justify-content: center; width: 100%; padding: 12px; border: 0; border-top: 1px solid var(--line); background: none; font: 700 13.5px var(--font-ui); color: var(--ink-2); }
 .lib-status { margin: 10px 4px 0; font-size: 13px; color: var(--ink-3); }
+/* The status line wraps so "Show them" and the left-out counts are never clipped on a phone. */
+.library-search .search-head-status, .lib-status { white-space: normal; overflow: visible; text-overflow: clip; }
 .lib-status button { padding: 0; border: 0; background: none; font: inherit; font-weight: 700; color: var(--ink-2); }
 @media (min-width: 1100px) { .lib-panel[data-tab="search"] .lib-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; align-items: start; } }

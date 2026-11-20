@@ -132,6 +132,8 @@ public class LibrarySearchUiTests
     Assert.Contains("onclick: () => { includeOff = true; ctx.onIncludeOff(); } }, 'Show them')", run);
     Assert.Contains("const hidden = !isViewer(ctx) && found.hiddenCount > 0 ? found.hiddenCount : 0;", run);
     Assert.Contains("role: 'status'", run);
+    // The line wraps instead of clipping the button (app.css gives .search-head-status nowrap and an ellipsis).
+    Assert.Contains(".library-search .search-head-status, .lib-status { white-space: normal; overflow: visible; text-overflow: clip; }", Read("library.css"));
   }
 
   [Fact]
