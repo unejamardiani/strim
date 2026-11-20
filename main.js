@@ -76,6 +76,7 @@ function h(tag, props, ...children) {
 
 const ICONS = {
   back: '<path d="M15 18l-6-6 6-6"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   more: '<circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
@@ -458,6 +459,8 @@ function parseRoute() {
   if (match) return { name: match[2] ? match[2].slice(1).toLowerCase() : 'playlist', id: match[1].toLowerCase() };
   const invite = /^\/invite(?:\/([^/?#]+))?$/.exec(path);
   if (invite) return { name: 'invite', token: invite[1] || '' };
+  const shared = /^\/shared\/([0-9a-f-]{36})$/i.exec(path);
+  if (shared) return { name: 'shared', id: shared[1].toLowerCase() };
   if (path === '/new') return { name: 'new' };
   return { name: 'home' };
 }
@@ -522,6 +525,7 @@ function route() {
   }
   if (target.name === 'home') return showHome();
   if (target.name === 'new') return showEditor(null);
+  if (target.name === 'shared') return showSharedLibrary(target.id);
   const playlist = state.playlists.find((p) => p.id === target.id);
   if (!playlist) {
     toast('That playlist does not exist any more.', { error: true });
@@ -1124,7 +1128,7 @@ function sharedCard(item) {
     h('div', { class: 'shared-card-foot' },
       h('span', { class: `share-avatar${['', ' t-live', ' t-movies'][pick(`${item.playlistId}:tone`, 3)]}`, 'aria-hidden': 'true', text: owner.charAt(0) }),
       h('p', { class: 'shared-by secondary', text: `Shared by ${owner}${since}` }),
-      h('a', { class: 'btn btn-primary btn-xs', href: `#/p/${item.playlistId}/library` }, 'Open'),
+      h('a', { class: 'btn btn-primary btn-xs', href: `#/shared/${item.playlistId}` }, 'Open'),
       h('button', { class: 'icon-btn is-sm', type: 'button', 'aria-label': `Actions for ${name}`, onclick: () => openSharedMenu(item) }, icon('more'))));
 }
 
@@ -1138,7 +1142,7 @@ function openSharedMenu(item, confirming = false) {
         h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => menuDialog.close() }, 'Keep'),
         h('button', { class: 'btn btn-danger', type: 'button', onclick: () => leaveShared(item) }, 'Remove')))
     : h('div', { class: 'menu' },
-      h('a', { class: 'menu-item', href: `#/p/${item.playlistId}/library` }, menuIcon('book'), h('span', { class: 'grow', text: 'Open the Library' })),
+      h('a', { class: 'menu-item', href: `#/shared/${item.playlistId}` }, menuIcon('book'), h('span', { class: 'grow', text: 'Open the Library' })),
       h('div', { class: 'menu-sep' }),
       h('button', { class: 'menu-item danger', type: 'button', onclick: () => openSharedMenu(item, true) },
         menuIcon('trash'), h('span', { class: 'grow' }, 'Remove from my lists', h('small', { text: 'You lose access. Your marks stay.' })))));
@@ -1534,7 +1538,36 @@ function showLibrary(playlist) {
     // The series card (#390) and its match, the same way.
     seriesCard: (params, signal) => api(`/playlists/${playlist.id}/library/series-card?${new URLSearchParams(params)}`, { signal }),
     setSeriesMatch: (body) => api('/marks/series-match', { method: 'PUT', body }),
+    // The viewer's Library (#383) replaces the loaders with its playlist-scoped ones.
+    ...playlist.scope,
   });
+}
+
+// The viewer's Library (#383): the same Library, read-only, on the routes scoped to one shared playlist. It opens with
+// library/open, which names the owner and counts only the groups the viewer sees; its key replaces the cacheKey.
+function showSharedLibrary(id) {
+  const scoped = ({ cacheKey, ...rest }) => ({ ...rest, libraryKey: cacheKey });
+  const base = `/playlists/${id}/library`;
+  showLibrary({ id, scope: {
+    role: 'viewer',
+    pick,
+    isCurrent: () => {
+      const target = parseRoute();
+      return target.name === 'shared' && target.id === id;
+    },
+    loadGroups: async (signal) => {
+      const open = await api(`${base}/open`, { method: 'POST', signal });
+      const groups = (open.groups || []).map((g, index) => ({
+        key: g.name, title: g.groupTitle || g.name, type: CONTENT_TYPES.includes(g.contentType) ? g.contentType : 'Live', count: g.count || 0, index,
+      }));
+      document.title = `${open.name || 'Playlist'} · Library · Strim`;
+      return { groups, disabled: new Set(), totalChannels: open.totalChannels, cacheKey: open.libraryKey, name: open.name, ownerName: open.ownerName };
+    },
+    search: (body, signal) => api(`${base}/search`, { method: 'POST', body: scoped(body), signal }),
+    groupEntries: (params, signal) => api(`${base}/group-entries?${new URLSearchParams(scoped(params))}`, { signal }),
+    filmCard: (params, signal) => api(`${base}/film-card?${new URLSearchParams(scoped(params))}`, { signal }),
+    seriesCard: (params, signal) => api(`${base}/series-card?${new URLSearchParams(scoped(params))}`, { signal }),
+  } });
 }
 
 function linkCard(playlist) {

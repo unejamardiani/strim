@@ -54,9 +54,9 @@ public class LibrarySearchTests
     var run = Between(library, "async function runSearch(", "function hit(");
     Assert.Contains("const hideDisabled = !includeOff;", run);
     Assert.Contains("const body = { cacheKey: list.cacheKey, query: state.query, disabledGroups: [...list.disabled], hideDisabled };", run);
-    Assert.Contains("const hidden = hideDisabled && Number.isInteger(found.hiddenCount) ? found.hiddenCount : 0;", run);
+    Assert.Contains("const hidden = hideDisabled && !isViewer(ctx) && Number.isInteger(found.hiddenCount) ? found.hiddenCount : 0;", run);
     Assert.Contains("`${plural(hidden, 'match', 'matches')} in switched-off groups`", run);
-    Assert.Contains("else if (left) text = `Nothing in your list. ${left}.`;", run);
+    Assert.Contains("else if (left) text = `Nothing in ${listWord(ctx)}. ${left}.`;", run);
 
     // The disabled groups and the cache key are the ones the Library loaded: the stored selection.
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
@@ -75,7 +75,7 @@ public class LibrarySearchTests
     Assert.Contains("includeOff = !includeOff;", section);
 
     var hit = library[library.IndexOf("function hit(", StringComparison.Ordinal)..];
-    Assert.Contains("m.enabled === false ? h('span', { class: 'search-badge off', text: 'Off' }) : null", hit);
+    Assert.Contains("m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null", hit);
   }
 
   [Fact]

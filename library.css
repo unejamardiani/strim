@@ -332,3 +332,66 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .film-credit-line { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--ink-2); }
 .film-credit-line .tmdb-logo { height: 14px; }
 .film-credit a { color: inherit; }
+
+/* Row marks use the film card's capsule instead of three 46px circles (#383, both Libraries). */
+.library-hit .film-marks { flex-shrink: 0; margin-right: -4px; }
+.library-hit .film-marks button { width: 32px; height: 32px; min-width: 32px; min-height: 32px; }
+.library-hit .film-marks svg { width: 16px; height: 16px; }
+
+/* The viewer's Library (#383): the group on every item. */
+.group-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.group-label svg { width: 13px; height: 13px; color: var(--ink-3); stroke-width: 2.2; flex-shrink: 0; }
+.search-hit-meta .group-label { color: var(--ink); font-weight: 600; }
+.search-hit-meta .group-label::after { content: "·"; margin: 0 2px; color: var(--ink-3); font-weight: 400; }
+.group-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 190px; padding: 3px 10px 3px 8px; border-radius: 999px; background: var(--surface-2); font-size: 12.5px; font-weight: 650; line-height: 18px; color: var(--ink); white-space: nowrap; flex-shrink: 0; }
+.group-chip span { overflow: hidden; text-overflow: ellipsis; }
+.group-chip svg { width: 13px; height: 13px; color: var(--ink-3); flex-shrink: 0; }
+.film-tile-meta .group-label svg { width: 11px; height: 11px; }
+@media (min-width: 600px) { .search-hit-meta .group-label { display: none; } }
+@media (max-width: 599px) {
+  .group-chip { max-width: 124px; }
+  .library-search .group-chip { display: none; }
+}
+
+/* The viewer's film card: larger poster, and the group as its own row. */
+.film-card.is-viewer { --film-pane-w: 448px; --film-poster-w: 244px; }
+.film-card.is-viewer .film-stage .film-poster { border-radius: 18px; }
+.film-card.is-viewer .film-rail .film-tile { flex-basis: 124px; }
+@media (max-width: 599px) { .film-card.is-viewer { --film-poster-w: 224px; } }
+.film-where { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); }
+.film-where-icon { width: 36px; height: 36px; flex-shrink: 0; border-radius: 11px; display: grid; place-items: center; background: var(--movies-soft); color: var(--movies-ink); }
+.film-where-icon svg { width: 18px; height: 18px; }
+.film-where small { display: block; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.film-where b { font-size: 15.5px; font-weight: 700; }
+.film-where span.share-tag { margin-left: auto; }
+
+/* The viewer's Library opens under the list's cover. */
+.library-cover { height: auto; min-height: 176px; border-radius: var(--radius-lg); padding: 18px 22px 20px; gap: 26px; }
+.library-cover::after { font-size: 300px; right: -10px; bottom: -92px; }
+.library-cover .cover-name { font-size: 48px; letter-spacing: -.045em; }
+.library-cover .cover-top a { display: inline-flex; align-items: center; gap: 6px; color: inherit; font-size: 13.5px; font-weight: 700; text-decoration: none; }
+.library-cover .cover-top svg { width: 15px; height: 15px; }
+.cover-by { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 10px 0 0; font-size: 14px; color: rgba(255,248,238,.82); font-variant-numeric: tabular-nums; }
+.cover-by b { color: #fff8ee; font-weight: 700; }
+.cover-by .share-avatar { background: rgba(255,248,238,.92); color: #1d1a16; }
+.cover-by i { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .6; }
+@media (max-width: 599px) {
+  .library-cover { min-height: 150px; padding: 14px 16px 16px; }
+  .library-cover .cover-name { font-size: 36px; }
+}
+
+/* Browse groups as tiles under a head per type; two columns on a phone. */
+.group-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.group-tile { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 14px 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow-card); color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.group-tile-top { display: flex; align-items: center; justify-content: space-between; }
+.group-tile-top svg { width: 15px; height: 15px; color: var(--ink-3); }
+.group-tile b { display: block; font: 800 18px/1.15 var(--font-display); letter-spacing: -.03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-tile small { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.type-head { display: flex; align-items: center; gap: 9px; margin: 6px 0 0; font-size: 13px; font-weight: 750; color: var(--ink-2); padding-left: 4px; }
+.type-head span.n { font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+@media (max-width: 599px) { .group-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* States of the viewer's Library */
+.library-gone { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; }
+.library-gone h2 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.035em; text-wrap: balance; }
+.library-gone p { margin: 0; color: var(--ink-2); }

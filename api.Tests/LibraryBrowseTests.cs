@@ -100,7 +100,7 @@ public class LibraryBrowseTests
             if (likedOnly) params.liked = true;
             page = await ctx.groupEntries(params, ctx.controller.signal);
           } catch (err) {
-            if (view !== state.open || ctx.controller.signal.aborted) return;
+            if (view !== state.open || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
             view.foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
               h('p', { text: err.message || 'The entries could not be loaded.' }),
               h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'Try again')));
@@ -108,7 +108,8 @@ public class LibraryBrowseTests
           }
           if (view !== state.open || !ctx.isCurrent()) return;
           const names = page.entries || [];
-          view.list.append(...names.map((e) => h('li', { class: 'library-hit' }, filmName(ctx, e, view.group.title, list.cacheKey), filmChevron(ctx, e), markControls(ctx, e))));
+          view.list.append(...names.map((e) => h('li', { class: 'library-hit' }, filmName(ctx, e, view.group.title, list.cacheKey), filmChevron(ctx, e),
+            groupChip(ctx, e.group || view.group.title), markControls(ctx, e))));
           view.offset += names.length;
           view.count.textContent = plural(page.total, 'entry', 'entries');
           const done = names.length === 0 || view.offset >= page.total;

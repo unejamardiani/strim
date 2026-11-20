@@ -6,14 +6,16 @@
   // ctx.controller is aborted by main.js when the route leaves the Library, so a pending load stops waiting.
   function mount(ctx) {
     const { root, playlist, h, icon, controller } = ctx;
-    const head = h('div', { class: 'editor-head library-head' },
+    // A viewer (#383) gets the list's cover as the head: no "Edit groups", the owner's name once the list is open.
+    if (isViewer(ctx)) ctx.cover = viewerCover(ctx);
+    const head = ctx.cover?.el || h('div', { class: 'editor-head library-head' },
       h('a', { class: 'icon-btn', href: '#/', 'aria-label': 'Back to playlists' }, icon('back')),
       h('h1', { class: 'page-title', text: playlist.name || 'Untitled' }),
       h('a', { class: 'btn btn-sm', href: `#/p/${playlist.id}` }, icon('list'), 'Edit groups'));
     const body = h('div');
     // My marks (#299) do not hang on the playlist, so they show even when it has no source or fails to load.
     root.replaceChildren(head, body, myMarks(ctx));
-    if (!playlist.sourceUrl) {
+    if (!isViewer(ctx) && !playlist.sourceUrl) {
       body.replaceChildren(h('div', { class: 'notice' }, 'This playlist has no source URL. Add one in the editor to see what it holds.'));
       return;
     }
@@ -24,19 +26,27 @@
     const { h, fmt, plural } = ctx;
     body.replaceChildren(h('div', { class: 'card loading-card' },
       h('span', { class: 'spinner', 'aria-hidden': 'true' }),
-      h('div', { class: 'grow', text: 'Loading the playlist from your provider' })));
+      h('div', { class: 'grow', text: isViewer(ctx) ? 'Loading the list' : 'Loading the playlist from your provider' })));
     let result;
     try {
       result = await ctx.loadGroups(own.signal);
     } catch (err) {
       if (own.signal.aborted || !ctx.isCurrent()) return;
+      if (accessGone(ctx, err)) return;
+      // A viewer gets the server's neutral message, never the provider's.
       body.replaceChildren(h('div', { class: 'notice error' },
-        h('p', { text: ctx.errorMessage(err) }),
+        isViewer(ctx) ? h('p', null, h('b', { text: 'The list cannot be loaded right now' }), ' ', err.message || '') : h('p', { text: ctx.errorMessage(err) }),
         h('div', { class: 'row-actions' },
           h('button', { class: 'btn btn-sm', type: 'button', onclick: () => load(ctx, body, own) }, 'Try again'))));
       return;
     }
     if (own.signal.aborted || !ctx.isCurrent()) return;
+    if (isViewer(ctx)) {
+      ctx.cover.fill(result);
+      const browse = browseSection(ctx, result);
+      body.replaceChildren(searchSection(ctx, result, browse.refresh, browse.reload), browse.el);
+      return;
+    }
     const on = result.groups.filter((g) => !result.disabled.has(g.key));
     const entries = on.reduce((sum, g) => sum + g.count, 0);
     const browse = browseSection(ctx, result);
@@ -57,6 +67,10 @@
     { value: 'channels', label: 'Channels', types: ['Live'] },
   ];
   const TYPE_LABELS = { Live: 'Channel', Movies: 'Film', Series: 'Series' };
+
+  // The viewer's Library (#383): the same view on someone else's list. Its copy says "this list", never "your list".
+  const isViewer = (ctx) => ctx.role === 'viewer';
+  const listWord = (ctx) => (isViewer(ctx) ? 'this list' : 'your list');
 
   // Kept for this page session only: a reload starts again with the groups that are on.
   let includeOff = false;
@@ -79,7 +93,7 @@
 
     const input = h('input', {
       class: 'input input-search', type: 'search', placeholder: 'Search films, series and channels',
-      'aria-label': 'Search your list', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search',
+      'aria-label': `Search ${listWord(ctx)}`, autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search',
       oninput: () => { state.query = input.value.trim(); schedule(); },
       onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
     });
@@ -94,7 +108,8 @@
         },
       }, option.label));
     }
-    const toggle = h('button', {
+    // A viewer sees only the groups the owner left on, so there is nothing to include.
+    const toggle = isViewer(ctx) ? null : h('button', {
       class: 'btn btn-sm library-toggle', type: 'button', 'aria-pressed': String(includeOff),
       onclick: () => {
         includeOff = !includeOff;
@@ -160,7 +175,7 @@
     try {
       found = await ctx.search(body, ctx.controller.signal);
     } catch (err) {
-      if (seq !== state.seq || ctx.controller.signal.aborted) return;
+      if (seq !== state.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
       show('', h('div', { class: 'notice error', role: 'alert', text: err.message || 'Search failed.' }));
       return;
     }
@@ -169,13 +184,13 @@
       state.host.searchLanguages = found.languages.filter((l) => l && typeof l.value === 'string' && l.value);
     }
     const matches = found.matches || [];
-    const hidden = hideDisabled && Number.isInteger(found.hiddenCount) ? found.hiddenCount : 0;
+    const hidden = hideDisabled && !isViewer(ctx) && Number.isInteger(found.hiddenCount) ? found.hiddenCount : 0;
     const seen = hideSeen && Number.isInteger(found.seenHiddenCount) ? found.seenHiddenCount : 0;
     const left = [hidden > 0 ? `${plural(hidden, 'match', 'matches')} in switched-off groups` : '',
       seen > 0 ? `${plural(seen, 'seen match', 'seen matches')} hidden` : ''].filter(Boolean).join(' · ');
     let text = 'Nothing matches your search.';
     if (matches.length) text = [plural(matches.length, 'match', 'matches'), left].filter(Boolean).join(' · ');
-    else if (left) text = `Nothing in your list. ${left}.`;
+    else if (left) text = `Nothing in ${listWord(ctx)}. ${left}.`;
     else if (likedOnly) text = 'Nothing you liked matches your search.';
     else if (lang) text = 'Nothing matches your search in the chosen languages.';
     if (matches.some((m) => m.languageSource === 'title')) text += ' · Labels from the title';
@@ -203,7 +218,8 @@
       class: 'icon-btn library-mark', type: 'button', 'aria-label': label, title: label, 'aria-pressed': 'false',
       onclick: () => setMark(ctx, entry.name, kind, key, next(marks.get(key))),
     }, icon(name));
-    const el = h('span', { class: 'library-marks', role: 'group', 'aria-label': 'Your marks', dataset: { key } },
+    // Rows use the film card's capsule (#383) in both Libraries.
+    const el = h('span', { class: 'library-marks film-marks', role: 'group', 'aria-label': 'Your marks', dataset: { key } },
       control('Seen', 'check', (m) => ({ ...m, seen: !m.seen })),
       control('Thumbs up', 'up', (m) => ({ ...m, rating: m.rating === 1 ? 0 : 1 })),
       control('Thumbs down', 'down', (m) => ({ ...m, rating: m.rating === -1 ? 0 : -1 })));
@@ -267,6 +283,7 @@
 
     const renderGroups = () => {
       const { sorted, hidden } = browseGroups(list, includeOff);
+      if (isViewer(ctx)) return groupsEl.replaceChildren(...groupTiles(ctx, sorted, open));
       const nodes = [];
       if (hidden > 0) nodes.push(status(`${plural(hidden, 'switched-off group')} hidden`));
       if (!sorted.length) nodes.push(status('No group is on. Include switched-off groups to browse them.'));
@@ -325,7 +342,7 @@
         if (likedOnly) params.liked = true;
         page = await ctx.groupEntries(params, ctx.controller.signal);
       } catch (err) {
-        if (view !== state.open || ctx.controller.signal.aborted) return;
+        if (view !== state.open || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
         view.foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
           h('p', { text: err.message || 'The entries could not be loaded.' }),
           h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'Try again')));
@@ -333,7 +350,8 @@
       }
       if (view !== state.open || !ctx.isCurrent()) return;
       const names = page.entries || [];
-      view.list.append(...names.map((e) => h('li', { class: 'library-hit' }, filmName(ctx, e, view.group.title, list.cacheKey), filmChevron(ctx, e), markControls(ctx, e))));
+      view.list.append(...names.map((e) => h('li', { class: 'library-hit' }, filmName(ctx, e, view.group.title, list.cacheKey), filmChevron(ctx, e),
+        groupChip(ctx, e.group || view.group.title), markControls(ctx, e))));
       view.offset += names.length;
       view.count.textContent = plural(page.total, 'entry', 'entries');
       const done = names.length === 0 || view.offset >= page.total;
@@ -366,9 +384,11 @@
         h('span', { class: 'search-hit-line' },
           filmName(ctx, m, m.group, cacheKey),
           ctx.searchLanguages(m)),
-        h('span', { class: 'search-hit-meta', text: `${m.group} · ${TYPE_LABELS[type]}` })),
-      m.enabled === false ? h('span', { class: 'search-badge off', text: 'Off' }) : null,
+        isViewer(ctx) ? h('span', { class: 'search-hit-meta' }, groupLabel(ctx, m.group), h('span', { text: TYPE_LABELS[type] }))
+          : h('span', { class: 'search-hit-meta', text: `${m.group} · ${TYPE_LABELS[type]}` })),
+      m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null,
       filmChevron(ctx, m),
+      groupChip(ctx, m.group),
       markControls(ctx, m));
   }
 
@@ -527,6 +547,60 @@
     for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
   }
 
+  // The viewer's head (#383): the list's cover as on its "Shared with you" card, filled from library/open.
+  function viewerCover(ctx) {
+    const { h, icon, playlist } = ctx;
+    const name = h('h1', { class: 'cover-name' });
+    const by = h('p', { class: 'cover-by' });
+    const el = h('header', { class: `cover library-cover cover-${ctx.pick(playlist.id, 6) + 1}` },
+      h('div', { class: 'cover-top' },
+        h('a', { href: '#/' }, icon('back'), 'My lists'),
+        h('span', { class: 'cover-chip' }, icon('book'), 'Read-only')),
+      h('div', null, name, by));
+    const fill = (list) => {
+      const owner = list.ownerName || 'Someone';
+      name.textContent = list.name || 'Untitled';
+      el.dataset.initials = name.textContent.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w.charAt(0)).join('').toUpperCase();
+      const dot = () => h('i', { 'aria-hidden': 'true' });
+      by.replaceChildren(
+        h('span', { class: `share-avatar is-sm${['', ' t-live', ' t-movies'][ctx.pick(`${playlist.id}:tone`, 3)]}`, 'aria-hidden': 'true', text: owner.charAt(0) }),
+        h('span', null, 'Shared by ', h('b', { text: owner })), dot(),
+        h('span', { text: ctx.plural(list.groups.length, 'group') }), dot(),
+        h('span', { text: ctx.plural(list.totalChannels, 'entry', 'entries') }));
+    };
+    return { el, fill };
+  }
+
+  // Any 404 from the playlist's Library routes means the share is gone: one message, then back to the lists.
+  function accessGone(ctx, err) {
+    if (!isViewer(ctx) || err?.status !== 404) return false;
+    const { h } = ctx;
+    ctx.controller.abort();
+    ctx.root.replaceChildren(h('section', { class: 'card library-gone', role: 'alert' },
+      h('h2', { text: 'This list is no longer shared with you' }),
+      h('p', { text: 'Its owner stopped sharing it, or it was removed from your lists. Your marks stay.' }),
+      h('a', { class: 'btn btn-primary', href: '#/' }, 'Back to my lists')));
+    return true;
+  }
+
+  // The group on every item of a viewer's Library: a chip before the marks, on a phone in the meta line.
+  const groupChip = (ctx, group) => (isViewer(ctx) && group
+    ? ctx.h('span', { class: 'group-chip', title: group }, ctx.icon('folder'), ctx.h('span', { text: group })) : null);
+  const groupLabel = (ctx, group) => ctx.h('span', { class: 'group-label' }, ctx.icon('folder'), ctx.h('span', { text: group }));
+
+  // A viewer browses the groups as tiles under a head per type; a tile opens the group like a row does.
+  function groupTiles(ctx, sorted, open) {
+    const { h, icon, plural } = ctx;
+    return BROWSE_ORDER.map((type) => sorted.filter((g) => g.type === type)).filter((gs) => gs.length).flatMap((gs) => [
+      h('h3', { class: 'type-head', dataset: { type: gs[0].type } }, h('span', { class: 'dot', 'aria-hidden': 'true' }),
+        BROWSE_HEADINGS[gs[0].type], h('span', { class: 'n', text: plural(gs.length, 'group') })),
+      h('div', { class: 'group-tiles' }, gs.map((g) => h('button', {
+        class: 'group-tile library-group', type: 'button', dataset: { key: g.key }, onclick: () => open(g),
+      }, h('span', { class: 'group-tile-top' }, h('span', { class: 'dot', 'aria-hidden': 'true', dataset: { type: g.type } }), icon('chevron')),
+      h('span', null, h('b', { text: g.title || 'Untitled group' }), h('small', { text: plural(g.count, 'entry', 'entries') }))))),
+    ]);
+  }
+
   // Film card (#367): a film row's name opens poster and details from TMDB in a <dialog>, a bottom sheet on a phone
   // and a side pane from 1100px. Only when /api/config reports TMDB on; it reads only and never changes the playlist.
   const card = { el: null, film: null, button: null, seq: 0, pending: null, answer: null, stack: [] };
@@ -598,7 +672,7 @@
     // The head floats over the stage: the left slot is Back from a similar film (#368), the right one Close.
     const head = h('div', { class: 'film-card-head' }, h('span'),
       h('button', { class: 'icon-btn film-glass', type: 'button', 'aria-label': 'Close', onclick: () => el.close() }, icon('close')));
-    const el = h('dialog', { class: 'sheet film-card', 'aria-labelledby': 'film-card-title' }, head, h('div', { class: 'film-scroll' }));
+    const el = h('dialog', { class: isViewer(ctx) ? 'sheet film-card is-viewer' : 'sheet film-card', 'aria-labelledby': 'film-card-title' }, head, h('div', { class: 'film-scroll' }));
     el.addEventListener('click', (e) => { if (e.target === el) el.close(); });
     el.addEventListener('close', () => filmClosed(ctx));
     // A new mode closes and reopens the card with the same content; the close handler sees it open again.
@@ -641,8 +715,8 @@
         const params = { name: film.name, group: film.group, type: 'Movies', cacheKey: film.cacheKey, includeDisabled: includeOff, hideSeen };
         if (film.type === 'Series') answer = await ctx.seriesCard({ ...params, type: 'Series' }, own.signal);
         else answer = await ctx.filmCard(params, own.signal);
-      } catch {
-        if (seq === card.seq) renderFilm(ctx, { status: 'failed' });
+      } catch (err) {
+        if (seq === card.seq && !accessGone(ctx, err)) renderFilm(ctx, { status: 'failed' });
         return;
       }
       if (seq !== card.seq || !ctx.isCurrent()) return;
@@ -689,12 +763,19 @@
         h('div', { class: 'film-actions' }, rating ? [
           h('span', { class: 'film-rating', role: 'img', 'aria-label': `TMDB rating ${rating} out of 10` }, icon('star'), h('b', { text: rating }), h('span', { text: 'TMDB' })),
           h('span', { class: 'film-sep', 'aria-hidden': 'true' })] : null, marksEl));
+      // A viewer's card names the group first (#383): where the title is in this list, read-only.
+      if (isViewer(ctx)) {
+        body.append(h('div', { class: 'film-where' },
+          h('span', { class: 'film-where-icon', 'aria-hidden': 'true' }, icon('folder')),
+          h('span', null, h('small', { text: 'In group' }), h('b', { text: entry.group })),
+          h('span', { class: 'share-tag', text: 'Read-only' })));
+      }
       if (f?.overview) body.append(h('p', { class: 'film-overview is-clamped', text: f.overview }));
       if (series && hasInList(f)) body.append(seriesInList(ctx, f, card.stack.length === 0 ? answer.context : null));
       if (f?.similar?.length) body.append(similarFilms(ctx, f));
       if (f) {
         body.append(h('div', { class: 'film-source' },
-          h('p', null, 'In your list as', h('b', { text: entry.name }), entry.group, entry.off ? h('span', { class: 'search-badge off', text: 'Off' }) : null),
+          h('p', null, `In ${listWord(ctx)} as`, h('b', { text: entry.name }), entry.group, entry.off ? h('span', { class: 'search-badge off', text: 'Off' }) : null),
           h('button', { class: 'film-unmatch', type: 'button', onclick: () => setMatch(ctx, null) }, `Not this ${word(entry)}`)));
       }
       if (!f) {
@@ -805,7 +886,7 @@
     const total = f.episodeCount > 0 ? `${list.episodes} of ${f.episodeCount} episodes` : `${list.episodes} ${list.episodes === 1 ? 'episode' : 'episodes'}`;
     return h('section', { class: 'film-section series-section' },
       h('div', { class: 'film-section-head' },
-        h('h3', { class: 'film-section-title', text: 'In your list' }),
+        h('h3', { class: 'film-section-title', text: `In ${listWord(ctx)}` }),
         h('span', { class: 'film-section-count', text: total })),
       pills.length ? h('div', { class: 'series-rail', role: 'group', 'aria-label': 'Seasons' }, pills) : null,
       panel, line,
@@ -821,11 +902,11 @@
     const more = Math.max(all.length + s.count - s.episodes.length, s.total || 0) - shown.length;
     const items = shown.map((n) => h('li', {
       class: ['series-episode', have.has(n) ? '' : 'is-absent', n === episode ? 'is-here' : ''].filter(Boolean).join(' '),
-      text: String(n), 'aria-label': `Episode ${n}${have.has(n) ? '' : ', not in your list'}`,
+      text: String(n), 'aria-label': `Episode ${n}${have.has(n) ? '' : `, not in ${listWord(ctx)}`}`,
     }));
     if (more > 0) items.push(h('li', { class: 'series-more', text: `and ${more} more` }));
     return [h('ol', { class: 'series-episodes', 'aria-label': `${seasonLabel(s.season)} episodes` }, items),
-      h('p', { class: 'series-legend' }, h('span', { class: 'series-key' }), 'In your list', h('span', { class: 'series-key is-absent' }), 'Not in your list')];
+      h('p', { class: 'series-legend' }, h('span', { class: 'series-key' }), `In ${listWord(ctx)}`, h('span', { class: 'series-key is-absent' }), `Not in ${listWord(ctx)}`)];
   }
 
   // Similar films (#368) in the API's order, those in the list first; only those open a card.
@@ -837,7 +918,7 @@
     return h('section', { class: 'film-section' },
       h('div', { class: 'film-section-head' },
         h('h3', { class: 'film-section-title', text: label }),
-        h('span', { class: 'film-section-count', text: `${f.similar.filter((s) => s.inList).length} in your list` }),
+        h('span', { class: 'film-section-count', text: `${f.similar.filter((s) => s.inList).length} in ${listWord(ctx)}` }),
         h('span', { class: 'film-rail-nav' },
           h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Previous', onclick: () => step(-1) }, icon('back')),
           h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Next', onclick: () => step(1) }, icon('chevron')))),
@@ -853,11 +934,13 @@
     const title = h('span', { class: 'film-tile-title', text: s.title });
     if (!s.inList) {
       return h('div', { class: 'film-tile is-absent' }, art, title,
-        h('span', { class: 'film-tile-meta', text: [s.year, 'Not in your list'].filter(Boolean).join(' · ') }));
+        h('span', { class: 'film-tile-meta', text: [s.year, `Not in ${listWord(ctx)}`].filter(Boolean).join(' · ') }));
     }
     const label = [s.title, s.year, `in ${s.group}`, off ? 'group off' : '', s.seen ? 'seen' : ''].filter(Boolean).join(', ');
+    // A viewer's tile carries the group label instead of the on/off dot (#383).
     return h('button', { class: 'film-tile', type: 'button', 'aria-label': label, dataset: { i: String(i) }, onclick: () => openSimilar(ctx, s, i) }, art, title,
-      h('span', { class: 'film-tile-meta' }, h('span', { class: off ? 'film-on is-off' : 'film-on', 'aria-hidden': 'true' }), h('span', { text: s.group })));
+      h('span', { class: 'film-tile-meta' }, isViewer(ctx) ? groupLabel(ctx, s.group)
+        : [h('span', { class: off ? 'film-on is-off' : 'film-on', 'aria-hidden': 'true' }), h('span', { text: s.group })]));
   }
 
   // The card in place: the current one goes on a stack with its scroll positions; device Back still closes all.
