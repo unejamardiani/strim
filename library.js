@@ -473,18 +473,19 @@
   }
 
   // Shown at once on every row of the title; a failed request puts the mark back and says so. Writes for one title
-  // go out in order (#424), so an Undo never overtakes the change it undoes.
+  // go out in order (#424), so an Undo never overtakes the change it undoes; a lane is listed while a write is pending.
   const writes = new Map();
   async function setMark(ctx, name, kind, key, next) {
     const before = marks.get(key);
     const repaint = () => {
       for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
-      view?.marksChanged?.(key, marks.get(key));
+      view?.marksChanged?.(key, marks.get(key), marks.get(key) === before ? 'failed' : undefined);
     };
     const lane = keyAlias.get(key) || key;
     const prior = writes.get(lane);
     let done;
-    writes.set(lane, new Promise((resolve) => { done = resolve; }));
+    const mine = new Promise((resolve) => { done = () => { resolve(); if (writes.get(lane) === mine) writes.delete(lane); }; });
+    writes.set(lane, mine);
     marks.set(key, next);
     repaint();
     try {
@@ -495,13 +496,13 @@
       if (saved && marks.get(key) === next && saved.watchlist !== next.watchlist) {
         marks.set(key, { ...next, watchlist: saved.watchlist === true });
         repaint();
-      }
+      } else if (marks.get(key) === next) view?.marksChanged?.(key, next, 'saved'); // a view loaded meanwhile may lack it
       // A card opened from a similar film (#368) uses a local key; the rows of the title use the one the API returns.
       const real = saved?.key || keyAlias.get(key);
       if (real && real !== key) {
         keyAlias.set(key, real);
         syncRows(ctx, real, marks.get(key));
-      } else if (!real && key.startsWith('similar:')) view?.marksStale?.(); // cleared at once: 204, no key to sync
+      } else if (!real && key.startsWith('similar:')) view?.marksStale?.(name, next); // cleared at once: 204, no key to sync
     } catch (err) {
       done();
       // A later tap on the same title already replaced this change.
@@ -765,9 +766,8 @@
   // mount() runs only after this file has run to its end, so My marks below may follow the export.
   window.StrimLibrary = { mount, show };
 
-  // The Marks tab (#424): every film and series the user marked, also titles in no playlist, in five views. A row
-  // says whether its title is in this list (one titles lookup per page) and then opens its card; its controls are the
-  // rows' (#419, #420). A row whose mark no longer fits the view leaves at once, with Undo in the toast.
+  // The Marks tab (#424): every marked film and series, in five views; a row says whether its title is in this list
+  // (one lookup per page) and opens its card, with the rows' controls (#419, #420); one that no longer fits leaves.
   const MARK_VIEWS = [
     { value: 'watchlist', label: 'Watchlist', params: { watchlist: true, sort: 'watchlisted' }, fits: (m) => m.watchlist === true,
       empty: 'Nothing on your watchlist yet. Add a film or series with the bookmark in its card.' },
@@ -786,7 +786,7 @@
     const state = { view: MARK_VIEWS.some((v) => v.value === asked) ? asked : 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, observer: null };
     // rows: mark key → { li, m }, m the last mark that fitted the view; waiting: pages loaded before the list.
     const rows = new Map();
-    let waiting = [];
+    const waiting = [];
     const option = () => MARK_VIEWS.find((v) => v.value === state.view);
     const status = (text) => h('p', { class: 'search-status lib-status', role: 'status', text });
     const line = h('p');
@@ -810,8 +810,13 @@
       if (other) state.view = value;
       return other || state.stale ? start() : keep();
     };
-    // A mark this tab cannot place (no loaded row, or no key yet): it loads again now or when it is shown next.
-    view.marksStale = () => (view.panels.marks.hidden ? (state.stale = true) : start());
+    // A mark this tab cannot place loads it again now or when shown next; a similar film cleared at once (204, no
+    // key) finds its row by the lookup's name and leaves with Undo; a Library left since is not touched.
+    view.marksStale = (name, mark) => {
+      const hit = name && [...rows].find(([, r]) => r.t?.name === name && !r.li.hidden);
+      if (hit) return view.marksChanged(hit[0], mark);
+      return !ctx.isCurrent() || !list.isConnected ? undefined : view.panels.marks.hidden ? (state.stale = true) : start();
+    };
 
     // The head line and the active chip count the view; with every row gone the view's empty state.
     const paint = () => {
@@ -846,8 +851,9 @@
       const items = page.items || [];
       const added = [];
       for (const m of items) {
+        // A row that left (still on the server) and a record kept only for its confirmed TMDB match: no row, not counted.
+        if (rows.get(m.key)?.li.hidden) state.skipped.add(m.key);
         if (state.shown.has(m.key) || rows.has(m.key) || state.skipped.has(m.key)) continue;
-        // A record kept only for its confirmed TMDB match is no mark: no row, not counted.
         if (!option().fits(m)) { state.skipped.add(m.key); continue; }
         state.shown.add(m.key);
         const li = markRow(m, null, true);
@@ -869,16 +875,12 @@
       if (state.done) return;
       // The next page once the sentinel comes within 600px of the screen.
       foot.append(sentinel);
-      state.observer = new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) loadPage(); }, { rootMargin: '600px' });
-      state.observer.observe(sentinel);
+      (state.observer = new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) loadPage(); }, { rootMargin: '600px' })).observe(sentinel);
     };
 
     // In this list: one lookup per page once the list is loaded; a key the answer lacks stays "Not in this list".
-    const lookup = async (keys, seq) => {
-      if (!ctx.list) {
-        waiting.push([keys, seq]);
-        return;
-      }
+    const lookup = async (keys, seq, off = includeOff) => {
+      if (!ctx.list) return void waiting.push([keys, seq]);
       let found;
       try {
         found = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys });
@@ -886,7 +888,7 @@
         if (seq === state.seq && ctx.isCurrent() && !ctx.controller.signal.aborted) accessGone(ctx, err);
         return;
       }
-      if (seq !== state.seq || !ctx.isCurrent()) return;
+      if (seq !== state.seq || off !== includeOff || !ctx.isCurrent()) return;
       for (const key of keys) {
         const r = rows.get(key);
         const t = found?.titles?.[key] || null;
@@ -897,20 +899,15 @@
         Object.assign(r, { li, t });
       }
     };
-    view.marksListReady = () => {
-      const pages = waiting;
-      waiting = [];
-      for (const [keys, seq] of pages) if (seq === state.seq) lookup(keys, seq);
-    };
+    view.marksListReady = () => { for (const [keys, seq] of waiting.splice(0)) if (seq === state.seq) lookup(keys, seq); };
     view.marksRelookup = () => state.pages.forEach((keys) => lookup(keys, state.seq));
 
-    // A row: type marker, title and year from the mark, where it is or "Not in this list", the rows' controls set
-    // under "<title> (<year>)" as Undo does, and the chevron, hidden on a row that opens nothing so controls align.
+    // A row: type marker, title and year, where it is or "Not in this list", the controls named as Undo names them,
+    // the chevron (hidden on a row that opens nothing); a fresh page shows the server's mark unless a save is pending.
     const markRow = (m, t, fresh) => {
       const type = m.kind === 'series' ? 'Series' : 'Movies';
-      // A fresh page shows the server's mark; a rebuild keeps the live mark object, so a save in flight stays its own.
-      const live = marks.get(m.key);
-      const now = fresh || !live ? m : live;
+      const live = !fresh || writes.has(m.key) ? marks.get(m.key) : null;
+      const now = live || m;
       const entry = { name: markName(m), title: m.title, year: m.year, contentType: type, markKey: m.key, seen: now.seen, rating: now.rating, watchlist: now.watchlist };
       // The card opens with the lookup's entry name and group; a title not in the list opens nothing.
       const card = t ? { ...entry, name: t.name, enabled: t.enabled } : { ...entry, markKey: null };
@@ -920,29 +917,30 @@
         h('span', { class: 'lib-text' }, filmName(ctx, card, t?.group, ctx.list?.cacheKey), h('span', { class: 'lib-meta' }, meta)),
         rowMarks(ctx, entry),
         h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));
-      if (!fresh && live) marks.set(m.key, live);
+      if (live) marks.set(m.key, live);
       paintMarks(li.querySelector('.library-marks'));
       return li;
     };
 
-    // Every change of a mark passes here from setMark: a row that no longer fits leaves and Undo sets r.m again; a
-    // row that fits again (after Undo or a failed request) comes back in its place.
-    view.marksChanged = (key, mark) => {
+    // Every change of a mark passes here: a row that no longer fits leaves, one that fits again comes back in place.
+    view.marksChanged = (key, mark, how) => {
       if (key.startsWith('similar:')) return;
       const r = rows.get(key);
       // A title marked elsewhere that now fits this view but has no row yet: the tab loads again.
       if (!r) return option().fits(mark) ? view.marksStale() : undefined;
-      if (!r.li.isConnected) return;
+      if (!r.li.isConnected || how === 'saved') return;
       const fits = option().fits(mark);
       if (fits) r.m = { ...r.m, seen: mark.seen, rating: mark.rating, watchlist: mark.watchlist };
-      // Newest change first: a visible row whose mark changed moves to the top (the Watchlist keeps its order).
-      if (fits && !r.li.hidden && state.view !== 'watchlist') list.prepend(r.li);
+      // Newest change first: a changed row moves to the top (not in the Watchlist), a failed write puts it back.
+      if (fits && !r.li.hidden && state.view !== 'watchlist') {
+        if (how === 'failed') r.back?.();
+        else { const p = r.li.previousElementSibling; r.back = () => (p?.isConnected ? p.after(r.li) : list.prepend(r.li)); list.prepend(r.li); }
+      }
       if (fits === !r.li.hidden) return;
       r.li.hidden = !fits;
       state.total += fits ? 1 : -1;
       // loadPage's page arithmetic counts only the rows in the list; a row that comes back counts again.
-      if (fits) state.shown.add(key);
-      else state.shown.delete(key);
+      if (fits) { state.shown.add(key); state.skipped.delete(key); } else state.shown.delete(key);
       paint();
       // A hidden tab updates its rows and count silently.
       if (fits || view.panels.marks.hidden) return;
@@ -958,11 +956,8 @@
     const start = () => {
       state.seq += 1;
       state.observer?.disconnect();
-      state.shown = new Set();
-      state.total = 0;
-      state.done = false;
       state.minPage = 1;
-      Object.assign(state, { skipped: new Set(), pages: [], stale: false });
+      Object.assign(state, { shown: new Set(), total: 0, done: false, skipped: new Set(), pages: [], stale: false });
       rows.clear();
       for (const b of chips) b.setAttribute('aria-pressed', String(b.dataset.value === state.view));
       keep();

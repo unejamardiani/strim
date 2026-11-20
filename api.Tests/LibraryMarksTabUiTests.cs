@@ -69,6 +69,8 @@ public class LibraryMarksTabUiTests
     // Only rows in the tab are rebuilt (one whose title left goes back to "Not in this list"); a late failure for a
     // view or screen left since replaces nothing; "Include switched-off groups" asks again for every loaded page.
     Assert.Contains("if (!r || (!t && !r.t)) continue;", lookup);
+    Assert.Contains("const lookup = async (keys, seq, off = includeOff) => {", tab);
+    Assert.Contains("if (seq !== state.seq || off !== includeOff || !ctx.isCurrent()) return;", lookup);
     Assert.Contains("if (seq === state.seq && ctx.isCurrent() && !ctx.controller.signal.aborted) accessGone(ctx, err);", lookup);
     Assert.Contains("view.marksRelookup = () => state.pages.forEach((keys) => lookup(keys, state.seq));", tab);
     Assert.Contains("onToggle();\n      view.marksRelookup?.();", Read("library.js"));
@@ -87,8 +89,9 @@ public class LibraryMarksTabUiTests
   public void Row_InList_OpensTheCard_OtherwiseSaysNotInThisList()
   {
     var row = Between(Tab(), "const markRow = (m, t, fresh) => {", "return li;");
-    Assert.Contains("const now = fresh || !live ? m : live;", row);
-    Assert.Contains("if (!fresh && live) marks.set(m.key, live);", row);
+    Assert.Contains("const live = !fresh || writes.has(m.key) ? marks.get(m.key) : null;\n      const now = live || m;", row);
+    Assert.Contains("if (live) marks.set(m.key, live);", row);
+    Assert.Contains("done = () => { resolve(); if (writes.get(lane) === mine) writes.delete(lane); };", Read("library.js"));
     Assert.Contains("const li = markRow(m, null, true);", Tab());
     Assert.Contains("const li = markRow(r.m, t, false);", Tab());
     Assert.Contains("const card = t ? { ...entry, name: t.name, enabled: t.enabled } : { ...entry, markKey: null };", row);
@@ -117,19 +120,23 @@ public class LibraryMarksTabUiTests
     var tab = Tab();
     Assert.Contains("fits: (m) => m.watchlist === true,", tab);
     Assert.Contains("fits: (m) => m.seen || m.rating !== 0 || m.watchlist === true,", tab);
-    var changed = Between(tab, "view.marksChanged = (key, mark) => {", "const start = () => {");
+    var changed = Between(tab, "view.marksChanged = (key, mark, how) => {", "const start = () => {");
     Assert.Contains("r.li.hidden = !fits;\n      state.total += fits ? 1 : -1;", changed);
     // A row that leaves no longer counts for loadPage's page arithmetic; Undo counts it again.
-    Assert.Contains("if (fits) state.shown.add(key);\n      else state.shown.delete(key);\n      paint();", changed);
-    Assert.Contains("if (state.shown.has(m.key) || rows.has(m.key) || state.skipped.has(m.key)) continue;", tab);
+    Assert.Contains("if (fits) { state.shown.add(key); state.skipped.delete(key); } else state.shown.delete(key);\n      paint();", changed);
+    Assert.Contains("if (rows.get(m.key)?.li.hidden) state.skipped.add(m.key);\n        if (state.shown.has(m.key) || rows.has(m.key) || state.skipped.has(m.key)) continue;", tab);
     Assert.Contains("if (!option().fits(m)) { state.skipped.add(m.key); continue; }", tab);
     Assert.Contains("state.total = page.total - state.skipped.size;", tab);
     // A fitting mark without a row, or a similar film's mark cleared before it had a key, reloads the tab (lazily).
     Assert.Contains("if (!r) return option().fits(mark) ? view.marksStale() : undefined;", changed);
-    Assert.Contains("view.marksStale = () => (view.panels.marks.hidden ? (state.stale = true) : start());", tab);
+    Assert.Contains("return !ctx.isCurrent() || !list.isConnected ? undefined : view.panels.marks.hidden ? (state.stale = true) : start();", tab);
     Assert.Contains("return other || state.stale ? start() : keep();", tab);
-    Assert.Contains("} else if (!real && key.startsWith('similar:')) view?.marksStale?.();", Read("library.js"));
-    Assert.Contains("if (fits && !r.li.hidden && state.view !== 'watchlist') list.prepend(r.li);", changed);
+    Assert.Contains("} else if (!real && key.startsWith('similar:')) view?.marksStale?.(name, next);", Read("library.js"));
+    Assert.Contains("const hit = name && [...rows].find(([, r]) => r.t?.name === name && !r.li.hidden);\n      if (hit) return view.marksChanged(hit[0], mark);", tab);
+    Assert.Contains("} else if (marks.get(key) === next) view?.marksChanged?.(key, next, 'saved');", Read("library.js"));
+    Assert.Contains("if (!r.li.isConnected || how === 'saved') return;", changed);
+    Assert.Contains("marks.get(key) === before ? 'failed' : undefined);", Read("library.js"));
+    Assert.Contains("if (how === 'failed') r.back?.();\n        else { const p = r.li.previousElementSibling; r.back = () => (p?.isConnected ? p.after(r.li) : list.prepend(r.li)); list.prepend(r.li); }", changed);
     Assert.Contains("if (card.el?.matches(':modal')) card.el.addEventListener('close', () => { if (r.li.hidden) undo(); }, { once: true });", changed);
     var set = Between(Read("library.js"), "async function setMark(", "// Browse (#287)");
     Assert.Contains("await prior;\n      const saved = await ctx.setMark(", set);
@@ -143,8 +150,7 @@ public class LibraryMarksTabUiTests
     Assert.Contains("const text = state.view === 'watchlist' ? `${r.m.title} is off your watchlist` : `Mark on ${r.m.title} removed`;", changed);
     Assert.Contains("const undo = () => ctx.toast(text, { action: { label: 'Undo', onClick: () => {", changed);
     Assert.Contains("if (r.li.hidden) setMark(ctx, markName(r.m), r.m.kind, key, { seen: r.m.seen, rating: r.m.rating, watchlist: r.m.watchlist });", changed);
-    // Every change of a mark, a failed one put back too, reaches the tab.
-    Assert.Contains("view?.marksChanged?.(key, marks.get(key));", Between(Read("library.js"), "async function setMark(", "// Browse (#287)"));
+    Assert.Contains("view?.marksChanged?.(key, marks.get(key), marks.get(key) === before ? 'failed' : undefined);", Between(Read("library.js"), "async function setMark(", "// Browse (#287)"));
   }
 
   [Fact]
