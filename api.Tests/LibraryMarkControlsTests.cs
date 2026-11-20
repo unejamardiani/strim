@@ -92,13 +92,13 @@ public class LibraryMarkControlsTests
     var section = Between(library, "function searchSection(", "async function runSearch(");
     Assert.Contains("const seenFilter = markFilter('Unseen', () => hideSeen, (v) => { hideSeen = v; });", section);
     Assert.Contains("const likedFilter = markFilter('Liked', () => likedOnly, (v) => { likedOnly = v; });", section);
-    Assert.Contains("types, h('span', { class: 'lib-chip-sep', 'aria-hidden': 'true' }), seenFilter, likedFilter),", section);
+    Assert.Contains("types, h('span', { class: 'lib-chip-sep', 'aria-hidden': 'true' }), seenFilter, likedFilter)),", section);
     Assert.Contains("run();\n          onMarkFilter();", section);
 
     var run = Between(library, "async function runSearch(", "// Marks (#298)");
-    Assert.Contains("if (hideSeen) body.hideSeen = true;\n    if (likedOnly) body.liked = true;", run);
-    Assert.Contains("const seen = hideSeen && Number.isInteger(found.seenHiddenCount) ? found.seenHiddenCount : 0;", run);
-    Assert.Contains("seen > 0 ? `${plural(seen, 'seen match', 'seen matches')} hidden` : ''", run);
+    Assert.Contains("if (hideSeen) params.hideSeen = true;\n    if (likedOnly) params.liked = true;", run);
+    Assert.Contains("const seen = hideSeen && found.seenHiddenCount > 0 ? found.seenHiddenCount : 0;", run);
+    Assert.Contains("seen ? `${plural(seen, 'seen title')} hidden` : ''", run);
     Assert.Contains("else if (likedOnly) text = 'Nothing you liked matches your search.';", run);
 
     // The open group asks with the same options, starts again on a change and shows its seen count.

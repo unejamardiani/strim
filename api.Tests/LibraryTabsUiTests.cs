@@ -18,7 +18,7 @@ public class LibraryTabsUiTests
     return source[from..to];
   }
 
-  private static string Mount() => Between(Read("library.js"), "function mount(ctx)", "function show(sub)");
+  private static string Mount() => Between(Read("library.js"), "function mount(ctx)", "function show(sub, query)");
 
   [Fact]
   public void Routes_AcceptLibrarySubPaths()
@@ -51,7 +51,7 @@ public class LibraryTabsUiTests
     Assert.Contains("const base = isViewer(ctx) ? `#/shared/${playlist.id}` : `#/p/${playlist.id}/library`;", mount);
     Assert.Contains("h('nav', { class: 'lib-tabs', 'aria-label': 'Library' },", mount);
     Assert.Contains("h('a', { href: `${base}/${t.name}`, dataset: { tab: t.name } }, icon(t.icon), t.label)", mount);
-    var show = Between(library, "function show(sub)", "function inPanels(");
+    var show = Between(library, "function show(sub, query)", "function inPanels(");
     Assert.Contains("a.setAttribute('aria-current', 'page');", show);
     Assert.Contains("window.scrollTo(0, 0);", show);
     Assert.Contains("show(ctx.sub);", mount);
@@ -68,7 +68,7 @@ public class LibraryTabsUiTests
     Assert.Contains("h('section', { class: 'lib-panel', dataset: { tab: t.name }, hidden: true })", mount);
     Assert.Contains("root.replaceChildren(...head, panels.search, panels.groups, panels.marks);", mount);
     var library = Read("library.js");
-    Assert.Contains("for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;", Between(library, "function show(sub)", "function inPanels("));
+    Assert.Contains("for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;", Between(library, "function show(sub, query)", "function inPanels("));
     // Search and Groups fill their panels once the list is loaded; nothing else replaces the root.
     var load = Between(library, "async function load(ctx, own)", "// The type control's choices");
     Assert.Contains("view.panels.search.replaceChildren(searchSection(", load);

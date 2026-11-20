@@ -1534,6 +1534,7 @@ function showLibrary(playlist) {
     plural,
     // The tab to open (#418) and the app's sheet for the Library's ⋯ menu.
     sub: target.sub,
+    query: target.query,
     openMenu: (title, nodes) => {
       menuTitle.textContent = title;
       menuBody.replaceChildren(h('div', { class: 'menu' }, nodes));
@@ -1552,6 +1553,8 @@ function showLibrary(playlist) {
     // The Library's search (#297): the editor's Everything search with the caller's marks; it only reads the list.
     searchHint,
     search: (body, signal) => api('/library/search', { method: 'POST', body, signal }),
+    // The Search tab (#421): one row per title, with counts per type, for owner and viewer.
+    titles: (params, signal) => api(`/playlists/${playlist.id}/library/titles?${new URLSearchParams(params)}`, { signal }),
     // A film or series mark (#298), stored per user; api() sends the CSRF token. It never touches the playlist.
     setMark: (mark) => api('/marks', { method: 'PUT', body: mark }),
     // My marks (#299): one page of the caller's marks, and removing one by key (api() sends the CSRF token).
@@ -1603,6 +1606,7 @@ function showSharedLibrary(id) {
     },
     search: (body, signal) => api(`${base}/search`, { method: 'POST', body: scoped(body), signal }),
     groupEntries: (params, signal) => api(`${base}/group-entries?${new URLSearchParams(scoped(params))}`, { signal }),
+    titles: (params, signal) => api(`${base}/titles?${new URLSearchParams(scoped(params))}`, { signal }),
     filmCard: (params, signal) => api(`${base}/film-card?${new URLSearchParams(scoped(params))}`, { signal }),
     seriesCard: (params, signal) => api(`${base}/series-card?${new URLSearchParams(scoped(params))}`, { signal }),
   } });

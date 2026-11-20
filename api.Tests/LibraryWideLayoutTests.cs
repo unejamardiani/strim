@@ -25,7 +25,7 @@ public class LibraryWideLayoutTests
     var media = Regex.Match(Read("library.css"), MediaBlock);
     Assert.True(media.Success, "library.css has no @media (min-width: 1100px) block.");
     var body = media.Groups[1].Value;
-    Assert.Matches(@"\.page:has\(\.library-browse\)\s*\{\s*max-width:\s*1440px;", body);
+    Assert.Matches(@"\.page:has\(\.lib-panel\)\s*\{\s*max-width:\s*1440px;", body);
     Assert.Matches(@"\.library-browse:has\(> \.library-open:not\(\[hidden\]\)\)\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(300px, 0\.4fr\) minmax\(0, 1fr\);", body);
     // The group list stays shown next to the open group even though library.js hides it on a phone. theme.css
     // hides every [hidden] element with !important, so a plain display would lose: the override must be

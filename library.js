@@ -19,7 +19,8 @@
     const nav = h('nav', { class: 'lib-tabs', 'aria-label': 'Library' },
       TABS.map((t) => h('a', { href: `${base}/${t.name}`, dataset: { tab: t.name } }, icon(t.icon), t.label)));
     const panels = Object.fromEntries(TABS.map((t) => [t.name, h('section', { class: 'lib-panel', dataset: { tab: t.name }, hidden: true })]));
-    view = { ctx, nav, panels, tab: null, byKeyboard: false };
+    // query: the search address's "q=…&type=…" (#421), applied once the list is loaded.
+    view = { ctx, nav, panels, base, tab: null, byKeyboard: false, query: ctx.query || '', search: null };
     // A link activated by keyboard clicks with detail 0; show() then moves the focus into the tab.
     nav.addEventListener('click', (e) => { view.byKeyboard = e.detail === 0; });
     // A viewer (#383) gets the list's cover as the head and the tabs under it; no ⋯ menu, nothing would be in it.
@@ -38,10 +39,14 @@
   }
 
   // Opens a tab of the Library on screen; main.js calls it for a tab change instead of mounting again.
-  function show(sub) {
+  function show(sub, query) {
     if (!view) return;
     const name = String(sub || '').split('/')[0];
     const tab = TABS.some((t) => t.name === name) ? name : 'search';
+    if (tab === 'search' && query) {
+      view.query = query;
+      view.search?.(query);
+    }
     for (const a of view.nav.children) {
       if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
@@ -154,26 +159,45 @@
     // The editor's language filter (#266) on its own host: the choice lives for this view only, like the editor's.
     const host = { searchLang: [], searchLanguages: [], onLangChoice: () => run() };
     const filter = ctx.languageFilter(host);
-    const state = { query: '', type: 'all', timer: 0, seq: 0, host, filter };
+    const state = { query: '', type: 'all', timer: 0, seq: 0, host, filter, observer: null };
     const results = { head: h('div', { class: 'search-head-status' }), body: h('div') };
     const run = () => runSearch(ctx, list, state, results);
     const schedule = () => { clearTimeout(state.timer); state.timer = setTimeout(run, 300); };
 
+    const clear = h('button', {
+      class: 'lib-clear', type: 'button', 'aria-label': 'Clear search', hidden: true,
+      onclick: () => { input.value = ''; typed(); run(); input.focus(); },
+    }, ctx.icon('close'));
+    const typed = () => { state.query = input.value.trim(); clear.hidden = !input.value; };
     const input = h('input', {
       class: 'input input-search', type: 'search', placeholder: 'Search films, series and channels',
       'aria-label': `Search ${listWord(ctx)}`, autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search',
-      oninput: () => { state.query = input.value.trim(); schedule(); },
+      oninput: () => { typed(); schedule(); },
       onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
     });
     // One chip row (#419): the types are a single choice, Unseen and Liked toggles; it scrolls sideways, never wraps.
+    // A type chip carries its count of the last answer (#421).
+    const pick = (option) => {
+      state.type = option.value;
+      for (const b of types) b.setAttribute('aria-pressed', String(b.dataset.value === option.value));
+    };
     const types = TYPES.map((option) => h('button', {
       class: 'lib-chip', type: 'button', 'aria-pressed': String(option.value === state.type), dataset: { value: option.value },
-      onclick: () => {
-        state.type = option.value;
-        for (const b of types) b.setAttribute('aria-pressed', String(b.dataset.value === option.value));
-        run();
-      },
-    }, option.label));
+      onclick: () => { pick(option); run(); },
+    }, option.label, h('span', { class: 'n' })));
+    state.types = types;
+    // "Show all" under a section picks its type.
+    state.pick = (value) => { pick(TYPES.find((t) => t.value === value)); run(); };
+    // The address's query (#421): fills the field and the type, then searches; the same query again does nothing.
+    view.search = (raw) => {
+      const p = new URLSearchParams(raw);
+      const type = TYPES.find((t) => t.value === p.get('type')) || TYPES[0];
+      input.value = (p.get('q') || '').trim();
+      if (state.seq && input.value === state.query && type.value === state.type) return;
+      typed();
+      pick(type);
+      run();
+    };
     // "Include switched-off groups" in the ⋯ menu (#418) runs the search and refreshes the groups; a viewer has no
     // menu and nothing to include.
     ctx.onIncludeOff = () => {
@@ -195,73 +219,163 @@
     const seenFilter = markFilter('Unseen', () => hideSeen, (v) => { hideSeen = v; });
     const likedFilter = markFilter('Liked', () => likedOnly, (v) => { likedOnly = v; });
 
-    ctx.controller.signal.addEventListener('abort', () => clearTimeout(state.timer), { once: true });
+    ctx.controller.signal.addEventListener('abort', () => { clearTimeout(state.timer); state.observer?.disconnect(); }, { once: true });
     // On a phone the labels that do not fit wait behind "+N", as in the editor; a new width fits them again.
     window.addEventListener('resize', () => ctx.fitSearchLanguages(results.body), { signal: ctx.controller.signal });
-    run();
-    return h('section', { class: 'library-search' },
-      input,
-      h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Filters' },
-        types, h('span', { class: 'lib-chip-sep', 'aria-hidden': 'true' }), seenFilter, likedFilter),
-      h('section', { class: 'card search-results', 'aria-label': 'Search results' },
-        h('div', { class: 'search-head' }, results.head, filter.bar),
-        filter.panel,
-        results.body));
+    const el = h('section', { class: 'library-search' },
+      h('div', { class: 'lib-sticky' },
+        h('div', { class: 'lib-search' }, input, clear),
+        h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Filters' },
+          types, h('span', { class: 'lib-chip-sep', 'aria-hidden': 'true' }), seenFilter, likedFilter)),
+      h('div', { class: 'search-head' }, results.head, filter.bar),
+      filter.panel,
+      h('div', { 'aria-label': 'Search results', role: 'region' }, results.body));
+    view.search(view.query);
+    return el;
   }
 
+  // The search's address (#421): #/p/<id>/library/search?q=…&type=…, replaced while typing, never a new entry.
+  function keepAddress(state) {
+    const p = new URLSearchParams();
+    if (state.query) p.set('q', state.query);
+    if (state.type !== 'all') p.set('type', state.type);
+    const hash = `${view.base}/search${String(p) ? `?${p}` : ''}`;
+    view.nav.querySelector('[data-tab="search"]').href = hash;
+    if (view.tab === 'search' && location.hash !== hash) history.replaceState(history.state, '', hash);
+  }
+
+  // The chips' counts from the answer's counts; All is their sum, and without a query no counts.
+  const COUNT_OF = { films: 'movies', series: 'series', channels: 'live' };
+  function paintCounts(ctx, state, counts) {
+    for (const b of state.types) {
+      const keys = b.dataset.value === 'all' ? Object.values(COUNT_OF) : [COUNT_OF[b.dataset.value]];
+      b.lastElementChild.textContent = counts ? ctx.fmt(keys.reduce((sum, k) => sum + (counts[k] || 0), 0)) : '';
+    }
+  }
+
+  // All shows up to three sections of 4 rows (#421), each with its count and, above 4, "Show all".
+  const SECTIONS = [
+    { type: 'Movies', value: 'films', name: 'Films', count: 'movies', n: (ctx, n) => ctx.plural(n, 'film'), more: (ctx, n) => `Show all ${ctx.fmt(n)} films` },
+    { type: 'Series', value: 'series', name: 'Series', count: 'series', n: (ctx, n) => ctx.plural(n, 'series', 'series'), more: (ctx, n) => `Show all ${ctx.fmt(n)} series` },
+    { type: 'Live', value: 'channels', name: 'Channels', count: 'live', n: (ctx, n) => ctx.plural(n, 'channel'), more: (ctx, n) => `Show all ${ctx.fmt(n)} channels` },
+  ];
+
+  function sections(ctx, state, found, rowOf) {
+    const { h } = ctx;
+    const counts = found.counts || {};
+    const section = (s) => {
+      const n = counts[s.count] || 0;
+      if (n <= 0) return null;
+      return h('section', { class: 'lib-sec', dataset: { type: s.type } },
+        h('div', { class: 'lib-sec-head' }, h('h2', { text: s.name }), h('span', { class: 'n', text: s.n(ctx, n) })),
+        h('div', { class: 'lib-list' },
+          h('ul', { class: 'search-list' }, (found.titles || []).filter((t) => t.contentType === s.type).slice(0, 4).map(rowOf)),
+          n > 4 ? h('button', { class: 'lib-more', type: 'button', onclick: () => state.pick(s.value) }, s.more(ctx, n)) : null));
+    };
+    // From 1100px Films is the left column, Series and Channels stack in the right one.
+    const [films, series, channels] = SECTIONS.map(section);
+    return h('div', { class: 'lib-sections' }, h('div', null, films), h('div', null, series, channels));
+  }
+
+  // The search (#421) asks the titles route: one row per title, a series as one row. All asks 4 of each type for the
+  // sections; a single type pages by 30.
   async function runSearch(ctx, list, state, results) {
-    const { h, plural } = ctx;
+    const { h, plural, fmt } = ctx;
     clearTimeout(state.timer);
     const seq = ++state.seq;
-    const status = (text) => h('p', { class: 'search-status', role: 'status', text });
-    // Shows the status beside the language chip and the results below the chip's open list.
-    const show = (head, ...nodes) => {
-      results.head.replaceChildren(...(head ? [status(head)] : []));
-      results.body.replaceChildren(...nodes);
-      state.filter.render();
-    };
+    state.observer?.disconnect();
+    keepAddress(state);
+    // The status line under the chips, beside the language chip.
+    const status = (...nodes) => results.head.replaceChildren(h('p', { class: 'search-status lib-status', role: 'status' }, ...nodes));
     const hint = ctx.searchHint(state.query);
     if (hint) {
-      show(hint);
+      paintCounts(ctx, state, null);
+      status(hint);
+      results.body.replaceChildren();
+      state.filter.render();
       return;
     }
-    const hideDisabled = !includeOff;
-    const contentTypes = TYPES.find((t) => t.value === state.type).types;
+    const type = TYPES.find((t) => t.value === state.type);
     const lang = state.host.searchLang.join(',');
-    const body = { cacheKey: list.cacheKey, query: state.query, disabledGroups: [...list.disabled], hideDisabled };
-    if (contentTypes.length) body.contentTypes = contentTypes;
-    if (lang) body.lang = lang;
-    if (hideSeen) body.hideSeen = true;
-    if (likedOnly) body.liked = true;
-    show('Searching…');
+    const params = { cacheKey: list.cacheKey, includeDisabled: includeOff, q: state.query };
+    if (type.types.length) Object.assign(params, { types: type.types.join(','), offset: 0, limit: 30 });
+    else params.perType = 4;
+    if (lang) params.lang = lang;
+    if (hideSeen) params.hideSeen = true;
+    if (likedOnly) params.liked = true;
+    // The sections of the previous answer stay until the new one arrives.
+    status('Searching…');
     let found;
     try {
-      found = await ctx.search(body, ctx.controller.signal);
+      found = await ctx.titles(params, ctx.controller.signal);
     } catch (err) {
       if (seq !== state.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
-      show('', h('div', { class: 'notice error', role: 'alert', text: err.message || 'Search failed.' }));
+      results.head.replaceChildren();
+      results.body.replaceChildren(h('div', { class: 'notice error', role: 'alert', text: err.message || 'Search failed.' }));
       return;
     }
     if (seq !== state.seq || !ctx.isCurrent()) return;
     if (Array.isArray(found.languages)) {
       state.host.searchLanguages = found.languages.filter((l) => l && typeof l.value === 'string' && l.value);
     }
-    const matches = found.matches || [];
-    const hidden = hideDisabled && !isViewer(ctx) && Number.isInteger(found.hiddenCount) ? found.hiddenCount : 0;
-    const seen = hideSeen && Number.isInteger(found.seenHiddenCount) ? found.seenHiddenCount : 0;
-    const left = [hidden > 0 ? `${plural(hidden, 'match', 'matches')} in switched-off groups` : '',
-      seen > 0 ? `${plural(seen, 'seen match', 'seen matches')} hidden` : ''].filter(Boolean).join(' · ');
+    paintCounts(ctx, state, found.counts || {});
+    const titles = found.titles || [];
+    const total = Number.isInteger(found.total) ? found.total : titles.length;
+    const hidden = !isViewer(ctx) && found.hiddenCount > 0 ? found.hiddenCount : 0;
+    const seen = hideSeen && found.seenHiddenCount > 0 ? found.seenHiddenCount : 0;
+    const left = [hidden ? `${fmt(hidden)} more in switched-off groups` : '',
+      seen ? `${plural(seen, 'seen title')} hidden` : ''].filter(Boolean).join(' · ');
     let text = 'Nothing matches your search.';
-    if (matches.length) text = [plural(matches.length, 'match', 'matches'), left].filter(Boolean).join(' · ');
+    if (total) text = [plural(total, 'title'), left].filter(Boolean).join(' · ');
     else if (left) text = `Nothing in ${listWord(ctx)}. ${left}.`;
     else if (likedOnly) text = 'Nothing you liked matches your search.';
     else if (lang) text = 'Nothing matches your search in the chosen languages.';
-    if (matches.some((m) => m.languageSource === 'title')) text += ' · Labels from the title';
-    const nodes = [];
-    if (matches.length) nodes.push(h('ul', { class: 'search-list' }, matches.map((m) => hit(ctx, m, list.cacheKey))));
-    if (found.hasMore === true) nodes.push(h('p', { class: 'search-more', text: 'More matches, refine your search.' }));
-    show(text, ...nodes);
+    if (titles.some((t) => t.languageSource === 'title')) text += ' · Labels from the title';
+    // "Show them" turns "Include switched-off groups" on, like the ⋯ menu.
+    const showThem = hidden ? h('button', { type: 'button', onclick: () => { includeOff = true; ctx.onIncludeOff(); } }, 'Show them') : null;
+    status(text, showThem ? ' ' : null, showThem);
+    const rowOf = (t) => hit(ctx, t, list.cacheKey);
+    let nodes = [];
+    if (!type.types.length && total) nodes = [sections(ctx, state, found, rowOf)];
+    else if (titles.length) nodes = [pages(ctx, state, params, found, rowOf, seq)];
+    results.body.replaceChildren(...nodes);
+    state.filter.render();
     ctx.fitSearchLanguages(results.body);
+  }
+
+  // A single type (#421): 30 titles a page, the next one once the sentinel comes within 600px of the screen.
+  function pages(ctx, state, params, first, rowOf, seq) {
+    const { h } = ctx;
+    const ul = h('ul', { class: 'search-list' }, first.titles.map(rowOf));
+    const foot = h('div');
+    const sentinel = h('div', { 'aria-hidden': 'true' });
+    const watch = (page) => {
+      foot.replaceChildren();
+      if (page.hasMore !== true || !page.titles?.length) return;
+      foot.append(sentinel);
+      state.observer = new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) more(); }, { rootMargin: '600px' });
+      state.observer.observe(sentinel);
+    };
+    // A failed page shows the error and Try again below the rows already shown, which stay.
+    const more = async () => {
+      state.observer?.disconnect();
+      let page;
+      try {
+        page = await ctx.titles({ ...params, offset: ul.children.length, limit: 30 }, ctx.controller.signal);
+      } catch (err) {
+        if (seq !== state.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
+        foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+          h('p', { text: err.message || 'The titles could not be loaded.' }),
+          h('button', { class: 'btn btn-sm', type: 'button', onclick: () => more() }, 'Try again')));
+        return;
+      }
+      if (seq !== state.seq || !ctx.isCurrent()) return;
+      ul.append(...(page.titles || []).map(rowOf));
+      ctx.fitSearchLanguages(ul);
+      watch(page);
+    };
+    watch(first);
+    return h('div', { class: 'lib-list' }, ul, foot);
   }
 
   // Marks (#298): seen and thumbs on a film or series, stored per user by the marks API that main.js hands in; they
@@ -491,15 +605,33 @@
     return { el, refresh, reload };
   }
 
-  // A result is text: its meta line holds group and type, then the editor's language labels (#265); 'Off' marks an
-  // entry of a group that is off.
+  // A result is one title (#421): its meta line, then the editor's language labels (#265); 'Off' marks a title of a
+  // group that is off.
   function hit(ctx, m, cacheKey) {
     const { h } = ctx;
-    const type = TYPE_LABELS[m.contentType] ? m.contentType : 'Live';
-    const where = isViewer(ctx) ? [groupLabel(ctx, m.group), h('span', { text: TYPE_LABELS[type] })]
-      : [h('b', { text: m.group }), ` · ${TYPE_LABELS[type]}`];
+    const where = [isViewer(ctx) ? groupLabel(ctx, m.group) : null, ...titleMeta(ctx, m)];
     return row(ctx, m, m.group, cacheKey, [h('span', { class: 'lib-where' }, where), ctx.searchLanguages(m)],
       m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
+  }
+
+  // A series: bold seasons and episodes, then the group; a film in more than one entry: its versions; a channel: the
+  // group. A viewer's group is the label in front.
+  function titleMeta(ctx, t) {
+    const { h, plural } = ctx;
+    const versions = t.contentType === 'Movies' && t.entries > 1;
+    const parts = [];
+    if (t.contentType === 'Series') parts.push(h('b', { text: seasonsLine(ctx, t) }));
+    if (versions) parts.push(t.groups > 1 ? `${plural(t.entries, 'version')} in ${plural(t.groups, 'group')}` : plural(t.entries, 'version'));
+    if (!isViewer(ctx) && !(versions && t.groups > 1)) parts.push(t.group);
+    return parts.flatMap((p, i) => (i ? [' · ', p] : [p]));
+  }
+
+  // "S1–S3 · 21 episodes", "S1 · 6 episodes", or "21 episodes" without season numbers.
+  function seasonsLine(ctx, t) {
+    const episodes = ctx.plural(t.episodes || t.entries || 0, 'episode');
+    if (t.seasonFirst == null) return episodes;
+    const last = t.seasonLast ?? t.seasonFirst;
+    return `${last === t.seasonFirst ? `S${t.seasonFirst}` : `S${t.seasonFirst}–S${last}`} · ${episodes}`;
   }
 
   // The row (#419) of a search result or a group entry: type marker, title and year, the meta line (none for a
@@ -761,10 +893,13 @@
 
   // The title line (#419): the name without a trailing "(YYYY)", then the year; the full name stays the button's name.
   function filmName(ctx, e, group, cacheKey) {
-    const year = /^(.+?)\s*\((\d{4})\)$/.exec(e.name.trim());
-    const title = year ? [year[1], ctx.h('span', { class: 'y', text: year[2] })] : [e.name];
+    // A row built from a title (#421) has its title and year; its name is the first entry's.
+    const collapsed = typeof e.title === 'string' && e.title !== '';
+    const year = collapsed ? [null, e.title, e.year ? String(e.year) : null] : /^(.+?)\s*\((\d{4})\)$/.exec(e.name.trim());
+    const title = year ? [year[1], year[2] ? ctx.h('span', { class: 'y', text: year[2] }) : null] : [e.name];
     if (!opens(ctx, e)) return ctx.h('span', { class: 'lib-title' }, title);
-    const film = { name: e.name, group: group || '', cacheKey, markKey: e.markKey, off: e.enabled === false, type: opensSeriesCard(ctx, e) ? 'Series' : 'Movies' };
+    // collapsed: the card shows no "Opened from" line, since the name is only one of the series' episodes.
+    const film = { name: e.name, group: group || '', cacheKey, markKey: e.markKey, off: e.enabled === false, collapsed, type: opensSeriesCard(ctx, e) ? 'Series' : 'Movies' };
     const button = ctx.h('button', {
       class: 'lib-title library-film-open', type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-label': e.name,
       dataset: { name: film.name, group: film.group }, onclick: () => openFilm(ctx, film, button),
@@ -902,7 +1037,7 @@
           h('span', { class: 'share-tag', text: 'Read-only' })));
       }
       if (f?.overview) body.append(h('p', { class: 'film-overview is-clamped', text: f.overview }));
-      if (series && hasInList(f)) body.append(seriesInList(ctx, f, card.stack.length === 0 ? answer.context : null));
+      if (series && hasInList(f)) body.append(seriesInList(ctx, f, card.stack.length === 0 && !entry.collapsed ? answer.context : null));
       if (f?.similar?.length) body.append(similarFilms(ctx, f));
       if (f) {
         body.append(h('div', { class: 'film-source' },

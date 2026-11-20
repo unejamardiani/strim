@@ -42,7 +42,7 @@ public class ViewerLibraryUiTests
     Assert.DoesNotContain("/shares/mine", shared);
 
     var library = Read("library.js");
-    var mount = Between(library, "function mount(ctx)", "function show(sub)");
+    var mount = Between(library, "function mount(ctx)", "function show(sub, query)");
     Assert.Contains("if (isViewer(ctx)) ctx.cover = viewerCover(ctx);", mount);
     Assert.Contains("const head = ctx.cover ? [ctx.cover.el, h('div', { class: 'lib-tabs-row' }, nav)] : [ownerHead(ctx, nav)];", mount);
     // The viewer's head: the cover, "My lists", Read-only, "Shared by", no "Edit groups" or player link.
