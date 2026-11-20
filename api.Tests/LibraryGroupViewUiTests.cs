@@ -61,8 +61,8 @@ public class LibraryGroupViewUiTests
 
     // The address opens the group with the group's type chosen; an open group's address is kept, never the list's.
     var handler = Handler();
-    Assert.Contains("if (state.open?.group.key === key) return;", handler);
-    InOrder(handler, "groupType = t.value;", "open(g, true, {", "renderGroups();");
+    Assert.Contains("if (shown?.group.key === key && shown.q === q && shown.sort === sort.value && unseen === hideSeen && liked === likedOnly) return;", handler);
+    InOrder(handler, "groupType = t.value;", "open(g, shown?.group.key !== key, {", "renderGroups();");
     Assert.Contains("if (state.open) return;", Between(browse, "const keepGroupsAddress = () => {", "};"));
     // A list still loading applies the address once it is loaded.
     Assert.Contains("if (view.tab === 'groups' && view.groupKey !== null) view.groupAddress(view.groupKey, view.groupQuery);", browse);
@@ -81,7 +81,7 @@ public class LibraryGroupViewUiTests
     var before = tail[..tail.IndexOf("if (view.tab === 'groups' && view.groupKey !== null)", StringComparison.Ordinal)];
     Assert.DoesNotContain("renderGroups();", before);
     // The handler opens the group before it draws the list.
-    InOrder(Between(Handler(), "if (state.open?.group.key === key) return;", "};"), "open(g, true, {", "renderGroups();");
+    InOrder(Between(Handler(), "unseen === hideSeen && liked === likedOnly) return;", "};"), "open(g, shown?.group.key !== key, {", "renderGroups();");
   }
 
   [Fact]
@@ -231,9 +231,17 @@ public class LibraryGroupViewUiTests
     Assert.Contains("class: 'lib-clear', type: 'button', 'aria-label': 'Clear filter', hidden: !cur.q,", open);
     // 300ms after the last key; below 2 letters or digits (searchHint, the server's rule) the unfiltered group.
     Assert.Contains("clearTimeout(state.timer); state.timer = setTimeout(filtered, 300);", open);
-    Assert.Contains("const q = ctx.searchHint(text) ? '' : text;", open);
+    Assert.Contains("const q = filterOf(input.value.trim());", open);
     Assert.Contains("if ((query.match(/[\\p{L}\\p{N}]/gu) || []).length < 2)", Read("main.js"));
-    InOrder(Between(open, "const filtered = () => {", "\n      };"), "if (q === cur.q) return;", "cur.q = q;", "loadGroup(cur);");
+    // The same 2-letters-or-digits rule, but an over-long filter stays: the titles route answers it with its message.
+    var filterOf = Between(Browse(), "const filterOf = (text) =>", ";\n");
+    Assert.Contains("((text.match(/[\\p{L}\\p{N}]/gu) || []).length < 2 ? '' : text)", filterOf);
+    Assert.DoesNotContain("searchHint", Browse());
+    Assert.Contains("if (q is not null && q.Length > Limits.MaxSearchQueryLength)", Read("api/Endpoints/LibraryTitlesEndpoints.cs"));
+    // A filter typed in group A and group B opened within 300ms: B drops A's pending callback, which also checks
+    // that its group is still the open one, so B's address and its answer stay.
+    InOrder(open, "clearTimeout(state.timer);", "state.open = cur;", "const filtered = () => {");
+    InOrder(Between(open, "const filtered = () => {", "\n      };"), "if (state.open !== cur || q === cur.q) return;", "cur.q = q;", "loadGroup(cur);");
     Assert.Contains("if (cur.q) params.q = cur.q;", LoadGroup());
     // A pending filter stops when the group closes or the Library is left.
     Assert.Contains("clearTimeout(state.timer);", Between(Browse(), "const close = () => {", "};"));
@@ -256,7 +264,9 @@ public class LibraryGroupViewUiTests
     var load = LoadGroup();
     Assert.Contains("cur.sortLabel.textContent = sort.label;", load);
     Assert.Contains("cur.sortChip.setAttribute('aria-label', `Sort: ${sort.label}`);", load);
-    Assert.Contains("if (cur.sort !== 'playlist') params.sort = cur.sort;", load);
+    // All three values go to the titles route, playlist order too; only the address leaves the default out.
+    Assert.Contains("params.sort = cur.sort;", load);
+    Assert.DoesNotContain("if (cur.sort !== 'playlist') params.sort", load);
     Assert.Contains("sort: '<path d=\"M7 5v14M7 19l-3-3M7 19l3-3M17 19V5M17 5l-3 3M17 5l3 3\"/>',", Read("main.js"));
   }
 
@@ -288,21 +298,31 @@ public class LibraryGroupViewUiTests
       "if (hideSeen) p.set('unseen', '1');", "if (likedOnly) p.set('liked', '1');", "return String(p);");
     var keep = Between(browse, "const keepOpenAddress = (cur) => {", "\n    };");
     Assert.Contains("const hash = `${groupHash(cur.group.key)}${query ? `?${query}` : ''}`;", keep);
-    Assert.Contains("if (view.tab === 'groups' && location.hash !== hash) history.replaceState(history.state, '', hash);", keep);
+    Assert.Contains("if (view.tab === 'groups' && location.hash !== hash) ctx.replaceAddress(hash);", keep);
     Assert.DoesNotContain("location.hash =", keep);
+    // replaceAddress replaces the entry and tells main.js's hashchange guard, so pasting the address from before the
+    // replacement routes again instead of being skipped as the one last routed.
+    var replace = Between(Read("main.js"), "replaceAddress: (hash) => {", "},");
+    InOrder(replace, "history.replaceState(history.state, '', hash);", "currentHash = hash;");
+    Assert.Contains("if (location.hash === currentHash) return;", Read("main.js"));
     InOrder(LoadGroup(), "keepOpenAddress(cur);", "const params =");
 
     // mount() passes the address's query to show(), show() to the handler, the handler to the opened group.
     Assert.Contains("show(ctx.sub, ctx.query);", Between(Library(), "function mount(ctx) {", "// Opens a tab"));
     Assert.Contains("view.groupQuery = query || '';", Show());
     Assert.Contains("view.groupAddress?.(view.groupKey, view.groupQuery);", Show());
-    var handler = Between(Handler(), "if (state.open?.group.key === key) return;", "renderGroups();\n    };");
+    var handler = Between(Handler(), "if (key === null) {", "renderGroups();\n    };");
     InOrder(handler, "const p = new URLSearchParams(query);",
       "const unseen = p.get('unseen') === '1';", "const liked = p.get('liked') === '1';",
-      "hideSeen = unseen;", "likedOnly = liked;", "view.marksChanged?.();",
-      "const q = (p.get('q') || '').trim();",
+      "const q = filterOf((p.get('q') || '').trim());",
       "const sort = SORTS.find((s) => s.value === p.get('sort')) || SORTS[0];",
-      "open(g, true, { q: ctx.searchHint(q) ? '' : q, sort: sort.value });");
+      // The group on screen is left alone only when the key and all four settings match: a different query pasted
+      // for it applies, and so does a return to the original address after the filter replaced it.
+      "const shown = state.open;",
+      "if (shown?.group.key === key && shown.q === q && shown.sort === sort.value && unseen === hideSeen && liked === likedOnly) return;",
+      "hideSeen = unseen;", "likedOnly = liked;", "view.marksChanged?.();",
+      "open(g, shown?.group.key !== key, { q, sort: sort.value });");
+    Assert.DoesNotContain("if (state.open?.group.key === key) return;", handler);
     // The field shows the address's text; the group starts with its filter and order.
     var open = Open();
     Assert.Contains("q: from.q, sort: from.sort };", open);

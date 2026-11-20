@@ -1553,6 +1553,11 @@ function showLibrary(playlist) {
     errorMessage: loadErrorMessage,
     // The Library's search (#297): the editor's Everything search with the caller's marks; it only reads the list.
     searchHint,
+    // An address replaced in place (#444): the hashchange guard then knows it, so pasting the one before still routes.
+    replaceAddress: (hash) => {
+      history.replaceState(history.state, '', hash);
+      currentHash = hash;
+    },
     search: (body, signal) => api('/library/search', { method: 'POST', body, signal }),
     // The Search tab (#421): one row per title, with counts per type, for owner and viewer.
     titles: (params, signal) => api(`/playlists/${playlist.id}/library/titles?${new URLSearchParams(params)}`, { signal }),

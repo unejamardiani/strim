@@ -657,6 +657,8 @@
       view.nav.querySelector('[data-tab="groups"]').href = hash;
       if (view.tab === 'groups' && location.hash !== hash) history.replaceState(history.state, '', hash);
     };
+    // A group's filter (#444): below 2 letters or digits none; an over-long one stays, the titles route answers it.
+    const filterOf = (text) => ((text.match(/[\p{L}\p{N}]/gu) || []).length < 2 ? '' : text);
     // An open group's query (#444): ?q=…&sort=title|year&unseen=1&liked=1, defaults left out.
     const groupQueryOf = (cur) => {
       const p = new URLSearchParams();
@@ -671,7 +673,7 @@
       const query = groupQueryOf(cur);
       const hash = `${groupHash(cur.group.key)}${query ? `?${query}` : ''}`;
       view.nav.querySelector('[data-tab="groups"]').href = hash;
-      if (view.tab === 'groups' && location.hash !== hash) history.replaceState(history.state, '', hash);
+      if (view.tab === 'groups' && location.hash !== hash) ctx.replaceAddress(hash);
     };
     // The Groups address handler (#442): the list (key null) closes an open group and focuses its row once the list
     // is drawn again; a group's address opens it unless it is already open; a group not shown falls back to the list.
@@ -687,7 +689,15 @@
         if (was !== undefined) focusRow(was);
         return;
       }
-      if (state.open?.group.key === key) return;
+      // The address is the source of truth (#444): filter, order and the shared mark chips come from its query. The
+      // group on screen stays as it is only when its key and all four settings match; a pasted query applies.
+      const p = new URLSearchParams(query);
+      const unseen = p.get('unseen') === '1';
+      const liked = p.get('liked') === '1';
+      const q = filterOf((p.get('q') || '').trim());
+      const sort = SORTS.find((s) => s.value === p.get('sort')) || SORTS[0];
+      const shown = state.open;
+      if (shown?.group.key === key && shown.q === q && shown.sort === sort.value && unseen === hideSeen && liked === likedOnly) return;
       const g = browseGroups(list, includeOff).sorted.find((x) => x.key === key);
       const t = GROUP_TYPES.find((x) => x.type === g?.type);
       if (!g || !t) {
@@ -696,19 +706,13 @@
         ctx.toast('That group is not in this list any more.', { error: true });
         return;
       }
-      // The address is the source of truth (#444): filter, order and the shared mark chips come from its query.
-      const p = new URLSearchParams(query);
-      const unseen = p.get('unseen') === '1';
-      const liked = p.get('liked') === '1';
       if (unseen !== hideSeen || liked !== likedOnly) {
         hideSeen = unseen;
         likedOnly = liked;
         view.marksChanged?.();
       }
-      const q = (p.get('q') || '').trim();
-      const sort = SORTS.find((s) => s.value === p.get('sort')) || SORTS[0];
       groupType = t.value;
-      open(g, true, { q: ctx.searchHint(q) ? '' : q, sort: sort.value });
+      open(g, shown?.group.key !== key, { q, sort: sort.value });
       renderGroups();
     };
     if (view.groupQuery) {
@@ -738,6 +742,8 @@
     // the title on one line, the group's count and the Off badge.
     // Below the title (#444): the filter field, then Unseen, Liked (the Search tab's shared chips) and the sort chip.
     const open = (g, scroll = true, from = { q: '', sort: 'playlist' }) => {
+      // A filter still pending for the group shown before is dropped.
+      clearTimeout(state.timer);
       if (state.seen[g.key] !== g.count) {
         state.seen = { ...state.seen, [g.key]: g.count };
         writeCounts(ctx, list, state.seen);
@@ -750,9 +756,8 @@
       el.classList.add('has-open');
       // 300ms after the last key; below 2 letters or digits the unfiltered group shows.
       const filtered = () => {
-        const text = input.value.trim();
-        const q = ctx.searchHint(text) ? '' : text;
-        if (q === cur.q) return;
+        const q = filterOf(input.value.trim());
+        if (state.open !== cur || q === cur.q) return;
         cur.q = q;
         loadGroup(cur);
       };
@@ -811,7 +816,7 @@
       keepOpenAddress(cur);
       const params = { cacheKey: list.cacheKey, includeDisabled: includeOff, group: cur.group.key, offset: 0, limit: 30 };
       if (cur.q) params.q = cur.q;
-      if (cur.sort !== 'playlist') params.sort = cur.sort;
+      params.sort = cur.sort;
       if (hideSeen) params.hideSeen = true;
       if (likedOnly) params.liked = true;
       cur.body.replaceChildren(status('Loading entries…'));
