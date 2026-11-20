@@ -139,7 +139,7 @@ switches, no bulk action, no Save and no dock; results and entries are text, not
 the mark controls and, for films and series, the name, which opens the film or series card.
 
 Film card (#367): only with TMDB on (`/api/config`), a film row's name is a button and the whole row
-its tap target (hover tint, 16px chevron from 768px, `.is-open` tint and 3px `--accent` inset).
+its tap target (hover tint, 16px chevron at every width, `.is-open` tint and 3px `--accent` inset).
 Channels and, with TMDB off, every row stay text and nothing about TMDB shows. One `<dialog>`: the
 app's sheet below 1100px (bottom sheet with handle below 600px, 520px centred from 600px), from 1100px
 a 420px side pane beside the list that does not block the page; while it is open the page reserves
@@ -185,14 +185,24 @@ Similar series and the match (#392): the film card's rail, tiles, in-place card 
 without the "Opened from" context. A stored or cleared match holds for every episode row of the
 series, so each of them loads its card again; a failed request brings the previous card back.
 
-Marks (#298): every film and series row (search results and group entries) ends with three round
-icon buttons, Seen (check), Thumbs up and Thumbs down, `--control-h` square (46px on phones, 42px
-from 768px) with `aria-pressed`. A pressed control has the `--accent-soft` fill; tapping it again
-undoes it. A mark is the user's, not the playlist's: it is stored at once and shows on every variant
-of the title in the view. A failed request puts the mark back and shows an error toast. Channels and
-names without a title get no controls. Two toggles next to the type pills,
-"Hide seen" and "Liked only", filter the search and the open group for the page session; with Hide
-seen on, the count of seen matches left out is shown. The editor shows no marks.
+Marks (#298): every film and series row (search results and group entries) ends with its marks.
+From 768px that is the wide form, the capsule: Seen (check), Thumbs up and Thumbs down as 32px icon
+buttons (since #383, instead of `--control-h` circles) with `aria-pressed`. Below 768px
+(#419) the row keeps the room for the title: a 15px liked glyph (thumb up in `--accent`, thumb down
+in `--ink-3`, nothing when unrated; its state is in the group label of the Seen button) and one
+round 36px Seen button (44px touch target, `aria-label="Seen"`); thumbs are set in the card. A
+pressed control has the `--accent-soft` fill; tapping it again undoes it. A seen title's name is
+`--ink-2` at weight 550. A mark is the user's, not the playlist's: it is stored at once and shows on
+every variant of the title in the view. A failed request puts the mark back and shows an error
+toast. Channels and names without a title get no controls. Two toggle chips after the type chips,
+"Unseen" and "Liked", filter the search and the open group for the page session; with Unseen on,
+the count of seen matches left out is shown. The editor shows no marks.
+
+Rows (#419): a search result and a group entry share one row, 56px minimum: the type marker (Live
+circle, Movies diamond, Series square), the name without a trailing "(YYYY)" and the year in
+`--ink-3` (the full name stays the accessible name), a meta line in `--ink-3` with the group in
+`--ink-2` and the type word (search results only, then the language labels), "Off", the marks and,
+for a row that opens a card, the chevron.
 
 My marks (#299): a section below Browse groups lists every mark of the user, newest change first,
 50 at a time with More, including titles no longer in any playlist. It shows even when the playlist
@@ -225,8 +235,8 @@ under it.
 ```
 ┌──────────────────────────────┐
 │ Head                         │  ‹ · LIBRARY / playlist name · tabs (from 768px) · ⋯
-│ Search tab                   │  field · type pills (All/Films/Series/Channels) · mark filters
-│                              │  results card: name, group · type, Off badge
+│ Search tab                   │  field · chip row (All/Films/Series/Channels | Unseen/Liked)
+│                              │  results card: rows (name and year, group · type, Off, marks)
 │ Groups tab: Browse groups    │  one card per type (Films, Series, Channels), playlist order
 │   open group                 │  All groups · title · count, entries card, More
 │ Marks tab: My marks          │  filter pills · count, marks card (title, meta, Remove), More
@@ -236,6 +246,11 @@ under it.
 ```
 
 Search: the editor's search, read-only, 300ms after typing; a result shows name, group and type.
+Its filters are one chip row (#419): All, Films, Series, Channels (a single choice), a thin
+separator, then the toggles Unseen and Liked, all 34px chips with `aria-pressed` (a chosen type
+`--ink` on `--bg`, an active toggle `--accent-soft`). The row never wraps; it scrolls sideways
+without a visible scrollbar. Below 600px the result status takes its own line and the Language
+chip sits below it.
 Browse: the groups by type, then in playlist order; opening one pages its entries 50 at a time with
 More until all are shown.
 

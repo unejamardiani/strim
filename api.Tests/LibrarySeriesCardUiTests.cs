@@ -18,7 +18,7 @@ public class LibrarySeriesCardUiTests
   {
     var card = Card();
     Assert.Contains("const opensSeriesCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Series' && !!e.markKey;", card);
-    Assert.Contains("if (!opens(ctx, e)) return ctx.h('span', { class: 'search-hit-name', text: e.name });", card);
+    Assert.Contains("if (!opens(ctx, e)) return ctx.h('span', { class: 'lib-title' }, title);", card);
     Assert.Contains("type: opensSeriesCard(ctx, e) ? 'Series' : 'Movies' };", card);
     Assert.Contains("const filmChevron = (ctx, e) => (opens(ctx, e) ?", card);
     Assert.Contains("if (film.type === 'Series') answer = await ctx.seriesCard({ ...params, type: 'Series' }, own.signal);", card);

@@ -21,7 +21,8 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   .lib-tabs-row { display: flex; margin-top: 12px; }
 }
 
-/* Search: the field, then the type pills and the one toggle, which wrap below each other on a phone. */
+/* Search: the field, then one chip row (#419): the types, a separator, Unseen and Liked. It scrolls sideways
+   without a visible scrollbar and never wraps. */
 .library-search {
   display: flex;
   flex-direction: column;
@@ -29,23 +30,20 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   margin-top: 14px;
 }
 
-.library-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
+.lib-chips { display: flex; align-items: center; gap: 8px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+.lib-chips::-webkit-scrollbar { display: none; }
+.lib-chip { position: relative; flex-shrink: 0; height: 34px; padding: 0 13px; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font: 650 13.5px var(--font-ui); white-space: nowrap; }
+.lib-chip::after { content: ""; position: absolute; inset: -5px 0; }
+.lib-chip svg { width: 15px; height: 15px; }
+.lib-chip .n { font-weight: 500; opacity: .7; font-variant-numeric: tabular-nums; }
+.lib-chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.lib-chip.is-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.lib-chip-sep { flex-shrink: 0; width: 1px; height: 20px; background: var(--line-strong); }
 
-.library-toggle {
-  min-height: var(--control-h);
-}
+/* Below 600px the result status takes its own line and the Language chip goes below it. */
+@media (max-width: 599px) { .library-search .search-head { flex-direction: column; align-items: stretch; gap: 8px; } }
 
-.library-toggle[aria-pressed="true"] {
-  background: var(--accent-soft);
-  color: var(--ink);
-}
-
-/* A result is text, not a control: the search row's look without its hover or pointer. */
+/* My marks rows: text, not a control, with the search row's look. */
 .library-hit {
   min-height: var(--row-h);
   display: flex;
@@ -53,11 +51,6 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   gap: 12px;
   padding: 8px 14px 8px 18px;
   border-top: 1px solid var(--line);
-}
-
-.library-entries .library-hit > .search-hit-name {
-  flex: 1;
-  min-width: 0;
 }
 
 /* Marks (#298): seen, thumbs up and thumbs down at the end of a film or series row, phone-sized tap targets.
@@ -120,10 +113,6 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 .library-group-title {
   margin: 0;
   font-size: 15px;
-  overflow-wrap: anywhere;
-}
-
-.library-entries .library-hit .search-hit-name {
   overflow-wrap: anywhere;
 }
 
@@ -193,21 +182,42 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   }
 }
 
-/* Film card (#367), one rule per line. A film row's name opens it and the whole row is the tap target; the
-   marks, the Off badge and the language chip stay tappable above it. */
-.library-hit { position: relative; }
-.library-hit .library-marks, .library-hit .search-badge, .library-hit .search-langs { position: relative; z-index: 1; }
-.library-film-open { display: block; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 16px; font-weight: 600; text-align: start; cursor: pointer; }
-.library-film-open::after { content: ""; position: absolute; inset: 0; }
-.library-hit:has(.library-film-open):hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
-.library-hit.is-open { background: color-mix(in srgb, var(--surface-2) 70%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
-.library-film-chevron { display: none; color: var(--ink-3); }
-.library-film-chevron svg { width: 16px; height: 16px; }
-
-@media (min-width: 768px) {
-  .library-film-open { font-size: 15px; }
-  .library-film-chevron { display: flex; }
-}
+/* Film card (#367) and the row (#419) of a search result or a group entry, one rule per line: type marker, title
+   and year, meta line, then the marks. A film or series row opens its card from anywhere on the row: the name's
+   ::after covers it and the controls lie above. Below 768px one Seen button and the liked glyph, from 768px the
+   capsule. */
+.library-film-open { display: block; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.lib-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 7px 10px 7px 16px; border-top: 1px solid var(--line); }
+.lib-row:first-child { border-top: 0; }
+.lib-row:has(.library-film-open):hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.lib-row.is-open { background: color-mix(in srgb, var(--surface-2) 70%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.lib-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--live); }
+.lib-dot[data-type="Movies"] { border-radius: 2px; background: var(--movies); transform: rotate(45deg); }
+.lib-dot[data-type="Series"] { border-radius: 2.5px; background: var(--series); }
+.lib-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.lib-title { font-size: 15.5px; font-weight: 650; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-title .y { margin-left: 6px; font-weight: 450; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.lib-meta { font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-meta b { font-weight: 600; color: var(--ink-2); }
+.lib-meta:empty { display: none; }
+/* With language labels the meta line is a flex row: group and type truncate, the labels fit or wait behind "+N". */
+.lib-meta:has(> .search-langs) { display: flex; align-items: center; gap: 6px; }
+.lib-where { flex: 0 1 auto; min-width: 39px; overflow: hidden; text-overflow: ellipsis; }
+.lib-row.is-seen .lib-title { color: var(--ink-2); font-weight: 550; }
+.lib-row .library-film-open::after { content: ""; position: absolute; inset: 0; }
+.lib-row .lib-seen, .lib-row .library-marks, .lib-row .lib-watch { position: relative; z-index: 1; }
+.lib-row .search-badge, .lib-row .search-langs, .lib-row .group-chip { position: relative; z-index: 1; }
+.lib-quick { display: contents; }
+.lib-like { flex-shrink: 0; display: inline-grid; color: var(--accent); }
+.lib-like[data-rating="-1"] { color: var(--ink-3); }
+.lib-like[data-rating="0"] { display: none; }
+.lib-like svg { width: 15px; height: 15px; }
+.lib-seen { position: relative; flex-shrink: 0; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--surface-2) 80%, transparent); color: var(--ink-3); }
+.lib-seen::after { content: ""; position: absolute; inset: -4px; }
+.lib-seen svg { width: 17px; height: 17px; stroke-width: 2.2; }
+.lib-seen[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.lib-chev { flex-shrink: 0; display: grid; color: var(--ink-3); }
+.lib-chev svg { width: 16px; height: 16px; }
 
 /* The pane's width lives on body so the page and the footer can reserve room for it. */
 body { --film-pane-w: 420px; }
@@ -352,21 +362,27 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .film-credit-line .tmdb-logo { height: 14px; }
 .film-credit a { color: inherit; }
 
-/* Row marks use the film card's capsule instead of three 46px circles (#383, both Libraries). */
-.library-hit .film-marks { flex-shrink: 0; margin-right: -4px; }
-.library-hit .film-marks button { width: 32px; height: 32px; min-width: 32px; min-height: 32px; }
-.library-hit .film-marks svg { width: 16px; height: 16px; }
+/* From 768px row marks use the film card's capsule instead of three 46px circles (#383, both Libraries). */
+.lib-row .film-marks { flex-shrink: 0; margin-right: -4px; }
+.lib-row .film-marks button { width: 32px; height: 32px; min-width: 32px; min-height: 32px; }
+.lib-row .film-marks svg { width: 16px; height: 16px; }
+/* After the capsule's own display, so the phone row hides it. */
+.lib-row .library-marks { display: none; }
+@media (min-width: 768px) {
+  .lib-row .lib-seen, .lib-row .lib-like { display: none; }
+  .lib-row .library-marks { display: inline-flex; }
+}
 
 /* The viewer's Library (#383): the group on every item. */
 .group-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .group-label svg { width: 13px; height: 13px; color: var(--ink-3); stroke-width: 2.2; flex-shrink: 0; }
-.search-hit-meta .group-label { color: var(--ink); font-weight: 600; }
-.search-hit-meta .group-label::after { content: "·"; margin: 0 2px; color: var(--ink-3); font-weight: 400; }
+.lib-meta .group-label { color: var(--ink); font-weight: 600; }
+.lib-meta .group-label::after { content: "·"; margin: 0 2px; color: var(--ink-3); font-weight: 400; }
 .group-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 190px; padding: 3px 10px 3px 8px; border-radius: 999px; background: var(--surface-2); font-size: 12.5px; font-weight: 650; line-height: 18px; color: var(--ink); white-space: nowrap; flex-shrink: 0; }
 .group-chip span { overflow: hidden; text-overflow: ellipsis; }
 .group-chip svg { width: 13px; height: 13px; color: var(--ink-3); flex-shrink: 0; }
 .film-tile-meta .group-label svg { width: 11px; height: 11px; }
-@media (min-width: 600px) { .search-hit-meta .group-label { display: none; } }
+@media (min-width: 600px) { .lib-meta .group-label { display: none; } }
 /* Phones: search hits lead their meta line with the group; a group's entries sit under its heading. No chip. */
 @media (max-width: 599px) { .library-search .group-chip, .library-entries .group-chip { display: none; } }
 
