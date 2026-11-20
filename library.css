@@ -194,8 +194,12 @@
   .library-film-chevron { display: flex; }
 }
 
+/* The pane's width lives on body so the page and the footer can reserve room for it. */
+body { --film-pane-w: 420px; }
+body:has(.film-card.is-viewer) { --film-pane-w: 448px; }
+
 /* The app's sheet (a bottom sheet below 600px, centred from 600px); from 1100px a side pane beside the list. */
-.film-card { --film-pane-w: 420px; --film-poster-w: 200px; --film-poster-shadow: 0 28px 50px -22px rgba(29,26,22,.6), 0 10px 22px -12px rgba(29,26,22,.35); max-width: 520px; isolation: isolate; }
+.film-card { --film-poster-w: 200px; --film-poster-shadow: 0 28px 50px -22px rgba(29,26,22,.6), 0 10px 22px -12px rgba(29,26,22,.35); max-width: 520px; isolation: isolate; }
 @media (prefers-color-scheme: dark) { .film-card { --film-poster-shadow: 0 30px 60px -20px rgba(0,0,0,.9), 0 10px 24px -10px rgba(0,0,0,.6); } }
 .film-card-head { position: absolute; z-index: 4; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; pointer-events: none; }
 .film-glass, .film-glass:hover { border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent); background: color-mix(in srgb, var(--surface) 68%, transparent); color: var(--ink); pointer-events: auto; -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5); }
@@ -216,7 +220,7 @@
 
 /* From 1100 to 1439px an open pane leaves one Browse column: the open group replaces the group list again. */
 @media (min-width: 1100px) and (max-width: 1439px) {
-  .page:has(> .film-card[open]) .library-browse { display: flex; }
+  .page:has(> .film-card[open]) .library-browse { display: flex; align-items: stretch; }
   .page:has(> .film-card[open]) .library-browse > .library-groups[hidden] { display: none !important; }
   .page:has(> .film-card[open]) .library-browse > .library-open { position: static; max-height: none; }
 }
@@ -352,7 +356,7 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 @media (max-width: 599px) { .library-search .group-chip, .library-entries .group-chip { display: none; } }
 
 /* The viewer's film card: larger poster, and the group as its own row. */
-.film-card.is-viewer { --film-pane-w: 448px; --film-poster-w: 244px; }
+.film-card.is-viewer { --film-poster-w: 244px; }
 .film-card.is-viewer .film-stage .film-poster { border-radius: 18px; }
 .film-card.is-viewer .film-rail .film-tile { flex-basis: 124px; }
 @media (max-width: 599px) { .film-card.is-viewer { --film-poster-w: 224px; } }

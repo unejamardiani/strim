@@ -75,7 +75,7 @@ public class ViewerLibraryUiTests
     Assert.Contains("@media (min-width: 600px) { .search-hit-meta .group-label { display: none; } }", css);
     Assert.Contains(".library-cover .cover-name { font-size: 48px; letter-spacing: -.045em; }", css);
     Assert.Contains("@media (max-width: 599px) { .group-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }", css);
-    Assert.Contains(".film-card.is-viewer { --film-pane-w: 448px; --film-poster-w: 244px; }", css);
+    Assert.Contains(".film-card.is-viewer { --film-poster-w: 244px; }", css);
     Assert.Contains("  folder: '<path", main);
   }
 

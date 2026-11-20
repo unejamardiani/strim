@@ -41,6 +41,34 @@ public class LibraryFilmCardUiTests
   }
 
   [Fact]
+  public void PaneWidth_IsDeclaredWhereThePageCanReadIt()
+  {
+    // #413: on .film-card the property never reached .page (custom properties do not inherit upwards), so the
+    // reserved padding was 0px and the pane covered the rows' marks.
+    var css = Read("library.css");
+    Assert.Contains("body { --film-pane-w: 420px; }", css);
+    Assert.Contains("body:has(.film-card.is-viewer) { --film-pane-w: 448px; }", css);
+    Assert.Contains("width: var(--film-pane-w);", css);
+    var rules = System.Text.RegularExpressions.Regex.Matches(css, @"(?<sel>[^{}]*\.film-card[^{}]*)\{(?<body>[^{}]*)\}");
+    Assert.NotEmpty(rules);
+    foreach (System.Text.RegularExpressions.Match rule in rules)
+    {
+      if (rule.Groups["sel"].Value.TrimStart().StartsWith("body", StringComparison.Ordinal)) continue;
+      Assert.DoesNotContain("--film-pane-w:", rule.Groups["body"].Value);
+    }
+  }
+
+  [Fact]
+  public void OpenPane_KeepsTheListStretchedBelow1440()
+  {
+    var css = Read("library.css");
+    var start = css.IndexOf("@media (min-width: 1100px) and (max-width: 1439px) {", StringComparison.Ordinal);
+    Assert.True(start >= 0);
+    var block = css[start..css.IndexOf("\n}", start, StringComparison.Ordinal)];
+    Assert.Contains(".page:has(> .film-card[open]) .library-browse { display: flex; align-items: stretch; }", block);
+  }
+
+  [Fact]
   public void TheScrollArea_TakesItsContentHeight_SoSafariDoesNotCollapseTheSheet()
   {
     // 19 Nov 2026: with `flex: 1` (a 0% basis) the phone sheet had no height in iOS Safari; only the backdrop showed.
