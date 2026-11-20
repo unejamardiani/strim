@@ -834,7 +834,7 @@
       const items = page.items || [];
       const added = [];
       for (const m of items) {
-        if (state.shown.has(m.key)) continue;
+        if (state.shown.has(m.key) || rows.has(m.key)) continue;
         state.shown.add(m.key);
         const li = markRow(m, null);
         rows.set(m.key, { li, m });
@@ -916,8 +916,12 @@
       if (fits === !r.li.hidden) return;
       r.li.hidden = !fits;
       state.total += fits ? 1 : -1;
+      // loadPage's page arithmetic counts only the rows in the list; a row that comes back counts again.
+      if (fits) state.shown.add(key);
+      else state.shown.delete(key);
       paint();
-      if (fits) return;
+      // A hidden tab updates its rows and count silently.
+      if (fits || view.panels.marks.hidden) return;
       const text = state.view === 'watchlist' ? `${r.m.title} is off your watchlist` : `Mark on ${r.m.title} removed`;
       ctx.toast(text, { action: { label: 'Undo', onClick: () => {
         if (r.li.hidden) setMark(ctx, markName(r.m), r.m.kind, key, { seen: r.m.seen, rating: r.m.rating, watchlist: r.m.watchlist });
@@ -952,6 +956,7 @@
     if (!marks.has(key)) return;
     marks.set(key, mark);
     for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
+    view?.marksChanged?.(key, mark);
   }
 
   // The viewer's head (#383): the list's cover as on its "Shared with you" card, filled from library/open.

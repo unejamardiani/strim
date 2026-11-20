@@ -103,7 +103,15 @@ public class LibraryMarksTabUiTests
     Assert.Contains("fits: (m) => m.watchlist === true,", tab);
     Assert.Contains("fits: (m) => m.seen || m.rating !== 0 || m.watchlist === true,", tab);
     var changed = Between(tab, "view.marksChanged = (key, mark) => {", "const start = () => {");
-    Assert.Contains("r.li.hidden = !fits;\n      state.total += fits ? 1 : -1;\n      paint();", changed);
+    Assert.Contains("r.li.hidden = !fits;\n      state.total += fits ? 1 : -1;", changed);
+    // A row that leaves no longer counts for loadPage's page arithmetic; Undo counts it again.
+    Assert.Contains("if (fits) state.shown.add(key);\n      else state.shown.delete(key);\n      paint();", changed);
+    Assert.Contains("if (state.shown.has(m.key) || rows.has(m.key)) continue;", tab);
+    // The toast only while the tab is visible; a hidden tab updates rows and count silently.
+    Assert.Contains("if (fits || view.panels.marks.hidden) return;", changed);
+    Assert.True(changed.IndexOf("view.panels.marks.hidden", StringComparison.Ordinal) < changed.IndexOf("ctx.toast(", StringComparison.Ordinal));
+    // A mark changed in a card opened from a similar film reaches the tab through syncRows as well.
+    Assert.Contains("view?.marksChanged?.(key, mark);", Between(Read("library.js"), "function syncRows(ctx, key, mark) {", "\n  }\n"));
     Assert.Contains("const text = state.view === 'watchlist' ? `${r.m.title} is off your watchlist` : `Mark on ${r.m.title} removed`;", changed);
     Assert.Contains("ctx.toast(text, { action: { label: 'Undo', onClick: () => {", changed);
     Assert.Contains("if (r.li.hidden) setMark(ctx, markName(r.m), r.m.kind, key, { seen: r.m.seen, rating: r.m.rating, watchlist: r.m.watchlist });", changed);

@@ -35,7 +35,7 @@ public class LibraryMyMarksTests
     Assert.Contains("const MARKS_PAGE = 50;", section);
     Assert.Contains("requested = Math.max(Math.floor(state.shown.size / MARKS_PAGE) + 1, state.minPage);", section);
     Assert.Contains("page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);", section);
-    Assert.Contains("if (state.shown.has(m.key)) continue;", section);
+    Assert.Contains("if (state.shown.has(m.key) || rows.has(m.key)) continue;", section);
     // More pages load with a sentinel 600px before the end instead of a More button.
     Assert.Contains("{ rootMargin: '600px' }", section);
     Assert.DoesNotContain("'More'", section);
