@@ -496,6 +496,7 @@
       if (saved && marks.get(key) === next && saved.watchlist !== next.watchlist) {
         marks.set(key, { ...next, watchlist: saved.watchlist === true });
         repaint();
+        view?.marksSettled?.(key);
       } else if (marks.get(key) === next) view?.marksChanged?.(key, next, 'saved'); // a view loaded meanwhile may lack it
       // A card opened from a similar film (#368) uses a local key; the rows of the title use the one the API returns.
       const real = saved?.key || keyAlias.get(key);
@@ -922,19 +923,24 @@
       return li;
     };
 
+    // A removal the server committed is gone from its list, so a repeated page that skipped it no longer counts it.
+    view.marksSettled = (key) => { if (rows.get(key)?.li.hidden) state.skipped.delete(key); };
+
     // Every change of a mark passes here: a row that no longer fits leaves, one that fits again comes back in place.
     view.marksChanged = (key, mark, how) => {
       if (key.startsWith('similar:')) return;
       const r = rows.get(key);
       // A title marked elsewhere that now fits this view but has no row yet: the tab loads again.
       if (!r) return option().fits(mark) ? view.marksStale() : undefined;
+      if (how === 'saved') view.marksSettled(key);
       if (!r.li.isConnected || how === 'saved') return;
       const fits = option().fits(mark);
       if (fits) r.m = { ...r.m, seen: mark.seen, rating: mark.rating, watchlist: mark.watchlist };
       // Newest change first: a changed row moves to the top (not in the Watchlist), a failed write puts it back.
       if (fits && !r.li.hidden && state.view !== 'watchlist') {
         if (how === 'failed') r.back?.();
-        else { const p = r.li.previousElementSibling; r.back = () => (p?.isConnected ? p.after(r.li) : list.prepend(r.li)); list.prepend(r.li); }
+        // By the predecessor's key: a lookup may have replaced its row since.
+        else { const pk = r.li.previousElementSibling?.dataset.key; r.back = () => { const p = rows.get(pk)?.li; return p?.isConnected ? p.after(r.li) : list.prepend(r.li); }; list.prepend(r.li); }
       }
       if (fits === !r.li.hidden) return;
       r.li.hidden = !fits;

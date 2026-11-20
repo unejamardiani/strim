@@ -136,7 +136,14 @@ public class LibraryMarksTabUiTests
     Assert.Contains("} else if (marks.get(key) === next) view?.marksChanged?.(key, next, 'saved');", Read("library.js"));
     Assert.Contains("if (!r.li.isConnected || how === 'saved') return;", changed);
     Assert.Contains("marks.get(key) === before ? 'failed' : undefined);", Read("library.js"));
-    Assert.Contains("if (how === 'failed') r.back?.();\n        else { const p = r.li.previousElementSibling; r.back = () => (p?.isConnected ? p.after(r.li) : list.prepend(r.li)); list.prepend(r.li); }", changed);
+    // A failed write finds its predecessor by key, since a lookup may have replaced that row in the meantime.
+    Assert.Contains("if (how === 'failed') r.back?.();\n", changed);
+    Assert.Contains("else { const pk = r.li.previousElementSibling?.dataset.key; r.back = () => { const p = rows.get(pk)?.li; return p?.isConnected ? p.after(r.li) : list.prepend(r.li); }; list.prepend(r.li); }", changed);
+    Assert.DoesNotContain("const p = r.li.previousElementSibling;", changed);
+    // A committed removal is gone from the server's list: a repeated page that skipped it no longer counts it.
+    Assert.Contains("view.marksSettled = (key) => { if (rows.get(key)?.li.hidden) state.skipped.delete(key); };", tab);
+    Assert.Contains("if (how === 'saved') view.marksSettled(key);\n      if (!r.li.isConnected || how === 'saved') return;", changed);
+    Assert.Contains("repaint();\n        view?.marksSettled?.(key);\n      } else if", Read("library.js"));
     Assert.Contains("if (card.el?.matches(':modal')) card.el.addEventListener('close', () => { if (r.li.hidden) undo(); }, { once: true });", changed);
     var set = Between(Read("library.js"), "async function setMark(", "// Browse (#287)");
     Assert.Contains("await prior;\n      const saved = await ctx.setMark(", set);

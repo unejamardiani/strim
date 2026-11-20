@@ -27,7 +27,8 @@ public record FilmMatchRequest(string? Name, JsonElement? TmdbId);
 /// film's card; 404 without a TMDB token. <c>PUT /api/marks/series-match</c> does the same for a series.</item>
 /// <item><c>DELETE /api/marks/{key}</c> removes a mark by its key (404 when the caller has none).</item>
 /// <item><c>GET /api/marks?seen=&amp;rating=&amp;watchlist=&amp;sort=&amp;page=&amp;pageSize=</c> lists the caller's marks,
-/// newest change first, or with <c>sort=watchlisted</c> newest on the watchlist first.</item>
+/// newest change first, or with <c>sort=watchlisted</c> newest on the watchlist first; a record kept only for its
+/// confirmed film is not listed.</item>
 /// </list>
 /// </summary>
 public static class MarkEndpoints
@@ -54,7 +55,8 @@ public static class MarkEndpoints
       }
 
       var userId = user.UserId();
-      var query = db.TitleMarks.Where(m => m.UserId == userId);
+      // A record kept only for a confirmed TMDB match (#424) is no mark: never listed, never counted.
+      var query = db.TitleMarks.Where(m => m.UserId == userId && (m.Seen || m.Rating != 0 || m.Watchlist));
       if (seen is { } s) query = query.Where(m => m.Seen == s);
       if (rating is { } r) query = query.Where(m => m.Rating == r);
       if (watchlist is { } w) query = query.Where(m => m.Watchlist == w);

@@ -79,6 +79,21 @@ public sealed class LibraryFilmMatchTests
     Assert.Single(host.Marks());
   }
 
+  // The Marks tab's All view (#424) counts marks only: a record kept just for its confirmed film is not listed.
+  [Fact]
+  public async Task List_LeavesOutAMatchOnlyRecord()
+  {
+    await using var host = await Host.StartAsync(Token);
+    await host.Client.SendAsync(HttpMethod.Put, "/api/marks", new { name = "Heat (1995)", kind = "film", seen = true });
+    await host.ConfirmAsync("The Matrix (1999)", 603);
+    Assert.Equal(2, host.Marks().Count);
+
+    var page = JsonDocument.Parse(await host.Client.Http.GetStringAsync("/api/marks?page=1&pageSize=50")).RootElement;
+
+    Assert.Equal(1, page.GetProperty("total").GetInt32());
+    Assert.Equal("film:1995:heat", Assert.Single(page.GetProperty("items").EnumerateArray()).GetProperty("key").GetString());
+  }
+
   [Theory]
   [InlineData("/api/marks/film-match", "film", "The Matrix (1999)")]
   [InlineData("/api/marks/series-match", "series", "Dark (2017)")]
