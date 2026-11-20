@@ -76,7 +76,7 @@ public class LibrarySearchUiTests
     var pages = Between(Library(), "function pages(", "// Marks (#298)");
     Assert.Contains("new IntersectionObserver(", pages);
     Assert.Contains("{ rootMargin: '600px' }", pages);
-    Assert.Contains("if (page.hasMore !== true || !page.titles?.length) return;", pages);
+    Assert.Contains("if (page.hasMore !== true || !page.titles?.length) return end && foot.append(end());", pages);
     Assert.Contains("offset: ul.children.length, limit: 30", pages);
     Assert.Contains("'Try again'", pages);
   }

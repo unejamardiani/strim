@@ -49,13 +49,15 @@
       view.query = query;
       view.search?.(query);
     }
-    if (tab === 'groups' && query) {
-      view.groupQuery = query;
-      view.groupType?.(query);
-    }
     for (const a of view.nav.children) {
       if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
+    }
+    // The Groups address (#423): groups?type=… is the list, groups/<encoded key>?q=…&sort=… an open group.
+    if (tab === 'groups') {
+      view.groupKey = groupKeyOf(sub);
+      view.groupQuery = query || '';
+      view.groupRoute?.(view.groupQuery);
     }
     for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;
     if (view.tab === tab) return;
@@ -224,6 +226,12 @@
     };
     const seenFilter = markFilter('Unseen', () => hideSeen, (v) => { hideSeen = v; });
     const likedFilter = markFilter('Liked', () => likedOnly, (v) => { likedOnly = v; });
+    // An open group's chips (#423) are the same filters: these follow and the search runs again.
+    view.marksChanged = () => {
+      seenFilter.setAttribute('aria-pressed', String(hideSeen));
+      likedFilter.setAttribute('aria-pressed', String(likedOnly));
+      run();
+    };
 
     ctx.controller.signal.addEventListener('abort', () => { clearTimeout(state.timer); state.observer?.disconnect(); }, { once: true });
     // On a phone the labels that do not fit wait behind "+N", as in the editor; a new width fits them again.
@@ -350,14 +358,15 @@
   }
 
   // A single type (#421): 30 titles a page, the next one once the sentinel comes within 600px of the screen.
-  function pages(ctx, state, params, first, rowOf, seq) {
+  // An open group (#423) pages the same way and passes end, its foot once everything is shown.
+  function pages(ctx, state, params, first, rowOf, seq, end) {
     const { h } = ctx;
     const ul = h('ul', { class: 'search-list' }, first.titles.map(rowOf));
     const foot = h('div');
     const sentinel = h('div', { 'aria-hidden': 'true' });
     const watch = (page) => {
       foot.replaceChildren();
-      if (page.hasMore !== true || !page.titles?.length) return;
+      if (page.hasMore !== true || !page.titles?.length) return end && foot.append(end());
       foot.append(sentinel);
       state.observer = new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) more(); }, { rootMargin: '600px' });
       state.observer.observe(sentinel);
@@ -499,8 +508,8 @@
     }
   }
 
-  // Browse (#287): the analysed groups by type, then in playlist order. Opening one pages through its
-  // entries with group-entries; the server sends at most 50 names per page.
+  // Browse (#287): the analysed groups by type, then in playlist order. An open group (#423) has its own address,
+  // #/…/groups/<encoded key>, and pages its titles by 30 from the titles route as its end comes near.
   const BROWSE_ORDER = ['Movies', 'Series', 'Live'];
   // The Groups tab's chips (#422), one per type with groups, and the word a group's count takes.
   const GROUP_TYPES = [
@@ -508,7 +517,15 @@
     { value: 'series', type: 'Series', label: 'Series', one: 'episode', many: 'episodes' },
     { value: 'channels', type: 'Live', label: 'Channels', one: 'channel', many: 'channels' },
   ];
-  const PAGE_SIZE = 50;
+  // The open group's orders (#423), cycled by the sort chip.
+  const SORTS = [{ value: 'playlist', label: 'Playlist order' }, { value: 'title', label: 'A to Z' }, { value: 'year', label: 'Newest year' }];
+  // A group's filter (#423) needs 2 letters or digits; below that the whole group shows.
+  const filterOf = (raw) => ((raw.trim().match(/[\p{L}\p{N}]/gu) || []).length >= 2 ? raw.trim() : '');
+  // The group key of a Groups address, decoded; null for the group list.
+  function groupKeyOf(sub) {
+    const raw = String(sub || '').split('/').slice(1).join('/');
+    try { return raw ? decodeURIComponent(raw) : null; } catch { return raw; }
+  }
   // The chosen type is kept for the page session, like the toggles.
   let groupType = null;
 
@@ -557,15 +574,19 @@
     const { h, icon, fmt, plural } = ctx;
     const state = { open: null, seen: seenCounts(ctx, list) };
     const groupsEl = h('div', { class: 'library-groups' });
-    const entriesEl = h('div', { class: 'library-open', hidden: true });
-    const el = h('section', { class: 'library-browse' }, h('h2', { class: 'library-title', text: 'Browse groups' }), groupsEl, entriesEl);
+    // From 1100px the group list (its own scroll) and the open group are two columns; below, the group replaces it.
+    const side = h('div', { class: 'lib-groups-side' }, h('h2', { class: 'library-title', text: 'Browse groups' }), groupsEl);
+    const openEl = h('div', { class: 'lib-group-open', hidden: true });
+    const el = h('section', { class: 'library-browse lib-groups-cols' }, side, openEl);
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
-    const offBadge = (g) => (list.disabled.has(g.key) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
+    const groupHash = (key, p) => `${view.base}/groups/${encodeURIComponent(key)}${String(p) ? `?${p}` : ''}`;
+    const markParams = () => new URLSearchParams([...(hideSeen ? [['unseen', '1']] : []), ...(likedOnly ? [['liked', '1']] : [])]);
 
-    // A group row (#422), the same for owner and viewer: the whole row is the button that opens the group.
+    // A group row (#422), the same for owner and viewer: the whole row is the button that opens the group at its
+    // address, a new history entry, so Back returns to the list.
     const groupRow = (g, t) => {
       const fresh = newSince(state.seen, g);
-      return h('button', { class: 'lib-row is-group', type: 'button', dataset: { key: g.key, type: g.type }, onclick: () => open(g) },
+      return h('button', { class: 'lib-row is-group', type: 'button', dataset: { key: g.key, type: g.type }, onclick: () => { location.hash = groupHash(g.key, markParams()); } },
         h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type: g.type } }),
         h('span', { class: 'lib-text' },
           h('span', { class: 'lib-title', text: g.title || 'Untitled group' }),
@@ -603,102 +624,177 @@
       markOpenGroup();
     };
 
-    // The Groups address (#422): #/…/groups?type=…, replaced, never a new entry.
+    // The Groups address (#422): #/…/groups?type=…, replaced, never a new entry; an open group keeps its own.
     const keepGroupsAddress = () => {
       const hash = `${view.base}/groups?type=${groupType}`;
       view.nav.querySelector('[data-tab="groups"]').href = hash;
-      if (view.tab === 'groups' && location.hash !== hash) history.replaceState(history.state, '', hash);
+      if (view.tab === 'groups' && !state.open && location.hash !== hash) history.replaceState(history.state, '', hash);
     };
-    view.groupType = (raw) => {
-      const value = new URLSearchParams(raw).get('type');
-      if (!GROUP_TYPES.some((t) => t.value === value) || value === groupType) return;
-      groupType = value;
+    // show() hands every Groups address here (#423): a key that is shown opens its group, none the list; a key that
+    // is not in the list (or not shown) falls back to the list with a toast.
+    view.groupRoute = (raw) => {
+      const key = view.groupKey;
+      const g = key === null ? null : browseGroups(list, includeOff).sorted.find((x) => x.key === key);
+      // Back on the tab with the open group's own address: it stays as it is.
+      if (g && state.open?.group === g && location.hash === state.open.hash) return;
+      if (g) return open(g, new URLSearchParams(raw));
+      close();
+      const type = new URLSearchParams(raw).get('type');
+      if (GROUP_TYPES.some((t) => t.value === type)) groupType = type;
+      if (key !== null) {
+        view.groupKey = null;
+        ctx.toast('That group is not in this list any more.', { error: true });
+      }
       renderGroups();
     };
-    if (view.groupQuery) {
-      const value = new URLSearchParams(view.groupQuery).get('type');
-      if (GROUP_TYPES.some((t) => t.value === value)) groupType = value;
-    }
 
     // From 1100px the open group's row stays visible beside its entries, tinted.
     const markOpenGroup = () => {
       for (const b of groupsEl.querySelectorAll('.is-group')) b.classList.toggle('is-open', b.dataset.key === state.open?.group.key);
     };
 
-    // Back to the group list, with the focus on the group that was open.
+    // Back to the group list, with the focus on the group that was open; its pending page or filter is dropped.
+    const stop = (o) => { o.seq += 1; o.observer?.disconnect(); clearTimeout(o.timer); };
+    ctx.controller.signal.addEventListener('abort', () => { if (state.open) stop(state.open); }, { once: true });
     const close = () => {
-      const key = state.open?.group.key;
+      const o = state.open;
+      if (!o) return;
+      stop(o);
       state.open = null;
-      entriesEl.hidden = true;
-      entriesEl.replaceChildren();
-      groupsEl.hidden = false;
+      el.classList.remove('has-open');
+      openEl.hidden = true;
+      openEl.replaceChildren();
       markOpenGroup();
-      for (const b of groupsEl.querySelectorAll('.is-group')) if (b.dataset.key === key) b.focus();
+      for (const b of groupsEl.querySelectorAll('.is-group')) if (b.dataset.key === o.group.key) b.focus();
     };
 
-    // Opening a group stores its current count on this device; its badge goes the next time the list is drawn.
-    const open = (g, scroll = true) => {
+    // Opening a group stores its current count on this device; its badge goes the next time the list is drawn. The
+    // address's query sets the filter, the order and the shared mark chips.
+    const open = (g, p) => {
+      if (state.open) stop(state.open);
       if (state.seen[g.key] !== g.count) {
         state.seen = { ...state.seen, [g.key]: g.count };
         writeCounts(ctx, list, state.seen);
       }
-      const view = {
-        group: g, offset: 0,
-        count: h('p', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') }),
-        list: h('ol', { class: 'search-list library-entries' }),
-        foot: h('div', { class: 'library-foot' }),
+      const unseen = p.get('unseen') === '1';
+      const liked = p.get('liked') === '1';
+      if (unseen !== hideSeen || liked !== likedOnly) {
+        hideSeen = unseen;
+        likedOnly = liked;
+        view.marksChanged?.();
+      }
+      const t = GROUP_TYPES.find((x) => x.type === g.type) || GROUP_TYPES[2];
+      const title = g.title || 'Untitled group';
+      const o = { group: g, q: filterOf(p.get('q') || ''), sort: SORTS.find((s) => s.value === p.get('sort')) || SORTS[0], seq: 0, observer: null, timer: 0 };
+      o.count = h('p');
+      o.body = h('div', { role: 'region', 'aria-label': `Entries of ${title}` });
+      o.paintCount = (seenHidden) => o.count.replaceChildren(...[plural(g.count, t.one, t.many),
+        hideSeen && seenHidden > 0 ? ` · ${fmt(seenHidden)} seen hidden` : '',
+        list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null].filter(Boolean));
+      // The filter (minimum 2 letters or digits, below that the whole group) waits 300ms after the last key.
+      const filter = () => {
+        clear.hidden = !input.value;
+        const q = filterOf(input.value);
+        clearTimeout(o.timer);
+        if (q !== o.q) o.timer = setTimeout(() => { o.q = q; loadGroup(o); }, 300);
       };
-      state.open = view;
-      markOpenGroup();
-      entriesEl.replaceChildren(
-        h('div', { class: 'library-entries-head' },
-          h('button', { class: 'btn btn-sm', type: 'button', onclick: close }, icon('back'), 'All groups'),
-          h('div', { class: 'grow' }, h('h3', { class: 'library-group-title', text: g.title || 'Untitled group' }), view.count),
-          offBadge(g)),
-        h('div', { class: 'card' }, view.list, view.foot));
-      groupsEl.hidden = true;
-      entriesEl.hidden = false;
-      if (scroll) el.scrollIntoView({ block: 'start' });
-      loadPage(view);
+      const input = h('input', {
+        class: 'input input-search', type: 'search', placeholder: `Filter ${title}`, 'aria-label': `Filter ${title}`,
+        value: p.get('q') || '', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search',
+        oninput: filter, onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
+      });
+      const clear = h('button', {
+        class: 'lib-clear', type: 'button', 'aria-label': 'Clear filter', hidden: true,
+        onclick: () => { input.value = ''; filter(); input.focus(); },
+      }, icon('close'));
+      // Unseen and Liked are the Search tab's chips (shared hideSeen / likedOnly); sort cycles the three orders.
+      const mark = (label, get, set) => h('button', {
+        class: 'lib-chip is-toggle', type: 'button',
+        onclick: () => { set(!get()); view.marksChanged?.(); loadGroup(o); },
+      }, label);
+      const seenChip = mark('Unseen', () => hideSeen, (v) => { hideSeen = v; });
+      const likedChip = mark('Liked', () => likedOnly, (v) => { likedOnly = v; });
+      const sortChip = h('button', {
+        class: 'lib-chip', type: 'button',
+        onclick: () => { o.sort = SORTS[(SORTS.indexOf(o.sort) + 1) % SORTS.length]; loadGroup(o); },
+      });
+      o.paintChips = () => {
+        seenChip.setAttribute('aria-pressed', String(hideSeen));
+        likedChip.setAttribute('aria-pressed', String(likedOnly));
+        sortChip.replaceChildren(icon('sort'), o.sort.label);
+        sortChip.setAttribute('aria-label', `Sort: ${o.sort.label}`);
+      };
+      state.open = o;
+      groupType = t.value;
+      renderGroups();
+      openEl.replaceChildren(
+        h('div', { class: 'lib-sticky' },
+          h('div', { class: 'lib-ghead' },
+            h('a', { class: 'lib-ib', href: `${view.base}/groups?type=${groupType}`, 'aria-label': 'All groups' }, icon('back')),
+            h('div', { class: 'lib-ghead-text' }, h('h2', { text: title, title }), o.count)),
+          h('div', { class: 'lib-search lib-gfilter' }, input, clear),
+          h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Filters' }, seenChip, likedChip, sortChip)),
+        o.body);
+      el.classList.add('has-open');
+      openEl.hidden = false;
+      window.scrollTo(0, 0);
+      clear.hidden = !input.value;
+      o.paintCount(0);
+      o.body.replaceChildren(status('Loading entries…'));
+      loadGroup(o);
     };
 
-    // A failed page shows its error below the entries already shown, which stay.
-    const loadPage = async (view) => {
-      view.foot.replaceChildren(status(view.offset ? 'Loading more…' : 'Loading entries…'));
-      let page;
+    // A series row carries its seasons, a film in more than one entry its versions; nothing else has a meta line.
+    const entryRow = (e) => {
+      const meta = e.contentType === 'Series' ? h('b', { text: seasonsLine(ctx, e) })
+        : e.contentType === 'Movies' && e.entries > 1 ? plural(e.entries, 'version') : null;
+      return row(ctx, e, e.group, list.cacheKey, meta, null);
+    };
+
+    // The first page of the open group by 30 titles; a change of filter, chip or order starts here again. The rows
+    // shown stay until the answer arrives.
+    const loadGroup = async (o) => {
+      if (o !== state.open) return;
+      const seq = ++o.seq;
+      o.observer?.disconnect();
+      o.paintChips();
+      const params = { cacheKey: list.cacheKey, includeDisabled: includeOff, group: o.group.key, sort: o.sort.value, offset: 0, limit: 30 };
+      if (o.q) params.q = o.q;
+      if (hideSeen) params.hideSeen = true;
+      if (likedOnly) params.liked = true;
+      const p = markParams();
+      if (o.q) p.set('q', o.q);
+      if (o.sort.value !== 'playlist') p.set('sort', o.sort.value);
+      o.hash = groupHash(o.group.key, p);
+      view.nav.querySelector('[data-tab="groups"]').href = o.hash;
+      if (view.tab === 'groups' && location.hash !== o.hash) history.replaceState(history.state, '', o.hash);
+      let found;
       try {
-        const params = { cacheKey: list.cacheKey, group: view.group.key, offset: view.offset, limit: PAGE_SIZE };
-        if (hideSeen) params.hideSeen = true;
-        if (likedOnly) params.liked = true;
-        page = await ctx.groupEntries(params, ctx.controller.signal);
+        found = await ctx.titles(params, ctx.controller.signal);
       } catch (err) {
-        if (view !== state.open || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
-        view.foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+        if (seq !== o.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
+        o.body.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
           h('p', { text: err.message || 'The entries could not be loaded.' }),
-          h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'Try again')));
+          h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadGroup(o) }, 'Try again')));
         return;
       }
-      if (view !== state.open || !ctx.isCurrent()) return;
-      const names = page.entries || [];
-      view.list.append(...names.map((e) => row(ctx, e, view.group.title, list.cacheKey, null, null)));
-      view.offset += names.length;
-      view.count.textContent = plural(page.total, 'entry', 'entries');
-      const done = names.length === 0 || view.offset >= page.total;
-      if (!done) view.foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'More'));
-      else {
-        const seen = hideSeen && page.seenHiddenCount > 0 ? ` · ${plural(page.seenHiddenCount, 'seen entry', 'seen entries')} hidden` : '';
-        view.foot.replaceChildren(status((page.total === 0 ? 'No entries in this group.' : `All ${fmt(page.total)} shown`) + seen));
-      }
+      if (seq !== o.seq || !ctx.isCurrent()) return;
+      o.paintCount(found.seenHiddenCount);
+      const titles = found.titles || [];
+      const total = Number.isInteger(found.total) ? found.total : titles.length;
+      const empty = o.q || hideSeen || likedOnly ? 'Nothing in this group matches.' : 'No entries in this group.';
+      const foot = () => h('p', { class: 'lib-foot', role: 'status', text: total ? `All ${fmt(total)} shown` : empty });
+      o.body.replaceChildren(total ? pages(ctx, o, params, { ...found, titles }, entryRow, seq, foot) : h('div', { class: 'lib-list' }, foot()));
     };
 
     // The shared toggle: an open group stays open unless it is off and switched-off groups are left out again.
     const refresh = () => {
-      renderGroups();
       if (state.open && !includeOff && list.disabled.has(state.open.group.key)) close();
+      renderGroups();
     };
     // A mark filter loads the open group again from its first page.
-    const reload = () => { if (state.open) open(state.open.group, false); };
-    renderGroups();
+    const reload = () => { if (state.open) loadGroup(state.open); };
+    view.groupRoute(view.groupQuery);
     return { el, refresh, reload };
   }
 

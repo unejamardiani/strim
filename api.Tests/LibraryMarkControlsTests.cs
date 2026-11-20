@@ -42,10 +42,9 @@ public class LibraryMarkControlsTests
     // Search results and group entries both carry the controls.
     var library = Read("library.js");
     Assert.Contains("return row(ctx, m, m.group, cacheKey,", Between(library, "function hit(", "window.StrimLibrary"));
-    Assert.Contains("view.list.append(...names.map((e) => row(ctx, e, view.group.title, list.cacheKey, null, null)));", library);
+    Assert.Contains("return row(ctx, e, e.group, list.cacheKey, meta, null);", library);
     Assert.Contains("rowMarks(ctx, e),", Between(library, "function row(", "window.StrimLibrary"));
     Assert.Contains("const capsule = markControls(ctx, entry);", Between(library, "function rowMarks(", "async function setMark("));
-    Assert.Contains("const names = page.entries || [];", library);
 
     // The icons exist; the tap target is the phone control height.
     var js = Read("main.js");
@@ -103,15 +102,15 @@ public class LibraryMarkControlsTests
 
     // The open group asks with the same options, starts again on a change and shows its seen count.
     var browse = Between(library, "// Browse (#287)", "function hit(");
-    Assert.Contains("if (hideSeen) params.hideSeen = true;\n        if (likedOnly) params.liked = true;", browse);
-    Assert.Contains("const reload = () => { if (state.open) open(state.open.group, false); };", browse);
-    Assert.Contains("plural(page.seenHiddenCount, 'seen entry', 'seen entries')", browse);
+    Assert.Contains("if (hideSeen) params.hideSeen = true;\n      if (likedOnly) params.liked = true;", browse);
+    Assert.Contains("const reload = () => { if (state.open) loadGroup(state.open); };", browse);
+    Assert.Contains("hideSeen && seenHidden > 0 ? ` · ${fmt(seenHidden)} seen hidden` : ''", browse);
     Assert.Contains("searchSection(ctx, result, browse.refresh, browse.reload)", library);
 
     // The Library asks the endpoints that know the caller's marks.
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
     Assert.Contains("api('/library/search', { method: 'POST', body, signal })", show);
-    Assert.Contains("api(`/library/group-entries?${new URLSearchParams(params)}`, { signal })", show);
+    Assert.Contains("api(`/playlists/${playlist.id}/library/titles?${new URLSearchParams(params)}`, { signal })", show);
   }
 
   [Fact]

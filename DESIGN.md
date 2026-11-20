@@ -267,8 +267,18 @@ is the left column, Series and Channels stack on the right. A single type loads 
 time as the end of the list comes within 600px. The status line names the titles and those left
 out ("7 more in switched-off groups" with "Show them", "3 seen titles hidden"). The query and type
 live in the address, `#/p/<id>/library/search?q=…&type=films`, replaced while typing.
-Browse: the groups by type, then in playlist order; opening one pages its entries 50 at a time with
-More until all are shown.
+Browse: the groups by type, then in playlist order. Opening one (#423) goes to its own address,
+`#/…/groups/<encodeURIComponent(groupKey)>?q=…&sort=title|year&unseen=1&liked=1` (a history entry; the
+query replaced), and scrolls to the top; a key not in the list (or not shown) falls back to the list
+with the toast "That group is not in this list any more." The group's titles come from the titles
+route, 30 at a time as the end comes within 600px, one row per series ("S1–S3 · 21 episodes"), a
+film in several entries "2 versions", no other meta line; a failed page shows "Try again" below the
+rows. The sticky head (`.lib-sticky`): back (`.lib-ib`, "All groups"), the title (one line, ellipsis)
+over "5,412 films" (+ " · 318 seen hidden" while Unseen is on, + "Off"), the filter field "Filter
+<group>" (2 letters or digits, 300ms), and the chips Unseen and Liked (the Search tab's) and sort
+(icon `sort`), cycling "Playlist order", "A to Z", "Newest year". Filter, chip or order start again
+from the first page. The foot says "All 5,412 shown", "No entries in this group." or "Nothing in this
+group matches.".
 Type chips and group rows (#422), owner and viewer alike: a chip row (single choice, the search's
 chips) with "Films 11", "Series 7", "Channels 7", the number of groups of each type, only for types
 that have groups; the first is chosen at the start, the choice kept for the page session and in the
@@ -286,15 +296,16 @@ Phone layout (below 1100px): one 760px column. Below 768px the tabs are a floati
 bottom (62px, 24px radius, the dock's inverted colours, icon over label, the active tab tinted with
 an `--accent` icon); the footer pads 104px to scroll clear of it, and an open film card's backdrop
 covers it. From 768px they are a segmented control in the head (owner) or in a row under the cover
-(viewer). An open group replaces the group list; All groups returns to the list with the focus on
-the group that was open.
+(viewer). An open group replaces the group list, its sticky head spanning the page's width; All
+groups or the browser's Back returns to the list with the focus on the group that was open.
 
 Wide Library (from 1100px, CSS only): once the groups are loaded the page widens to a 1440px
-maximum (same 18px padding). While a group is open, Browse becomes two columns with a 24px gap,
-`minmax(300px, 0.4fr) minmax(0, 1fr)`: left the group list, which stays shown, right the open
-group's entries, sticky below the top bar and scrolling within the screen height. The head with the
-segmented tabs, the search and the Browse title span the width; with no group open the list keeps
-the full width.
+maximum (same 18px padding). While a group is open (`.lib-groups-cols.has-open`), Browse becomes two
+columns with a 24px gap, `minmax(300px, 0.4fr) minmax(0, 1fr)`: left the group list with its title,
+sticky with its own scroll, right the open group, whose head sticks under the top bar while the page
+scrolls the entries; the back button is hidden. The head with the segmented tabs spans the width;
+with no group open the list keeps the full width. From 1100 to 1439px an open film card leaves one
+column again.
 
 ### Site (`/`, guides: site.css)
 

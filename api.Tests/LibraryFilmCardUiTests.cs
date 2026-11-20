@@ -65,7 +65,8 @@ public class LibraryFilmCardUiTests
     var start = css.IndexOf("@media (min-width: 1100px) and (max-width: 1439px) {", StringComparison.Ordinal);
     Assert.True(start >= 0);
     var block = css[start..css.IndexOf("\n}", start, StringComparison.Ordinal)];
-    Assert.Contains(".page:has(> .film-card[open]) .library-browse { display: flex; align-items: stretch; }", block);
+    Assert.Contains(".page:has(> .film-card[open]) .lib-groups-cols.has-open { display: flex; align-items: stretch; }", block);
+    Assert.Contains(".page:has(> .film-card[open]) .lib-groups-cols.has-open .lib-groups-side { display: none; }", block);
   }
 
   [Fact]

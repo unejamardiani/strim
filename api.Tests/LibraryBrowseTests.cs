@@ -61,105 +61,22 @@ public class LibraryBrowseTests
     Assert.Contains("return { sorted, hidden: list.groups.length - shown.length };", browse);
     Assert.Contains("const { sorted, hidden } = browseGroups(list, includeOff);", browse);
     Assert.Contains("if (hidden > 0) nodes.push(status(`${plural(hidden, 'switched-off group')} hidden`));", browse);
-    Assert.Contains("const offBadge = (g) => (list.disabled.has(g.key) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);", browse);
+    Assert.Contains("list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null].filter(Boolean));", browse);
 
     var refresh = Between(browse, "const refresh = () => {", "};");
     Assert.Contains("renderGroups();", refresh);
     Assert.Contains("if (state.open && !includeOff && list.disabled.has(state.open.group.key)) close();", refresh);
   }
 
-  private const string PinnedOpenAndLoadPage = """
-        const open = (g, scroll = true) => {
-          if (state.seen[g.key] !== g.count) {
-            state.seen = { ...state.seen, [g.key]: g.count };
-            writeCounts(ctx, list, state.seen);
-          }
-          const view = {
-            group: g, offset: 0,
-            count: h('p', { class: 'search-hit-meta', text: plural(g.count, 'entry', 'entries') }),
-            list: h('ol', { class: 'search-list library-entries' }),
-            foot: h('div', { class: 'library-foot' }),
-          };
-          state.open = view;
-          markOpenGroup();
-          entriesEl.replaceChildren(
-            h('div', { class: 'library-entries-head' },
-              h('button', { class: 'btn btn-sm', type: 'button', onclick: close }, icon('back'), 'All groups'),
-              h('div', { class: 'grow' }, h('h3', { class: 'library-group-title', text: g.title || 'Untitled group' }), view.count),
-              offBadge(g)),
-            h('div', { class: 'card' }, view.list, view.foot));
-          groupsEl.hidden = true;
-          entriesEl.hidden = false;
-          if (scroll) el.scrollIntoView({ block: 'start' });
-          loadPage(view);
-        };
-
-        // A failed page shows its error below the entries already shown, which stay.
-        const loadPage = async (view) => {
-          view.foot.replaceChildren(status(view.offset ? 'Loading more…' : 'Loading entries…'));
-          let page;
-          try {
-            const params = { cacheKey: list.cacheKey, group: view.group.key, offset: view.offset, limit: PAGE_SIZE };
-            if (hideSeen) params.hideSeen = true;
-            if (likedOnly) params.liked = true;
-            page = await ctx.groupEntries(params, ctx.controller.signal);
-          } catch (err) {
-            if (view !== state.open || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
-            view.foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
-              h('p', { text: err.message || 'The entries could not be loaded.' }),
-              h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'Try again')));
-            return;
-          }
-          if (view !== state.open || !ctx.isCurrent()) return;
-          const names = page.entries || [];
-          view.list.append(...names.map((e) => row(ctx, e, view.group.title, list.cacheKey, null, null)));
-          view.offset += names.length;
-          view.count.textContent = plural(page.total, 'entry', 'entries');
-          const done = names.length === 0 || view.offset >= page.total;
-          if (!done) view.foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: () => loadPage(view) }, 'More'));
-          else {
-            const seen = hideSeen && page.seenHiddenCount > 0 ? ` · ${plural(page.seenHiddenCount, 'seen entry', 'seen entries')} hidden` : '';
-            view.foot.replaceChildren(status((page.total === 0 ? 'No entries in this group.' : `All ${fmt(page.total)} shown`) + seen));
-          }
-        };
-    """;
-
-  [Fact]
-  public void OpeningAGroup_PagesWithOffsetAndLimit_UntilTotal_AndAFailedPageKeepsTheEntries()
-  {
-    var browse = Browse();
-    // Opening (first page at once), each request with offset/limit, 'More' until total, and a failure that
-    // only replaces the footer are pinned to the exact source: clearing the list, skipping the first page or
-    // another offset step fails here. api.Tests has no JS engine (no new dependency); the test below walks
-    // the real endpoint with the same steps.
-    Assert.Equal(PinnedOpenAndLoadPage.ReplaceLineEndings("\n"), Between(browse, "    const open = (g, scroll = true) => {", "\n\n    // The shared toggle"));
-    // The entries list is only placed in the view and appended to; nothing else clears or replaces it.
-    Assert.Equal(2, Regex.Matches(browse, Regex.Escape("view.list")).Count);
-    Assert.DoesNotContain("innerHTML", Read("library.js"));
-
-    // The page size is the server's limit.
-    Assert.Contains("const PAGE_SIZE = 50;", browse);
-    Assert.Contains("public const int MaxSearchResults = 50;", Read("api/Endpoints/EndpointSupport.cs"));
-
-    // main.js hands in the read-only group-entries request with the parameters as the query string.
-    var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
-    Assert.Contains("groupEntries: (params, signal) => api(`/library/group-entries?${new URLSearchParams(params)}`, { signal }),", show);
-    Assert.DoesNotContain("/playlist/group-entries", Read("library.js"));
-
-    // 'All groups' (pinned in open) goes back to the list.
-    var close = Between(browse, "const close = () => {", "const open = (g, scroll = true) => {");
-    Assert.Contains("groupsEl.hidden = false;", close);
-  }
-
   /// <summary>
-  /// Walks a 120-entry group through the real endpoint with the steps of the loadPage pinned above: the first page on opening, then
-  /// 'More' with offset += names until total. A failed page leaves the shown names and 'Try again' resumes.
+  /// The editor's group-entries route (#215) stays: it pages a 120-entry group 50 names at a time until total, and a
+  /// failed page leaves the shown names so a retry asks for the same offset. The Library's open group uses the
+  /// titles route (#423), pinned in LibraryGroupViewUiTests.
   /// </summary>
   [Fact]
   public async Task PagingAGroup_ThroughTheRealEndpoint_RequestsSuccessivePagesUntilTotal()
   {
-    var browse = Browse();
-    var pageSize = int.Parse(Regex.Match(browse, @"const PAGE_SIZE = (\d+);").Groups[1].Value);
+    const int pageSize = 50;
 
     using var app = new StrimAppFactory();
     var client = new ApiClient(app.CreateClient());
@@ -226,8 +143,8 @@ public class LibraryBrowseTests
     Assert.DoesNotMatch(@"\bswitch\b", browse);
     foreach (var forbidden in new[] { "checkbox", "class: 'toggle'", "library-toggle", "bulk", "Bulk", "Save", "Switch", "Turn off", "Turn on", "disabled.add", "disabled.delete", "POST" })
       Assert.DoesNotContain(forbidden, browse);
-    // The only buttons open a group, page, retry or go back.
+    // The only button with a fixed label retries; rows open a group, the head goes back, the chips filter and sort.
     var labels = Regex.Matches(browse, @"\}, '([^']+)'\)").Select(m => m.Groups[1].Value).ToHashSet();
-    Assert.Equal(new HashSet<string> { "More", "Try again" }, labels);
+    Assert.Equal(new HashSet<string> { "Try again" }, labels);
   }
 }

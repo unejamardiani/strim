@@ -72,7 +72,7 @@ public class LibraryRowsUiTests
     var row = Between(library, "function row(ctx, e, group, cacheKey, meta, badge)", "// mount() runs");
     Assert.Contains("rowMarks(ctx, e),", row);
     Assert.Contains("return row(ctx, m, m.group, cacheKey,", Between(library, "function hit(", "function row("));
-    Assert.Contains("view.list.append(...names.map((e) => row(ctx, e, view.group.title, list.cacheKey, null, null)));", library);
+    Assert.Contains("return row(ctx, e, e.group, list.cacheKey, meta, null);", library);
     // The glyph's state is in the group label.
     var paint = Between(library, "function paintMarks(el)", "function rowMarks(");
     Assert.Contains("like.dataset.rating = String(m.rating);", paint);

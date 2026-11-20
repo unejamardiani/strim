@@ -92,6 +92,7 @@ const ICONS = {
   up: '<path d="M7 10v10H4V10zM7 10l4-6.5c1.3 0 2.2 1 2 2.3L12.5 9H18a2 2 0 0 1 2 2.3l-1.2 6.8A2 2 0 0 1 16.8 20H7"/>',
   down: '<path transform="rotate(180 12 12)" d="M7 10v10H4V10zM7 10l4-6.5c1.3 0 2.2 1 2 2.3L12.5 9H18a2 2 0 0 1 2 2.3l-1.2 6.8A2 2 0 0 1 16.8 20H7"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
+  sort: '<path d="M7 5v14M7 19l-3-3M7 19l3-3M17 19V5M17 5l-3 3M17 5l3 3"/>',
   star: '<path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>',
   book: '<path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H19v13H6.5A1.5 1.5 0 0 0 5 18.5zM5 18.5A1.5 1.5 0 0 0 6.5 20H19"/>',
   people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>',
@@ -1569,8 +1570,6 @@ function showLibrary(playlist) {
       host.langFilter = langFilterNodes(host);
       return { bar: host.langFilter.bar, panel: host.langFilter.panel, render: () => renderLangFilter(host) };
     },
-    // One page of a group's entries with their marks (#215, #297), read-only like the search.
-    groupEntries: (params, signal) => api(`/library/group-entries?${new URLSearchParams(params)}`, { signal }),
     // The film card (#367): TMDB facts and the marks of one film entry, only when /api/config reports TMDB on.
     tmdbEnabled: state.tmdbEnabled,
     filmCard: (params, signal) => api(`/playlists/${playlist.id}/library/film-card?${new URLSearchParams(params)}`, { signal }),
@@ -1605,7 +1604,6 @@ function showSharedLibrary(id) {
       return { groups, disabled: new Set(), totalChannels: open.totalChannels, cacheKey: open.libraryKey, name: open.name, ownerName: open.ownerName };
     },
     search: (body, signal) => api(`${base}/search`, { method: 'POST', body: scoped(body), signal }),
-    groupEntries: (params, signal) => api(`${base}/group-entries?${new URLSearchParams(scoped(params))}`, { signal }),
     titles: (params, signal) => api(`${base}/titles?${new URLSearchParams(scoped(params))}`, { signal }),
     filmCard: (params, signal) => api(`${base}/film-card?${new URLSearchParams(scoped(params))}`, { signal }),
     seriesCard: (params, signal) => api(`${base}/series-card?${new URLSearchParams(scoped(params))}`, { signal }),
