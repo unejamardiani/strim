@@ -2039,3 +2039,93 @@ select.input {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Compact controls (#382): visible 32-36px, the 44px touch target comes from ::after ---------- */
+.btn-xs { position: relative; min-height: 32px; padding: 0 11px; font-size: 13px; font-weight: 700; border-radius: 10px; gap: 6px; }
+.btn-xs::after, .icon-btn.is-sm::after { content: ""; position: absolute; inset: -6px -2px; }
+.btn-xs svg { width: 15px; height: 15px; }
+.btn-quiet { background: none; color: var(--ink-2); }
+.btn-danger { background: var(--danger); color: var(--on-danger); }
+.btn-danger-quiet { background: none; color: var(--danger); }
+.icon-btn.is-sm { position: relative; width: 34px; height: 34px; }
+.icon-btn.is-sm svg { width: 17px; height: 17px; }
+/* Person avatar: the initial of the owner's label; the tone is picked from the id. */
+.share-avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font: 800 15px/1 var(--font-display); text-transform: uppercase; background: var(--series-soft); color: var(--series-ink); }
+.share-avatar.t-live { background: var(--live-soft); color: var(--live-ink); }
+.share-avatar.t-movies { background: var(--movies-soft); color: var(--movies-ink); }
+/* ---------- Invitation (#382): a page with a decorative ticket; stacked below 900px ---------- */
+.invite-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; padding: 6px 6px 28px; align-content: start; justify-items: start; }
+.invite-copy { display: flex; flex-direction: column; gap: 18px; align-items: flex-start; }
+.invite-copy .eyebrow { font: 750 12px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--accent-ink); }
+.invite-copy h1 { font-size: 50px; font-weight: 800; letter-spacing: -.045em; line-height: .98; text-wrap: balance; }
+.invite-text { margin: 0; color: var(--ink-2); font-size: 16px; max-width: 42ch; }
+.invite-as { align-self: stretch; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); font-size: 14px; }
+.invite-as small { display: block; font-size: 12.5px; color: var(--ink-2); }
+.invite-as a { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--accent-ink); text-decoration: none; white-space: nowrap; }
+.invite-actions { align-self: stretch; display: flex; gap: 8px; }
+.invite-actions .btn { min-height: 44px; font-size: 15px; }
+.invite-actions .btn-primary { flex: 1; }
+.invite-fine { margin: 0; font-size: 12.5px; color: var(--ink-3); }
+.invite-perks { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; color: var(--ink-2); }
+.invite-perks span { display: inline-flex; align-items: center; gap: 7px; }
+.invite-perks svg { width: 15px; height: 15px; color: var(--ok); stroke-width: 2.8; }
+.ticket { position: relative; width: 300px; height: 400px; justify-self: center; border-radius: 26px; padding: 24px; display: flex; flex-direction: column; color: #f5eee4; transform: rotate(-4deg);
+  background: radial-gradient(17rem 13rem at 112% -8%, rgba(255,91,31,.75), transparent 62%), radial-gradient(15rem 13rem at -24% 104%, rgba(122,90,248,.6), transparent 62%), #1d1a16;
+  box-shadow: 0 40px 70px -30px rgba(29,26,22,.7), 0 14px 30px -16px rgba(29,26,22,.5); outline: 1px solid rgba(255,255,255,.08); outline-offset: -1px; }
+.ticket::before, .ticket::after { content: ""; position: absolute; top: 284px; width: 26px; height: 26px; border-radius: 50%; background: var(--bg); }
+.ticket::before { left: -13px; } .ticket::after { right: -13px; }
+.ticket .wordmark { font-size: 22px; }
+.ticket-kicker { margin-top: auto; font: 750 11px/1 var(--font-ui); letter-spacing: .2em; text-transform: uppercase; opacity: .7; }
+.ticket-title { margin-top: 10px; font: 800 52px/.9 var(--font-display); letter-spacing: -.05em; }
+.ticket-sub { margin-top: 12px; font-size: 14px; font-weight: 600; opacity: .85; }
+.ticket-perf { margin: 22px -8px 0; border-top: 2px dashed rgba(245,238,228,.28); }
+.ticket-foot { height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 14px; font: 700 11px/1.5 var(--font-ui); letter-spacing: .14em; text-transform: uppercase; }
+.ticket-foot span { opacity: .75; }
+.ticket-bars { width: 96px; height: 34px; opacity: .85; background: repeating-linear-gradient(90deg, #f5eee4 0 2px, transparent 2px 5px, #f5eee4 5px 6px, transparent 6px 10px, #f5eee4 10px 13px, transparent 13px 15px); }
+.ticket-stamp { position: absolute; right: 18px; top: 74px; width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; border: 3px solid currentColor; font: 800 15px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; transform: rotate(14deg); }
+.ticket.is-ok .ticket-stamp { color: #7be0a8; }
+.ticket.is-void { filter: grayscale(1); opacity: .62; }
+.ticket.is-void .ticket-stamp { color: #f5eee4; width: auto; height: auto; padding: 8px 16px; border-radius: 10px; right: 50%; top: 104px; transform: translateX(50%) rotate(-12deg); font-size: 26px; }
+@media (min-width: 900px) {
+  .page:has(> .invite-page) { max-width: 1000px; }
+  .invite-page { grid-template-columns: 340px minmax(0, 440px); gap: 72px; align-items: center; justify-content: center; justify-items: stretch; padding: 24px 0 60px; }
+}
+@media (max-width: 599px) {
+  .invite-copy h1 { font-size: 34px; }
+  .ticket { width: 210px; height: 280px; padding: 17px; border-radius: 20px; justify-self: start; margin: 4px 0 0 6px; }
+  .ticket::before, .ticket::after { top: 196px; width: 20px; height: 20px; }
+  .ticket::before { left: -10px; } .ticket::after { right: -10px; }
+  .ticket-title { font-size: 36px; }
+  .ticket-sub { font-size: 12px; margin-top: 8px; }
+  .ticket-perf { margin-top: 14px; }
+  .ticket-foot { height: 58px; font-size: 9px; }
+  .ticket-bars { width: 64px; height: 24px; }
+  .ticket-stamp { width: 66px; height: 66px; font-size: 11px; top: 52px; right: 12px; }
+  .ticket.is-void .ticket-stamp { font-size: 19px; top: 74px; }
+}
+/* ---------- Shared with you (#382): cover cards in the playlist cards' grid; the cover preset comes from the id ---------- */
+.shared-section { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.shared-head { display: flex; align-items: baseline; gap: 10px; padding-left: 4px; }
+.shared-head h2 { font-size: 24px; font-weight: 800; letter-spacing: -.03em; }
+.shared-head span { font-size: 13px; color: var(--ink-2); }
+.shared-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 1024px) {
+  .page:has(> .shared-section:not([hidden])) { max-width: 1200px; }
+  .shared-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+}
+.shared-card { padding: 8px 8px 16px; display: flex; flex-direction: column; gap: 14px; }
+.cover { position: relative; overflow: hidden; isolation: isolate; height: 132px; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; justify-content: space-between; color: #fff8ee; background: var(--cover); }
+.cover::after { content: attr(data-initials); position: absolute; z-index: -1; right: -8px; bottom: -44px; font: 800 170px/1 var(--font-display); letter-spacing: -.08em; color: rgba(255,255,255,.14); }
+.cover-1 { --cover: radial-gradient(18rem 12rem at 100% 0%, #ff8a4c, transparent 60%), radial-gradient(16rem 12rem at 0% 110%, #7a5af8, transparent 62%), #2a1c3a; }
+.cover-2 { --cover: radial-gradient(18rem 12rem at 0% 0%, #2f9e62, transparent 60%), radial-gradient(18rem 12rem at 100% 110%, #e39a2d, transparent 62%), #14312a; }
+.cover-3 { --cover: radial-gradient(18rem 12rem at 100% 100%, #d6372f, transparent 60%), radial-gradient(16rem 12rem at 0% 0%, #e39a2d, transparent 62%), #3a1614; }
+.cover-4 { --cover: radial-gradient(18rem 12rem at 0% 0%, #7a5af8, transparent 60%), radial-gradient(16rem 12rem at 100% 110%, #ff5b1f, transparent 62%), #1f1833; }
+.cover-5 { --cover: radial-gradient(18rem 12rem at 100% 0%, #e39a2d, transparent 60%), radial-gradient(16rem 12rem at 0% 110%, #7a5af8, transparent 62%), #2e2210; }
+.cover-6 { --cover: radial-gradient(18rem 12rem at 0% 100%, #ff5b1f, transparent 60%), radial-gradient(16rem 12rem at 100% 0%, #e39a2d, transparent 62%), #2d1a10; }
+.cover-top { display: flex; justify-content: space-between; align-items: center; }
+.cover-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font: 750 11.5px/18px var(--font-ui); background: rgba(20,17,14,.38); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.cover-chip svg { width: 12px; height: 12px; stroke-width: 2.6; }
+.cover-name { font: 800 30px/1 var(--font-display); letter-spacing: -.04em; text-shadow: 0 1px 14px rgba(0,0,0,.25); overflow-wrap: anywhere; }
+.shared-card-foot { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 10px; }
+.shared-card-foot .shared-by { flex: 1; min-width: 0; margin: 0; font-size: 13.5px; }
+.shared-card-foot .btn { min-height: 36px; }

@@ -72,6 +72,7 @@
 
   --danger: #d6372f;
   --danger-soft: #fde1de;
+  --on-danger: #ffffff;
   --warn-ink: #8a5a00;
   --warn-soft: #fbeacb;
   --ok: #2f9e62;
@@ -129,6 +130,7 @@
 
     --danger: #ff7a70;
     --danger-soft: rgba(255, 122, 112, 0.14);
+    --on-danger: #1d0e05;
     --warn-ink: #f4c97f;
     --warn-soft: rgba(240, 176, 74, 0.14);
     --ok: #5fd193;
