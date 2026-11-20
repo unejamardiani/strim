@@ -71,8 +71,9 @@ public class LibrarySearchTests
     var library = Read("library.js");
     var section = Between(library, "function searchSection(", "async function runSearch(");
     Assert.Single(Regex.Matches(library, Regex.Escape("'Include switched-off groups'")));
-    Assert.Contains("class: 'btn btn-sm library-toggle', type: 'button', 'aria-pressed': String(includeOff),", section);
-    Assert.Contains("includeOff = !includeOff;", section);
+    // The switch sits in the Library's ⋯ menu (#418) and runs this search again.
+    Assert.Contains("ctx.onIncludeOff = () => {\n      run();", section);
+    Assert.Contains("class: 'toggle', type: 'checkbox', role: 'switch', checked: includeOff,", library);
 
     var hit = library[library.IndexOf("function hit(", StringComparison.Ordinal)..];
     Assert.Contains("m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null", hit);
@@ -118,8 +119,10 @@ public class LibrarySearchTests
     Assert.Contains("const filter = ctx.languageFilter(host);", section);
     Assert.Contains("h('div', { class: 'search-head' }, results.head, filter.bar),", section);
     Assert.Contains("filter.panel,", section);
+    // The only checkbox is the ⋯ menu's switch (#418).
+    var withoutMenu = library.Replace(Between(library, "function libraryMenu(ctx)", "async function load("), "");
     foreach (var copied in new[] { "lang-filter", "lang-panel", "lang-option", "type: 'checkbox'" })
-      Assert.DoesNotContain(copied, library);
+      Assert.DoesNotContain(copied, withoutMenu);
 
     // One request carries the type, the toggle and the language choice together; the offer comes from the response.
     var run = Between(library, "async function runSearch(", "function hit(");

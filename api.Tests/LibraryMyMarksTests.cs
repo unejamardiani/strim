@@ -27,7 +27,9 @@ public class LibraryMyMarksTests
   public void MyMarks_IsPartOfTheLibrary_AndPagesThroughTheListEndpoint()
   {
     var library = Read("library.js");
-    Assert.Contains("root.replaceChildren(head, body, myMarks(ctx));", Between(library, "function mount(ctx)", "async function load("));
+    var mount = Between(library, "function mount(ctx)", "function show(sub)");
+    Assert.Contains("panels.marks.append(myMarks(ctx));", mount);
+    Assert.True(mount.IndexOf("myMarks(ctx)", StringComparison.Ordinal) < mount.IndexOf("load(ctx, controller);", StringComparison.Ordinal));
 
     var section = MyMarks();
     Assert.Contains("const MARKS_PAGE = 50;", section);

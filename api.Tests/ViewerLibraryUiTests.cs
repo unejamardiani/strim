@@ -28,7 +28,7 @@ public class ViewerLibraryUiTests
   {
     var main = Read("main.js");
     // #/shared/<playlistId> opens the same Library as a viewer; the "Shared with you" card and menu link there.
-    Assert.Contains("const shared = /^\\/shared\\/([0-9a-f-]{36})$/i.exec(path);", Between(main, "function parseRoute()", "function navigate("));
+    Assert.Contains("const shared = /^\\/shared\\/([0-9a-f-]{36})(?:\\/([^?#]*))?(?:\\?(.*))?$/i.exec(path);", Between(main, "function parseRoute()", "function navigate("));
     Assert.Contains("if (target.name === 'shared') return showSharedLibrary(target.id);", Between(main, "function route()", "function closeSheets()"));
     var cards = Between(main, "// ---------- Shared with you (#382) ----------", "// ---------- Editor ----------");
     Assert.Equal(2, Regex.Matches(cards, Regex.Escape("href: `#/shared/${item.playlistId}`")).Count);
@@ -42,9 +42,9 @@ public class ViewerLibraryUiTests
     Assert.DoesNotContain("/shares/mine", shared);
 
     var library = Read("library.js");
-    var mount = Between(library, "function mount(ctx)", "async function load(");
+    var mount = Between(library, "function mount(ctx)", "function show(sub)");
     Assert.Contains("if (isViewer(ctx)) ctx.cover = viewerCover(ctx);", mount);
-    Assert.Contains("const head = ctx.cover?.el || h('div', { class: 'editor-head library-head' },", mount);
+    Assert.Contains("const head = ctx.cover ? [ctx.cover.el, h('div', { class: 'lib-tabs-row' }, nav)] : [ownerHead(ctx, nav)];", mount);
     // The viewer's head: the cover, "My lists", Read-only, "Shared by", no "Edit groups" or player link.
     var cover = Between(library, "function viewerCover(ctx)", "function accessGone(");
     Assert.Contains("`cover library-cover cover-${ctx.pick(playlist.id, 6) + 1}`", cover);
@@ -55,7 +55,7 @@ public class ViewerLibraryUiTests
       Assert.DoesNotContain(editorOnly, cover);
 
     // No switched-off toggle, no Off badges and "this list" in the viewer's copy.
-    Assert.Contains("const toggle = isViewer(ctx) ? null : h('button', {", library);
+    Assert.DoesNotContain("libraryMenu", Between(library, "function viewerCover(ctx)", "function accessGone("));
     Assert.Contains("m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null,", library);
     Assert.Contains("const listWord = (ctx) => (isViewer(ctx) ? 'this list' : 'your list');", library);
     Assert.Contains("`${f.similar.filter((s) => s.inList).length} in ${listWord(ctx)}`", library);

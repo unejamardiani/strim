@@ -1,9 +1,24 @@
 /* Strim Library (library.js): the read-only view of a saved playlist. */
 
-.library-head .page-title {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
+/* The owner's head and the tabs (#418): a bottom bar below 768px, a segmented control from 768px. The head's
+   buttons and the menu text sit at the end of this file. */
+
+.lib-tabs { position: fixed; z-index: 20; left: 12px; right: 12px; bottom: calc(14px + var(--safe-bottom)); height: 62px; display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: 24px; background: var(--dock-bg); border: 1px solid var(--dock-border); color: var(--dock-ink-2); box-shadow: var(--shadow-pop); }
+.lib-tabs a { flex: 1; height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 18px; color: inherit; text-decoration: none; font: 700 11.5px var(--font-ui); }
+.lib-tabs a svg { width: 21px; height: 21px; }
+.lib-tabs a[aria-current="page"] { background: color-mix(in srgb, var(--dock-ink) 12%, transparent); color: var(--dock-ink); }
+.lib-tabs a[aria-current="page"] svg { color: var(--accent); }
+/* The footer (with the TMDB notice) must scroll clear of the bar. */
+body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom)); }
+
+@media (min-width: 768px) {
+  .lib-tabs { position: static; height: auto; display: inline-flex; gap: 2px; padding: 4px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); box-shadow: none; }
+  .lib-tabs a { flex: none; height: 36px; flex-direction: row; gap: 8px; padding: 0 16px; border-radius: 999px; font: 650 14.5px var(--font-ui); }
+  .lib-tabs a svg { width: 16px; height: 16px; }
+  .lib-tabs a[aria-current="page"] { background: var(--pill-on); color: var(--ink); box-shadow: 0 1px 2px rgba(29, 26, 22, .12); }
+  .lib-tabs a[aria-current="page"] svg { color: inherit; }
+  body:has(.lib-tabs) .site-links { padding-bottom: calc(28px + var(--safe-bottom)); }
+  .lib-tabs-row { display: flex; margin-top: 12px; }
 }
 
 /* Search: the field, then the type pills and the one toggle, which wrap below each other on a phone. */
@@ -397,3 +412,16 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .library-gone { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; }
 .library-gone h2 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.035em; text-wrap: balance; }
 .library-gone p { margin: 0; color: var(--ink-2); }
+
+/* The owner's head (#418): back, kicker and name on one line, ⋯. */
+.lib-head { display: flex; align-items: center; gap: 10px; margin: 6px 0 12px; }
+.lib-head-text { flex: 1; min-width: 0; }
+.lib-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.lib-name { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: -.035em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-ib { position: relative; width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--ink); }
+.lib-ib::after { content: ""; position: absolute; inset: -4px; }
+.lib-ib svg { width: 18px; height: 18px; }
+.lib-ib.is-quiet { background: transparent; }
+.lib-menu-facts { margin: 0 12px 8px; font-size: 14.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.lib-menu-facts small { display: block; margin-top: 4px; font-size: 13px; color: var(--ink-3); }
+@media (min-width: 768px) { .lib-name { font-size: 32px; } }

@@ -89,7 +89,7 @@ public class LibraryMarkControlsTests
     var section = Between(library, "function searchSection(", "async function runSearch(");
     Assert.Contains("const seenFilter = markFilter('Hide seen', () => hideSeen, (v) => { hideSeen = v; });", section);
     Assert.Contains("const likedFilter = markFilter('Liked only', () => likedOnly, (v) => { likedOnly = v; });", section);
-    Assert.Contains("h('div', { class: 'library-filters' }, types, toggle, seenFilter, likedFilter),", section);
+    Assert.Contains("h('div', { class: 'library-filters' }, types, seenFilter, likedFilter),", section);
     Assert.Contains("run();\n          onMarkFilter();", section);
 
     var run = Between(library, "async function runSearch(", "// Marks (#298)");
@@ -103,7 +103,7 @@ public class LibraryMarkControlsTests
     Assert.Contains("if (hideSeen) params.hideSeen = true;\n        if (likedOnly) params.liked = true;", browse);
     Assert.Contains("const reload = () => { if (state.open) open(state.open.group, false); };", browse);
     Assert.Contains("plural(page.seenHiddenCount, 'seen entry', 'seen entries')", browse);
-    Assert.Contains("searchSection(ctx, result, browse.refresh, browse.reload),", library);
+    Assert.Contains("searchSection(ctx, result, browse.refresh, browse.reload)", library);
 
     // The Library asks the endpoints that know the caller's marks.
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
