@@ -423,6 +423,7 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .lib-clear { position: absolute; right: 6px; top: 6px; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); }
 .lib-clear[hidden] { display: none; }
 .lib-clear svg { width: 16px; height: 16px; }
+.lib-gfilter { margin-top: 10px; }
 .lib-sec { margin-top: 22px; }
 .lib-sec-head { display: flex; align-items: baseline; gap: 10px; margin: 0 2px 8px; }
 .lib-sec-head h2 { margin: 0; font-family: var(--font-display); font-size: 19px; font-weight: 800; letter-spacing: -.03em; }

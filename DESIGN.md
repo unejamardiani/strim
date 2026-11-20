@@ -287,6 +287,17 @@ Back or All groups (a navigation to `…/groups?type=…`) returns to the list w
 group's row once the list is drawn again. A group that is not in the list, or not shown, falls back
 to the list with the toast "That group is not in this list any more." and the list's address
 (replaced). While a group is open the list's address is not written over the group's.
+Below the title in the sticky head (#444): a filter field (`.lib-search.lib-gfilter`, 10px above,
+placeholder and `aria-label` "Filter " + the group title, `.lib-clear` "Clear filter") sends `q`
+300ms after the last key once it has 2 letters or digits; below that the unfiltered group shows.
+Then one chip row: "Unseen" and "Liked" (toggles, the Search tab's shared chips: either one changes
+both tabs) and a sort chip (15px `sort` icon, not a toggle) cycling "Playlist order", "A to Z",
+"Newest year" (`sort=playlist|title|year`, `aria-label="Sort: A to Z"`). A change starts again
+from the first page; with a filter text the empty foot says "Nothing in this group matches.".
+The group's address keeps them, replaced, never a new entry: `…/groups/<key>?q=…&sort=title|year&unseen=1&liked=1`,
+defaults left out; opening a group (reload, pasted address, first visit) takes all four from it
+(an unknown `sort` is playlist order, no `unseen` / `liked` switches the shared chips off), and a
+group row navigates with the current `unseen` / `liked`.
 Type chips and group rows (#422), owner and viewer alike: a chip row (single choice, the search's
 chips) with "Films 11", "Series 7", "Channels 7", the number of groups of each type, only for types
 that have groups; the first is chosen at the start, the choice kept for the page session and in the

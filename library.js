@@ -159,6 +159,12 @@
     { value: 'series', label: 'Series', types: ['Series'] },
     { value: 'channels', label: 'Channels', types: ['Live'] },
   ];
+  // An open group's orders (#444), the titles route's sort values.
+  const SORTS = [
+    { value: 'playlist', label: 'Playlist order' },
+    { value: 'title', label: 'A to Z' },
+    { value: 'year', label: 'Newest year' },
+  ];
   const TYPE_LABELS = { Live: 'Channel', Movies: 'Film', Series: 'Series' };
 
   // The viewer's Library (#383): the same view on someone else's list. Its copy says "this list", never "your list".
@@ -238,6 +244,12 @@
     };
     const seenFilter = markFilter('Unseen', () => hideSeen, (v) => { hideSeen = v; });
     const likedFilter = markFilter('Liked', () => likedOnly, (v) => { likedOnly = v; });
+    // An open group's Unseen and Liked (#444) are the same filters: these chips follow and the search runs again.
+    view.marksChanged = () => {
+      seenFilter.setAttribute('aria-pressed', String(hideSeen));
+      likedFilter.setAttribute('aria-pressed', String(likedOnly));
+      run();
+    };
 
     ctx.controller.signal.addEventListener('abort', () => { clearTimeout(state.timer); state.observer?.disconnect(); }, { once: true });
     // On a phone the labels that do not fit wait behind "+N", as in the editor; a new width fits them again.
@@ -573,14 +585,14 @@
   function browseSection(ctx, list) {
     const { h, icon, fmt, plural } = ctx;
     // seq and observer are the open group's paging (#443), as pages() uses them for the search.
-    const state = { open: null, seen: seenCounts(ctx, list), seq: 0, observer: null };
+    const state = { open: null, seen: seenCounts(ctx, list), seq: 0, observer: null, timer: 0 };
     const groupsEl = h('div', { class: 'library-groups' });
     const entriesEl = h('div', { class: 'lib-groups-main' });
     // The group list with its title, and the open group: beside each other from 1100px, the open group alone below.
     const el = h('section', { class: 'library-browse lib-groups-cols' },
       h('div', { class: 'lib-groups-side' }, h('h2', { class: 'library-title', text: 'Browse groups' }), groupsEl), entriesEl);
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
-    ctx.controller.signal.addEventListener('abort', () => state.observer?.disconnect(), { once: true });
+    ctx.controller.signal.addEventListener('abort', () => { clearTimeout(state.timer); state.observer?.disconnect(); }, { once: true });
 
     // A group's own address (#442), the list's address and the row of a group.
     const groupHash = (key) => `${view.base}/groups/${encodeURIComponent(key)}`;
@@ -592,9 +604,11 @@
     // A group row (#422), the same for owner and viewer: the whole row is the button that goes to the group's address.
     // It also opens the group at once: main.js skips a hashchange back to the address it last routed, which a
     // replaced list address leaves behind; the route that follows finds the group open and does nothing.
+    // The row's address carries the shared Unseen and Liked (#444), so opening a group does not reset them.
     const go = (g) => {
-      location.hash = groupHash(g.key);
-      view.groupAddress(g.key, '');
+      const query = groupQueryOf({ q: '', sort: 'playlist' });
+      location.hash = `${groupHash(g.key)}${query ? `?${query}` : ''}`;
+      view.groupAddress(g.key, query);
     };
     const groupRow = (g, t) => {
       const fresh = newSince(state.seen, g);
@@ -643,6 +657,24 @@
       view.nav.querySelector('[data-tab="groups"]').href = hash;
       if (view.tab === 'groups' && location.hash !== hash) history.replaceState(history.state, '', hash);
     };
+    // A group's filter (#444): below 2 letters or digits none; an over-long one stays, the titles route answers it.
+    const filterOf = (text) => ((text.match(/[\p{L}\p{N}]/gu) || []).length < 2 ? '' : text);
+    // An open group's query (#444): ?q=…&sort=title|year&unseen=1&liked=1, defaults left out.
+    const groupQueryOf = (cur) => {
+      const p = new URLSearchParams();
+      if (cur.q) p.set('q', cur.q);
+      if (cur.sort !== 'playlist') p.set('sort', cur.sort);
+      if (hideSeen) p.set('unseen', '1');
+      if (likedOnly) p.set('liked', '1');
+      return String(p);
+    };
+    // Replaced, never a new entry; the Groups tab's link keeps it while another tab is shown.
+    const keepOpenAddress = (cur) => {
+      const query = groupQueryOf(cur);
+      const hash = `${groupHash(cur.group.key)}${query ? `?${query}` : ''}`;
+      view.nav.querySelector('[data-tab="groups"]').href = hash;
+      if (view.tab === 'groups' && location.hash !== hash) ctx.replaceAddress(hash);
+    };
     // The Groups address handler (#442): the list (key null) closes an open group and focuses its row once the list
     // is drawn again; a group's address opens it unless it is already open; a group not shown falls back to the list.
     view.groupAddress = (key, query) => {
@@ -657,7 +689,15 @@
         if (was !== undefined) focusRow(was);
         return;
       }
-      if (state.open?.group.key === key) return;
+      // The address is the source of truth (#444): filter, order and the shared mark chips come from its query. The
+      // group on screen stays as it is only when its key and all four settings match; a pasted query applies.
+      const p = new URLSearchParams(query);
+      const unseen = p.get('unseen') === '1';
+      const liked = p.get('liked') === '1';
+      const q = filterOf((p.get('q') || '').trim());
+      const sort = SORTS.find((s) => s.value === p.get('sort')) || SORTS[0];
+      const shown = state.open;
+      if (shown?.group.key === key && shown.q === q && shown.sort === sort.value && unseen === hideSeen && liked === likedOnly) return;
       const g = browseGroups(list, includeOff).sorted.find((x) => x.key === key);
       const t = GROUP_TYPES.find((x) => x.type === g?.type);
       if (!g || !t) {
@@ -666,9 +706,13 @@
         ctx.toast('That group is not in this list any more.', { error: true });
         return;
       }
+      if (unseen !== hideSeen || liked !== likedOnly) {
+        hideSeen = unseen;
+        likedOnly = liked;
+        view.marksChanged?.();
+      }
       groupType = t.value;
-      open(g);
-      view.nav.querySelector('[data-tab="groups"]').href = `${groupHash(key)}${query ? `?${query}` : ''}`;
+      open(g, shown?.group.key !== key, { q, sort: sort.value });
       renderGroups();
     };
     if (view.groupQuery) {
@@ -684,6 +728,7 @@
     // Back to the group list; the caller focuses the row once renderGroups() has drawn the list again (#442).
     // An answer still on its way is dropped (seq) and the sentinel stops watching.
     const close = () => {
+      clearTimeout(state.timer);
       state.open = null;
       state.seq++;
       state.observer?.disconnect();
@@ -695,23 +740,57 @@
     // Opening a group stores its current count on this device; its badge goes the next time the list is drawn. The
     // sticky head (#443): back to the list's address (a history entry; the address handler closes and focuses, #442),
     // the title on one line, the group's count and the Off badge.
-    const open = (g, scroll = true) => {
+    // Below the title (#444): the filter field, then Unseen, Liked (the Search tab's shared chips) and the sort chip.
+    const open = (g, scroll = true, from = { q: '', sort: 'playlist' }) => {
+      // A filter still pending for the group shown before is dropped.
+      clearTimeout(state.timer);
       if (state.seen[g.key] !== g.count) {
         state.seen = { ...state.seen, [g.key]: g.count };
         writeCounts(ctx, list, state.seen);
       }
       const t = GROUP_TYPES.find((x) => x.type === g.type) || GROUP_TYPES[2];
       const name = g.title || 'Untitled group';
-      const cur = { group: g, t, count: h('p', { text: plural(g.count, t.one, t.many) }), body: h('div') };
+      const cur = { group: g, t, count: h('p', { text: plural(g.count, t.one, t.many) }), body: h('div'), q: from.q, sort: from.sort };
       state.open = cur;
       markOpenGroup();
       el.classList.add('has-open');
+      // 300ms after the last key; below 2 letters or digits the unfiltered group shows.
+      const filtered = () => {
+        const q = filterOf(input.value.trim());
+        if (state.open !== cur || q === cur.q) return;
+        cur.q = q;
+        loadGroup(cur);
+      };
+      const clear = h('button', {
+        class: 'lib-clear', type: 'button', 'aria-label': 'Clear filter', hidden: !cur.q,
+        onclick: () => { input.value = ''; clear.hidden = true; clearTimeout(state.timer); filtered(); input.focus(); },
+      }, icon('close'));
+      const input = h('input', {
+        class: 'input input-search', type: 'search', placeholder: `Filter ${name}`, 'aria-label': `Filter ${name}`,
+        value: cur.q, autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search',
+        oninput: () => { clear.hidden = !input.value; clearTimeout(state.timer); state.timer = setTimeout(filtered, 300); },
+        onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
+      });
+      const markChip = (label, get, set) => h('button', {
+        class: 'lib-chip is-toggle', type: 'button', 'aria-pressed': String(get()),
+        onclick: () => { set(!get()); view.marksChanged?.(); loadGroup(cur); },
+      }, label);
+      cur.seenChip = markChip('Unseen', () => hideSeen, (v) => { hideSeen = v; });
+      cur.likedChip = markChip('Liked', () => likedOnly, (v) => { likedOnly = v; });
+      const sortLabel = h('span');
+      cur.sortChip = h('button', {
+        class: 'lib-chip', type: 'button',
+        onclick: () => { cur.sort = SORTS[(SORTS.findIndex((s) => s.value === cur.sort) + 1) % SORTS.length].value; loadGroup(cur); },
+      }, icon('sort'), sortLabel);
+      cur.sortLabel = sortLabel;
       entriesEl.replaceChildren(
         h('div', { class: 'lib-sticky' },
           h('div', { class: 'lib-ghead' },
             h('a', { class: 'lib-ib', href: `${view.base}/groups?type=${t.value}`, 'aria-label': 'All groups' }, icon('back')),
             h('div', { class: 'lib-ghead-text' }, h('h2', { text: name, title: name }), cur.count),
-            list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null)),
+            list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null),
+          h('div', { class: 'lib-search lib-gfilter' }, input, clear),
+          h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Filters' }, cur.seenChip, cur.likedChip, cur.sortChip)),
         cur.body);
       if (scroll) window.scrollTo(0, 0);
       loadGroup(cur);
@@ -725,10 +804,19 @@
     const entryRow = (x) => row(ctx, x, x.group, list.cacheKey, groupMeta(x), null);
 
     // The first page replaces what was shown; a failed one shows the error with Try again in place of the rows.
+    // Every change of filter, chip or sort starts here (#444): the chips are painted, the address replaced.
     const loadGroup = async (cur) => {
       const seq = ++state.seq;
       state.observer?.disconnect();
+      const sort = SORTS.find((s) => s.value === cur.sort);
+      cur.seenChip.setAttribute('aria-pressed', String(hideSeen));
+      cur.likedChip.setAttribute('aria-pressed', String(likedOnly));
+      cur.sortLabel.textContent = sort.label;
+      cur.sortChip.setAttribute('aria-label', `Sort: ${sort.label}`);
+      keepOpenAddress(cur);
       const params = { cacheKey: list.cacheKey, includeDisabled: includeOff, group: cur.group.key, offset: 0, limit: 30 };
+      if (cur.q) params.q = cur.q;
+      params.sort = cur.sort;
       if (hideSeen) params.hideSeen = true;
       if (likedOnly) params.liked = true;
       cur.body.replaceChildren(status('Loading entries…'));
@@ -749,7 +837,7 @@
       const total = Number.isInteger(first.total) ? first.total : titles.length;
       const foot = (text) => h('p', { class: 'lib-foot', text });
       if (!titles.length) {
-        cur.body.replaceChildren(foot(hideSeen || likedOnly ? 'Nothing in this group matches.' : 'No entries in this group.'));
+        cur.body.replaceChildren(foot(hideSeen || likedOnly || cur.q ? 'Nothing in this group matches.' : 'No entries in this group.'));
         return;
       }
       cur.body.replaceChildren(pages(ctx, state, params, first, entryRow, seq, foot(`All ${fmt(total)} shown`)));
@@ -763,8 +851,8 @@
       renderGroups();
       if (gone) focusRow(gone.key);
     };
-    // A mark filter loads the open group again from its first page.
-    const reload = () => { if (state.open) open(state.open.group, false); };
+    // A mark filter of the Search tab loads the open group again from its first page; its filter and sort stay.
+    const reload = () => { if (state.open) loadGroup(state.open); };
     // A group address that came while the list was loading (#442) is applied before the list is first drawn: drawn
     // with no group open, it would replace the group's address by the list's.
     if (view.tab === 'groups' && view.groupKey !== null) view.groupAddress(view.groupKey, view.groupQuery);

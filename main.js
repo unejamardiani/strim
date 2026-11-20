@@ -89,6 +89,7 @@ const ICONS = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   bookmark: '<path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  sort: '<path d="M7 5v14M7 19l-3-3M7 19l3-3M17 19V5M17 5l-3 3M17 5l3 3"/>',
   up: '<path d="M7 10v10H4V10zM7 10l4-6.5c1.3 0 2.2 1 2 2.3L12.5 9H18a2 2 0 0 1 2 2.3l-1.2 6.8A2 2 0 0 1 16.8 20H7"/>',
   down: '<path transform="rotate(180 12 12)" d="M7 10v10H4V10zM7 10l4-6.5c1.3 0 2.2 1 2 2.3L12.5 9H18a2 2 0 0 1 2 2.3l-1.2 6.8A2 2 0 0 1 16.8 20H7"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
@@ -1552,6 +1553,11 @@ function showLibrary(playlist) {
     errorMessage: loadErrorMessage,
     // The Library's search (#297): the editor's Everything search with the caller's marks; it only reads the list.
     searchHint,
+    // An address replaced in place (#444): the hashchange guard then knows it, so pasting the one before still routes.
+    replaceAddress: (hash) => {
+      history.replaceState(history.state, '', hash);
+      currentHash = hash;
+    },
     search: (body, signal) => api('/library/search', { method: 'POST', body, signal }),
     // The Search tab (#421): one row per title, with counts per type, for owner and viewer.
     titles: (params, signal) => api(`/playlists/${playlist.id}/library/titles?${new URLSearchParams(params)}`, { signal }),

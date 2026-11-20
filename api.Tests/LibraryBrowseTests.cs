@@ -61,7 +61,7 @@ public class LibraryBrowseTests
     Assert.Contains("return { sorted, hidden: list.groups.length - shown.length };", browse);
     Assert.Contains("const { sorted, hidden } = browseGroups(list, includeOff);", browse);
     Assert.Contains("if (hidden > 0) nodes.push(status(`${plural(hidden, 'switched-off group')} hidden`));", browse);
-    Assert.Contains("list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null)),", browse);
+    Assert.Contains("list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null),", browse);
 
     var refresh = Between(browse, "const refresh = () => {", "};");
     Assert.Contains("renderGroups();", refresh);
