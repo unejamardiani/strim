@@ -68,6 +68,11 @@ public class LibraryGroupsUiTests
     Assert.Contains("list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null,", row);
     Assert.Contains("h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron'))", row);
     Assert.DoesNotContain("'entry', 'entries'", row);
+    // The row's address carries the shared Unseen / Liked (#444), so opening a group keeps them.
+    var go = Between(browse, "const go = (g) => {", "\n    };");
+    Assert.Contains("const query = groupQueryOf({ q: '', sort: 'playlist' });", go);
+    Assert.Contains("location.hash = `${groupHash(g.key)}${query ? `?${query}` : ''}`;", go);
+    Assert.Contains("view.groupAddress(g.key, query);", go);
   }
 
   [Fact]
@@ -92,7 +97,7 @@ public class LibraryGroupsUiTests
     Assert.Contains("const newSince = (seen, g) => (Number.isFinite(seen[g.key]) && g.count > seen[g.key] ? g.count - seen[g.key] : 0);", browse);
     Assert.Contains("fresh > 0 ? h('span', { class: 'lib-new', text: `+${fmt(fresh)} new` }) : null,", browse);
     // Opening a group stores its count; groups that no longer exist are dropped on write.
-    var open = Between(browse, "const open = (g, scroll = true) => {", "markOpenGroup();");
+    var open = Between(browse, "const open = (g, scroll = true, from = { q: '', sort: 'playlist' }) => {", "markOpenGroup();");
     Assert.Contains("state.seen = { ...state.seen, [g.key]: g.count };", open);
     Assert.Contains("writeCounts(ctx, list, state.seen);", open);
     var write = Between(browse, "function writeCounts(ctx, list, counts) {", "function seenCounts(");
@@ -134,6 +139,6 @@ public class LibraryGroupsUiTests
     Assert.Contains("writeCounts(ctx, list, counts);", first);
     // The stored counts equal the current ones, so newSince is 0 for every group.
     Assert.Contains("return counts;", first);
-    Assert.Contains("const state = { open: null, seen: seenCounts(ctx, list), seq: 0, observer: null };", browse);
+    Assert.Contains("const state = { open: null, seen: seenCounts(ctx, list), seq: 0, observer: null, timer: 0 };", browse);
   }
 }

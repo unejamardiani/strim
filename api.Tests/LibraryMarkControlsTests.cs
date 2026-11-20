@@ -104,7 +104,7 @@ public class LibraryMarkControlsTests
     // The open group asks with the same options, starts again on a change and shows its seen count.
     var browse = Between(library, "// Browse (#287)", "function hit(");
     Assert.Contains("if (hideSeen) params.hideSeen = true;\n      if (likedOnly) params.liked = true;", browse);
-    Assert.Contains("const reload = () => { if (state.open) open(state.open.group, false); };", browse);
+    Assert.Contains("const reload = () => { if (state.open) loadGroup(state.open); };", browse);
     Assert.Contains("` · ${fmt(first.seenHiddenCount)} seen hidden`", browse);
     Assert.Contains("searchSection(ctx, result, browse.refresh, browse.reload)", library);
 

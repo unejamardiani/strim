@@ -42,8 +42,8 @@ public class LibraryGroupViewUiTests
     // The row navigates to the group's address, its key encoded, as a history entry.
     Assert.Contains("const groupHash = (key) => `${view.base}/groups/${encodeURIComponent(key)}`;", browse);
     Assert.Contains("onclick: () => go(g) },", Between(browse, "const groupRow = (g, t) => {", "h('span', { class: 'lib-dot'"));
-    var go = Between(browse, "const go = (g) => {", "};");
-    Assert.Contains("location.hash = groupHash(g.key);", go);
+    var go = Between(browse, "const go = (g) => {", "\n    };");
+    Assert.Contains("location.hash = `${groupHash(g.key)}${query ? `?${query}` : ''}`;", go);
     Assert.DoesNotContain("replaceState", go);
     Assert.DoesNotContain("onclick: () => open(g)", browse);
 
@@ -62,7 +62,7 @@ public class LibraryGroupViewUiTests
     // The address opens the group with the group's type chosen; an open group's address is kept, never the list's.
     var handler = Handler();
     Assert.Contains("if (state.open?.group.key === key) return;", handler);
-    InOrder(handler, "groupType = t.value;", "open(g);", "renderGroups();");
+    InOrder(handler, "groupType = t.value;", "open(g, true, {", "renderGroups();");
     Assert.Contains("if (state.open) return;", Between(browse, "const keepGroupsAddress = () => {", "};"));
     // A list still loading applies the address once it is loaded.
     Assert.Contains("if (view.tab === 'groups' && view.groupKey !== null) view.groupAddress(view.groupKey, view.groupQuery);", browse);
@@ -81,7 +81,7 @@ public class LibraryGroupViewUiTests
     var before = tail[..tail.IndexOf("if (view.tab === 'groups' && view.groupKey !== null)", StringComparison.Ordinal)];
     Assert.DoesNotContain("renderGroups();", before);
     // The handler opens the group before it draws the list.
-    InOrder(Between(Handler(), "if (state.open?.group.key === key) return;", "};"), "open(g);", "renderGroups();");
+    InOrder(Between(Handler(), "if (state.open?.group.key === key) return;", "};"), "open(g, true, {", "renderGroups();");
   }
 
   [Fact]
@@ -100,7 +100,8 @@ public class LibraryGroupViewUiTests
     Assert.Contains("view.groupAddress?.(view.groupKey, view.groupQuery);", show);
     var handler = Handler();
     Assert.Contains("const value = new URLSearchParams(query).get('type');", handler);
-    Assert.Contains("view.nav.querySelector('[data-tab=\"groups\"]').href = `${groupHash(key)}${query ? `?${query}` : ''}`;", handler);
+    // An open group's query (#444) is kept on the tab's link by keepOpenAddress().
+    Assert.Contains("view.nav.querySelector('[data-tab=\"groups\"]').href = hash;", Between(Browse(), "const keepOpenAddress = (cur) => {", "\n    };"));
     var browse = Browse();
     Assert.Contains("const value = new URLSearchParams(view.groupQuery).get('type');", browse);
   }
@@ -129,21 +130,19 @@ public class LibraryGroupViewUiTests
     Assert.DoesNotContain("groupsEl.hidden", Library());
   }
 
-  private static string Open() => Between(Browse(), "const open = (g, scroll = true) => {", "\n\n    // The shared toggle");
+  private static string Open() => Between(Browse(), "const open = (g, scroll = true, from = { q: '', sort: 'playlist' }) => {", "\n\n    // The shared toggle");
 
   [Fact]
   public void Group_LoadsTitlesByThirtyWithASentinel()
   {
     var open = Open();
-    // The titles route with the group, by 30, with the shared mark filters; no sort and no query.
+    // The titles route with the group, by 30, with the shared mark filters (and, #444, the filter and the sort).
     Assert.Contains("const params = { cacheKey: list.cacheKey, includeDisabled: includeOff, group: cur.group.key, offset: 0, limit: 30 };", open);
     Assert.Contains("if (hideSeen) params.hideSeen = true;\n      if (likedOnly) params.liked = true;", open);
     Assert.Contains("first = await ctx.titles(params, ctx.controller.signal);", open);
-    Assert.DoesNotContain("sort", open);
-    Assert.DoesNotContain("q:", open);
     // An overtaken answer is dropped; a mark filter or another address starts again from the first page.
     InOrder(open, "const seq = ++state.seq;", "state.observer?.disconnect();", "if (seq !== state.seq || ctx.controller.signal.aborted", "if (seq !== state.seq || !ctx.isCurrent()) return;");
-    Assert.Contains("const reload = () => { if (state.open) open(state.open.group, false); };", Browse());
+    Assert.Contains("const reload = () => { if (state.open) loadGroup(state.open); };", Browse());
     // A failed first page: the error with Try again in place of the rows.
     InOrder(open, "cur.body.replaceChildren(h('div', { class: 'notice error', role: 'alert' },", "onclick: () => loadGroup(cur) }, 'Try again')");
     // Later pages come from pages() of #421: the sentinel within 600px, Try again below the rows, the optional end.
@@ -159,7 +158,7 @@ public class LibraryGroupViewUiTests
     Assert.Contains("const entryRow = (x) => row(ctx, x, x.group, list.cacheKey, groupMeta(x), null);", open);
     // The three foot texts.
     Assert.Contains("const foot = (text) => h('p', { class: 'lib-foot', text });", open);
-    Assert.Contains("foot(hideSeen || likedOnly ? 'Nothing in this group matches.' : 'No entries in this group.')", open);
+    Assert.Contains("foot(hideSeen || likedOnly || cur.q ? 'Nothing in this group matches.' : 'No entries in this group.')", open);
     Assert.Contains("`All ${fmt(total)} shown`", open);
     // The old paging is gone: no More button, no group-entries, no PAGE_SIZE, no scrollIntoView; the page goes to the top.
     var browse = Browse();
@@ -179,7 +178,8 @@ public class LibraryGroupViewUiTests
     InOrder(open, "h('div', { class: 'lib-sticky' },", "h('div', { class: 'lib-ghead' },",
       "'aria-label': 'All groups' }, icon('back')),",
       "h('div', { class: 'lib-ghead-text' }, h('h2', { text: name, title: name }), cur.count),",
-      "list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null)),");
+      "list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null),",
+      "h('div', { class: 'lib-search lib-gfilter' }, input, clear),");
     Assert.Contains("const name = g.title || 'Untitled group';", open);
     // The count line: the group's count with the type word, plus the seen titles left out while Unseen is on.
     Assert.Contains("count: h('p', { text: plural(g.count, t.one, t.many) })", open);
@@ -216,6 +216,97 @@ public class LibraryGroupViewUiTests
     Assert.Contains("@media (max-width: 1099px) { .lib-groups-cols.has-open .lib-groups-side { display: none; } }", css);
     // The old [hidden] override is gone.
     Assert.DoesNotContain("!important", Between(css, "/* Browse (#287)", "/* Stage:"));
+  }
+
+  private static string LoadGroup() => Between(Open(), "const loadGroup = async (cur) => {", "cur.body.replaceChildren(status(");
+
+  [Fact]
+  public void Filter_SendsQ_AfterTwoLettersWithDebounce()
+  {
+    var open = Open();
+    // The field of #421 inside the sticky head, below the title, labelled with the group's title.
+    InOrder(open, "h('div', { class: 'lib-sticky' },", "h('div', { class: 'lib-ghead-text' }",
+      "h('div', { class: 'lib-search lib-gfilter' }, input, clear),", "h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Filters' }");
+    Assert.Contains("placeholder: `Filter ${name}`, 'aria-label': `Filter ${name}`,", open);
+    Assert.Contains("class: 'lib-clear', type: 'button', 'aria-label': 'Clear filter', hidden: !cur.q,", open);
+    // 300ms after the last key; below 2 letters or digits (searchHint, the server's rule) the unfiltered group.
+    Assert.Contains("clearTimeout(state.timer); state.timer = setTimeout(filtered, 300);", open);
+    Assert.Contains("const q = ctx.searchHint(text) ? '' : text;", open);
+    Assert.Contains("if ((query.match(/[\\p{L}\\p{N}]/gu) || []).length < 2)", Read("main.js"));
+    InOrder(Between(open, "const filtered = () => {", "\n      };"), "if (q === cur.q) return;", "cur.q = q;", "loadGroup(cur);");
+    Assert.Contains("if (cur.q) params.q = cur.q;", LoadGroup());
+    // A pending filter stops when the group closes or the Library is left.
+    Assert.Contains("clearTimeout(state.timer);", Between(Browse(), "const close = () => {", "};"));
+    Assert.Contains("'abort', () => { clearTimeout(state.timer); state.observer?.disconnect(); }", Browse());
+    Assert.Contains(".lib-gfilter { margin-top: 10px; }", Read("library.css"));
+  }
+
+  [Fact]
+  public void Sort_CyclesThreeOrders()
+  {
+    var library = Library();
+    InOrder(Between(library, "const SORTS = [", "];"),
+      "{ value: 'playlist', label: 'Playlist order' },", "{ value: 'title', label: 'A to Z' },", "{ value: 'year', label: 'Newest year' },");
+    // The same values the titles route accepts.
+    Assert.Contains("Sorts = [\"playlist\", \"title\", \"year\"];", Read("api/Endpoints/LibraryTitlesEndpoints.cs"));
+    var open = Open();
+    Assert.Contains("onclick: () => { cur.sort = SORTS[(SORTS.findIndex((s) => s.value === cur.sort) + 1) % SORTS.length].value; loadGroup(cur); },", open);
+    Assert.Contains("}, icon('sort'), sortLabel);", open);
+    Assert.DoesNotContain("'aria-pressed'", Between(open, "cur.sortChip = h('button', {", "sortLabel);"));
+    var load = LoadGroup();
+    Assert.Contains("cur.sortLabel.textContent = sort.label;", load);
+    Assert.Contains("cur.sortChip.setAttribute('aria-label', `Sort: ${sort.label}`);", load);
+    Assert.Contains("if (cur.sort !== 'playlist') params.sort = cur.sort;", load);
+    Assert.Contains("sort: '<path d=\"M7 5v14M7 19l-3-3M7 19l3-3M17 19V5M17 5l-3 3M17 5l3 3\"/>',", Read("main.js"));
+  }
+
+  [Fact]
+  public void Chips_ShareTheSearchTabsMarkFilters()
+  {
+    var open = Open();
+    // Exactly Unseen, Liked, sort; both toggles set the shared filters and tell the Search tab.
+    Assert.Contains("'aria-label': 'Filters' }, cur.seenChip, cur.likedChip, cur.sortChip)),", open);
+    Assert.Contains("class: 'lib-chip is-toggle', type: 'button', 'aria-pressed': String(get()),", open);
+    Assert.Contains("onclick: () => { set(!get()); view.marksChanged?.(); loadGroup(cur); },", open);
+    Assert.Contains("cur.seenChip = markChip('Unseen', () => hideSeen, (v) => { hideSeen = v; });", open);
+    Assert.Contains("cur.likedChip = markChip('Liked', () => likedOnly, (v) => { likedOnly = v; });", open);
+    // The Search tab's chips follow and its search runs again; its own chips reload the open group (reload()).
+    var marks = Between(Library(), "view.marksChanged = () => {", "};");
+    InOrder(marks, "seenFilter.setAttribute('aria-pressed', String(hideSeen));", "likedFilter.setAttribute('aria-pressed', String(likedOnly));", "run();");
+    var load = LoadGroup();
+    InOrder(load, "cur.seenChip.setAttribute('aria-pressed', String(hideSeen));", "cur.likedChip.setAttribute('aria-pressed', String(likedOnly));",
+      "if (hideSeen) params.hideSeen = true;", "if (likedOnly) params.liked = true;");
+  }
+
+  [Fact]
+  public void Address_KeepsFilterSortAndChips_AndOpeningReadsThem()
+  {
+    var browse = Browse();
+    // Written on every load, replaced, never a history entry; defaults left out.
+    var query = Between(browse, "const groupQueryOf = (cur) => {", "\n    };");
+    InOrder(query, "if (cur.q) p.set('q', cur.q);", "if (cur.sort !== 'playlist') p.set('sort', cur.sort);",
+      "if (hideSeen) p.set('unseen', '1');", "if (likedOnly) p.set('liked', '1');", "return String(p);");
+    var keep = Between(browse, "const keepOpenAddress = (cur) => {", "\n    };");
+    Assert.Contains("const hash = `${groupHash(cur.group.key)}${query ? `?${query}` : ''}`;", keep);
+    Assert.Contains("if (view.tab === 'groups' && location.hash !== hash) history.replaceState(history.state, '', hash);", keep);
+    Assert.DoesNotContain("location.hash =", keep);
+    InOrder(LoadGroup(), "keepOpenAddress(cur);", "const params =");
+
+    // mount() passes the address's query to show(), show() to the handler, the handler to the opened group.
+    Assert.Contains("show(ctx.sub, ctx.query);", Between(Library(), "function mount(ctx) {", "// Opens a tab"));
+    Assert.Contains("view.groupQuery = query || '';", Show());
+    Assert.Contains("view.groupAddress?.(view.groupKey, view.groupQuery);", Show());
+    var handler = Between(Handler(), "if (state.open?.group.key === key) return;", "renderGroups();\n    };");
+    InOrder(handler, "const p = new URLSearchParams(query);",
+      "const unseen = p.get('unseen') === '1';", "const liked = p.get('liked') === '1';",
+      "hideSeen = unseen;", "likedOnly = liked;", "view.marksChanged?.();",
+      "const q = (p.get('q') || '').trim();",
+      "const sort = SORTS.find((s) => s.value === p.get('sort')) || SORTS[0];",
+      "open(g, true, { q: ctx.searchHint(q) ? '' : q, sort: sort.value });");
+    // The field shows the address's text; the group starts with its filter and order.
+    var open = Open();
+    Assert.Contains("q: from.q, sort: from.sort };", open);
+    Assert.Contains("value: cur.q,", open);
   }
 
   [Fact]
