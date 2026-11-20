@@ -272,7 +272,7 @@ body:has(.film-card.is-viewer) { --film-pane-w: 448px; }
 .film-poster-empty.is-series { background: linear-gradient(160deg, var(--series-soft), var(--surface-3)); }
 .film-poster-empty.is-series::after { border-radius: 3px; background: var(--series); transform: none; }
 .series-facts { margin: 4px 0 0; font-size: 13px; font-weight: 550; color: var(--ink-3); }
-.film-actions { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; }
+.film-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; row-gap: 10px; margin-top: 18px; }
 .film-sep { width: 1px; height: 22px; background: var(--line-strong); }
 .film-rating { display: inline-flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; }
 .film-rating svg { width: 15px; height: 15px; align-self: center; fill: var(--movies); stroke: var(--movies); stroke-width: 1.4; }
@@ -302,7 +302,7 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .film-tile-title { overflow: hidden; font-size: 13.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .film-tile-meta { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; color: var(--ink-2); }
 .film-tile-meta > :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.film-choose .film-marks { align-self: center; }
+.film-load .film-actions, .film-choose .film-actions { margin-top: 0; }
 
 /* Similar films (#368): a rail of tiles; in-list tiles are buttons with their group, the others greyed out. */
 .film-section { display: flex; flex-direction: column; gap: 12px; }
@@ -368,6 +368,14 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .lib-row .film-marks svg { width: 16px; height: 16px; }
 /* After the capsule's own display, so the phone row hides it. */
 .lib-row .library-marks { display: none; }
+/* Watchlist button (#420): a 42px circle, the capsule's outer height, on its own background; rows show it from 768px. */
+.lib-watch { position: relative; flex-shrink: 0; width: 42px; height: 42px; display: grid; place-items: center; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--surface-2) 80%, transparent); color: var(--ink-2); }
+.lib-watch::after { content: ""; position: absolute; inset: -1px; }
+.lib-watch svg { width: 17px; height: 17px; stroke-width: 2; }
+.lib-watch[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.lib-watch[aria-pressed="true"] svg { fill: currentColor; }
+.lib-row .lib-watch { display: none; }
+@media (min-width: 768px) { .lib-row .lib-watch { display: grid; } }
 @media (min-width: 768px) {
   .lib-row .lib-seen, .lib-row .lib-like { display: none; }
   .lib-row .library-marks { display: inline-flex; }

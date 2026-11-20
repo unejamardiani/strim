@@ -147,7 +147,11 @@ a 420px side pane beside the list that does not block the page; while it is open
 It loads once on open (a skeleton poster, the entry name and the marks). The stage is centred: 2:3
 poster (200px, 208px in the pane; Movies-diamond box when missing), kicker "Film · year", title
 (Bricolage 36px/800), up to three genres joined by " · ", then the TMDB rating and the marks capsule
-(Seen, Thumbs up, Thumbs down as 36px icon buttons sharing the rows' state). The overview is clamped
+(Seen, Thumbs up, Thumbs down as 36px icon buttons sharing the rows' state), then, after a second
+thin line, the Watchlist button (#420): a 42px bookmark circle on its own capsule background,
+"Add to watchlist" when off, "On your watchlist" (filled, `--accent-soft`) when on, in every state
+that shows the capsule (loading, "choose", film and series, owner and viewer). On a 320px sheet the
+row may wrap (10px row gap). The overview is clamped
 to 3 lines with More/Less. "choose" lists the candidates as a 3-column grid of poster tiles; other
 states and failures show the entry name, its group and a short notice. With TMDB data, TMDB's logo,
 credit line and notice end it. Close, Escape, backdrop or Back close it without moving the page.
@@ -194,7 +198,10 @@ round 36px Seen button (44px touch target, `aria-label="Seen"`); thumbs are set 
 pressed control has the `--accent-soft` fill; tapping it again undoes it. A seen title's name is
 `--ink-2` at weight 550. A mark is the user's, not the playlist's: it is stored at once and shows on
 every variant of the title in the view. A failed request puts the mark back and shows an error
-toast. Channels and names without a title get no controls. Two toggle chips after the type chips,
+toast. From 768px the Watchlist button stands directly before the capsule; below 768px rows have
+none (the card has it) and a watchlisted row shows no badge. Seen wins: marking a title seen takes it
+off the watchlist at once on every control of the title, and the server does the same; a failed
+request puts seen, rating and watchlist back. Channels and names without a title get no controls. Two toggle chips after the type chips,
 "Unseen" and "Liked", filter the search and the open group for the page session; with Unseen on,
 the count of seen matches left out is shown. The editor shows no marks.
 

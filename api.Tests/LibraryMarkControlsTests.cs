@@ -31,7 +31,8 @@ public class LibraryMarkControlsTests
     Assert.Contains("const MARK_KINDS = { Movies: 'film', Series: 'series' };", marks);
     Assert.Contains("if (!entry.markKey || !kind) return null;", marks);
     Assert.Contains("class: 'icon-btn library-mark', type: 'button', 'aria-label': label, title: label, 'aria-pressed': 'false',", marks);
-    Assert.Contains("control('Seen', 'check', (m) => ({ ...m, seen: !m.seen })),", marks);
+    Assert.Contains("control('Seen', 'check', toggleSeen),", marks);
+    Assert.Contains("const toggleSeen = (m) => (m.seen ? { ...m, seen: false } :", marks);
     Assert.Contains("control('Thumbs up', 'up', (m) => ({ ...m, rating: m.rating === 1 ? 0 : 1 })),", marks);
     Assert.Contains("control('Thumbs down', 'down', (m) => ({ ...m, rating: m.rating === -1 ? 0 : -1 })));", marks);
     Assert.Contains("seen.setAttribute('aria-pressed', String(m.seen));", marks);
@@ -64,7 +65,7 @@ public class LibraryMarkControlsTests
     Assert.Contains("dataset: { key } },", marks);
     Assert.Contains("for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);", marks);
     Assert.Contains("marks.set(key, next);\n    repaint();\n    try {", marks);
-    Assert.Contains("await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating });", marks);
+    Assert.Contains("await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating, watchlist: next.watchlist });", marks);
 
     // library.js has no request of its own; main.js hands in the marks call through api(), which adds the CSRF token.
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
