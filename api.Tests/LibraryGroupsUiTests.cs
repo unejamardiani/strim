@@ -134,6 +134,6 @@ public class LibraryGroupsUiTests
     Assert.Contains("writeCounts(ctx, list, counts);", first);
     // The stored counts equal the current ones, so newSince is 0 for every group.
     Assert.Contains("return counts;", first);
-    Assert.Contains("const state = { open: null, seen: seenCounts(ctx, list) };", browse);
+    Assert.Contains("const state = { open: null, seen: seenCounts(ctx, list), seq: 0, observer: null };", browse);
   }
 }

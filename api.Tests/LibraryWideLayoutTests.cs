@@ -26,35 +26,30 @@ public class LibraryWideLayoutTests
     Assert.True(media.Success, "library.css has no @media (min-width: 1100px) block.");
     var body = media.Groups[1].Value;
     Assert.Matches(@"\.page:has\(\.lib-panel\)\s*\{\s*max-width:\s*1440px;", body);
-    Assert.Matches(@"\.library-browse:has\(> \.library-open:not\(\[hidden\]\)\)\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(300px, 0\.4fr\) minmax\(0, 1fr\);", body);
-    // The group list stays shown next to the open group even though library.js hides it on a phone. theme.css
-    // hides every [hidden] element with !important, so a plain display would lose: the override must be
-    // !important too, and library.css must load after theme.css for it to win.
-    Assert.Matches(@"\[hidden\]\s*\{\s*display:\s*none\s*!important;", Read("theme.css"));
-    Assert.Matches(@"\.library-browse > \.library-groups\[hidden\]\s*\{\s*display:\s*flex\s*!important;", body);
-    var html = Read("app.html");
-    var theme = html.IndexOf("href=\"theme.css\"", StringComparison.Ordinal);
-    var library = html.IndexOf("href=\"library.css\"", StringComparison.Ordinal);
-    Assert.True(theme >= 0 && library > theme, "app.html must load library.css after theme.css.");
-    Assert.Matches(@"\.library-browse > \.library-title\s*\{\s*grid-column:\s*1 / -1;", body);
-    Assert.Matches(@"\.library-browse > \.library-open\s*\{[^}]*position:\s*sticky;[^}]*overflow-y:\s*auto;", body);
+    // While a group is open (#443): the group list with its title on the left, sticky with its own scroll.
+    Assert.Matches(@"\.lib-groups-cols\.has-open\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(300px, 0\.4fr\) minmax\(0, 1fr\);", body);
+    Assert.Matches(@"\.lib-groups-cols\.has-open \.lib-groups-side\s*\{[^}]*position:\s*sticky;[^}]*overflow-y:\s*auto;", body);
+    // library.js no longer hides the list; the [hidden] override is gone.
+    Assert.DoesNotContain("[hidden]", body);
+    Assert.DoesNotContain(".library-open", Read("library.css"));
   }
 
   [Fact]
   public void LibraryCss_BelowBreakpoint_KeepsThePhoneLayout()
   {
     var outside = OutsideMedia(Read("library.css").Split("/* Film card (#367)")[0]);
-    // Below 1100px nothing places columns or overrides the hidden group list: an open group replaces the list.
+    // Below 1100px nothing places columns: an open group replaces the list, which CSS hides (#443).
     Assert.DoesNotContain("grid", outside);
     Assert.DoesNotContain("[hidden]", outside);
-    Assert.DoesNotContain(".library-open", outside);
     Assert.DoesNotContain("max-width", outside);
     Assert.Matches(@"\.library-browse\s*\{\s*display:\s*flex;\s*flex-direction:\s*column;", outside);
+    Assert.Contains("@media (max-width: 1099px) { .lib-groups-cols.has-open .lib-groups-side { display: none; } }", Read("library.css"));
 
     var js = Read("library.js");
-    Assert.Contains("const entriesEl = h('div', { class: 'library-open', hidden: true });", js);
-    Assert.Contains("groupsEl.hidden = true;", js);
-    Assert.Contains("groupsEl.hidden = false;", js);
+    Assert.Contains("const entriesEl = h('div', { class: 'lib-groups-main' });", js);
+    Assert.Contains("el.classList.add('has-open');", js);
+    Assert.Contains("el.classList.remove('has-open');", js);
+    Assert.DoesNotContain("groupsEl.hidden", js);
   }
 
   [Fact]

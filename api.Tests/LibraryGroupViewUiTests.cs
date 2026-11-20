@@ -121,10 +121,101 @@ public class LibraryGroupViewUiTests
     var refresh = Between(browse, "const refresh = () => {", "};");
     InOrder(refresh, "if (gone) close();", "renderGroups();", "if (gone) focusRow(gone.key);");
 
-    // "All groups" keeps its look and goes to the list's address, a history entry.
-    Assert.Contains("h('button', { class: 'btn btn-sm', type: 'button', onclick: back }, icon('back'), 'All groups'),", browse);
-    Assert.Contains("const back = () => { location.hash = listHash(); };", browse);
+    // "All groups" (#443) is the head's back link to the list's address, a history entry.
+    Assert.Contains("h('a', { class: 'lib-ib', href: `${view.base}/groups?type=${t.value}`, 'aria-label': 'All groups' }, icon('back')),", browse);
     Assert.Contains("const focusRow = (key) => {\n      for (const b of groupsEl.querySelectorAll('.is-group')) if (b.dataset.key === key) b.focus();", browse);
+    // The rebuilt close drops a pending answer and the sentinel, and no longer hides or shows the list itself.
+    InOrder(close, "state.open = null;", "state.seq++;", "state.observer?.disconnect();", "el.classList.remove('has-open');");
+    Assert.DoesNotContain("groupsEl.hidden", Library());
+  }
+
+  private static string Open() => Between(Browse(), "const open = (g, scroll = true) => {", "\n\n    // The shared toggle");
+
+  [Fact]
+  public void Group_LoadsTitlesByThirtyWithASentinel()
+  {
+    var open = Open();
+    // The titles route with the group, by 30, with the shared mark filters; no sort and no query.
+    Assert.Contains("const params = { cacheKey: list.cacheKey, includeDisabled: includeOff, group: cur.group.key, offset: 0, limit: 30 };", open);
+    Assert.Contains("if (hideSeen) params.hideSeen = true;\n      if (likedOnly) params.liked = true;", open);
+    Assert.Contains("first = await ctx.titles(params, ctx.controller.signal);", open);
+    Assert.DoesNotContain("sort", open);
+    Assert.DoesNotContain("q:", open);
+    // An overtaken answer is dropped; a mark filter or another address starts again from the first page.
+    InOrder(open, "const seq = ++state.seq;", "state.observer?.disconnect();", "if (seq !== state.seq || ctx.controller.signal.aborted", "if (seq !== state.seq || !ctx.isCurrent()) return;");
+    Assert.Contains("const reload = () => { if (state.open) open(state.open.group, false); };", Browse());
+    // A failed first page: the error with Try again in place of the rows.
+    InOrder(open, "cur.body.replaceChildren(h('div', { class: 'notice error', role: 'alert' },", "onclick: () => loadGroup(cur) }, 'Try again')");
+    // Later pages come from pages() of #421: the sentinel within 600px, Try again below the rows, the optional end.
+    Assert.Contains("cur.body.replaceChildren(pages(ctx, state, params, first, entryRow, seq, foot(`All ${fmt(total)} shown`)));", open);
+    var pages = Between(Library(), "function pages(ctx, state, params, first, rowOf, seq, end) {", "// Marks (#298)");
+    Assert.Contains("new IntersectionObserver(", pages);
+    Assert.Contains("{ rootMargin: '600px' }", pages);
+    Assert.Contains("offset: ul.children.length, limit: 30", pages);
+    InOrder(pages, "if (page.hasMore !== true || !page.titles?.length) {", "if (end) foot.append(end);", "'Try again'");
+    // Rows: a series is one row with its seasons, a film in several entries says its versions, others no meta.
+    Assert.Contains("if (x.contentType === 'Series') return h('b', { text: seasonsLine(ctx, x) });", open);
+    Assert.Contains("return x.contentType === 'Movies' && x.entries > 1 ? plural(x.entries, 'version') : null;", open);
+    Assert.Contains("const entryRow = (x) => row(ctx, x, x.group, list.cacheKey, groupMeta(x), null);", open);
+    // The three foot texts.
+    Assert.Contains("const foot = (text) => h('p', { class: 'lib-foot', text });", open);
+    Assert.Contains("foot(hideSeen || likedOnly ? 'Nothing in this group matches.' : 'No entries in this group.')", open);
+    Assert.Contains("`All ${fmt(total)} shown`", open);
+    // The old paging is gone: no More button, no group-entries, no PAGE_SIZE, no scrollIntoView; the page goes to the top.
+    var browse = Browse();
+    Assert.DoesNotContain("'More'", browse);
+    Assert.DoesNotContain("PAGE_SIZE", Library());
+    Assert.DoesNotContain("groupEntries", Library());
+    Assert.DoesNotContain("scrollIntoView", Library());
+    Assert.Contains("if (scroll) window.scrollTo(0, 0);", open);
+    var main = Read("main.js");
+    Assert.DoesNotContain("groupEntries", main);
+  }
+
+  [Fact]
+  public void Head_IsStickyUnderTheTopBar()
+  {
+    var open = Open();
+    InOrder(open, "h('div', { class: 'lib-sticky' },", "h('div', { class: 'lib-ghead' },",
+      "'aria-label': 'All groups' }, icon('back')),",
+      "h('div', { class: 'lib-ghead-text' }, h('h2', { text: name, title: name }), cur.count),",
+      "list.disabled.has(g.key) ? h('span', { class: 'lib-off', text: 'Off' }) : null)),");
+    Assert.Contains("const name = g.title || 'Untitled group';", open);
+    // The count line: the group's count with the type word, plus the seen titles left out while Unseen is on.
+    Assert.Contains("count: h('p', { text: plural(g.count, t.one, t.many) })", open);
+    Assert.Contains("const seen = hideSeen && first.seenHiddenCount > 0 ? ` · ${fmt(first.seenHiddenCount)} seen hidden` : '';", open);
+    Assert.Contains("cur.count.textContent = plural(cur.group.count, cur.t.one, cur.t.many) + seen;", open);
+
+    var css = Read("library.css");
+    Assert.Contains(".lib-sticky { position: sticky; top: var(--topbar-h);", css);
+    Assert.Contains(".lib-ghead { display: flex; align-items: center; gap: 10px; }", css);
+    Assert.Contains(".lib-ghead-text { flex: 1; min-width: 0; }", css);
+    Assert.Contains(".lib-ghead h2 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: -.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }", css);
+    Assert.Contains(".lib-ghead p { margin: 0; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }", css);
+    Assert.Contains("padding: 12px; border-top: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--ink-3); }", css);
+    foreach (var gone in new[] { ".library-entries-head", ".library-group-title", ".library-open" })
+    {
+      Assert.DoesNotContain(gone, css);
+      Assert.DoesNotContain(gone.TrimStart('.'), Library());
+    }
+  }
+
+  [Fact]
+  public void Wide_KeepsTheGroupListBesideTheEntries()
+  {
+    var browse = Browse();
+    Assert.Contains("const el = h('section', { class: 'library-browse lib-groups-cols' },\n      h('div', { class: 'lib-groups-side' }, h('h2', { class: 'library-title', text: 'Browse groups' }), groupsEl), entriesEl);", browse);
+    InOrder(Open(), "el.classList.add('has-open');", "loadGroup(cur);");
+
+    var css = Read("library.css");
+    var wide = Between(css, "@media (min-width: 1100px) {\n  .page:has(.lib-panel)", "\n}\n");
+    Assert.Contains(".lib-groups-cols.has-open { display: grid; grid-template-columns: minmax(300px, 0.4fr) minmax(0, 1fr); gap: 24px; align-items: start; }", wide);
+    Assert.Contains(".lib-groups-cols.has-open .lib-groups-side { position: sticky; top: calc(var(--topbar-h) + 12px); max-height: calc(100dvh - var(--topbar-h) - 30px); overflow-y: auto; }", wide);
+    Assert.Contains(".lib-groups-cols.has-open .lib-ghead .lib-ib { display: none; }", wide);
+    Assert.Contains(".lib-groups-cols.has-open .lib-sticky { margin: 0; padding: 0 0 10px; top: calc(var(--topbar-h) + 12px); background: var(--bg); }", wide);
+    Assert.Contains("@media (max-width: 1099px) { .lib-groups-cols.has-open .lib-groups-side { display: none; } }", css);
+    // The old [hidden] override is gone.
+    Assert.DoesNotContain("!important", Between(css, "/* Browse (#287)", "/* Stage:"));
   }
 
   [Fact]

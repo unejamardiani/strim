@@ -267,8 +267,20 @@ is the left column, Series and Channels stack on the right. A single type loads 
 time as the end of the list comes within 600px. The status line names the titles and those left
 out ("7 more in switched-off groups" with "Show them", "3 seen titles hidden"). The query and type
 live in the address, `#/p/<id>/library/search?q=…&type=films`, replaced while typing.
-Browse: the groups by type, then in playlist order; opening one pages its entries 50 at a time with
-More until all are shown. An open group has its own address (#442),
+Browse: the groups by type, then in playlist order. An open group (#443) asks the titles route
+(`group`, playlist order, `hideSeen` / `liked` while Unseen / Liked are on) 30 titles at a time,
+the next page once a sentinel comes within 600px of the screen. Its sticky head (`.lib-sticky` with
+`.lib-ghead`, under the top bar): the back button (`.lib-ib`, `aria-label="All groups"`, a link to
+`…/groups?type=<type>`), the title (20px display face, one line, ellipsis, the full title in
+`title`), below it "5,412 films" (the group's count with film(s), episode(s) or channel(s)), plus
+" · 318 seen hidden" while Unseen is on, and "Off" (`.lib-off`). Rows are the search's title rows
+without a meta line, except "S1–S3 · 21 episodes" for a series and "2 versions" for a film in
+several entries. The foot (`.lib-foot`, 13px `--ink-3`, centred, a hairline above) says "All 5,412
+shown" (the answer's total after the mark filters) once all are loaded; with nothing, "No entries in
+this group." or, with a mark filter on, "Nothing in this group matches.". A failed later page shows
+Try again below the rows, a failed first page in their place; a mark filter or a new address starts
+again from the first page, and opening a group scrolls the page to the top. An open group has its
+own address (#442),
 `#/p/<id>/library/groups/<encoded group key>` (viewer `#/shared/<id>/groups/<…>`): a row navigates
 there (a history entry), a reload keeps the group open and its type chip chosen, and the browser's
 Back or All groups (a navigation to `…/groups?type=…`) returns to the list with the focus on the
@@ -292,16 +304,17 @@ Phone layout (below 1100px): one 760px column. Below 768px the tabs are a floati
 bottom (62px, 24px radius, the dock's inverted colours, icon over label, the active tab tinted with
 an `--accent` icon); the footer pads 104px to scroll clear of it, and an open film card's backdrop
 covers it. From 768px they are a segmented control in the head (owner) or in a row under the cover
-(viewer). An open group replaces the group list at its own address; Back or All groups returns to
+(viewer). An open group replaces the group list at its own address (CSS hides the list while
+`.has-open` is on Browse); its sticky head spans the page's full width. Back or All groups returns to
 the list with the focus on the group that was open, and a group that is gone shows the list with a
 toast.
 
 Wide Library (from 1100px, CSS only): once the groups are loaded the page widens to a 1440px
 maximum (same 18px padding). While a group is open, Browse becomes two columns with a 24px gap,
-`minmax(300px, 0.4fr) minmax(0, 1fr)`: left the group list, which stays shown, right the open
-group's entries, sticky below the top bar and scrolling within the screen height. The head with the
-segmented tabs, the search and the Browse title span the width; with no group open the list keeps
-the full width.
+`minmax(300px, 0.4fr) minmax(0, 1fr)`: left the group list with its "Browse groups" title, sticky
+below the top bar with its own scroll, right the open group, whose entries the page scrolls; its
+head sticks 12px below the top bar and the back button is hidden. With no group open the list keeps
+the full width. From 1100 to 1439px an open film card leaves one column again, with the back button.
 
 ### Site (`/`, guides: site.css)
 
