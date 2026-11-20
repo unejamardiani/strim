@@ -4,7 +4,6 @@
   "prompts": ".factory/prompts",
   "models": {
     "default": "claude-opus-5-5",
-    "review": "gpt-6-astra",
     "review_effort": "high",
     "advisor": "claude-opus-5-5"
   },
