@@ -211,13 +211,23 @@ circle, Movies diamond, Series square), the name without a trailing "(YYYY)" and
 `--ink-2` and the type word (search results only, then the language labels), "Off", the marks and,
 for a row that opens a card, the chevron.
 
-My marks (#299): a section below Browse groups lists every mark of the user, newest change first,
-50 at a time with More, including titles no longer in any playlist. It shows even when the playlist
-does not load. Pills filter it to All, Seen, Liked or Disliked. A row is plain text, never a link to
+My marks (#299): the Marks tab lists every mark of the user, newest change first, including titles
+no longer in any playlist; a record kept only for a confirmed TMDB match is no mark and is neither
+listed nor counted. It shows even when the playlist does not load. Its head (#446), sticky with the
+chips in `.lib-sticky`, is the title "My marks" (`.lib-ghead`) over the count of the view: "65 marks ·
+newest change first", for the Watchlist "14 titles · newest first", empty until the first page
+answers. Five single-choice chips (`.lib-chips`, `aria-pressed`) pick the view: Watchlist (newest on
+the watchlist first), All, Seen, Liked or Disliked; the tab opens on All and the active chip shows the
+count in its `.n`. The view is kept in the address, `#/…/marks?view=watchlist|all|seen|liked|disliked`,
+replaced and never a new history entry, only while the Marks panel is shown; the Marks tab link carries
+it, and a link to it switches a Library already on screen. Pages of 50 load while scrolling, once a
+sentinel comes within 600px of the screen. The card follows 6px below the head; the list keeps the
+760px column and from 1100px is at most 920px wide. A row is plain text, never a link to
 an entry: display title, then year (when known) · Film or Series · Seen · Liked or Disliked, and a
 Remove button at `--control-h`. Remove asks no confirmation: the row goes at once and a toast offers
 Undo, which sets the same mark again and puts the row back in its place. With no marks it says so
-and how to mark a title.
+and how to mark a title: the Watchlist "Nothing on your watchlist yet. Add a film or series with the
+bookmark in its card.", All how to mark a title, the other views "No marks of this kind.".
 
 My list by default: the Library shows the entries of the groups that are on. One switch in the ⋯
 menu, "Include switched-off groups", adds the groups that are off and marks their groups and entries "Off". It is
