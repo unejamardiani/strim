@@ -113,6 +113,51 @@ public class LibrarySeriesCardUiTests
   }
 
   [Fact]
+  public void SimilarSeries_InListOpenInPlace()
+  {
+    var card = Card();
+    Assert.Contains("const label = card.film.type === 'Series' ? 'Similar series' : 'Similar films';", card);
+    Assert.Contains("poster(ctx, s.posterUrl, '', 'film-tile-poster', card.film.type)", card);
+    // Only in-list tiles are buttons; they open the card in place as a series, Back returns to the previous one.
+    Assert.Contains("return h('div', { class: 'film-tile is-absent' }, art, title,", card);
+    Assert.Contains("onclick: () => openSimilar(ctx, s, i) }", card);
+    Assert.Contains("markKey: `similar:${s.entry}`, off: s.enabled === false, type: card.film.type };", card);
+    Assert.Contains("'aria-label': `Back to ${prev.title}`, onclick: () => filmBack(ctx)", card);
+    // The series opened in place has no "Opened from" context.
+    Assert.Contains("seriesInList(ctx, f, card.stack.length === 0 ? answer.context : null)", card);
+    Assert.Contains("Similar series and the match (#392):", Read("DESIGN.md"));
+  }
+
+  [Fact]
+  public void Choose_StoresSeriesMatch()
+  {
+    var card = Card();
+    Assert.Contains("text: choose ? `Which ${word(entry)} is it?` : f?.title || entry.name", card);
+    Assert.Contains("onclick: () => setMatch(ctx, c.id) },", card);
+    Assert.Contains("poster(ctx, c.posterUrl, '', 'film-tile-poster', entry.type)", card);
+    Assert.Contains("if (film.type === 'Series') await ctx.setSeriesMatch({ name: film.name, tmdbId });", card);
+    Assert.Contains("onclick: () => setMatch(ctx, null) }, `Not this ${word(entry)}`)", card);
+    // Every episode row shares the series match, so no kept series answer survives a change.
+    Assert.Contains("const stale = (k) => (film.type === 'Series' ? k[4] === 'Series' : k[0] === film.name);", card);
+    Assert.Contains("for (const k of [...answers.keys()]) if (stale(JSON.parse(k))) answers.delete(k);", card);
+    Assert.Contains("const key = JSON.stringify([film.name, film.group, includeOff, hideSeen, film.type]);", card);
+    Assert.Contains("`Strim finds only this ${word(film)} for the title.`", card);
+  }
+
+  [Fact]
+  public void FailedMatch_RestoresCard()
+  {
+    var card = Card();
+    var match = card[card.IndexOf("async function setMatch(ctx, tmdbId)", StringComparison.Ordinal)..];
+    match = match[..match.IndexOf("await loadFilm(ctx);", StringComparison.Ordinal)];
+    Assert.Contains("const before = card.answer;", match);
+    Assert.Contains("renderFilm(ctx, before);", match);
+    Assert.Contains("cardToast(ctx)(`The ${word(film)} was not changed. ${err.message || ''}`.trim(), { error: true });", match);
+    // The kept answers are dropped only after the match was stored.
+    Assert.True(match.IndexOf("renderFilm(ctx, before);", StringComparison.Ordinal) < match.IndexOf("answers.delete", StringComparison.Ordinal));
+  }
+
+  [Fact]
   public void FilmCard_Unchanged()
   {
     var card = Card();
