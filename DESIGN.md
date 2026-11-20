@@ -142,7 +142,8 @@ Film card (#367): only with TMDB on (`/api/config`), a film row's name is a butt
 its tap target (hover tint, 16px chevron from 768px, `.is-open` tint and 3px `--accent` inset).
 Channels and, with TMDB off, every row stay text and nothing about TMDB shows. One `<dialog>`: the
 app's sheet below 1100px (bottom sheet with handle below 600px, 520px centred from 600px), from 1100px
-a 420px side pane beside the list that does not block the page. A glass Close circle floats top right.
+a 420px side pane beside the list that does not block the page; while it is open the page reserves
+462px (490px for a viewer) on the right, so the pane never covers the list. A glass Close circle floats top right.
 It loads once on open (a skeleton poster, the entry name and the marks). The stage is centred: 2:3
 poster (200px, 208px in the pane; Movies-diamond box when missing), kicker "Film · year", title
 (Bricolage 36px/800), up to three genres joined by " · ", then the TMDB rating and the marks capsule
