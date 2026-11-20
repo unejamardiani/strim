@@ -245,6 +245,109 @@ public sealed class PlaylistSearchIndex
     return new PlaylistSeriesResult(seasons.ToDictionary(s => s.Key, s => (IReadOnlyCollection<int>)s.Value), unnumbered.Count, similar);
   }
 
+  /// <summary>The most distinct titles <see cref="Titles"/> collects; entries of known titles are still counted.</summary>
+  public const int MaxTitles = 20_000;
+
+  /// <summary>
+  /// In one pass: the titles of the list instead of its entries. Films collapse on their film <see cref="MarkKey"/>,
+  /// series on their series key, across groups unless the query names a group; channels and names without a key
+  /// stay one title per entry. A title's first entry prefers an enabled group, otherwise source order, and titles
+  /// come in the source order of that entry. With <paramref name="hideDisabled"/>, entries of disabled groups are not
+  /// collected and a title found only there counts once in <c>HiddenCount</c>.
+  /// </summary>
+  public PlaylistTitlesResult Titles(PlaylistTitleQuery query, ISet<string> disabledGroups, bool hideDisabled)
+  {
+    var folded = PlaylistSearchText.Fold(query.Query).AsSpan();
+    Interlocked.Increment(ref _passCount);
+    var enabled = _slots.Select(s => !PlaylistProcessor.IsDisabled(disabledGroups, s.GroupTitle, s.ContentType)).ToArray();
+    var usable = _slots.Select(s => (query.GroupKey is null
+        || string.Equals(s.GroupKey, query.GroupKey, StringComparison.OrdinalIgnoreCase))
+      && (query.ContentTypes is not { Count: > 0 } || query.ContentTypes.Contains(s.ContentType))).ToArray();
+    var keyFilter = query.Keys is { Count: > 0 } ? query.Keys : null;
+    var titles = new List<TitleBuilder>();
+    var byKey = new Dictionary<string, TitleBuilder>(StringComparer.Ordinal);
+    var hiddenKeys = new HashSet<string>(StringComparer.Ordinal);
+    var hiddenUnkeyed = 0;
+
+    for (var c = 0; c < _chunks.Count; c++)
+    {
+      var text = _chunks[c].AsSpan(0, _chunkUsed[c]);
+      var end = c + 1 < _chunks.Count ? _chunkFirstEntry[c + 1] : Count;
+      for (var entry = _chunkFirstEntry[c]; entry < end; entry++)
+      {
+        var slotId = Field(entry, 1);
+        if (!usable[slotId]) continue;
+        var start = Field(entry, 0);
+        var tab = start + text[start..].IndexOf('\t');
+        if (!folded.IsEmpty && text[start..tab].IndexOf(folded) < 0) continue;
+        var slot = _slots[slotId];
+        var name = new string(text[(tab + 1)..(tab + 1 + text[(tab + 1)..].IndexOf('\n'))]);
+        var mark = slot.ContentType switch
+        {
+          PlaylistContentType.Movies => MarkKey.From(name, MarkKind.Film),
+          PlaylistContentType.Series => MarkKey.From(name, MarkKind.Series),
+          _ => null,
+        };
+        if (keyFilter is not null && (mark is null || !keyFilter.Contains(mark.Key))) continue;
+        if (hideDisabled && !enabled[slotId])
+        {
+          if (mark is null) hiddenUnkeyed++;
+          else if (hiddenKeys.Count < MaxTitles) hiddenKeys.Add(mark.Key);
+          continue;
+        }
+
+        if (mark is null || !byKey.TryGetValue(mark.Key, out var title))
+        {
+          if (titles.Count >= MaxTitles) continue;
+          title = new TitleBuilder(mark);
+          titles.Add(title);
+          if (mark is not null) byKey[mark.Key] = title;
+        }
+        if (title.Entry < 0 || (!title.Enabled && enabled[slotId]))
+        {
+          (title.Entry, title.Name, title.Slot, title.Enabled) = (entry, name, slot, enabled[slotId]);
+          title.Languages = _languages[Field(entry, 3)];
+        }
+        title.Entries++;
+        title.Groups.Add(slot.GroupKey);
+        if (slot.ContentType == PlaylistContentType.Series && SeriesEpisode.Parse(name) is ({ } season, var episode))
+        {
+          title.Seasons.Add(season);
+          if (episode is { } e) title.Episodes.Add((season, e));
+        }
+      }
+    }
+
+    var hidden = hiddenUnkeyed + hiddenKeys.Count(k => !byKey.ContainsKey(k));
+    return new PlaylistTitlesResult(titles.OrderBy(t => t.Entry).Select(t => t.Build()).ToList(), hidden);
+  }
+
+  private sealed class TitleBuilder(MarkKey? mark)
+  {
+    public int Entry { get; set; } = -1;
+    public string Name { get; set; } = "";
+    public Slot Slot { get; set; } = null!;
+    public bool Enabled { get; set; }
+    public PlaylistSearchLanguages Languages { get; set; } = PlaylistSearchLanguages.None;
+    public int Entries { get; set; }
+    public HashSet<string> Groups { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public SortedSet<int> Seasons { get; } = [];
+    public HashSet<(int, int)> Episodes { get; } = [];
+
+    public PlaylistTitle Build()
+    {
+      var series = Slot.ContentType == PlaylistContentType.Series;
+      return new PlaylistTitle(
+        Name, mark?.DisplayTitle ?? Name, mark?.Year, Slot.ContentType, mark?.Key, Slot.OutputGroup, Slot.GroupKey,
+        Enabled, Entries, Groups.Count,
+        series && Seasons.Count > 0 ? Seasons.Min : null, series && Seasons.Count > 0 ? Seasons.Max : null,
+        series ? Episodes.Count : null)
+      {
+        Languages = Languages,
+      };
+    }
+  }
+
   private string NameAt(int chunk, int entry)
   {
     var text = _chunks[chunk].AsSpan(0, _chunkUsed[chunk]);
@@ -432,6 +535,37 @@ public sealed record PlaylistSearchResult(IReadOnlyList<PlaylistSearchMatch> Mat
   /// <summary>Matches the mark filter hid as seen, also those past the limit.</summary>
   public int SeenHiddenCount { get; init; }
 }
+
+/// <summary>The filters of <see cref="PlaylistSearchIndex.Titles"/>; null or empty means no filter.</summary>
+/// <param name="Query">Matched against the entry name with the folding and containment of a search.</param>
+/// <param name="GroupKey">Only entries of this group key (case-insensitive); titles then collapse inside it.</param>
+/// <param name="ContentTypes">Only entries of these types.</param>
+/// <param name="Keys">Only titles with one of these mark keys.</param>
+public sealed record PlaylistTitleQuery(
+  string? Query = null,
+  string? GroupKey = null,
+  IReadOnlySet<PlaylistContentType>? ContentTypes = null,
+  IReadOnlySet<string>? Keys = null);
+
+/// <summary>One film, series, or uncollapsed entry, read from its first entry (in an enabled group when there is one).</summary>
+/// <param name="Name">The display name of the first entry.</param>
+/// <param name="Title">The mark key's display title; the entry name for a title without a mark key.</param>
+/// <param name="MarkKey">Null for channels and names without a title.</param>
+/// <param name="Entries">List entries collapsed into this title.</param>
+/// <param name="Groups">Distinct group keys among them.</param>
+/// <param name="Episodes">Series only: distinct numbered (season, episode) pairs.</param>
+public sealed record PlaylistTitle(
+  string Name, string Title, int? Year, PlaylistContentType ContentType, string? MarkKey,
+  string OutputGroup, string GroupKey, bool Enabled, int Entries, int Groups,
+  int? SeasonFirst, int? SeasonLast, int? Episodes)
+{
+  /// <summary>The languages and prefix tags of the first entry.</summary>
+  public PlaylistSearchLanguages Languages { get; init; } = PlaylistSearchLanguages.None;
+}
+
+/// <param name="Titles">Every title that passed, in source order of its first entry.</param>
+/// <param name="HiddenCount">Titles that exist only in disabled groups; 0 unless they are hidden.</param>
+public sealed record PlaylistTitlesResult(IReadOnlyList<PlaylistTitle> Titles, int HiddenCount);
 
 /// <summary>What a mark filter does with an entry: keep it, skip it, or hide it as seen (counted).</summary>
 public enum MarkVerdict { Keep, Skip, HideSeen }
