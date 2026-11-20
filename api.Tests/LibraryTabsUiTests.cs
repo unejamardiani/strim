@@ -54,7 +54,7 @@ public class LibraryTabsUiTests
     var show = Between(library, "function show(sub, query)", "function inPanels(");
     Assert.Contains("a.setAttribute('aria-current', 'page');", show);
     Assert.Contains("window.scrollTo(0, 0);", show);
-    Assert.Contains("show(ctx.sub);", mount);
+    Assert.Contains("show(ctx.sub, ctx.query);", mount);
     var main = Read("main.js");
     Assert.Contains("search: '<circle cx=\"11\" cy=\"11\" r=\"6.5\"/>", main);
     Assert.Contains("grid: '<rect x=\"4\" y=\"4\" width=\"7\" height=\"7\" rx=\"1.5\"/>", main);

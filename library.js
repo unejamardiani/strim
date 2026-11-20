@@ -19,10 +19,9 @@
     const nav = h('nav', { class: 'lib-tabs', 'aria-label': 'Library' },
       TABS.map((t) => h('a', { href: `${base}/${t.name}`, dataset: { tab: t.name } }, icon(t.icon), t.label)));
     const panels = Object.fromEntries(TABS.map((t) => [t.name, h('section', { class: 'lib-panel', dataset: { tab: t.name }, hidden: true })]));
-    // query: the search address's "q=…&type=…" (#421), groupQuery the Groups address's "type=…" (#422), applied once
-    // the list is loaded.
-    const onGroups = String(ctx.sub || '').startsWith('groups');
-    view = { ctx, nav, panels, base, tab: null, byKeyboard: false, query: onGroups ? '' : ctx.query || '', search: null, groupQuery: onGroups ? ctx.query || '' : '', groupType: null };
+    // query: the search address's "q=…&type=…" (#421), groupQuery the Groups address's query (#422) and groupKey its
+    // group (#442, null for the list), applied once the list is loaded; show() fills them from the address.
+    view = { ctx, nav, panels, base, tab: null, byKeyboard: false, query: '', search: null, groupQuery: '', groupKey: null, groupAddress: null };
     // A link activated by keyboard clicks with detail 0; show() then moves the focus into the tab.
     nav.addEventListener('click', (e) => { view.byKeyboard = e.detail === 0; });
     // A viewer (#383) gets the list's cover as the head and the tabs under it; no ⋯ menu, nothing would be in it.
@@ -31,7 +30,7 @@
     // The marks (#299) do not hang on the playlist, so they show even when it has no source or fails to load.
     panels.marks.append(myMarks(ctx));
     root.replaceChildren(...head, panels.search, panels.groups, panels.marks);
-    show(ctx.sub);
+    show(ctx.sub, ctx.query);
     if (!isViewer(ctx) && !playlist.sourceUrl) {
       ctx.listState = 'none';
       inPanels(ctx, () => h('div', { class: 'notice' }, 'This playlist has no source URL. Add one in the editor to see what it holds.'));
@@ -49,24 +48,39 @@
       view.query = query;
       view.search?.(query);
     }
-    if (tab === 'groups' && query) {
-      view.groupQuery = query;
-      view.groupType?.(query);
+    // The Groups address (#442): "groups?type=…" is the list, "groups/<encoded key>" an open group; the query is
+    // taken as given.
+    if (tab === 'groups') {
+      view.groupQuery = query || '';
+      view.groupKey = groupKeyOf(String(sub));
     }
     for (const a of view.nav.children) {
       if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     }
     for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;
-    if (view.tab === tab) return;
+    const same = view.tab === tab;
     const first = view.tab !== null;
     view.tab = tab;
+    if (tab === 'groups') view.groupAddress?.(view.groupKey, view.groupQuery);
+    if (same) return;
     window.scrollTo(0, 0);
     if (!first || !view.byKeyboard) return;
     view.byKeyboard = false;
     const target = view.panels[tab].querySelector('input, h2, h3');
     if (target && target.tagName !== 'INPUT') target.tabIndex = -1;
     target?.focus();
+  }
+
+  // The group key of a Groups address (#442): everything after "groups/", decoded; a malformed escape as written.
+  function groupKeyOf(sub) {
+    if (!sub.startsWith('groups/')) return null;
+    const raw = sub.slice('groups/'.length);
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
   }
 
   // Search and Groups both wait on the list, so both show its loading card, error or notice.
@@ -562,10 +576,23 @@
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
     const offBadge = (g) => (list.disabled.has(g.key) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
 
-    // A group row (#422), the same for owner and viewer: the whole row is the button that opens the group.
+    // A group's own address (#442), the list's address and the row of a group.
+    const groupHash = (key) => `${view.base}/groups/${encodeURIComponent(key)}`;
+    const listHash = () => `${view.base}/groups?type=${groupType}`;
+    const focusRow = (key) => {
+      for (const b of groupsEl.querySelectorAll('.is-group')) if (b.dataset.key === key) b.focus();
+    };
+
+    // A group row (#422), the same for owner and viewer: the whole row is the button that goes to the group's address.
+    // It also opens the group at once: main.js skips a hashchange back to the address it last routed, which a
+    // replaced list address leaves behind; the route that follows finds the group open and does nothing.
+    const go = (g) => {
+      location.hash = groupHash(g.key);
+      view.groupAddress(g.key, '');
+    };
     const groupRow = (g, t) => {
       const fresh = newSince(state.seen, g);
-      return h('button', { class: 'lib-row is-group', type: 'button', dataset: { key: g.key, type: g.type }, onclick: () => open(g) },
+      return h('button', { class: 'lib-row is-group', type: 'button', dataset: { key: g.key, type: g.type }, onclick: () => go(g) },
         h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type: g.type } }),
         h('span', { class: 'lib-text' },
           h('span', { class: 'lib-title', text: g.title || 'Untitled group' }),
@@ -603,16 +630,39 @@
       markOpenGroup();
     };
 
-    // The Groups address (#422): #/…/groups?type=…, replaced, never a new entry.
+    // The Groups address (#422): #/…/groups?type=…, replaced, never a new entry; never over an open group's (#442).
     const keepGroupsAddress = () => {
-      const hash = `${view.base}/groups?type=${groupType}`;
+      if (state.open) return;
+      const hash = listHash();
       view.nav.querySelector('[data-tab="groups"]').href = hash;
       if (view.tab === 'groups' && location.hash !== hash) history.replaceState(history.state, '', hash);
     };
-    view.groupType = (raw) => {
-      const value = new URLSearchParams(raw).get('type');
-      if (!GROUP_TYPES.some((t) => t.value === value) || value === groupType) return;
-      groupType = value;
+    // The Groups address handler (#442): the list (key null) closes an open group and focuses its row once the list
+    // is drawn again; a group's address opens it unless it is already open; a group not shown falls back to the list.
+    view.groupAddress = (key, query) => {
+      if (key === null) {
+        const value = new URLSearchParams(query).get('type');
+        const typed = GROUP_TYPES.some((t) => t.value === value) && value !== groupType;
+        const was = state.open?.group.key;
+        if (!state.open && !typed) return;
+        if (typed) groupType = value;
+        close();
+        renderGroups();
+        if (was !== undefined) focusRow(was);
+        return;
+      }
+      if (state.open?.group.key === key) return;
+      const g = browseGroups(list, includeOff).sorted.find((x) => x.key === key);
+      const t = GROUP_TYPES.find((x) => x.type === g?.type);
+      if (!g || !t) {
+        close();
+        renderGroups();
+        ctx.toast('That group is not in this list any more.', { error: true });
+        return;
+      }
+      groupType = t.value;
+      open(g);
+      view.nav.querySelector('[data-tab="groups"]').href = `${groupHash(key)}${query ? `?${query}` : ''}`;
       renderGroups();
     };
     if (view.groupQuery) {
@@ -625,16 +675,16 @@
       for (const b of groupsEl.querySelectorAll('.is-group')) b.classList.toggle('is-open', b.dataset.key === state.open?.group.key);
     };
 
-    // Back to the group list, with the focus on the group that was open.
+    // Back to the group list; the caller focuses the row once renderGroups() has drawn the list again (#442).
     const close = () => {
-      const key = state.open?.group.key;
       state.open = null;
       entriesEl.hidden = true;
       entriesEl.replaceChildren();
       groupsEl.hidden = false;
       markOpenGroup();
-      for (const b of groupsEl.querySelectorAll('.is-group')) if (b.dataset.key === key) b.focus();
     };
+    // "All groups" goes to the list's address, a history entry; the address handler closes and focuses (#442).
+    const back = () => { location.hash = listHash(); };
 
     // Opening a group stores its current count on this device; its badge goes the next time the list is drawn.
     const open = (g, scroll = true) => {
@@ -652,7 +702,7 @@
       markOpenGroup();
       entriesEl.replaceChildren(
         h('div', { class: 'library-entries-head' },
-          h('button', { class: 'btn btn-sm', type: 'button', onclick: close }, icon('back'), 'All groups'),
+          h('button', { class: 'btn btn-sm', type: 'button', onclick: back }, icon('back'), 'All groups'),
           h('div', { class: 'grow' }, h('h3', { class: 'library-group-title', text: g.title || 'Untitled group' }), view.count),
           offBadge(g)),
         h('div', { class: 'card' }, view.list, view.foot));
@@ -691,14 +741,19 @@
       }
     };
 
-    // The shared toggle: an open group stays open unless it is off and switched-off groups are left out again.
+    // The shared toggle: an open group stays open unless it is off and switched-off groups are left out again; then
+    // its row gets the focus after the list is drawn again and the address becomes the list's (#442).
     const refresh = () => {
+      const gone = state.open && !includeOff && list.disabled.has(state.open.group.key) ? state.open.group : null;
+      if (gone) close();
       renderGroups();
-      if (state.open && !includeOff && list.disabled.has(state.open.group.key)) close();
+      if (gone) focusRow(gone.key);
     };
     // A mark filter loads the open group again from its first page.
     const reload = () => { if (state.open) open(state.open.group, false); };
     renderGroups();
+    // A group address that came while the list was loading (#442).
+    if (view.tab === 'groups' && view.groupKey !== null) view.groupAddress(view.groupKey, view.groupQuery);
     return { el, refresh, reload };
   }
 

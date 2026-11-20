@@ -65,7 +65,8 @@ public class LibraryBrowseTests
 
     var refresh = Between(browse, "const refresh = () => {", "};");
     Assert.Contains("renderGroups();", refresh);
-    Assert.Contains("if (state.open && !includeOff && list.disabled.has(state.open.group.key)) close();", refresh);
+    Assert.Contains("const gone = state.open && !includeOff && list.disabled.has(state.open.group.key) ? state.open.group : null;", refresh);
+    Assert.Contains("if (gone) close();", refresh);
   }
 
   private const string PinnedOpenAndLoadPage = """
@@ -84,7 +85,7 @@ public class LibraryBrowseTests
           markOpenGroup();
           entriesEl.replaceChildren(
             h('div', { class: 'library-entries-head' },
-              h('button', { class: 'btn btn-sm', type: 'button', onclick: close }, icon('back'), 'All groups'),
+              h('button', { class: 'btn btn-sm', type: 'button', onclick: back }, icon('back'), 'All groups'),
               h('div', { class: 'grow' }, h('h3', { class: 'library-group-title', text: g.title || 'Untitled group' }), view.count),
               offBadge(g)),
             h('div', { class: 'card' }, view.list, view.foot));
