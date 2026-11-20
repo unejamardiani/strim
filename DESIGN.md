@@ -268,7 +268,13 @@ time as the end of the list comes within 600px. The status line names the titles
 out ("7 more in switched-off groups" with "Show them", "3 seen titles hidden"). The query and type
 live in the address, `#/p/<id>/library/search?q=…&type=films`, replaced while typing.
 Browse: the groups by type, then in playlist order; opening one pages its entries 50 at a time with
-More until all are shown.
+More until all are shown. An open group has its own address (#442),
+`#/p/<id>/library/groups/<encoded group key>` (viewer `#/shared/<id>/groups/<…>`): a row navigates
+there (a history entry), a reload keeps the group open and its type chip chosen, and the browser's
+Back or All groups (a navigation to `…/groups?type=…`) returns to the list with the focus on the
+group's row once the list is drawn again. A group that is not in the list, or not shown, falls back
+to the list with the toast "That group is not in this list any more." and the list's address
+(replaced). While a group is open the list's address is not written over the group's.
 Type chips and group rows (#422), owner and viewer alike: a chip row (single choice, the search's
 chips) with "Films 11", "Series 7", "Channels 7", the number of groups of each type, only for types
 that have groups; the first is chosen at the start, the choice kept for the page session and in the
@@ -286,8 +292,9 @@ Phone layout (below 1100px): one 760px column. Below 768px the tabs are a floati
 bottom (62px, 24px radius, the dock's inverted colours, icon over label, the active tab tinted with
 an `--accent` icon); the footer pads 104px to scroll clear of it, and an open film card's backdrop
 covers it. From 768px they are a segmented control in the head (owner) or in a row under the cover
-(viewer). An open group replaces the group list; All groups returns to the list with the focus on
-the group that was open.
+(viewer). An open group replaces the group list at its own address; Back or All groups returns to
+the list with the focus on the group that was open, and a group that is gone shows the list with a
+toast.
 
 Wide Library (from 1100px, CSS only): once the groups are loaded the page widens to a 1440px
 maximum (same 18px padding). While a group is open, Browse becomes two columns with a 24px gap,

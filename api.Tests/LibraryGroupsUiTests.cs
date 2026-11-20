@@ -37,9 +37,10 @@ public class LibraryGroupsUiTests
     Assert.Contains("h('div', { class: 'lib-list', dataset: { type: chosen.type } }, chosen.groups.map((g) => groupRow(g, chosen)))", browse);
     // The choice lives for the page session and in the address, replaced.
     Assert.Contains("let groupType = null;", library);
-    Assert.Contains("const hash = `${view.base}/groups?type=${groupType}`;", browse);
+    Assert.Contains("const listHash = () => `${view.base}/groups?type=${groupType}`;", browse);
+    Assert.Contains("const hash = listHash();", browse);
     Assert.Contains("if (view.tab === 'groups' && location.hash !== hash) history.replaceState(history.state, '', hash);", browse);
-    Assert.Contains("if (tab === 'groups' && query) {", Between(library, "function show(sub, query)", "function inPanels("));
+    Assert.Contains("if (tab === 'groups') {", Between(library, "function show(sub, query)", "function inPanels("));
     // Owner copy as before.
     Assert.Contains("if (hidden > 0) nodes.push(status(`${plural(hidden, 'switched-off group')} hidden`));", browse);
     Assert.Contains("'No group is on. Include switched-off groups to browse them.'", browse);
@@ -60,7 +61,7 @@ public class LibraryGroupsUiTests
     Assert.Contains("{ value: 'series', type: 'Series', label: 'Series', one: 'episode', many: 'episodes' },", browse);
     Assert.Contains("{ value: 'channels', type: 'Live', label: 'Channels', one: 'channel', many: 'channels' },", browse);
     var row = Between(browse, "const groupRow = (g, t) => {", "};");
-    Assert.Contains("h('button', { class: 'lib-row is-group', type: 'button', dataset: { key: g.key, type: g.type }, onclick: () => open(g) },", row);
+    Assert.Contains("h('button', { class: 'lib-row is-group', type: 'button', dataset: { key: g.key, type: g.type }, onclick: () => go(g) },", row);
     Assert.Contains("h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type: g.type } }),", row);
     Assert.Contains("h('span', { class: 'lib-title', text: g.title || 'Untitled group' }),", row);
     Assert.Contains("h('span', { class: 'lib-meta', text: plural(g.count, t.one, t.many) })", row);
