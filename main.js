@@ -1,5 +1,6 @@
 // Strim app: a playlists home and a group picker, driven by the backend (no local M3U parsing).
-// Routes: #/ (playlists, or the editor for guests), #/new, #/p/<playlist id>, #/p/<playlist id>/library.
+// Routes: #/ (playlists, or the editor for guests), #/new, #/p/<playlist id>, #/p/<playlist id>/library,
+// #/invite/<token> (stored, then shown as #/invite).
 
 // ---------- Configuration ----------
 
@@ -437,7 +438,7 @@ function afterAuthChange() {
   const ed = state.editor;
   if (state.user && ed && !ed.id && ed.phase === 'ready') {
     navigate('#/new', { replace: true });
-  } else if (!state.user && location.hash !== '#/' && location.hash !== '') {
+  } else if (!state.user && location.hash !== '#/' && location.hash !== '' && location.hash !== '#/invite') {
     navigate('#/', { replace: true });
   } else {
     route();
@@ -453,6 +454,8 @@ function parseRoute() {
   const path = location.hash.replace(/^#/, '') || '/';
   const match = /^\/p\/([0-9a-f-]{36})(\/library)?$/i.exec(path);
   if (match) return { name: match[2] ? 'library' : 'playlist', id: match[1].toLowerCase() };
+  const invite = /^\/invite(?:\/([^/?#]+))?$/.exec(path);
+  if (invite) return { name: 'invite', token: invite[1] || '' };
   if (path === '/new') return { name: 'new' };
   return { name: 'home' };
 }
@@ -498,6 +501,15 @@ function route() {
   libraryController?.abort();
   libraryController = null;
   const target = parseRoute();
+  // An invitation link (#382): the token leaves the address at once and waits in this tab's sessionStorage.
+  if (target.name === 'invite' && target.token) {
+    setInviteToken(target.token);
+    history.replaceState(null, '', '#/invite');
+    currentHash = '#/invite';
+  }
+  if (target.name === 'invite') return showInvite();
+  // An external sign-in comes back without the hash; a waiting invitation is shown again.
+  if (target.name === 'home' && state.user && inviteToken()) return navigate('#/invite', { replace: true });
   if (!state.user) {
     if (target.name !== 'home') {
       history.replaceState(null, '', '#/');
@@ -553,18 +565,23 @@ function showHome() {
     playlists.length ? h('a', { class: 'btn btn-primary btn-sm', href: '#/new' }, icon('plus'), 'New') : null
   );
 
+  // Lists shared with the caller (#382), filled once /shares/mine answers; hidden while there are none.
+  const shared = h('section', { class: 'shared-section', hidden: true });
+  loadSharedWithMe(shared);
+
   if (!playlists.length) {
     app.replaceChildren(
       head,
       h('div', { class: 'card empty' },
         h('h2', { text: 'Start with your provider’s link' }),
         h('p', { text: 'Paste the M3U link, switch off the groups you never watch and get a link your player can use.' }),
-        h('a', { class: 'btn btn-primary', href: '#/new' }, icon('plus'), 'New playlist'))
+        h('a', { class: 'btn btn-primary', href: '#/new' }, icon('plus'), 'New playlist')),
+      shared
     );
     return;
   }
 
-  app.replaceChildren(head, h('div', { class: 'playlist-list' }, playlists.map(playlistCard)));
+  app.replaceChildren(head, h('div', { class: 'playlist-list' }, playlists.map(playlistCard)), shared);
   loadOverview();
 }
 
@@ -751,6 +768,165 @@ async function deletePlaylist(playlist) {
     if (state.editor?.id === playlist.id) closeEditor();
     if (parseRoute().name === 'home') showHome();
     else navigate('#/', { replace: true });
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+// ---------- Invitation (#382) ----------
+
+const INVITE_KEY = 'strim.invite';
+
+// sessionStorage can be unavailable (private mode); the page then shows the invitation as not working.
+function inviteToken() {
+  try { return sessionStorage.getItem(INVITE_KEY) || ''; } catch { return ''; }
+}
+function setInviteToken(token) {
+  try { if (token) sessionStorage.setItem(INVITE_KEY, token); else sessionStorage.removeItem(INVITE_KEY); } catch { /* see above */ }
+}
+
+// The ticket is decoration only; the copy next to it says everything.
+function inviteTicket(kind) {
+  return h('div', { class: `ticket${kind === 'ok' ? ' is-ok' : kind === 'void' ? ' is-void' : ''}`, 'aria-hidden': 'true' },
+    h('span', { class: 'wordmark' }, 'str', h('span', { class: 'wm-i' }, 'ı', h('span', { class: 'wm-dot' })), 'm'),
+    kind === 'ok' || kind === 'void' ? h('span', { class: 'ticket-stamp', text: kind === 'ok' ? 'Accepted' : 'Void' }) : null,
+    h('span', { class: 'ticket-kicker', text: 'Invitation' }),
+    h('span', { class: 'ticket-title', text: 'Admit one' }),
+    h('span', { class: 'ticket-sub', text: 'A shared list, read-only' }),
+    h('div', { class: 'ticket-perf' }),
+    h('div', { class: 'ticket-foot' }, h('span', { text: 'Works once · 7 days' }), h('span', { class: 'ticket-bars' })));
+}
+
+// outcome: null (waiting), { kind: 'ok', id, name }, { kind: 'void' } or { kind: 'own' }. The invitation stays
+// neutral: the list's name appears only after accepting.
+function showInvite(outcome = null) {
+  clearInterval(loadingTimer);
+  teardownPicker();
+  setActionBar(false);
+  document.title = 'Invitation · Strim';
+  if (!outcome && !inviteToken()) outcome = { kind: 'void' };
+  const kind = outcome?.kind || 'open';
+  const btn = (cls, label, onclick) => h('button', { class: `btn ${cls}`, type: 'button', onclick }, label);
+  const copy = h('div', { class: 'invite-copy' }, h('span', { class: 'eyebrow', text: 'Invitation' }));
+
+  if (kind === 'ok') {
+    copy.append(
+      h('h1', { text: `${outcome.name || 'The list'} is in your lists` }),
+      h('p', { class: 'invite-text', text: 'You find it under “Shared with you” from now on.' }),
+      h('div', { class: 'invite-actions' },
+        h('a', { class: 'btn btn-primary', href: `#/p/${outcome.id}/library` }, 'Open the Library'),
+        h('a', { class: 'btn btn-quiet', href: '#/' }, 'Later')));
+  } else if (kind === 'void' || kind === 'own') {
+    const own = kind === 'own';
+    copy.append(
+      h('h1', { text: own ? 'This is your own playlist' : 'This invitation does not work any more' }),
+      h('p', { class: 'invite-text', text: own ? 'Send the link to the person you invited. It is still valid.'
+        : 'It was already used, withdrawn or is older than 7 days. Ask the person who sent it for a new link.' }),
+      h('div', { class: 'invite-actions' }, h('a', { class: 'btn btn-primary', href: '#/' }, 'Go to my lists')));
+  } else {
+    copy.append(
+      h('h1', { text: 'Someone shared a list with you' }),
+      h('p', { class: 'invite-text', text: 'Accept to browse this list in your Library: find films and series and mark what you have seen and liked. Nothing you do changes the list.' }),
+      h('div', { class: 'invite-perks' }, ['Read-only', 'Your own marks', 'Works with your account'].map((perk) => h('span', null, icon('check'), perk))));
+    if (state.user) {
+      const accept = btn('btn-primary', 'Accept invitation', () => acceptInvite(accept));
+      copy.append(
+        h('div', { class: 'invite-as' },
+          h('span', null, h('small', { text: 'You are signed in as' }), h('b', { text: state.user.userName || state.user.email })),
+          h('a', { href: '#/invite', onclick: (e) => { e.preventDefault(); signOut(); } }, 'Not you? Switch')),
+        h('div', { class: 'invite-actions' }, accept, btn('btn-quiet', 'Not now', notNow)),
+        h('p', { class: 'invite-fine', text: 'The link works once. After you accept, it belongs to this account.' }));
+    } else {
+      copy.append(
+        h('div', { class: 'invite-actions' },
+          btn('btn-primary', 'Sign in to accept', () => openAccount()),
+          btn('', 'Create account', () => openAccount())),
+        h('p', { class: 'invite-fine', text: 'Sign in or create an account. The invitation waits here in the meantime.' }));
+    }
+  }
+  app.replaceChildren(h('div', { class: 'invite-page' }, inviteTicket(kind), copy));
+}
+
+async function acceptInvite(button) {
+  const token = inviteToken();
+  button.disabled = true;
+  try {
+    const result = await api('/shares/accept', { method: 'POST', body: { token } });
+    setInviteToken('');
+    toast(`${result.name} added`);
+    showInvite({ kind: 'ok', id: result.playlistId, name: result.name });
+  } catch (err) {
+    // Used, withdrawn and expired all answer 404 and get one message; 400 is the owner's own playlist.
+    if (err.status === 404 || err.status === 400) {
+      setInviteToken('');
+      showInvite({ kind: err.status === 404 ? 'void' : 'own' });
+    } else {
+      toast(err.message, { error: true });
+      button.disabled = false;
+    }
+  }
+}
+
+// "Not now" forgets the invitation in this tab; the link itself stays valid.
+function notNow() {
+  setInviteToken('');
+  navigate('#/', { replace: true });
+}
+
+// ---------- Shared with you (#382) ----------
+
+// A stable pick from an id, so a list keeps its cover and avatar tone.
+const pick = (id, n) => [...String(id)].reduce((sum, c) => (sum * 31 + c.charCodeAt(0)) % 9973, 0) % n;
+
+async function loadSharedWithMe(section) {
+  const lists = await api('/shares/mine').catch(() => null);
+  if (!Array.isArray(lists) || !lists.length) return;
+  section.replaceChildren(
+    h('div', { class: 'shared-head' }, h('h2', { text: 'Shared with you' }), h('span', { text: `${plural(lists.length, 'list')}, read-only` })),
+    h('div', { class: 'shared-grid' }, lists.map(sharedCard)));
+  section.hidden = false;
+}
+
+// A viewer's card: the cover, who shared it and since when, Open and ⋯. No count, no editor or player-link action.
+function sharedCard(item) {
+  const name = item.name || 'Untitled';
+  const owner = item.ownerName || 'Someone';
+  const since = item.sharedSinceUtc ? ` · since ${new Date(item.sharedSinceUtc).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : '';
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w.charAt(0)).join('').toUpperCase();
+  return h('article', { class: 'card shared-card' },
+    h('div', { class: `cover cover-${pick(item.playlistId, 6) + 1}`, dataset: { initials } },
+      h('div', { class: 'cover-top' }, h('span', { class: 'cover-chip' }, icon('book'), 'Read-only')),
+      h('h3', { class: 'cover-name', text: name })),
+    h('div', { class: 'shared-card-foot' },
+      h('span', { class: `share-avatar${['', ' t-live', ' t-movies'][pick(`${item.playlistId}:tone`, 3)]}`, 'aria-hidden': 'true', text: owner.charAt(0) }),
+      h('p', { class: 'shared-by secondary', text: `Shared by ${owner}${since}` }),
+      h('a', { class: 'btn btn-primary btn-xs', href: `#/p/${item.playlistId}/library` }, 'Open'),
+      h('button', { class: 'icon-btn is-sm', type: 'button', 'aria-label': `Actions for ${name}`, onclick: () => openSharedMenu(item) }, icon('more'))));
+}
+
+function openSharedMenu(item, confirming = false) {
+  const name = item.name || 'Untitled';
+  menuTitle.textContent = confirming ? `Remove ${name} from your lists?` : name;
+  menuBody.replaceChildren(confirming
+    ? h('div', { class: 'confirm stack' },
+      h('p', { class: 'secondary', text: `You lose access at once. Your seen and thumbs marks stay. To get back in, ${item.ownerName || 'the owner'} has to send you a new invitation.` }),
+      h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => menuDialog.close() }, 'Keep'),
+        h('button', { class: 'btn btn-danger', type: 'button', onclick: () => leaveShared(item) }, 'Remove')))
+    : h('div', { class: 'menu' },
+      h('a', { class: 'menu-item', href: `#/p/${item.playlistId}/library` }, menuIcon('book'), h('span', { class: 'grow', text: 'Open the Library' })),
+      h('div', { class: 'menu-sep' }),
+      h('button', { class: 'menu-item danger', type: 'button', onclick: () => openSharedMenu(item, true) },
+        menuIcon('trash'), h('span', { class: 'grow' }, 'Remove from my lists', h('small', { text: 'You lose access. Your marks stay.' })))));
+  if (!menuDialog.open) menuDialog.showModal();
+}
+
+async function leaveShared(item) {
+  try {
+    await api(`/shares/mine/${item.playlistId}`, { method: 'DELETE' });
+    menuDialog.close();
+    toast(`${item.name || 'The list'} removed`);
+    if (parseRoute().name === 'home') showHome();
   } catch (err) {
     toast(err.message, { error: true });
   }
