@@ -275,7 +275,7 @@
     if (!entry.markKey || !kind) return null;
     const { h, icon } = ctx;
     const key = entry.markKey;
-    marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0 });
+    marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });
     // Tapping an active control again undoes it.
     const control = (label, name, next) => h('button', {
       class: 'icon-btn library-mark', type: 'button', 'aria-label': label, title: label, 'aria-pressed': 'false',
@@ -283,12 +283,15 @@
     }, icon(name));
     // Rows use the film card's capsule (#383) in both Libraries.
     const el = h('span', { class: 'library-marks film-marks', role: 'group', 'aria-label': 'Your marks', dataset: { key } },
-      control('Seen', 'check', (m) => ({ ...m, seen: !m.seen })),
+      control('Seen', 'check', toggleSeen),
       control('Thumbs up', 'up', (m) => ({ ...m, rating: m.rating === 1 ? 0 : 1 })),
       control('Thumbs down', 'down', (m) => ({ ...m, rating: m.rating === -1 ? 0 : -1 })));
     paintMarks(el);
     return el;
   }
+
+  // Seen wins (#420): a title marked seen leaves the watchlist at once, before the request; the server does the same.
+  const toggleSeen = (m) => (m.seen ? { ...m, seen: false } : { ...m, seen: true, watchlist: false });
 
   function paintMarks(el) {
     const m = marks.get(el.dataset.key);
@@ -296,6 +299,9 @@
     seen.setAttribute('aria-pressed', String(m.seen));
     up.setAttribute('aria-pressed', String(m.rating === 1));
     down.setAttribute('aria-pressed', String(m.rating === -1));
+    // The Watchlist button sits beside the capsule, on the card and in the row.
+    const watch = el.parentElement?.querySelector(':scope > .lib-watch');
+    if (watch) paintWatch(watch, m);
     // The row's phone controls (#419) and its dimmed title follow the capsule.
     const row = el.closest('.lib-row');
     if (!row) return;
@@ -318,10 +324,29 @@
     const key = entry.markKey;
     const seen = h('button', {
       class: 'lib-seen', type: 'button', 'aria-label': 'Seen', 'aria-pressed': 'false',
-      onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, { ...marks.get(key), seen: !marks.get(key).seen }),
+      onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen(marks.get(key))),
     }, icon('check'));
     const like = h('span', { class: 'lib-like', 'aria-hidden': 'true' }, icon('up'), icon('down'));
-    return [h('span', { class: 'lib-quick', role: 'group' }, like, seen), capsule];
+    return [h('span', { class: 'lib-quick', role: 'group' }, like, seen), watchButton(ctx, entry), capsule];
+  }
+
+  // The Watchlist button (#420): after the card's capsule and, from 768px, before a row's capsule. Tapping it again
+  // takes the title off the list.
+  function watchButton(ctx, entry) {
+    const key = entry.markKey;
+    const el = ctx.h('button', {
+      class: 'lib-watch', type: 'button', dataset: { key },
+      onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, { ...marks.get(key), watchlist: !marks.get(key).watchlist }),
+    }, ctx.icon('bookmark'));
+    paintWatch(el, marks.get(key));
+    return el;
+  }
+
+  function paintWatch(el, m) {
+    const label = m.watchlist === true ? 'On your watchlist' : 'Add to watchlist';
+    el.setAttribute('aria-pressed', String(m.watchlist === true));
+    el.setAttribute('aria-label', label);
+    el.title = label;
   }
 
   // Shown at once on every row of the title; a failed request puts the mark back and says so.
@@ -333,12 +358,17 @@
     marks.set(key, next);
     repaint();
     try {
-      const saved = await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating });
+      const saved = await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating, watchlist: next.watchlist });
+      // The server's watchlist (#414) is taken over, unless a later tap already replaced this change.
+      if (saved && marks.get(key) === next && saved.watchlist !== next.watchlist) {
+        marks.set(key, { ...next, watchlist: saved.watchlist === true });
+        repaint();
+      }
       // A card opened from a similar film (#368) uses a local key; the rows of the title use the one the API returns.
       const real = saved?.key || keyAlias.get(key);
       if (real && real !== key) {
         keyAlias.set(key, real);
-        syncRows(ctx, real, next);
+        syncRows(ctx, real, marks.get(key));
       }
     } catch (err) {
       // A later tap on the same title already replaced this change.
@@ -593,7 +623,7 @@
           return;
         }
       }
-      syncRows(ctx, m.key, { seen: false, rating: 0 });
+      syncRows(ctx, m.key, { seen: false, rating: 0, watchlist: false });
       if (!li.isConnected) return;
       view.shown.delete(m.key);
       view.total -= 1;
@@ -606,13 +636,13 @@
       li.dataset.restoring = 'true';
       let mark;
       try {
-        mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating });
+        mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });
       } catch (err) {
         delete li.dataset.restoring;
         ctx.toast(`The mark was not restored. ${err.message || ''}`.trim(), { error: true });
         return;
       }
-      syncRows(ctx, mark.key, { seen: mark.seen, rating: mark.rating });
+      syncRows(ctx, mark.key, { seen: mark.seen, rating: mark.rating, watchlist: mark.watchlist === true });
       if (!li.isConnected || view.shown.has(mark.key)) return;
       li.replaceWith(row(mark));
       view.shown.add(mark.key);
@@ -842,7 +872,7 @@
     let top;
     if (!answer) {
       top = h('div', { class: 'film-load' }, h('div', { class: 'film-poster skel', 'aria-hidden': 'true' }), title,
-        h('span', { class: 'skel skel-line', 'aria-hidden': 'true' }), marksEl,
+        h('span', { class: 'skel skel-line', 'aria-hidden': 'true' }), h('div', { class: 'film-actions' }, marksEl),
         h('span', { class: 'sr-only', role: 'status', text: `Loading ${word(entry)} details` }));
     } else if (choose) {
       // Picking a candidate stores the match (#368) and loads the card again.
@@ -852,7 +882,7 @@
           poster(ctx, c.posterUrl, '', 'film-tile-poster', entry.type),
           h('span', { class: 'film-tile-title', text: c.title || entry.name }),
           h('span', { class: 'film-tile-meta', text: c.year ? String(c.year) : 'Year unknown' }))))),
-        marksEl);
+        h('div', { class: 'film-actions' }, marksEl));
     } else {
       const rating = f?.rating > 0 ? f.rating.toFixed(1) : '';
       const meta = f ? (f.genres || []).slice(0, 3).join(' · ') : entry.group;
@@ -936,18 +966,20 @@
   // a failure shows inside the card for 5 s, because the toasts lie under the dialog's top layer.
   function cardMarks(ctx, entry, answer) {
     const key = entry.markKey;
-    const now = marks.get(key) || { seen: false, rating: 0 };
+    const now = marks.get(key) || { seen: false, rating: 0, watchlist: false };
     // An answer's marks count once: a kept answer reopened later must not undo a mark set since. Reopened under
     // another key (its row, then a similar tile), it takes the live state of the key that first used it.
     const owner = answerMarkKey.get(answer);
     const given = !answer?.marks || owner === key ? now
-      : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0 };
+      : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0, watchlist: answer.marks.watchlist === true };
     if (answer?.marks && !owner) answerMarkKey.set(answer, key);
-    const toast = cardToast(ctx);
-    const el = markControls({ ...ctx, toast }, { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given });
+    const cardCtx = { ...ctx, toast: cardToast(ctx) };
+    const markEntry = { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given };
+    const el = markControls(cardCtx, markEntry);
     el.classList.add('film-marks');
-    if (given.seen !== now.seen || given.rating !== now.rating) syncRows(ctx, entry.markKey, given);
-    return el;
+    if (given.seen !== now.seen || given.rating !== now.rating || given.watchlist !== now.watchlist) syncRows(ctx, entry.markKey, given);
+    // Capsule, thin line, Watchlist button (#420), in every state that shows the capsule.
+    return [el, ctx.h('span', { class: 'film-sep', 'aria-hidden': 'true' }), watchButton(cardCtx, markEntry)];
   }
 
   const cardToast = (ctx) => (text, options) => {

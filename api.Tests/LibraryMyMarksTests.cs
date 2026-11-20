@@ -89,7 +89,7 @@ public class LibraryMyMarksTests
     Assert.Contains("ctx.toast(`The mark was not removed. ${err.message || ''}`.trim(), { error: true });", remove);
 
     var undo = Between(section, "const undo = async (m, li) => {", "const start = () => {");
-    Assert.Contains("mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating });", undo);
+    Assert.Contains("mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });", undo);
     Assert.Contains("li.replaceWith(row(mark));", undo);
     Assert.Contains("if (!li.hidden || li.dataset.restoring) return;", undo);
 
