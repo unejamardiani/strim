@@ -70,6 +70,9 @@ public class ViewerLibraryUiTests
     var css = Read("library.css");
     Assert.Contains(".library-hit .film-marks button { width: 32px; height: 32px;", css);
     Assert.Contains(".group-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 190px;", css);
+    // Below 600px no chip before the marks, neither in search hits nor in a group's entries.
+    Assert.Contains("@media (max-width: 599px) { .library-search .group-chip, .library-entries .group-chip { display: none; } }", css);
+    Assert.Contains("@media (min-width: 600px) { .search-hit-meta .group-label { display: none; } }", css);
     Assert.Contains(".library-cover .cover-name { font-size: 48px; letter-spacing: -.045em; }", css);
     Assert.Contains("@media (max-width: 599px) { .group-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }", css);
     Assert.Contains(".film-card.is-viewer { --film-pane-w: 448px; --film-poster-w: 244px; }", css);

@@ -348,10 +348,8 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .group-chip svg { width: 13px; height: 13px; color: var(--ink-3); flex-shrink: 0; }
 .film-tile-meta .group-label svg { width: 11px; height: 11px; }
 @media (min-width: 600px) { .search-hit-meta .group-label { display: none; } }
-@media (max-width: 599px) {
-  .group-chip { max-width: 124px; }
-  .library-search .group-chip { display: none; }
-}
+/* Phones: search hits lead their meta line with the group; a group's entries sit under its heading. No chip. */
+@media (max-width: 599px) { .library-search .group-chip, .library-entries .group-chip { display: none; } }
 
 /* The viewer's film card: larger poster, and the group as its own row. */
 .film-card.is-viewer { --film-pane-w: 448px; --film-poster-w: 244px; }
