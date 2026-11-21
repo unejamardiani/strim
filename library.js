@@ -514,12 +514,8 @@
     el.title = label;
   }
 
-  // Shown at once on every row of the title; a failed request puts the mark back and says so. saving counts the saves
-  // still on their way per key (#447), so a fresh Marks page does not paint over a pending value.
-  // saveTicks moves when a save starts or ends; settleQueue runs once no save is on its way (a Marks page that
-  // overlapped one is worked out again then).
-  // markAt holds per key the tick of the last start or end of a save: an answer asked for before it (asked, stamped by
-  // askTitles and loadPage) is stale for that key and leaves its mark alone.
+  // Shown at once on every row of the title; a failed request puts the mark back and says so. Per key (#447): saving
+  // counts the saves on their way, markAt the tick of the last start or end of one (an answer asked before is stale).
   const saving = new Map();
   const markAt = new Map();
   let saveTicks = 0;
@@ -537,7 +533,10 @@
     saving.set(key, (saving.get(key) || 0) + 1);
     saveTicks += 1;
     markAt.set(key, saveTicks);
-    const repaint = () => paintKey(ctx, key);
+    // A similar film's card (#368) saves under a local key; once the API's key is known, the save is pending there too.
+    const alias = keyAlias.get(key);
+    if (alias) { saving.set(alias, (saving.get(alias) || 0) + 1); markAt.set(alias, saveTicks); marks.set(alias, next); }
+    const repaint = () => [key, alias].forEach((k) => k && paintKey(ctx, k));
     marks.set(key, next);
     repaint();
     try {
@@ -549,17 +548,20 @@
       }
       // A card opened from a similar film (#368) uses a local key; the rows of the title use the one the API returns.
       const real = saved?.key || keyAlias.get(key);
-      if (real && real !== key) {
+      if (real && real !== key && (real !== alias || marks.get(alias) === next)) {
         keyAlias.set(key, real);
         syncRows(ctx, real, marks.get(key));
       }
     } catch (err) {
       // A later tap on the same title already replaced this change.
       if (marks.get(key) !== next) return;
+      if (alias && marks.get(alias) === next) marks.set(alias, before);
       marks.set(key, before);
       repaint();
       ctx.toast(`The mark was not changed. ${err.message || ''}`.trim(), { error: true });
     } finally {
+      if (alias && saving.get(alias) > 1) saving.set(alias, saving.get(alias) - 1);
+      else if (alias) saving.delete(alias);
       if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);
       else saving.delete(key);
       saveTicks += 1;
@@ -1048,12 +1050,11 @@
       let page;
       let requested;
       const ticks = saveTicks;
-      // minPage holds only while no save started or ended since it was raised: a save may have moved a title onto the
-      // pages it skips, whichever way this request ends (an answer, an error and Try again).
+      // minPage holds only while no save started or ended since it was raised (a save may move a title onto its pages).
       if (view.minAt !== ticks) view.minPage = 1;
       try {
         const filter = MARK_VIEWS.find((f) => f.value === view.filter).params;
-        requested = Math.max(Math.floor((view.shown.size - view.back - left()) / MARKS_PAGE) + 1, view.minPage);
+        requested = view.top ? 1 : Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);
         page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
       } catch (err) {
         if (seq !== view.seq || ctx.controller.signal.aborted) return;
@@ -1064,24 +1065,23 @@
         return;
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
-      // A save that overlapped the request may have moved titles between pages (a like cleared on page one pulls the
-      // 51st Liked up, before or after the server read this page): the page is shown, its pending titles with the
-      // pending value, and the page is asked again from the rows shown once no save is on its way; repeated rows are
-      // skipped then.
+      // A save that overlapped the request may have moved titles between pages: the page is shown and asked again once
+      // no save is on its way.
       const overlapped = ticks !== saveTicks || saving.size > 0;
       view.loading = false;
-      // The count is the first settled page's (one no save overlapped) until the view is loaded again (#447), also
-      // after a row was edited out of it; the rows shown that were edited out of it (left) still count then.
-      if (!view.counted) view.total = page.total + left();
+      // The count is the first settled page's until the view is loaded again (#447), rows edited out (left) included;
+      // a later overlapped page leaves it alone, as its server count may still hold a row counted in left.
+      if (!view.counted && (!overlapped || !view.loaded)) view.total = page.total + left();
       view.counted = view.counted || !overlapped;
       view.loaded = true;
       const items = page.items || [];
       let added = 0;
       for (const m of items) {
-        // A fresh page shows the server's mark, unless a save for the title overlapped it; a repeated row takes it in
-        // place. Controls of the title already shown in Search or Groups follow it, so their next tap starts from it.
+        // A fresh page shows the server's mark unless a save overlapped it, on every control of the title; its stamp
+        // outranks a Search or Groups answer asked before it that arrives later.
         if (freshFor(m.key, ticks)) {
           marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
+          markAt.set(m.key, Math.max(markAt.get(m.key) || 0, ticks + 0.5));
           paintKey(ctx, m.key);
         }
         if (view.shown.has(m.key)) continue;
@@ -1090,9 +1090,8 @@
         list.append(build(m.key));
         added += 1;
       }
-      // The retry after an overlapped answer pages from the rows shown before it: rows it added may stand on a later
-      // page now (title 51 moved onto page 1 while page 2 returned title 52).
-      view.back = overlapped ? view.back + added : 0;
+      // The retry after an overlapped answer starts at page 1, where a saved title moves to; minPage skips on from there.
+      view.top = overlapped;
       // One lookup with the keys of the whole page, repeated rows included.
       const keys = items.map((m) => m.key);
       view.pages.push(keys);
@@ -1178,7 +1177,7 @@
       view.minPage = 1;
       view.loading = false;
       view.loaded = view.counted = false;
-      view.back = 0;
+      view.top = false;
       view.pages = [];
       rows.clear();
       list.replaceChildren();
