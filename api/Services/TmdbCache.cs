@@ -1,8 +1,8 @@
 namespace Api.Services;
 
 /// <summary>
-/// Process-local memory cache of successful TMDB answers, keyed by request path. Entries live for a fixed
-/// lifetime (at most 30 days, well within TMDB's six-month limit) and are counted in bytes; past the budget
+/// Process-local memory cache of successful TMDB answers, keyed by request path. Entries live for
+/// <see cref="Lifetime"/> or their own lifetime (at most 30 days, well within TMDB's six-month limit) and are counted in bytes; past the budget
 /// the oldest entries are evicted, and an answer larger than the whole budget is not cached at all.
 /// Nothing is written to disk or to the database.
 /// </summary>
@@ -52,8 +52,13 @@ public sealed class TmdbCache(TimeProvider timeProvider)
     return false;
   }
 
-  public void Set(string key, byte[] body)
+  /// <summary>
+  /// Stores the answer for <paramref name="lifetime"/> (clamped to <see cref="MaxLifetime"/>), or for
+  /// <see cref="Lifetime"/> when none is given. A lifetime of zero or less stores nothing and drops an older entry.
+  /// </summary>
+  public void Set(string key, byte[] body, TimeSpan? lifetime = null)
   {
+    var life = lifetime is TimeSpan given ? (given > MaxLifetime ? MaxLifetime : given) : Lifetime;
     var size = SizeOf(key, body);
     lock (_gate)
     {
@@ -61,7 +66,7 @@ public sealed class TmdbCache(TimeProvider timeProvider)
       {
         Remove(existing);
       }
-      if (size > ByteBudget)
+      if (life <= TimeSpan.Zero || size > ByteBudget)
       {
         return;
       }
@@ -69,7 +74,7 @@ public sealed class TmdbCache(TimeProvider timeProvider)
       {
         Remove(oldest);
       }
-      var node = _byAge.AddLast(new Entry(key, body, timeProvider.GetUtcNow() + Lifetime, size));
+      var node = _byAge.AddLast(new Entry(key, body, timeProvider.GetUtcNow() + life, size));
       _byKey[key] = node;
       _bytes += size;
     }

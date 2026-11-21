@@ -416,6 +416,93 @@ public class TmdbClientTests
         Assert.DoesNotContain(forbidden, line);
   }
 
+  [Fact]
+  public async Task Trending_AsksTheWeekListOfEachKind()
+  {
+    var handler = new StubHandler(_ => Json("""{"page":1,"results":[],"total_pages":1}"""));
+    var client = CreateClient(handler);
+
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTrendingMoviesAsync(1, default)).Status);
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTrendingTvAsync(1, default)).Status);
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTrendingMoviesAsync(2, default)).Status);
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTrendingTvAsync(3, default)).Status);
+
+    Assert.Equal(
+      ["/3/trending/movie/week", "/3/trending/tv/week", "/3/trending/movie/week?page=2", "/3/trending/tv/week?page=3"],
+      handler.Requests.Select(r => r.Uri.PathAndQuery));
+    Assert.All(handler.Requests, r =>
+    {
+      Assert.Equal("api.themoviedb.org", r.Uri.Host);
+      Assert.Equal("Bearer", r.Authorization?.Scheme);
+      Assert.Equal(Token, r.Authorization?.Parameter);
+      Assert.DoesNotContain(Token, r.Uri.OriginalString);
+    });
+  }
+
+  [Fact]
+  public async Task Trending_ReadsOriginalTitleAdultAndTotalPages()
+  {
+    var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.Contains("/movie/")
+      ? Json("""{"page":2,"total_pages":500,"results":[{"id":7,"title":"Some Film","original_title":"Un Film","adult":true,"poster_path":"/a.jpg","vote_average":7.5}]}""")
+      : Json("""{"page":1,"total_pages":40,"results":[{"id":9,"name":"Some Series","original_name":"Une Série","adult":true}]}"""));
+    var client = CreateClient(handler);
+
+    var movies = (await client.GetTrendingMoviesAsync(2, default)).Value!;
+    Assert.Equal(2, movies.Page);
+    Assert.Equal(500, movies.TotalPages);
+    var movie = Assert.Single(movies.Results!);
+    Assert.Equal(("Some Film", "Un Film", true, "/a.jpg"), (movie.Title, movie.OriginalTitle, movie.Adult, movie.PosterPath));
+
+    var tv = (await client.GetTrendingTvAsync(1, default)).Value!;
+    Assert.Equal((1, 40), (tv.Page, tv.TotalPages));
+    var series = Assert.Single(tv.Results!);
+    Assert.Equal(("Some Series", "Une Série", true), (series.Name, series.OriginalName, series.Adult));
+
+    // Missing fields read as 0, null and false; the positional constructors still work.
+    var bare = new TmdbMoviePage([new TmdbMovieSummary(1, "A", null, null, 0)]);
+    Assert.Equal((0, 0, null, false), (bare.Page, bare.TotalPages, bare.Results![0].OriginalTitle, bare.Results[0].Adult));
+  }
+
+  [Fact]
+  public async Task Trending_IsCachedForSixHours()
+  {
+    Assert.Equal(TimeSpan.FromHours(6), TmdbClient.TrendingLifetime);
+    var time = new ManualTime();
+    var cache = new TmdbCache(time);
+    var handler = new StubHandler(_ => Json("""{"page":1,"results":[{"id":7}],"total_pages":1}"""));
+    var client = CreateClient(handler, time: time, cache: cache);
+
+    await client.GetTrendingMoviesAsync(1, default);
+    await client.GetTrendingTvAsync(1, default);
+    await client.GetMovieWithSimilarAsync(7, default);
+    time.Advance(TimeSpan.FromHours(6) - TimeSpan.FromSeconds(1));
+    Assert.Equal(7, Assert.Single((await client.GetTrendingMoviesAsync(1, default)).Value!.Results!).Id);
+    await client.GetTrendingTvAsync(1, default);
+    Assert.Equal(3, handler.Requests.Count);
+
+    time.Advance(TimeSpan.FromSeconds(1));
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTrendingMoviesAsync(1, default)).Status);
+    await client.GetTrendingTvAsync(1, default);
+    Assert.Equal(5, handler.Requests.Count);
+    // Other answers keep the default lifetime.
+    await client.GetMovieWithSimilarAsync(7, default);
+    Assert.Equal(5, handler.Requests.Count);
+  }
+
+  [Fact]
+  public async Task Trending_PageOutOfRange_Throws()
+  {
+    var handler = new StubHandler(_ => Json("{}"));
+    var client = CreateClient(handler);
+
+    foreach (var page in new[] { 0, -1, 4 })
+    {
+      await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.GetTrendingMoviesAsync(page, default));
+      await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.GetTrendingTvAsync(page, default));
+    }
+    Assert.Empty(handler.Requests);
+  }
+
   private static TmdbClient CreateClient(
     StubHandler handler,
     string? token = Token,

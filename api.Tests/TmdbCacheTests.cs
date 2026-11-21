@@ -78,6 +78,65 @@ public class TmdbCacheTests
   }
 
   [Fact]
+  public void Set_WithItsOwnLifetime_ExpiresThenAndNotAfterTheDefault()
+  {
+    var time = new ManualTime();
+    var cache = new TmdbCache(time);
+    cache.Set("short", new byte[10], TimeSpan.FromHours(6));
+    cache.Set("default", new byte[10]);
+
+    time.Advance(TimeSpan.FromHours(6) - TimeSpan.FromSeconds(1));
+    Assert.True(cache.TryGet("short", out _));
+    time.Advance(TimeSpan.FromSeconds(1));
+    Assert.False(cache.TryGet("short", out _));
+    Assert.True(cache.TryGet("default", out _));
+
+    time.Advance(TmdbCache.MaxLifetime - TimeSpan.FromHours(6));
+    Assert.False(cache.TryGet("default", out _));
+  }
+
+  [Fact]
+  public void Set_LifetimeLongerThanThirtyDays_IsClamped()
+  {
+    var time = new ManualTime();
+    var cache = new TmdbCache(time);
+    cache.Set("a", new byte[10], TimeSpan.FromDays(365));
+    cache.Set("b", new byte[10], TimeSpan.MaxValue);
+
+    time.Advance(TimeSpan.FromDays(30) - TimeSpan.FromSeconds(1));
+    Assert.True(cache.TryGet("a", out _));
+    Assert.True(cache.TryGet("b", out _));
+    time.Advance(TimeSpan.FromSeconds(1));
+    Assert.False(cache.TryGet("a", out _));
+    Assert.False(cache.TryGet("b", out _));
+  }
+
+  [Fact]
+  public void Set_ZeroLifetime_StoresNothing()
+  {
+    var cache = new TmdbCache(new ManualTime());
+    // Bytes is checked before any lookup: TryGet drops expired entries and would hide a stored one.
+    cache.Set("a", new byte[10], TimeSpan.Zero);
+    Assert.Equal(0, cache.Bytes);
+    cache.Set("b", new byte[10], TimeSpan.FromHours(-1));
+    Assert.Equal(0, cache.Bytes);
+    Assert.False(cache.TryGet("a", out _));
+    Assert.False(cache.TryGet("b", out _));
+
+    // An older entry of the same key is removed, not kept.
+    cache.Set("c", new byte[10]);
+    Assert.True(cache.Bytes > 0);
+    cache.Set("c", new byte[10], TimeSpan.Zero);
+    Assert.Equal(0, cache.Bytes);
+    cache.Set("d", new byte[10]);
+    Assert.True(cache.Bytes > 0);
+    cache.Set("d", new byte[10], TimeSpan.FromHours(-1));
+    Assert.Equal(0, cache.Bytes);
+    Assert.False(cache.TryGet("c", out _));
+    Assert.False(cache.TryGet("d", out _));
+  }
+
+  [Fact]
   public void ExpiredEntry_ReleasesBudget()
   {
     var time = new ManualTime();
