@@ -35,7 +35,7 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 .lib-chip { position: relative; flex-shrink: 0; height: 34px; padding: 0 13px; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font: 650 13.5px var(--font-ui); white-space: nowrap; }
 .lib-chip::after { content: ""; position: absolute; inset: -5px 0; }
 .lib-chip svg { width: 15px; height: 15px; }
-.lib-chip .n { font-weight: 500; opacity: .7; font-variant-numeric: tabular-nums; }
+.lib-chip .n { font-weight: 500; font-variant-numeric: tabular-nums; }
 .lib-chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .lib-chip.is-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
 .lib-chip-sep { flex-shrink: 0; width: 1px; height: 20px; background: var(--line-strong); }
