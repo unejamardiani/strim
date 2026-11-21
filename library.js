@@ -1053,7 +1053,7 @@
       if (view.minAt !== ticks) view.minPage = 1;
       try {
         const filter = MARK_VIEWS.find((f) => f.value === view.filter).params;
-        requested = Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);
+        requested = Math.max(Math.floor((view.shown.size - view.back - left()) / MARKS_PAGE) + 1, view.minPage);
         page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
       } catch (err) {
         if (seq !== view.seq || ctx.controller.signal.aborted) return;
@@ -1070,8 +1070,10 @@
       // skipped then.
       const overlapped = ticks !== saveTicks || saving.size > 0;
       view.loading = false;
-      // The count is the first page's until the view is loaded again (#447), also after a row was edited out of it.
-      if (!view.loaded) view.total = page.total;
+      // The count is the first settled page's (one no save overlapped) until the view is loaded again (#447), also
+      // after a row was edited out of it.
+      if (!view.counted) view.total = page.total;
+      view.counted = view.counted || !overlapped;
       view.loaded = true;
       const items = page.items || [];
       let added = 0;
@@ -1088,6 +1090,9 @@
         list.append(build(m.key));
         added += 1;
       }
+      // The retry after an overlapped answer pages from the rows shown before it: rows it added may stand on a later
+      // page now (title 51 moved onto page 1 while page 2 returned title 52).
+      view.back = overlapped ? view.back + added : 0;
       // One lookup with the keys of the whole page, repeated rows included.
       const keys = items.map((m) => m.key);
       view.pages.push(keys);
@@ -1172,7 +1177,8 @@
       view.done = false;
       view.minPage = 1;
       view.loading = false;
-      view.loaded = false;
+      view.loaded = view.counted = false;
+      view.back = 0;
       view.pages = [];
       rows.clear();
       list.replaceChildren();

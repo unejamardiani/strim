@@ -56,7 +56,7 @@ public class LibraryMarksTabUiTests
     Assert.Contains("count.textContent = !view.loaded ? ''", section);
     Assert.Contains("view.filter === 'watchlist' ? `${plural(view.total, 'title')} · newest first` : `${plural(view.total, 'mark')} · newest change first`;", section);
     Assert.Contains("if (view.loaded && b.dataset.value === view.filter) b.append(h('span', { class: 'n', text: fmt(view.total) }));", section);
-    Assert.Contains("view.loaded = false;", Between(section, "const start = () => {", "start();"));
+    Assert.Contains("view.loaded = view.counted = false;", Between(section, "const start = () => {", "start();"));
 
     // The replaced parts are gone.
     var library = Read("library.js");
@@ -188,12 +188,20 @@ public class LibraryMarksTabUiTests
   {
     var section = MyMarks();
     var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
-    // The count is set by the first page only; later pages do not lower it after a row was edited out of the view.
-    Assert.Contains("if (!view.loaded) view.total = page.total;\n      view.loaded = true;", load);
+    // The count is set by the first settled page only; later pages do not lower it after a row was edited out of the
+    // view. A first page a save overlapped (Liked opened while the first Like saves, the page empty) leaves the count
+    // to the retry, which shows the row with "1 mark" and no empty message.
+    Assert.Contains("if (!view.counted) view.total = page.total;\n      view.counted = view.counted || !overlapped;\n      view.loaded = true;", load);
+    Assert.True(load.IndexOf("const overlapped =", StringComparison.Ordinal) < load.IndexOf("if (!view.counted)", StringComparison.Ordinal));
+    Assert.Contains("view.loaded = view.counted = false;\n      view.back = 0;", section);
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(section, @"view\.total = page\.total"));
     // A row edited out of the view moved every later title up by one on the server: the next page counts it out,
     // so the sentinel still reaches the 51st title of 51 Liked after a like on page one is cleared.
-    Assert.Contains("requested = Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", load);
+    Assert.Contains("requested = Math.max(Math.floor((view.shown.size - view.back - left()) / MARKS_PAGE) + 1, view.minPage);", load);
+    // 52 marks, title 1 cleared while page 2 loads: page 2 returns title 52, title 51 moved onto page 1. The retry pages
+    // from the rows shown before that answer (page 1 again), so titles 51 and 52 are both reached.
+    Assert.Contains("view.back = overlapped ? view.back + added : 0;", load);
+    Assert.True(load.IndexOf("added += 1;", StringComparison.Ordinal) < load.IndexOf("view.back = overlapped", StringComparison.Ordinal));
     Assert.Contains("const short = view.shown.size - left() < page.total;\n      view.done = items.length < MARKS_PAGE || !short;", load);
     Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", section);
     // A save overlapping the request, in both orders: page one answers with the 50 rows shown (the cleared like not yet
