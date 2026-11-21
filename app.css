@@ -2043,6 +2043,20 @@ select.input {
 /* ---------- Compact controls (#382): visible 32-36px, the 44px touch target comes from ::after ---------- */
 .btn-xs { position: relative; min-height: 32px; padding: 0 11px; font-size: 13px; font-weight: 700; border-radius: 10px; gap: 6px; }
 .btn-xs::after, .icon-btn.is-sm::after { content: ""; position: absolute; inset: -6px -2px; }
+/* Phones (#490): the same for the editor's and the cards' small controls. Nothing changes size; the insets were
+   measured at 390px so no target overlaps a neighbour. The adult switch reaches 41px between the sort select and the
+   All on / All off row. */
+@media (max-width: 767px) {
+  .link-box .btn, .pills button, .bulk .btn, .account, .playlist-title a, .site-links a, .sharing-line, .adult-switch { position: relative; }
+  .link-box .btn::after { content: ""; position: absolute; inset: -3px 0; }
+  .pills button::after { content: ""; position: absolute; inset: -4px 0; }
+  .bulk .btn::after { content: ""; position: absolute; inset: -6px 0; }
+  .account::after { content: ""; position: absolute; inset: -2px 0; }
+  .playlist-title a::after { content: ""; position: absolute; inset: -7px 0; }
+  .site-links a::after { content: ""; position: absolute; inset: -6px -4px; }
+  .sharing-line::after { content: ""; position: absolute; inset: -12px -8px; }
+  .adult-switch::after { content: ""; position: absolute; inset: -11px 0 -2px; }
+}
 .btn-xs svg { width: 15px; height: 15px; }
 .btn-quiet { background: none; color: var(--ink-2); }
 .btn-danger { background: var(--danger); color: var(--on-danger); }

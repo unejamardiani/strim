@@ -60,6 +60,8 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
 - Touch: controls 46px on phones (42px from 768px), group rows 56px (50px), switches 46×28.
   Row and sheet actions use the compact controls (`.btn-xs`, `.icon-btn.is-sm`, `.btn-quiet`, `.btn-danger`,
   `.btn-danger-quiet`): 32–36px visible with a 44px touch target from `::after`, replacing the 46px rule for them.
+  Controls drawn smaller than 44px (small buttons, pills, text links that stand alone) get the 44px target from
+  `::after` on phones; a new control below 44px needs the same.
   Primary actions are 40–44px high and never full width on desktop.
 
 ### Components
