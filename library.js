@@ -74,6 +74,8 @@
     for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;
     // On Home (#425) the cover carries the name as the page's h1; the owner's head keeps only the kicker.
     view.homeHead?.(tab === 'home');
+    // "New in your groups" (#425) reads the stored counts again: a group opened since no longer counts as new.
+    if (tab === 'home') view.homeFresh?.();
     const same = view.tab === tab;
     const first = view.tab !== null;
     view.tab = tab;
@@ -1159,16 +1161,12 @@
     const fresh = part('New in your groups', `${base}/groups`, 'All groups');
     // Browse: one tile per type with groups that are on, opening the Groups tab with that type.
     const types = part('Browse');
-    view.homeList = (again) => {
+    // Painted from the stored counts whenever the list arrives and whenever Home is shown again (show()), so a group
+    // opened since (which stores its count) no longer reads "+N new" here either. Reading only, never writing.
+    view.homeFresh = () => {
       const list = ctx.list;
-      facts.textContent = { none: 'This playlist has no source URL', failed: 'The list could not be loaded' }[ctx.listState] || 'Loading the list';
       fresh.el.hidden = true;
-      if (ctx.listState === 'loading') return busy(types);
-      for (const s of [watch, follow]) s.lookup();
-      if (ctx.listState === 'none') return void (types.el.hidden = true);
-      if (!list) return failed(types, null, again);
-      const on = list.groups.filter((g) => !list.disabled.has(g.key));
-      facts.textContent = `${plural(on.reduce((sum, g) => sum + g.count, 0), 'entry', 'entries')} in ${plural(on.length, 'group')} · read-only`;
+      if (!list || ctx.listState === 'loading') return;
       const seen = readCounts(ctx) || {};
       const grown = browseGroups(list, includeOff).sorted.map((g) => [g, newSince(seen, g)]).filter(([, n]) => n > 0)
         .sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -1187,6 +1185,17 @@
           h('span', { class: 'lib-new', text: `+${fmt(n)} new` }),
           h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));
       })));
+    };
+    view.homeList = (again) => {
+      const list = ctx.list;
+      facts.textContent = { none: 'This playlist has no source URL', failed: 'The list could not be loaded' }[ctx.listState] || 'Loading the list';
+      view.homeFresh();
+      if (ctx.listState === 'loading') return busy(types);
+      for (const s of [watch, follow]) s.lookup();
+      if (ctx.listState === 'none') return void (types.el.hidden = true);
+      if (!list) return failed(types, null, again);
+      const on = list.groups.filter((g) => !list.disabled.has(g.key));
+      facts.textContent = `${plural(on.reduce((sum, g) => sum + g.count, 0), 'entry', 'entries')} in ${plural(on.length, 'group')} · read-only`;
       const tiles = GROUP_TYPES.map((t) => ({ ...t, on: on.filter((g) => g.type === t.type) })).filter((t) => t.on.length);
       types.el.hidden = !tiles.length;
       types.body.replaceChildren(h('div', { class: 'lib-types' }, tiles.map((t) => h('a', { class: 'lib-type', href: `${base}/groups?type=${t.value}` },

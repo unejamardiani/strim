@@ -103,6 +103,13 @@ public class LibraryHomeUiTests
     Assert.DoesNotContain("writeCounts", home);
     Assert.DoesNotContain("seenCounts", home);
     Assert.DoesNotContain("localStorage", home);
+    // The section reads the counts again each time Home is shown, so a group opened since (which stored its count) drops
+    // out as it does in the Groups tab; and when the list arrives.
+    var fresh = Between(home, "view.homeFresh = () => {", "view.homeList = (again) => {");
+    Assert.Contains("fresh.el.hidden = true;", fresh);
+    Assert.Contains("const seen = readCounts(ctx) || {};", fresh);
+    Assert.Contains("view.homeFresh();", Between(home, "view.homeList = (again) => {", "// Marks set anywhere"));
+    Assert.Contains("if (tab === 'home') view.homeFresh?.();", Between(Read("library.js"), "function show(sub, query)", "function inPanels("));
   }
 
   [Fact]
