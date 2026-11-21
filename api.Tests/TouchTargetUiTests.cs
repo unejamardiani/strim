@@ -17,8 +17,8 @@ public class TouchTargetUiTests
     (".pills button", "-4px 0"),
     (".bulk .btn", "-6px 0"),
     (".account", "-3px 0"),
-    (".playlist-title a", "-7px 0"),
-    (".site-links > a", "-8px -4px -5px"),
+    (".playlist-title a", "-7px min(0px, calc(100% - 44px)) -7px 0"),
+    (".site-links > a", "-8px -5px -5px"),
     (".sharing-line", "-12px -8px"),
     (".adult-switch", "-11px 0 -2px"),
   ];
@@ -67,7 +67,7 @@ public class TouchTargetUiTests
     var blocks = PhoneBlocks(Read("library.css"));
     Assert.Contains(blocks, b =>
       b.Contains(".lib-sec-head a, .lib-sec-head button { position: relative; }") &&
-      b.Contains(".lib-sec-head a::after, .lib-sec-head button::after { content: \"\"; position: absolute; inset: -19px -14px -8px; }"));
+      b.Contains(".lib-sec-head a::after, .lib-sec-head button::after { content: \"\"; position: absolute; inset: -20px -14px -8px; }"));
   }
 
   [Fact]
@@ -102,15 +102,20 @@ public class TouchTargetUiTests
     // The footer must not move: no gap, margin or padding change on the footer row.
     Assert.DoesNotContain(".site-links {", block);
     Assert.DoesNotContain("row-gap", block);
-    // 31.5px links: 8px up and 5px down give 44.5px, short of the TMDB attribution 12px below.
-    // On narrow phones Source wraps alone 4px under the first row: the first row reaches 44.5px upwards, Source
-    // downwards, and both stop in the middle of the gap, so the rows' targets never overlap.
+    // 31.5px links: 8px up and 5px down give 44.5px, short of the TMDB attribution 12px below; 5px sideways give the
+    // 35.6px "Home" 45.6px and leave 8px of the 18px column gap free.
+    // On narrow phones Source, and below about 305px Compare too, wrap 4px under the first row: Home, Features and
+    // How to use reach 44.5px upwards, Compare and Source (the 4th and 5th link) downwards, and both stop in the
+    // middle of the gap, so the rows' targets never overlap whichever of the two has wrapped.
     var narrow = Assert.Single(PhoneBlocks(css, NarrowPhoneQuery));
     Assert.Equal(
-      AfterRule(".site-links > a", "-11px -4px -2px") + "\n  " + AfterRule(".site-links > a:last-of-type", "-2px -4px -11px"),
+      AfterRule(".site-links > a", "-11px -5px -2px") + "\n  " + AfterRule(".site-links > a:nth-of-type(n+4)", "-2px -5px -11px"),
       narrow.Trim());
+    var links = Regex.Matches(Read("app.html"), "\n      <a href=\"[^\"]+\"[^>]*>([^<]+)</a>")
+      .Select(m => m.Groups[1].Value).ToArray();
+    Assert.Equal(new[] { "Home", "Features", "How to use", "Compare", "Source" }, links);
     Assert.True(css.IndexOf(NarrowPhoneQuery, StringComparison.Ordinal) >
-      css.IndexOf(AfterRule(".site-links > a", "-8px -4px -5px"), StringComparison.Ordinal),
+      css.IndexOf(AfterRule(".site-links > a", "-8px -5px -5px"), StringComparison.Ordinal),
       "The narrow-phone footer rule must come after the phone rule to override it.");
   }
 
@@ -118,7 +123,7 @@ public class TouchTargetUiTests
   public void Targets_AreNotDrawn()
   {
     var targets = EditorTargets.Select(t => t.Selector)
-      .Concat([".btn-sm", ".lib-sec-head a", ".lib-sec-head button"])
+      .Concat([".btn-sm", ".lib-sec-head a", ".lib-sec-head button", ".site-links > a:nth-of-type(n+4)"])
       .Select(s => s + "::after")
       .ToHashSet();
     var found = new HashSet<string>();

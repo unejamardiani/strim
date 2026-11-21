@@ -405,10 +405,10 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .lib-sec-head .n { font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .lib-sec-head a, .lib-sec-head button { margin-left: auto; padding: 0; border: 0; background: none; font: 700 13.5px var(--font-ui); color: var(--accent-ink); text-decoration: none; }
 /* Phones (#490): the 13.5px link keeps its size; ::after gives it a 44px target, more above than below because the
-   rail or list starts 8 to 12px under the head. */
+   rail or list starts 8 to 12px under the head; the 16.5px link reaches 44.5px. */
 @media (max-width: 767px) {
   .lib-sec-head a, .lib-sec-head button { position: relative; }
-  .lib-sec-head a::after, .lib-sec-head button::after { content: ""; position: absolute; inset: -19px -14px -8px; }
+  .lib-sec-head a::after, .lib-sec-head button::after { content: ""; position: absolute; inset: -20px -14px -8px; }
 }
 .lib-list { overflow: hidden; border: 1px solid var(--card-border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-card); }
 .lib-more { display: flex; justify-content: center; width: 100%; padding: 12px; border: 0; border-top: 1px solid var(--line); background: none; font: 700 13.5px var(--font-ui); color: var(--ink-2); }
