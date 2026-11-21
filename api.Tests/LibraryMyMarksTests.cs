@@ -53,7 +53,7 @@ public class LibraryMyMarksTests
     var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     Assert.Contains("added += 1;", load);
     // Without a save overlapping the request (see LibraryMarksTabUiTests) it moves on to the next page at once.
-    Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        loadPage();\n        return;\n      }", load.ReplaceLineEndings("\n"));
+    Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        view.minAt = ticks;\n        loadPage();\n        return;\n      }", load.ReplaceLineEndings("\n"));
     Assert.True(load.IndexOf("view.done = items.length", StringComparison.Ordinal) < load.IndexOf("if (!view.done && added === 0)", StringComparison.Ordinal));
     Assert.Contains("view.minPage = 1;", Between(MyMarks(), "const start = () => {", "start();"));
   }

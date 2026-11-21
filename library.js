@@ -1048,6 +1048,9 @@
       let page;
       let requested;
       const ticks = saveTicks;
+      // minPage holds only while no save started or ended since it was raised: a save may have moved a title onto the
+      // pages it skips, whichever way this request ends (an answer, an error and Try again).
+      if (view.minAt !== ticks) view.minPage = 1;
       try {
         const filter = MARK_VIEWS.find((f) => f.value === view.filter).params;
         requested = Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);
@@ -1062,18 +1065,10 @@
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
       // A save that overlapped the request may have moved titles between pages (a like cleared on page one pulls the
-      // 51st Liked up, before or after the server read this page): the page is dropped before any row of it is shown
-      // and asked again from the rows shown once no save is on its way. A page skipped as repeated may hold new titles
-      // after such a save, so minPage starts over.
-      if (ticks !== saveTicks || saving.size) {
-        whenSettled(() => {
-          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
-          view.loading = false;
-          view.minPage = 1;
-          loadPage();
-        });
-        return;
-      }
+      // 51st Liked up, before or after the server read this page): the page is shown, its pending titles with the
+      // pending value, and the page is asked again from the rows shown once no save is on its way; repeated rows are
+      // skipped then.
+      const overlapped = ticks !== saveTicks || saving.size > 0;
       view.loading = false;
       // The count is the first page's until the view is loaded again (#447), also after a row was edited out of it.
       if (!view.loaded) view.total = page.total;
@@ -1099,8 +1094,20 @@
       lookup(keys, seq);
       const short = view.shown.size - left() < page.total;
       view.done = items.length < MARKS_PAGE || !short;
+      if (overlapped) {
+        view.loading = true;
+        paint();
+        whenSettled(() => {
+          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
+          view.loading = false;
+          view.done = false;
+          loadPage();
+        });
+        return;
+      }
       if (!view.done && added === 0) {
         view.minPage = requested + 1;
+        view.minAt = ticks;
         loadPage();
         return;
       }
@@ -1345,6 +1352,7 @@
     if (!answer) {
       renderFilm(ctx, null);
       const own = (card.pending = new AbortController());
+      const asked = saveTicks;
       try {
         const params = { name: film.name, group: film.group, type: 'Movies', cacheKey: film.cacheKey, includeDisabled: includeOff, hideSeen };
         if (film.type === 'Series') answer = await ctx.seriesCard({ ...params, type: 'Series' }, own.signal);
@@ -1354,6 +1362,8 @@
         return;
       }
       if (seq !== card.seq || !ctx.isCurrent()) return;
+      // Stamped like the titles' answers (#447): a save of the title that overlapped the request outranks its marks.
+      answer.asked = asked;
       if (answer.status === 'matched') answers.set(key, answer);
     }
     renderFilm(ctx, answer);
@@ -1473,9 +1483,10 @@
     // An answer's marks count once: a kept answer reopened later must not undo a mark set since. Reopened under
     // another key (its row, then a similar tile), it takes the live state of the key that first used it.
     const owner = answerMarkKey.get(answer);
-    // While a save for the title is on its way the card shows that value and leaves its object in marks (#447):
-    // setMark takes a replaced object for a later tap and would skip the rollback of a failed save.
-    const pending = saving.has(key) && marks.has(key);
+    // While a save for the title is on its way, or one overlapped the card's request, the card shows the value in marks
+    // and leaves its object in place (#447): setMark takes a replaced object for a later tap and would skip the
+    // rollback of a failed save.
+    const pending = !freshFor(key, answer?.asked) && marks.has(key);
     const given = pending || !answer?.marks || owner === key ? now
       : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0, watchlist: answer.marks.watchlist === true };
     if (answer?.marks && !owner) answerMarkKey.set(answer, key);

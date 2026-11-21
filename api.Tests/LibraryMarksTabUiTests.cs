@@ -199,18 +199,25 @@ public class LibraryMarksTabUiTests
     // A save overlapping the request, in both orders: page one answers with the 50 rows shown (the cleared like not yet
     // saved) and the save then pulls the 51st Liked onto page one; or the sentinel asks for page two first and the
     // save lands before the server reads it, so page two comes back empty, or with title 52 of 52 while title 51 moved
-    // onto page one. No such page is taken: it is dropped before any of its rows is appended or the count is set, so
-    // the retry asks again from the position before it, once no save is on its way.
+    // onto page one. Such a page is shown (All reselected while a Like saves: its rows appear at once, the pending
+    // title with the pending Like, and stay usable), then asked again from the rows shown once no save is on its way;
+    // the rows it already showed are skipped as repeated then, and the loading state keeps the sentinel away meanwhile.
     var ticks = load.IndexOf("const ticks = saveTicks;", StringComparison.Ordinal);
     Assert.True(ticks >= 0 && ticks < load.IndexOf("await ctx.listMarks(", StringComparison.Ordinal));
-    var retry = load.IndexOf("if (ticks !== saveTicks || saving.size) {\n        whenSettled(() => {\n          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n          view.loading = false;\n          view.minPage = 1;\n          loadPage();\n        });\n        return;\n      }\n      view.loading = false;", StringComparison.Ordinal);
-    Assert.True(retry > load.IndexOf("if (seq !== view.seq || !ctx.isCurrent()) return;", StringComparison.Ordinal));
-    Assert.True(retry < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
-    Assert.True(retry < load.IndexOf("view.shown.add(m.key);", StringComparison.Ordinal));
-    Assert.True(retry < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
-    Assert.True(retry < load.IndexOf("view.pages.push(keys);", StringComparison.Ordinal));
+    Assert.Contains("const overlapped = ticks !== saveTicks || saving.size > 0;\n      view.loading = false;", load);
+    Assert.DoesNotContain("if (ticks !== saveTicks || saving.size) {", load);
+    var retry = load.IndexOf("if (overlapped) {\n        view.loading = true;\n        paint();\n        whenSettled(() => {\n          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n          view.loading = false;\n          view.done = false;\n          loadPage();\n        });\n        return;\n      }", StringComparison.Ordinal);
+    Assert.True(retry > load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
+    Assert.True(retry > load.IndexOf("lookup(keys, seq);", StringComparison.Ordinal));
+    Assert.True(retry < load.IndexOf("if (!view.done && added === 0) {", StringComparison.Ordinal));
     Assert.DoesNotContain("short && (added === 0 || view.done)", load);
-    Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;", load);
+    Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        view.minAt = ticks;", load);
+    // minPage holds only while no save started or ended since it was raised, on every path to the next request: the
+    // answer of an overlapped page and an error followed by Try again alike (a cleared mark moved title 100 onto page
+    // 2 after minPage reached 3; the retry asks from the rows shown again).
+    var reset = load.IndexOf("if (view.minAt !== ticks) view.minPage = 1;", StringComparison.Ordinal);
+    Assert.True(reset > ticks && reset < load.IndexOf("requested = Math.max(", StringComparison.Ordinal));
+    Assert.Contains("onclick: loadPage }, 'Try again')", load);
     var library = Read("library.js");
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);\n    saveTicks += 1;", setMark);
@@ -233,8 +240,14 @@ public class LibraryMarksTabUiTests
     var library = Read("library.js");
     var card = Between(library, "function cardMarks(ctx, entry, answer) {", "const cardToast");
     // While a save is on its way the card shows the pending value and markControls keeps that object, so a failed
-    // save still rolls back and says so.
-    Assert.Contains("const pending = saving.has(key) && marks.has(key);", card);
+    // save still rolls back and says so. A save that overlapped the card's request counts too: a Seen title's card
+    // opened, a Like saved while it loads, the older answer then arrives unliked; the card keeps the saved Like, so the
+    // next Seen tap sends rating 1 instead of 0.
+    Assert.Contains("const pending = !freshFor(key, answer?.asked) && marks.has(key);", card);
+    var load = Between(library, "async function loadFilm(ctx) {", "function renderFilm(");
+    var asked = load.IndexOf("const asked = saveTicks;", StringComparison.Ordinal);
+    Assert.True(asked >= 0 && asked < load.IndexOf("await ctx.seriesCard(", StringComparison.Ordinal));
+    Assert.Contains("if (seq !== card.seq || !ctx.isCurrent()) return;\n      // Stamped like the titles' answers (#447): a save of the title that overlapped the request outranks its marks.\n      answer.asked = asked;\n      if (answer.status === 'matched') answers.set(key, answer);", load);
     Assert.Contains("const given = pending || !answer?.marks || owner === key ? now", card);
     Assert.Contains("markEntry = { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given, keepMark: pending };", card);
     Assert.True(card.IndexOf("const pending", StringComparison.Ordinal) < card.IndexOf("markControls(cardCtx, markEntry)", StringComparison.Ordinal));
@@ -266,8 +279,8 @@ public class LibraryMarksTabUiTests
     var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     Assert.Contains(FreshPage + "\n        if (view.shown.has(m.key)) continue;", load);
 
-    // A dropped page retries with minPage from 1: a page skipped as repeated may hold a title the save moved up.
-    Assert.Contains("view.loading = false;\n          view.minPage = 1;\n          loadPage();", load);
+    // An overlapped page asks again with minPage from 1: a page skipped as repeated may hold a title the save moved up.
+    Assert.Contains("if (view.minAt !== ticks) view.minPage = 1;", load);
   }
 
   [Fact]
