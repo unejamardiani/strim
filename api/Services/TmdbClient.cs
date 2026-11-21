@@ -26,6 +26,11 @@ public sealed record TmdbMoviePage(IReadOnlyList<TmdbMovieSummary>? Results)
 
 public sealed record TmdbGenre(int Id, string? Name);
 
+/// <param name="DisplayPriorities">Country code to TMDB's display order there; lower comes first.</param>
+public sealed record TmdbWatchProvider(int ProviderId, string? ProviderName, IReadOnlyDictionary<string, int>? DisplayPriorities);
+
+public sealed record TmdbWatchProviderList(IReadOnlyList<TmdbWatchProvider>? Results);
+
 public sealed record TmdbMovieDetails(
   int Id, string? Title, string? Overview, string? ReleaseDate, string? PosterPath, double VoteAverage,
   IReadOnlyList<TmdbGenre>? Genres, TmdbMoviePage? Similar);
@@ -108,6 +113,20 @@ public sealed class TmdbClient
   /// <summary>Series trending this week; <paramref name="page"/> 1 to 3, page 1 without a query string.</summary>
   public Task<TmdbResult<TmdbTvPage>> GetTrendingTvAsync(int page, CancellationToken cancellationToken) =>
     SendAsync<TmdbTvPage>(TrendingPath("trending/tv/week", page), cancellationToken, TrendingLifetime);
+
+  /// <summary>How long a streaming-service list is kept: it rarely changes.</summary>
+  public static readonly TimeSpan ProvidersLifetime = TimeSpan.FromDays(30);
+
+  /// <summary>The one country whose streaming services Strim asks for; fixed, never taken from a request.</summary>
+  public const string WatchRegion = "CH";
+
+  /// <summary>The streaming services TMDB lists films for in <see cref="WatchRegion"/>.</summary>
+  public Task<TmdbResult<TmdbWatchProviderList>> GetMovieProvidersAsync(CancellationToken cancellationToken) =>
+    SendAsync<TmdbWatchProviderList>("watch/providers/movie?watch_region=" + WatchRegion, cancellationToken, ProvidersLifetime);
+
+  /// <summary>The streaming services TMDB lists series for in <see cref="WatchRegion"/>.</summary>
+  public Task<TmdbResult<TmdbWatchProviderList>> GetTvProvidersAsync(CancellationToken cancellationToken) =>
+    SendAsync<TmdbWatchProviderList>("watch/providers/tv?watch_region=" + WatchRegion, cancellationToken, ProvidersLifetime);
 
   private static string TrendingPath(string path, int page)
   {

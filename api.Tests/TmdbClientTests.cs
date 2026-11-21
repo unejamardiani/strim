@@ -503,6 +503,51 @@ public class TmdbClientTests
     Assert.Empty(handler.Requests);
   }
 
+  [Fact]
+  public async Task Providers_AskBothListsForCh()
+  {
+    Assert.Equal("CH", TmdbClient.WatchRegion);
+    var handler = new StubHandler(_ => Json("""{"results":[{"provider_id":3,"provider_name":"Stream Three","display_priorities":{"CH":4,"DE":1},"logo_path":"/l.png"}]}"""));
+    var client = CreateClient(handler);
+
+    var movies = await client.GetMovieProvidersAsync(default);
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTvProvidersAsync(default)).Status);
+
+    var provider = Assert.Single(movies.Value!.Results!);
+    Assert.Equal((3, "Stream Three", 4), (provider.ProviderId, provider.ProviderName, provider.DisplayPriorities!["CH"]));
+    Assert.Equal(["/3/watch/providers/movie?watch_region=CH", "/3/watch/providers/tv?watch_region=CH"],
+      handler.Requests.Select(r => r.Uri.PathAndQuery));
+    Assert.All(handler.Requests, r =>
+    {
+      Assert.Equal("api.themoviedb.org", r.Uri.Host);
+      Assert.Equal(Token, r.Authorization?.Parameter);
+      Assert.DoesNotContain(Token, r.Uri.OriginalString);
+    });
+  }
+
+  [Fact]
+  public async Task Providers_AreCachedForThirtyDays()
+  {
+    Assert.Equal(TimeSpan.FromDays(30), TmdbClient.ProvidersLifetime);
+    var time = new ManualTime();
+    // A shorter default shows the providers keep their own lifetime.
+    var cache = new TmdbCache(time) { Lifetime = TimeSpan.FromDays(1) };
+    var handler = new StubHandler(_ => Json("""{"results":[]}"""));
+    var client = CreateClient(handler, time: time, cache: cache);
+
+    await client.GetMovieProvidersAsync(default);
+    await client.GetTvProvidersAsync(default);
+    time.Advance(TimeSpan.FromDays(30) - TimeSpan.FromSeconds(1));
+    Assert.Equal(TmdbStatus.Ok, (await client.GetMovieProvidersAsync(default)).Status);
+    await client.GetTvProvidersAsync(default);
+    Assert.Equal(2, handler.Requests.Count);
+
+    time.Advance(TimeSpan.FromSeconds(1));
+    await client.GetMovieProvidersAsync(default);
+    await client.GetTvProvidersAsync(default);
+    Assert.Equal(4, handler.Requests.Count);
+  }
+
   private static TmdbClient CreateClient(
     StubHandler handler,
     string? token = Token,

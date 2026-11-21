@@ -199,6 +199,7 @@ public static class LibraryEndpoints
 
     app.MapLibraryTitlesEndpoints();
     app.MapLibraryPostersEndpoints();
+    app.MapLibraryProvidersEndpoints();
     return app;
   }
 
