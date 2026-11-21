@@ -9,7 +9,7 @@ public class TouchTargetUiTests
 {
   private const string PhoneQuery = "@media (max-width: 767px) {";
   private const string NarrowPhoneQuery = "@media (max-width: 379px) {";
-  private const string ThreeRowQuery = "@media (max-width: 229px) {";
+  private const string ThreeRowQuery = "@media (max-width: 240px) {";
 
   private static readonly (string Selector, string Inset)[] EditorTargets =
   [
@@ -118,7 +118,7 @@ public class TouchTargetUiTests
     Assert.True(css.IndexOf(NarrowPhoneQuery, StringComparison.Ordinal) >
       css.IndexOf(AfterRule(".site-links > a", "-8px -5px -5px"), StringComparison.Ordinal),
       "The narrow-phone footer rule must come after the phone rule to override it.");
-    // Below about 230px three rows: Home and Features, How to use and Compare, Source. The middle row has a row above
+    // Up to 240px three rows: Home and Features, How to use and Compare, Source. The middle row has a row above
     // and below, so How to use and Compare stop 2px into both gaps instead of reaching 11px into a neighbour's row.
     var threeRows = Assert.Single(PhoneBlocks(css, ThreeRowQuery));
     Assert.Equal(

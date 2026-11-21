@@ -2063,7 +2063,7 @@ select.input {
   .adult-switch::after { content: ""; position: absolute; inset: -11px 0 -2px; }
 }
 /* Below about 380px the footer wraps onto two rows, 4px apart: Source alone, and below about 305px Compare too
-   (Home, Features and How to use share the first row down to about 230px). The first three links reach 44.5px
+   (Home, Features and How to use share the first row down to 241px). The first three links reach 44.5px
    upwards, Compare and Source downwards; vertical neighbours stop in the middle of the 4px gap. While Compare is
    still on the first row it sits at the row's right end, clear of the centred Source, so its downward target
    overlaps nothing. */
@@ -2071,10 +2071,10 @@ select.input {
   .site-links > a::after { content: ""; position: absolute; inset: -11px -5px -2px; }
   .site-links > a:nth-of-type(n+4)::after { content: ""; position: absolute; inset: -2px -5px -11px; }
 }
-/* Below about 230px the footer wraps onto three rows: Home and Features, How to use and Compare, Source. The first
+/* Up to 240px the footer wraps onto three rows: Home and Features, How to use and Compare, Source. The first
    row keeps its upward and Source its downward target; How to use and Compare have a row above and below and stop
    in the middle of both gaps (35.5px), so no target overlaps a neighbour. No phone is this narrow. */
-@media (max-width: 229px) {
+@media (max-width: 240px) {
   .site-links > a:nth-of-type(3)::after, .site-links > a:nth-of-type(4)::after { content: ""; position: absolute; inset: -2px -5px; }
 }
 .btn-xs svg { width: 15px; height: 15px; }
