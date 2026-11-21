@@ -232,10 +232,15 @@ switched-off groups" changes; an answer for a view, setting or Library left sinc
 A title in this list shows its group, for a series bold "S1–S3 · 21 episodes" · group, and its row
 opens the film or series card (with TMDB on), never a link to an entry; any other row, also while the
 list loads or after a failed lookup, reads "Not in this list", opens nothing (`is-static`) and keeps
-its chevron's room hidden. A changed mark shows in place: the row stays where it is and its controls,
-like every other control of the title, show the new mark, also when it is now empty or no longer fits
-the view; the count changes when the view is loaded again. After a change (#457) the count stays and
-scrolling still reaches every title of the view, whatever order the save and the pages answer in:
+its chevron's room hidden. A changed mark shows in place on every control of the title (#448), set
+in the row, a card, Search or a group. A row whose mark is now empty or no longer fits the view (marked seen in
+the Watchlist, for example) leaves at once and the count in the head and the chip drops by one; the
+toast "Mark on <title> removed" (in the Watchlist "<title> is off your watchlist") offers Undo, which
+sets the previous mark again and puts the row back in its place. Below 1100px a change made in the
+modal card offers its toast when the card closes. While the Marks tab is hidden a row leaves without a
+toast. Outside the Watchlist a changed row that still fits moves to the top, and back when the save
+fails; a title marked elsewhere that now fits the view without a row loads the view again (when the
+tab is shown next). After a change (#457) scrolling still reaches every title of the view, whatever order the save and the pages answer in:
 a page a save overlapped is shown, and once no save is on its way the list asks its pages again
 from page 1 ("Loading more…" meanwhile). With no marks it says so
 and how to mark a title: the Watchlist "Nothing on your watchlist yet. Add a film or series with the
