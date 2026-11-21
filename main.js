@@ -94,6 +94,7 @@ const ICONS = {
   down: '<path transform="rotate(180 12 12)" d="M7 10v10H4V10zM7 10l4-6.5c1.3 0 2.2 1 2 2.3L12.5 9H18a2 2 0 0 1 2 2.3l-1.2 6.8A2 2 0 0 1 16.8 20H7"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
   star: '<path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>',
+  home: '<path d="M4 11l8-6.5 8 6.5V20h-5.5v-5.5h-5V20H4z"/>',
   book: '<path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H19v13H6.5A1.5 1.5 0 0 0 5 18.5zM5 18.5A1.5 1.5 0 0 0 6.5 20H19"/>',
   people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
@@ -458,7 +459,7 @@ let currentHash = location.hash;
 let libraryController = null;
 // The Library on screen ({ name: 'library' | 'shared', id }), so a tab change (#418) keeps it instead of remounting.
 let libraryMounted = null;
-const LIBRARY_TABS = ['search', 'groups', 'marks'];
+const LIBRARY_TABS = ['home', 'search', 'groups', 'marks'];
 
 // The rest of a Library route after its root (#418), the tab name lower-cased.
 const librarySub = (rest) => (rest || '').replace(/^[^/]*/, (tab) => tab.toLowerCase());
@@ -557,14 +558,14 @@ function route() {
   showEditor(playlist);
 }
 
-// The Library opens Search for its root and for an unknown tab (#418), and the address says so.
+// The Library opens Home for its root and for an unknown tab (#418, #425), and the address says so.
 function libraryTab(target) {
   if (LIBRARY_TABS.includes(target.sub.split('/')[0])) return target.sub;
   const base = target.name === 'shared' ? `#/shared/${target.id}` : `#/p/${target.id}/library`;
-  const hash = `${base}/search${target.query ? `?${target.query}` : ''}`;
+  const hash = `${base}/home`;
   history.replaceState(null, '', hash);
   currentHash = hash;
-  return 'search';
+  return 'home';
 }
 
 function closeSheets() {

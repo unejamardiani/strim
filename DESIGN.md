@@ -251,9 +251,9 @@ menu, "Include switched-off groups", adds the groups that are off and marks thei
 kept for the page session only. With the toggle off, the count of left-out matches and the number of
 hidden groups are shown.
 
-Tabs and routes (#418): Search, Groups and Marks, each with its own address:
-`#/p/<id>/library/search|groups|marks` for the owner, `#/shared/<id>/search|groups|marks` for an
-invited viewer. The root and an unknown tab open Search and replace the address. Tabs are links,
+Tabs and routes (#418, #425): Home, Search, Groups and Marks, each with its own address:
+`#/p/<id>/library/home|search|groups|marks` for the owner, `#/shared/<id>/home|search|groups|marks`
+for an invited viewer. The root and an unknown tab open Home and replace the address. Tabs are links,
 the active one with `aria-current="page"`; a tab change keeps the loaded list, the typed query, an
 open group and the loaded marks (the panels stay in the DOM, hidden), scrolls to the top and, from
 the keyboard, moves the focus to the tab's first field or heading. Marks shows at once; Search and
@@ -266,15 +266,33 @@ entries in your list" ("Loading the list" before), the read-only hint, Edit grou
 "Include switched-off groups" switch. A viewer keeps the cover as the head, without ⋯, the tabs
 under it.
 
+Home (#425), without posters: the owner's cover is a tinted card (`.lib-hero`, accent and series
+mixed into `--surface`, no dark override) with the playlist name as the page's `h1` (Bricolage 800,
+34px, two lines at most), "59,060 entries in 25 groups · read-only" (groups that are on; "Loading the
+list" before) and the field "Search this list"; from 768px name and field share one row. On Home the
+owner's head shows the kicker "Library · <name>" and no `h1`. A viewer keeps the cover and gets the
+plain field under it. Focusing or typing in the field moves to Search with the text carried over
+(`…/search?q=…`) and the focus in its field. Below it, 22px apart: Your watchlist (12 watchlisted
+marks newest first, one lookup, up to 5 Marks-tab rows, the count, All to the Watchlist view; an
+empty line when none), Series you follow (liked series in this list, up to 5, "N liked series", All
+to Liked; left out when none), New in your groups (up to 3 groups with "+N new", largest first, from
+the device's counts, read without writing; left out when nothing is new) and Browse (one tile per
+type with groups that are on: marker, name, "11 groups · 17,817", opening Groups with that type).
+Each section shows its own "Loading…" line and its own error with Try again; the marks sections
+show also when the list failed. From 1100px the page is at most 1280px wide and the two lists sit
+side by side. Marks set anywhere repaint Home's rows; a title marked seen leaves the watchlist.
+
 ```
 ┌──────────────────────────────┐
 │ Head                         │  ‹ · LIBRARY / playlist name · tabs (from 768px) · ⋯
+│ Home tab                     │  tinted cover (name, facts, search field) · Your watchlist · Series you follow
+│                              │  New in your groups (+N new) · Browse: Films / Series / Channels tiles
 │ Search tab                   │  field · chip row (All/Films/Series/Channels | Unseen/Liked)
 │                              │  results card: rows (name and year, group · type, Off, marks)
 │ Groups tab: Browse groups    │  type chips with group counts, one list of rows, playlist order
 │   open group                 │  All groups · title · count, entries card, More
 │ Marks tab: My marks          │  head (title, count), view chips, rows (title, in this list or not, mark controls, card)
-│ Tab bar (below 768px)        │  floating, dock colours: Search · Groups · Marks
+│ Tab bar (below 768px)        │  floating, dock colours: Home · Search · Groups · Marks
 │ Film card                    │  sheet, or side pane from 1100px: poster, facts, marks, overview
 └──────────────────────────────┘
 ```
