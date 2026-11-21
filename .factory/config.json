@@ -15,7 +15,7 @@
   "limits": {
     "max_added_lines": 500,
     "implement_per_day": 100,
-    "attempts_per_story_per_day": 2,
+    "attempts_per_story_per_day": 4,
     "fix_rounds": 2,
     "requirements_per_day": 100,
     "research_per_day": 2,
