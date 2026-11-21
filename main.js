@@ -99,6 +99,12 @@ const ICONS = {
   people: '<circle class="b" cx="9" cy="8.3" r="3.3"/><path d="M3 19.5a6 6 0 0 1 12 0M17.8 14a5 5 0 0 1 3.2 4.7"/><circle class="sig" cx="17.6" cy="8.8" r="1.9"/>',
   search: '<circle class="b" cx="10" cy="10" r="6"/><path d="M14.4 14.4l2.2 2.2"/><circle class="sig" cx="19.5" cy="19.5" r="1.7"/>',
   grid: '<rect class="b" x="4" y="4" width="6.6" height="6.6" rx="1.9"/><rect class="b" x="4" y="13.4" width="6.6" height="6.6" rx="1.9"/><rect class="b" x="13.4" y="13.4" width="6.6" height="6.6" rx="1.9"/><circle class="sig" cx="16.7" cy="7.3" r="2.2"/>',
+  marks: '<path d="M3.8 13.2 8.6 18l7.2-8.6"/><circle class="sig" cx="19.3" cy="5.6" r="1.7"/>',
+  trend: '<path d="M3.5 17.2 9 11.7l3.5 3.5 4.6-5.7"/><circle class="sig" cx="19.6" cy="6.3" r="1.7"/>',
+  signal: '<path d="M6 11.5a6.5 6.5 0 0 1 6.5 6.5M6 5a13 13 0 0 1 13 13"/><circle class="sig" cx="6.2" cy="17.8" r="1.9"/>',
+  spark: '<path class="b" d="M10.5 4c.7 4.3 2.2 5.8 6.5 6.5-4.3.7-5.8 2.2-6.5 6.5-.7-4.3-2.2-5.8-6.5-6.5 4.3-.7 5.8-2.2 6.5-6.5z"/><circle class="sig" cx="18.6" cy="18" r="1.7"/>',
+  tv: '<rect class="b" x="3.5" y="7.5" width="17" height="12.5" rx="2.6"/><path d="M8.5 3.5 12 7.5l3.5-4"/><circle class="sig" cx="16.3" cy="15.8" r="1.7"/>',
+  eye: '<path class="b" d="M2.8 12c2.2-3.9 5.3-5.8 9.2-5.8s7 1.9 9.2 5.8c-2.2 3.9-5.3 5.8-9.2 5.8S5 15.9 2.8 12z"/><circle class="sig" cx="12" cy="12" r="2.1"/>',
 };
 
 function icon(name) {

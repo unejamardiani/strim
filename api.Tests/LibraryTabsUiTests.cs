@@ -44,12 +44,19 @@ public class LibraryTabsUiTests
   }
 
   [Fact]
+  public void MarksTab_HasItsOwnGlyph()
+  {
+    // The Marks tab carries the marks glyph (#495), a check that ends in the signal dot, like the other three tabs.
+    Assert.DoesNotContain("icon: 'check' }", Read("library.js"));
+  }
+
+  [Fact]
   public void Tabs_AreLinksWithAriaCurrent()
   {
     var library = Read("library.js");
     var tabs = Between(library, "const TABS = [", "];");
     var at = -1;
-    foreach (var tab in new[] { "{ name: 'home', label: 'Home', icon: 'home' }", "{ name: 'search', label: 'Search', icon: 'search' }", "{ name: 'groups', label: 'Groups', icon: 'grid' }", "{ name: 'marks', label: 'Marks', icon: 'check' }" })
+    foreach (var tab in new[] { "{ name: 'home', label: 'Home', icon: 'home' }", "{ name: 'search', label: 'Search', icon: 'search' }", "{ name: 'groups', label: 'Groups', icon: 'grid' }", "{ name: 'marks', label: 'Marks', icon: 'marks' }" })
     {
       var next = tabs.IndexOf(tab, StringComparison.Ordinal);
       Assert.True(next > at, $"'{tab}' missing or out of order.");

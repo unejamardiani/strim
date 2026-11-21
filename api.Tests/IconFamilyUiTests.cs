@@ -6,7 +6,7 @@ using Xunit;
 namespace Api.Tests;
 
 /// <summary>Pins the Stem and dot icon family (#493) at its source in main.js, theme.css and library.css (api.Tests
-/// has no JS engine): the 24 names stay, every object glyph carries one filled signal dot, and no glyph brings its
+/// has no JS engine): the 30 names stay (24 of #493, six of #495), every object glyph carries one filled signal dot, and no glyph brings its
 /// own colour.</summary>
 public class IconFamilyUiTests
 {
@@ -14,13 +14,25 @@ public class IconFamilyUiTests
   [
     "back", "folder", "more", "copy", "download", "list", "refresh", "trash", "link", "clock", "plus", "check",
     "bookmark", "close", "sort", "up", "down", "chevron", "star", "home", "book", "people", "search", "grid",
+    "marks", "trend", "signal", "spark", "tv", "eye",
   ];
 
   private static readonly string[] ObjectGlyphs =
   [
     "home", "search", "grid", "book", "bookmark", "folder", "people", "clock", "link", "copy", "trash", "download",
-    "refresh", "list", "up", "down", "back",
+    "refresh", "list", "up", "down", "back", "marks", "trend", "signal", "spark", "tv", "eye",
   ];
+
+  // The six of #495, as drawn in the approved mockup.
+  private static readonly Dictionary<string, string> NewGlyphs = new()
+  {
+    ["marks"] = "<path d=\"M3.8 13.2 8.6 18l7.2-8.6\"/><circle class=\"sig\" cx=\"19.3\" cy=\"5.6\" r=\"1.7\"/>",
+    ["trend"] = "<path d=\"M3.5 17.2 9 11.7l3.5 3.5 4.6-5.7\"/><circle class=\"sig\" cx=\"19.6\" cy=\"6.3\" r=\"1.7\"/>",
+    ["signal"] = "<path d=\"M6 11.5a6.5 6.5 0 0 1 6.5 6.5M6 5a13 13 0 0 1 13 13\"/><circle class=\"sig\" cx=\"6.2\" cy=\"17.8\" r=\"1.9\"/>",
+    ["spark"] = "<path class=\"b\" d=\"M10.5 4c.7 4.3 2.2 5.8 6.5 6.5-4.3.7-5.8 2.2-6.5 6.5-.7-4.3-2.2-5.8-6.5-6.5 4.3-.7 5.8-2.2 6.5-6.5z\"/><circle class=\"sig\" cx=\"18.6\" cy=\"18\" r=\"1.7\"/>",
+    ["tv"] = "<rect class=\"b\" x=\"3.5\" y=\"7.5\" width=\"17\" height=\"12.5\" rx=\"2.6\"/><path d=\"M8.5 3.5 12 7.5l3.5-4\"/><circle class=\"sig\" cx=\"16.3\" cy=\"15.8\" r=\"1.7\"/>",
+    ["eye"] = "<path class=\"b\" d=\"M2.8 12c2.2-3.9 5.3-5.8 9.2-5.8s7 1.9 9.2 5.8c-2.2 3.9-5.3 5.8-9.2 5.8S5 15.9 2.8 12z\"/><circle class=\"sig\" cx=\"12\" cy=\"12\" r=\"2.1\"/>",
+  };
 
   private static readonly string[] BareGlyphs = ["chevron", "close", "plus", "check", "sort", "star"];
 
@@ -57,7 +69,7 @@ public class IconFamilyUiTests
   private static int Count(string text, string part) => Regex.Matches(text, Regex.Escape(part)).Count;
 
   [Fact]
-  public void Family_KeepsThe24Names()
+  public void Family_HasThe30Names()
   {
     Assert.Equal(Names.Order(), Map().Keys.Order());
   }
@@ -90,10 +102,18 @@ public class IconFamilyUiTests
   }
 
   [Fact]
+  public void NewGlyphs_MatchTheApprovedDrawing()
+  {
+    var map = Map();
+    foreach (var (name, glyph) in NewGlyphs)
+      Assert.Equal(glyph, map[name]);
+  }
+
+  [Fact]
   public void Family_StaysSmall()
   {
     var bytes = Encoding.UTF8.GetByteCount(MapSource());
-    Assert.True(bytes < 3500, $"The ICONS map is {bytes} bytes; it must stay under 3,500.");
+    Assert.True(bytes < 4400, $"The ICONS map is {bytes} bytes; it must stay under 4,400.");
   }
 
   [Fact]

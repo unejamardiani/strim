@@ -78,6 +78,14 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
   carries exactly one dot (⋯ is three), while direction and operator glyphs (chevron, close, plus, check, sort)
   and the star carry none. The dot's radius is 1.5 to 2.2 on the 24 grid, and a new icon follows the rule and is
   added to `ICONS`.
+  The 30 names: back, folder, more, copy, download, list, refresh, trash, link, clock, plus, check, bookmark, close,
+  sort, up, down, chevron, star, home, book, people, search, grid, and six object glyphs, each with one dot:
+  - `marks`: the Marks tab, a check whose stroke ends in the dot (`check` stays on a seen tile, Saved and sharing).
+  - `trend`: trending, a rising line with the dot ahead of it.
+  - `spark`: because you liked, a four-point spark.
+  - `signal`: live, on air, two broadcast arcs from the dot.
+  - `tv`: channels, a screen with its antenna.
+  - `eye`: the seen filter, an eye with the dot as its pupil.
 
 ### Voice
 
