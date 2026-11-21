@@ -41,31 +41,46 @@ public class LibraryFilmCardUiTests
   }
 
   [Fact]
-  public void PaneWidth_IsDeclaredWhereThePageCanReadIt()
+  public void Card_IsAlwaysModal()
   {
-    // #413: on .film-card the property never reached .page (custom properties do not inherit upwards), so the
-    // reserved padding was 0px and the pane covered the rows' marks.
-    var css = Read("library.css");
-    Assert.Contains("body { --film-pane-w: 420px; }", css);
-    Assert.Contains("body:has(.film-card.is-viewer) { --film-pane-w: 448px; }", css);
-    Assert.Contains("width: var(--film-pane-w);", css);
-    var rules = System.Text.RegularExpressions.Regex.Matches(css, @"(?<sel>[^{}]*\.film-card[^{}]*)\{(?<body>[^{}]*)\}");
-    Assert.NotEmpty(rules);
-    foreach (System.Text.RegularExpressions.Match rule in rules)
-    {
-      if (rule.Groups["sel"].Value.TrimStart().StartsWith("body", StringComparison.Ordinal)) continue;
-      Assert.DoesNotContain("--film-pane-w:", rule.Groups["body"].Value);
-    }
+    // #430: the side pane from 1100px is gone; the card opens with showModal() at every width.
+    var library = Read("library.js");
+    var card = Card();
+    Assert.DoesNotContain("card.el.show()", library);
+    Assert.DoesNotContain(".show();", card);
+    Assert.DoesNotContain("matchMedia('(min-width: 1100px)')", library);
+    Assert.Contains("card.el.showModal();", card);
+    // No reopen on a breakpoint change and no Escape handler for a non-modal card.
+    Assert.DoesNotContain("const reopen = ", card);
+    Assert.DoesNotContain(".addEventListener('change', () => { if (el.open)", card);
+    Assert.DoesNotContain("!el.matches(':modal')", card);
   }
 
   [Fact]
-  public void OpenPane_KeepsTheListStretchedBelow1440()
+  public void Card_Wide_IsCentredAt560()
   {
     var css = Read("library.css");
-    var start = css.IndexOf("@media (min-width: 1100px) and (max-width: 1439px) {", StringComparison.Ordinal);
-    Assert.True(start >= 0);
-    var block = css[start..css.IndexOf("\n}", start, StringComparison.Ordinal)];
-    Assert.Contains(".page:has(> .film-card[open]) .library-browse { display: flex; align-items: stretch; }", block);
+    Assert.Contains("@media (min-width: 1100px) {\n  .film-card { --film-poster-w: 208px; width: 560px; max-width: none; height: auto; max-height: min(88dvh, 860px); margin: auto; }\n  .film-card.is-viewer { width: 588px; }\n}", css);
+    // The pane's fixed placement is gone; the viewer keeps its larger poster.
+    Assert.DoesNotContain("right: max(18px, calc((100vw - 1440px) / 2 + 18px))", css);
+    Assert.Contains(".film-card.is-viewer { --film-poster-w: 244px; }", css);
+    Assert.Contains("from 1100px a centred 560px dialog", Read("DESIGN.md"));
+    Assert.DoesNotContain("side pane", Read("DESIGN.md"));
+  }
+
+  [Fact]
+  public void Page_ReservesNoRoomForThePane()
+  {
+    var css = Read("library.css");
+    Assert.DoesNotContain("--film-pane-w", css);
+    var rules = System.Text.RegularExpressions.Regex.Matches(css, @"(?<sel>[^{}]*)\{(?<body>[^{}]*)\}");
+    Assert.NotEmpty(rules);
+    foreach (System.Text.RegularExpressions.Match rule in rules)
+    {
+      if (!rule.Groups["sel"].Value.Contains(".film-card[open]", StringComparison.Ordinal)) continue;
+      Assert.DoesNotContain("padding-right", rule.Groups["body"].Value);
+    }
+    Assert.DoesNotContain("@media (min-width: 1100px) and (max-width: 1439px)", css);
   }
 
   [Fact]
@@ -78,14 +93,13 @@ public class LibraryFilmCardUiTests
   }
 
   [Fact]
-  public void TheCard_IsASheetOrASidePane_ClosedByBackWithoutMovingThePage()
+  public void TheCard_IsClosedByBackdropOrBack_WithoutMovingThePage()
   {
     var card = Card();
-    Assert.Contains("const showCard = () => (wide.matches ? card.el.show() : card.el.showModal());", card);
     Assert.Contains("history.pushState({ filmCard: true }, '');", card);
     Assert.Contains("window.addEventListener('popstate', () => { if (el.open) el.close(); }, { signal });", card);
+    Assert.Contains("el.addEventListener('click', (e) => { if (e.target === el) el.close(); });", card);
     Assert.Contains("?.focus({ preventScroll: true });", card);
-    Assert.Contains("body:has(.film-card[open]) .site-links { padding-right: calc(18px + var(--film-pane-w) + 24px); }", Read("library.css"));
   }
 
   [Fact]

@@ -1749,7 +1749,7 @@
       const offer = () => ctx.toast(text, { action: { label: 'Undo', onClick: () => {
         if (r.li.hidden) setMark(ctx, name, m.kind, key, markOf(r.fit || m));
       } } });
-      // Below 1100px the card is a modal and the page behind it inert: the toast waits until the card closes.
+      // The card is a modal and the page behind it inert: the toast waits until the card closes.
       if (card.el?.matches(':modal')) card.el.addEventListener('close', () => { if (r.li.hidden) offer(); }, { once: true });
       else offer();
     };
@@ -1857,13 +1857,12 @@
   const groupLabel = (ctx, group) => ctx.h('span', { class: 'group-label' }, ctx.icon('folder'), ctx.h('span', { text: group }));
 
   // Film card (#367): a film row's name opens poster and details from TMDB in a <dialog>, a bottom sheet on a phone
-  // and a side pane from 1100px. Only when /api/config reports TMDB on; it reads only and never changes the playlist.
+  // and a centred dialog from 600px (#430). Only when /api/config reports TMDB on; it reads only and never changes the playlist.
   const card = { el: null, film: null, button: null, seq: 0, pending: null, answer: null, stack: [] };
   const keyAlias = new Map();
   const answers = new Map();
   // The mark key that first used an answer's marks (#368).
   const answerMarkKey = new WeakMap();
-  const wide = window.matchMedia('(min-width: 1100px)');
   const opensCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Movies' && !!e.markKey;
   // A series row opens the same card with the series answer (#390); words and calls follow the entry's type.
   const opensSeriesCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Series' && !!e.markKey;
@@ -1911,19 +1910,15 @@
     }
   }
 
-  const showCard = () => (wide.matches ? card.el.show() : card.el.showModal());
-
-  // The pane does not block the page: another film row swaps the content in place. Back closes the card.
+  // The card is modal at every width (#430): no row can be tapped while it is open. Back closes it.
   function openFilm(ctx, film, button) {
     if (!card.el?.isConnected) card.el = filmDialog(ctx);
     card.film = film;
     card.button = button;
     card.stack = [];
     markOpen(ctx, button);
-    if (!card.el.open) {
-      showCard();
-      history.pushState({ filmCard: true }, '');
-    }
+    card.el.showModal();
+    history.pushState({ filmCard: true }, '');
     loadFilm(ctx);
   }
 
@@ -1936,14 +1931,7 @@
     const el = h('dialog', { class: isViewer(ctx) ? 'sheet film-card is-viewer' : 'sheet film-card', 'aria-labelledby': 'film-card-title' }, head, h('div', { class: 'film-scroll' }));
     el.addEventListener('click', (e) => { if (e.target === el) el.close(); });
     el.addEventListener('close', () => filmClosed(ctx));
-    // A new mode closes and reopens the card with the same content; the close handler sees it open again.
-    const reopen = () => { el.close(); showCard(); el.querySelector('#film-card-title')?.focus(); };
-    wide.addEventListener('change', () => { if (el.open) reopen(); }, { signal });
     window.addEventListener('popstate', () => { if (el.open) el.close(); }, { signal });
-    document.addEventListener('keydown', (e) => {
-      const here = el.contains(document.activeElement) || document.activeElement === card.button;
-      if (e.key === 'Escape' && el.open && !el.matches(':modal') && here) el.close();
-    }, { signal });
     signal.addEventListener('abort', () => { card.pending?.abort(); el.close(); }, { once: true });
     ctx.root.append(el);
     return el;

@@ -140,12 +140,13 @@ the mark controls and, for films and series, the name, which opens the film or s
 
 Film card (#367): only with TMDB on (`/api/config`), a film row's name is a button and the whole row
 its tap target (hover tint, 16px chevron at every width, `.is-open` tint and 3px `--accent` inset).
-Channels and, with TMDB off, every row stay text and nothing about TMDB shows. One `<dialog>`: the
-app's sheet below 1100px (bottom sheet with handle below 600px, 520px centred from 600px), from 1100px
-a 420px side pane beside the list that does not block the page; while it is open the page reserves
-462px (490px for a viewer) on the right, so the pane never covers the list. A glass Close circle floats top right.
+Channels and, with TMDB off, every row stay text and nothing about TMDB shows. One modal `<dialog>`,
+the app's sheet at every width (#430): bottom sheet with handle below 600px, 520px centred from 600px,
+from 1100px a centred 560px dialog (588px for a viewer), at most `min(88dvh, 860px)` high and scrolling
+inside; the Library behind keeps its full width. Backdrop, Escape, Close and Back close it, and the
+focus returns to the row or tile that opened it. A glass Close circle floats top right.
 It loads once on open (a skeleton poster, the entry name and the marks). The stage is centred: 2:3
-poster (200px, 208px in the pane; Movies-diamond box when missing), kicker "Film · year", title
+poster (200px, 208px from 1100px; Movies-diamond box when missing), kicker "Film · year", title
 (Bricolage 36px/800), up to three genres joined by " · ", then the TMDB rating and the marks capsule
 (Seen, Thumbs up, Thumbs down as 36px icon buttons sharing the rows' state), then, after a second
 thin line, the Watchlist button (#420): a 42px bookmark circle on its own capsule background,
@@ -325,7 +326,7 @@ rail's Previous and Next (`.film-rail-nav`) in the section head. With TMDB off H
 │   open group                 │  All groups · title · count, entries card, More
 │ Marks tab: My marks          │  head (title, count), view chips, rows (title, in this list or not, mark controls, card)
 │ Tab bar (below 768px)        │  floating, dock colours: Home · Search · Groups · Marks
-│ Film card                    │  sheet, or side pane from 1100px: poster, facts, marks, overview
+│ Film card                    │  sheet, centred 560px from 1100px: poster, facts, marks, overview
 └──────────────────────────────┘
 ```
 
@@ -412,7 +413,7 @@ maximum (same 18px padding). While a group is open, Browse becomes two columns w
 `minmax(300px, 0.4fr) minmax(0, 1fr)`: left the group list with its "Browse groups" title, sticky
 below the top bar with its own scroll, right the open group, whose entries the page scrolls; its
 head sticks 12px below the top bar and the back button is hidden. With no group open the list keeps
-the full width. From 1100 to 1439px an open film card leaves one column again, with the back button.
+the full width. An open film card is a centred dialog over the page and changes none of this.
 
 ### Site (`/`, guides: site.css)
 

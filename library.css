@@ -164,11 +164,7 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 .lib-chev { flex-shrink: 0; display: grid; color: var(--ink-3); }
 .lib-chev svg { width: 16px; height: 16px; }
 
-/* The pane's width lives on body so the page and the footer can reserve room for it. */
-body { --film-pane-w: 420px; }
-body:has(.film-card.is-viewer) { --film-pane-w: 448px; }
-
-/* The app's sheet (a bottom sheet below 600px, centred from 600px); from 1100px a side pane beside the list. */
+/* The app's sheet, modal at every width: a bottom sheet below 600px, centred from 600px. */
 .film-card { --film-poster-w: 200px; --film-poster-shadow: 0 28px 50px -22px rgba(29,26,22,.6), 0 10px 22px -12px rgba(29,26,22,.35); max-width: 520px; isolation: isolate; }
 @media (prefers-color-scheme: dark) { .film-card { --film-poster-shadow: 0 30px 60px -20px rgba(0,0,0,.9), 0 10px 24px -10px rgba(0,0,0,.6); } }
 .film-card-head { position: absolute; z-index: 4; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; pointer-events: none; }
@@ -183,16 +179,10 @@ body:has(.film-card.is-viewer) { --film-pane-w: 448px; }
   .film-card::before { position: absolute; z-index: 5; top: 8px; left: calc(50% - 20px); margin: 0; background: color-mix(in srgb, var(--ink) 30%, transparent); }
 }
 
+/* From 1100px a centred 560px dialog (#430) over the Library, which keeps its full width. */
 @media (min-width: 1100px) {
-  .film-card { --film-poster-w: 208px; position: fixed; top: calc(var(--topbar-h) + 12px); bottom: 18px; right: max(18px, calc((100vw - 1440px) / 2 + 18px)); inset-inline-start: auto; z-index: 25; width: var(--film-pane-w); height: auto; max-width: none; max-height: none; margin: 0; border-radius: var(--radius-lg); }
-  .page:has(> .film-card[open]), body:has(.film-card[open]) .site-links { padding-right: calc(18px + var(--film-pane-w) + 24px); }
-}
-
-/* From 1100 to 1439px an open pane leaves one Browse column: the open group replaces the group list again. */
-@media (min-width: 1100px) and (max-width: 1439px) {
-  .page:has(> .film-card[open]) .library-browse { display: flex; align-items: stretch; }
-  .page:has(> .film-card[open]) .lib-groups-cols.has-open .lib-groups-side { display: none; }
-  .page:has(> .film-card[open]) .lib-groups-cols.has-open .lib-ghead .lib-ib { display: grid; }
+  .film-card { --film-poster-w: 208px; width: 560px; max-width: none; height: auto; max-height: min(88dvh, 860px); margin: auto; }
+  .film-card.is-viewer { width: 588px; }
 }
 
 /* Stage: the blurred poster backdrop, then poster, kicker, title, genres, rating and marks, centred. */
