@@ -444,7 +444,7 @@ public class TmdbClientTests
   {
     var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.Contains("/movie/")
       ? Json("""{"page":2,"total_pages":500,"results":[{"id":7,"title":"Some Film","original_title":"Un Film","adult":true,"poster_path":"/a.jpg","vote_average":7.5}]}""")
-      : Json("""{"page":1,"total_pages":40,"results":[{"id":9,"name":"Some Series","original_name":"Une Série","adult":false}]}"""));
+      : Json("""{"page":1,"total_pages":40,"results":[{"id":9,"name":"Some Series","original_name":"Une Série","adult":true}]}"""));
     var client = CreateClient(handler);
 
     var movies = (await client.GetTrendingMoviesAsync(2, default)).Value!;
@@ -456,7 +456,7 @@ public class TmdbClientTests
     var tv = (await client.GetTrendingTvAsync(1, default)).Value!;
     Assert.Equal((1, 40), (tv.Page, tv.TotalPages));
     var series = Assert.Single(tv.Results!);
-    Assert.Equal(("Some Series", "Une Série", false), (series.Name, series.OriginalName, series.Adult));
+    Assert.Equal(("Some Series", "Une Série", true), (series.Name, series.OriginalName, series.Adult));
 
     // Missing fields read as 0, null and false; the positional constructors still work.
     var bare = new TmdbMoviePage([new TmdbMovieSummary(1, "A", null, null, 0)]);

@@ -115,17 +115,25 @@ public class TmdbCacheTests
   public void Set_ZeroLifetime_StoresNothing()
   {
     var cache = new TmdbCache(new ManualTime());
+    // Bytes is checked before any lookup: TryGet drops expired entries and would hide a stored one.
     cache.Set("a", new byte[10], TimeSpan.Zero);
+    Assert.Equal(0, cache.Bytes);
     cache.Set("b", new byte[10], TimeSpan.FromHours(-1));
+    Assert.Equal(0, cache.Bytes);
     Assert.False(cache.TryGet("a", out _));
     Assert.False(cache.TryGet("b", out _));
-    Assert.Equal(0, cache.Bytes);
 
     // An older entry of the same key is removed, not kept.
     cache.Set("c", new byte[10]);
+    Assert.True(cache.Bytes > 0);
     cache.Set("c", new byte[10], TimeSpan.Zero);
-    Assert.False(cache.TryGet("c", out _));
     Assert.Equal(0, cache.Bytes);
+    cache.Set("d", new byte[10]);
+    Assert.True(cache.Bytes > 0);
+    cache.Set("d", new byte[10], TimeSpan.FromHours(-1));
+    Assert.Equal(0, cache.Bytes);
+    Assert.False(cache.TryGet("c", out _));
+    Assert.False(cache.TryGet("d", out _));
   }
 
   [Fact]
