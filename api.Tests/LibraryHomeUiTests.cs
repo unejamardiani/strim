@@ -41,6 +41,18 @@ public class LibraryHomeUiTests
   }
 
   [Fact]
+  public void Home_LeavesLoadingOnceTheListHasLoaded()
+  {
+    // Home keys its head, Browse, the watchlist and the followed series off ctx.listState === 'loading'; load() set it
+    // to 'loading' and never back, so Home stayed on "Loading…" after a successful load.
+    var load = Between(Read("library.js"), "async function load(ctx, own) {", "// Home's search field handed over");
+    Assert.Contains("ctx.listState = 'loading';", load);
+    Assert.Contains("ctx.list = result;\n    ctx.listState = 'ready';\n", load);
+    Assert.True(load.IndexOf("ctx.listState = 'ready';", StringComparison.Ordinal) < load.LastIndexOf("view.homeList();", StringComparison.Ordinal),
+      "Home is repainted only after the state has left 'loading'.");
+  }
+
+  [Fact]
   public void Cover_SearchFieldHandsOverToTheSearchTab()
   {
     var home = Home();

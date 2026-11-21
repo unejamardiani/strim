@@ -175,6 +175,7 @@
     if (own.signal.aborted || !ctx.isCurrent()) return;
     if (isViewer(ctx)) ctx.cover.fill(result);
     ctx.list = result;
+    ctx.listState = 'ready';
     // Marks pages loaded before the list get their lookup now (#455).
     ctx.lookupMarks?.();
     const browse = browseSection(ctx, result);
