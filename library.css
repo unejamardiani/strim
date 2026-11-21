@@ -317,6 +317,7 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .lib-watch svg { width: 17px; height: 17px; stroke-width: 2; }
 .lib-watch[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
 .lib-watch[aria-pressed="true"] svg { fill: currentColor; }
+.lib-watch[aria-pressed="true"] .sig { fill: var(--surface); }
 .lib-row .lib-watch { display: none; }
 @media (min-width: 768px) { .lib-row .lib-watch { display: grid; } }
 @media (min-width: 768px) {
@@ -451,6 +452,7 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .lib-art-seen svg { width: 13px; height: 13px; stroke-width: 2.6; }
 .lib-art-watch { position: absolute; left: 6px; bottom: 6px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent); }
 .lib-art-watch svg { width: 12px; height: 12px; fill: currentColor; }
+.lib-art-watch .sig { fill: var(--accent); }
 .lib-art-bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 8px 6px; background: linear-gradient(transparent, rgba(0, 0, 0, .7)); color: #fff; font: 700 11.5px var(--font-ui); }
 .lib-art-bar ~ .lib-art-watch { bottom: auto; top: 6px; }
 .lib-tile .lib-title { font-size: 13.5px; }

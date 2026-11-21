@@ -44,7 +44,7 @@ public class LibraryWatchlistUiTests
     // main.js forwards the body unchanged, with the CSRF token of api().
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
     Assert.Contains("setMark: (mark) => api('/marks', { method: 'PUT', body: mark }),", show);
-    Assert.Contains("  bookmark: '<path d=\"M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z\"/>',", Read("main.js"));
+    Assert.Contains("  bookmark: '<path class=\"b\" d=\"M7.8 4h8.4A1.8 1.8 0 0 1 18 5.8V20l-6-4.3L6 20V5.8A1.8 1.8 0 0 1 7.8 4z\"/><circle class=\"sig\" cx=\"12\" cy=\"9.3\" r=\"1.7\"/>',", Read("main.js"));
   }
 
   [Fact]

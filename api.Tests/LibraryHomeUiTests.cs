@@ -28,7 +28,7 @@ public class LibraryHomeUiTests
     Assert.StartsWith("const TABS = [\n    { name: 'home', label: 'Home', icon: 'home' },\n    { name: 'search'", tabs);
     Assert.Contains("const tab = TABS.some((t) => t.name === name) ? name : 'home';", Between(library, "function show(sub, query)", "function inPanels("));
     var main = Read("main.js");
-    Assert.Contains("home: '<path d=\"M4 11l8-6.5 8 6.5V20h-5.5v-5.5h-5V20H4z\"/>',", main);
+    Assert.Contains("home: '<path class=\"b\" d=\"M3.6 11.8 10.6 5.6l7 6.2v6.7a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2z\"/><path d=\"M10.6 20.5v-4.6\"/><circle class=\"sig\" cx=\"19.4\" cy=\"5.2\" r=\"1.7\"/>',", main);
     var tab = Between(main, "function libraryTab(target)", "function closeSheets()");
     Assert.Contains("const hash = `${base}/home`;", tab);
     Assert.Contains("return 'home';", tab);
