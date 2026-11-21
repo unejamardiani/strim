@@ -1697,10 +1697,12 @@
       for (const key of keys) {
         const state = rows.get(key);
         const title = answer?.titles?.[key] || null;
-        // A first answer, or a failure after one, draws the row again (#429): a tile asks for its poster only once looked.
-        if (state && state.looked !== !!answer) state.title = undefined;
+        // Whether a lookup answered is kept for when the grid is chosen later (#429); a list row is drawn again only when its
+        // title changed (its mark buttons keep focus), a tile also when it may now ask for its poster.
+        const looked = !!answer;
+        if (state && view.grid && looked !== !!state.looked) state.title = undefined;
+        if (state) state.looked = looked;
         if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;
-        state.looked = !!answer;
         state.title = title;
         build(key);
       }
