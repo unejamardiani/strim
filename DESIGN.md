@@ -342,7 +342,17 @@ several entries. The foot (`.lib-foot`, 13px `--ink-3`, centred, a hairline abov
 shown" (the answer's total after the mark filters) once all are loaded; with nothing, "No entries in
 this group." or, with a mark filter on, "Nothing in this group matches.". A failed later page shows
 Try again below the rows, a failed first page in their place; a mark filter or a new address starts
-again from the first page, and opening a group scrolls the page to the top. An open group has its
+again from the first page, and opening a group scrolls the page to the top. The grid (#428): with
+TMDB on, a Films or Series group opens as poster tiles (`.lib-grid`, the Home tiles from the same
+30-title pages; 3 columns on a phone, 5 from 768px, 7 from 1100px; the sentinel and the foot span
+all columns). A tile's meta is the year, for a series "S1–S3 · 21 episodes"; it opens the card,
+where the marks are set. The head's right end has the view button (`.lib-ib`): the `list` icon
+("Show as list") in grid view, the `grid` icon ("Show as posters") in list view, the choice kept
+per device in `localStorage` `strim.library.groupView` (default grid). Filter, Unseen, Liked and
+sort work in both views; switching keeps the loaded titles and starts at the top. From 1100px the
+grid takes the full Library width (at most 1280px) without the group list beside it (Back returns
+to it); list view keeps the two columns. Channel groups, and every group with TMDB off, keep the
+list without the button. An open group has its
 own address (#442),
 `#/p/<id>/library/groups/<encoded group key>` (viewer `#/shared/<id>/groups/<…>`): a row navigates
 there (a history entry), a reload keeps the group open and its type chip chosen, and the browser's

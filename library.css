@@ -458,3 +458,20 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 @media (prefers-color-scheme: dark) { .lib-art { box-shadow: none; border: 1px solid var(--line); } }
 @media (prefers-reduced-motion: reduce) { .lib-art img { transition: none; } }
 @media (min-width: 768px) { .lib-tile { flex-basis: 148px; } }
+
+/* An open film or series group as posters (#428): 3, 5 and 7 columns; the sentinel and the foot span all of them. From
+   1100px the grid takes the Library's full width without the group list; list view keeps the two columns and its
+   view button. */
+.lib-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 12px; margin-top: 6px; }
+.lib-grid .lib-tile { flex: none; }
+.lib-grid-items { display: contents; }
+.lib-grid > .lib-pages-foot { grid-column: 1 / -1; }
+@media (min-width: 768px) { .lib-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 20px 14px; } }
+@media (min-width: 1100px) {
+  .lib-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 22px 16px; }
+  .lib-groups-cols.has-open.is-grid { display: block; }
+  .lib-groups-cols.has-open.is-grid .lib-groups-side { display: none; }
+  .lib-groups-cols.has-open.is-grid .lib-ghead .lib-ib { display: grid; }
+  .lib-panel[data-tab="groups"]:has(.is-grid) { max-width: 1280px; margin: 0 auto; }
+  .lib-groups-cols.has-open .lib-ghead .lib-ib.lib-view { display: grid; }
+}
