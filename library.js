@@ -948,6 +948,11 @@
   };
   const MARKS_PAGE = 50;
   // A view named in an address's query, or null when it names none or an unknown one.
+  // Whether a mark still belongs to a view: a row edited out of it stays, but the server's pages no longer count it.
+  const MARK_FITS = {
+    watchlist: (m) => m.watchlist === true, all: (m) => m.seen || m.rating !== 0 || m.watchlist === true,
+    seen: (m) => m.seen, liked: (m) => m.rating === 1, disliked: (m) => m.rating === -1,
+  };
   const markViewOf = (query) => {
     const name = new URLSearchParams(query || '').get('view');
     return MARK_VIEWS.some((v) => v.value === name) ? name : null;
@@ -1016,7 +1021,7 @@
       let requested;
       try {
         const filter = MARK_VIEWS.find((f) => f.value === view.filter).params;
-        requested = Math.max(Math.floor(view.shown.size / MARKS_PAGE) + 1, view.minPage);
+        requested = Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);
         page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
       } catch (err) {
         if (seq !== view.seq || ctx.controller.signal.aborted) return;
@@ -1028,6 +1033,8 @@
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
       view.loading = false;
+      // The count is the first page's until the view is loaded again (#447), also after a row was edited out of it.
+      if (!view.loaded) view.total = page.total;
       view.loaded = true;
       const items = page.items || [];
       let added = 0;
@@ -1044,8 +1051,7 @@
       const keys = items.map((m) => m.key);
       view.pages.push(keys);
       lookup(keys, seq);
-      view.total = page.total;
-      view.done = items.length < MARKS_PAGE || view.shown.size >= page.total;
+      view.done = items.length < MARKS_PAGE || view.shown.size - left() >= page.total;
       if (!view.done && added === 0) {
         view.minPage = requested + 1;
         loadPage();
@@ -1056,6 +1062,9 @@
 
     // A row: type marker, title and year, where the title is, the shared controls (#419) and the chevron, hidden on a
     // row that opens no card. Built again after a lookup it shows the mark in marks and leaves that object in place.
+    // Rows shown whose mark no longer fits the view: the server's pages after them moved up by as many places.
+    const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;
+
     const build = (key) => {
       const state = rows.get(key);
       const { mark: m, title: t } = state;
@@ -1077,16 +1086,15 @@
 
     // In this list: one lookup per page once the list is there. An answer for a view left since, for an earlier
     // setting of "Include switched-off groups" (asks) or for a Library left since changes nothing; a row whose key
-    // the answer lacks says "Not in this list".
+    // the answer lacks, and every row of a current lookup that failed, says "Not in this list".
     const lookup = async (keys, seq) => {
       if (!ctx.list || !keys.length) return;
       const ask = view.asks;
-      let answer;
+      let answer = null;
       try {
         answer = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys });
       } catch (err) {
-        if (seq === view.seq && ask === view.asks && ctx.isCurrent() && !ctx.controller.signal.aborted) accessGone(ctx, err);
-        return;
+        if (!(seq === view.seq && ask === view.asks && ctx.isCurrent() && !ctx.controller.signal.aborted) || accessGone(ctx, err)) return;
       }
       if (seq !== view.seq || ask !== view.asks || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
       for (const key of keys) {
@@ -1418,11 +1426,14 @@
     // An answer's marks count once: a kept answer reopened later must not undo a mark set since. Reopened under
     // another key (its row, then a similar tile), it takes the live state of the key that first used it.
     const owner = answerMarkKey.get(answer);
-    const given = !answer?.marks || owner === key ? now
+    // While a save for the title is on its way the card shows that value and leaves its object in marks (#447):
+    // setMark takes a replaced object for a later tap and would skip the rollback of a failed save.
+    const pending = saving.has(key) && marks.has(key);
+    const given = pending || !answer?.marks || owner === key ? now
       : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0, watchlist: answer.marks.watchlist === true };
     if (answer?.marks && !owner) answerMarkKey.set(answer, key);
     const cardCtx = { ...ctx, toast: cardToast(ctx) };
-    const markEntry = { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given };
+    const markEntry = { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given, keepMark: pending };
     const el = markControls(cardCtx, markEntry);
     el.classList.add('film-marks');
     if (given.seen !== now.seen || given.rating !== now.rating || given.watchlist !== now.watchlist) syncRows(ctx, entry.markKey, given);

@@ -134,17 +134,74 @@ public class LibraryMarksTabUiTests
   public void LookupFailure_LeavesTheNextScreenAlone()
   {
     var lookup = Between(MyMarks(), "const lookup = async (keys, seq) => {", "ctx.lookupMarks = () => {");
-    var failure = Between(lookup, "} catch (err) {", "return;\n      }");
-    Assert.Contains("if (seq === view.seq && ask === view.asks && ctx.isCurrent() && !ctx.controller.signal.aborted) accessGone(ctx, err);", failure);
+    var failure = Between(lookup, "} catch (err) {", "\n      }");
+    Assert.Contains("if (!(seq === view.seq && ask === view.asks && ctx.isCurrent() && !ctx.controller.signal.aborted) || accessGone(ctx, err)) return;", failure);
     var gone = failure.IndexOf("accessGone(", StringComparison.Ordinal);
-    foreach (var check in new[] { "seq === view.seq", "ctx.isCurrent()", "!ctx.controller.signal.aborted" })
+    foreach (var check in new[] { "seq === view.seq", "ask === view.asks", "ctx.isCurrent()", "!ctx.controller.signal.aborted" })
     {
       var at = failure.IndexOf(check, StringComparison.Ordinal);
       Assert.True(at >= 0 && at < gone, $"'{check}' must come before accessGone.");
     }
-    // Nothing else happens: an owner's rows keep "Not in this list".
-    Assert.DoesNotContain("build(", failure);
     Assert.DoesNotContain("toast", failure);
+    // A current failure that is no lost access goes on with no answer: every row of the page, also one matched by
+    // the lookup before (the switch turned off, then the lookup failed), loses its card and says "Not in this list".
+    Assert.Contains("let answer = null;", lookup);
+    var apply = lookup[lookup.IndexOf("if (seq !== view.seq || ask !== view.asks", StringComparison.Ordinal)..];
+    Assert.Contains("const title = answer?.titles?.[key] || null;", apply);
+    Assert.Contains("state.title = title;\n        build(key);", apply);
+  }
+
+  [Fact]
+  public void LookupSuccess_TurnsAnAbsentRowIntoACardLink()
+  {
+    var section = MyMarks();
+    // A row starts without a title and is built static.
+    Assert.Contains("rows.set(m.key, { li: null, mark: m, title: null });\n        list.append(build(m.key));", section);
+    var lookup = Between(section, "const lookup = async (keys, seq) => {", "ctx.lookupMarks = () => {");
+    // The answer's title is stored in the row's state and the row is built again in place.
+    Assert.Contains("for (const key of keys) {\n        const state = rows.get(key);\n        const title = answer?.titles?.[key] || null;\n        if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;\n        state.title = title;\n        build(key);\n      }", lookup);
+    var build = Between(section, "const build = (key) => {", "const lookup = async");
+    // build reads the stored title: with it the row opens the card and loses is-static, and it replaces the old row.
+    Assert.Contains("const { mark: m, title: t } = state;", build);
+    Assert.Contains("const opened = t ? { ...e, name: t.name, enabled: t.enabled } : { ...e, markKey: null };", build);
+    Assert.Contains("class: opens(ctx, opened) ? 'lib-row' : 'lib-row is-static'", build);
+    Assert.Contains("state.li?.replaceWith(li);\n      state.li = li;", build);
+  }
+
+  [Fact]
+  public void EditedRow_KeepsTheCountAndThePaging()
+  {
+    var section = MyMarks();
+    var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
+    // The count is set by the first page only; later pages do not lower it after a row was edited out of the view.
+    Assert.Contains("if (!view.loaded) view.total = page.total;\n      view.loaded = true;", load);
+    Assert.Single(System.Text.RegularExpressions.Regex.Matches(section, @"view\.total = page\.total"));
+    // A row edited out of the view moved every later title up by one on the server: the next page counts it out,
+    // so the sentinel still reaches the 51st title of 51 Liked after a like on page one is cleared.
+    Assert.Contains("requested = Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", load);
+    Assert.Contains("view.done = items.length < MARKS_PAGE || view.shown.size - left() >= page.total;", load);
+    Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", section);
+    var fits = Between(section, "const MARK_FITS = {", "};");
+    foreach (var rule in new[]
+    {
+      "watchlist: (m) => m.watchlist === true", "all: (m) => m.seen || m.rating !== 0 || m.watchlist === true",
+      "seen: (m) => m.seen", "liked: (m) => m.rating === 1", "disliked: (m) => m.rating === -1",
+    })
+      Assert.Contains(rule, fits);
+  }
+
+  [Fact]
+  public void CardOpenedDuringASave_LeavesThePendingMarkInPlace()
+  {
+    var library = Read("library.js");
+    var card = Between(library, "function cardMarks(ctx, entry, answer) {", "const cardToast");
+    // While a save is on its way the card shows the pending value and markControls keeps that object, so a failed
+    // save still rolls back and says so.
+    Assert.Contains("const pending = saving.has(key) && marks.has(key);", card);
+    Assert.Contains("const given = pending || !answer?.marks || owner === key ? now", card);
+    Assert.Contains("markEntry = { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given, keepMark: pending };", card);
+    Assert.True(card.IndexOf("const pending", StringComparison.Ordinal) < card.IndexOf("markControls(cardCtx, markEntry)", StringComparison.Ordinal));
+    Assert.Contains("if (!entry.keepMark) marks.set(key, {", Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
   }
 
   [Fact]
