@@ -103,14 +103,21 @@ public class LibraryMarksTabUiTests
   public void Page_OverlappingARemoveOrUndo_IsAskedAgain()
   {
     var section = MyMarks();
-    // A page asked before a Remove or Undo succeeded would bring back the old total: it is dropped and asked again.
+    // A page that answers while a Remove or Undo started meanwhile or is still pending may carry a total from before or
+    // after the server's change, in either response order: it is dropped and asked again once no edit is pending.
     var load = Between(section, "const loadPage = async () => {", "const row = (m) => {");
     Assert.Contains("const edits = view.edits;", load);
-    Assert.Contains("if (edits !== view.edits) {\n        loadPage();\n        return;\n      }", load);
-    Assert.True(load.IndexOf("if (edits !== view.edits)", StringComparison.Ordinal) < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
+    Assert.Contains("if (edits !== view.edits || view.pending) {\n        if (view.pending) view.waiting = seq;\n        else { view.loading = false; loadPage(); }\n        return;\n      }", load);
+    Assert.True(load.IndexOf("if (edits !== view.edits", StringComparison.Ordinal) < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
     Assert.True(load.IndexOf("const edits = view.edits;", StringComparison.Ordinal) < load.IndexOf("await ctx.listMarks", StringComparison.Ordinal));
-    Assert.Contains("view.total -= 1;\n      view.edits += 1;", Between(section, "const remove = async", "const undo = async"));
-    Assert.Contains("view.total += 1;\n      view.edits += 1;", Between(section, "const undo = async", "const start = () => {"));
+    // The edit counts from its start (before the request) until its bookkeeping is done, then a waiting page is asked again.
+    var edit = Between(section, "const edit = (work) =>", "const remove = edit(");
+    Assert.True(edit.IndexOf("view.edits += 1;\n      view.pending += 1;", StringComparison.Ordinal) < edit.IndexOf("await work(...args);", StringComparison.Ordinal));
+    Assert.Contains("} finally {\n        view.pending -= 1;\n        if (!view.pending && view.waiting) {", edit);
+    Assert.Contains("if (again) { view.loading = false; loadPage(); }", edit);
+    Assert.Contains("const restore = edit(async (m, li) => {", section);
+    Assert.DoesNotContain("view.edits += 1;", Between(section, "const remove = edit(", "const start = () => {"));
+    Assert.Contains("view.waiting = 0;", Between(section, "const start = () => {", "keepMarksAddress(view.filter);\n    start();"));
   }
 
   [Fact]

@@ -946,7 +946,7 @@
   function myMarks(ctx) {
     const { h, fmt, plural } = ctx;
     const asked = String(ctx.sub || '').startsWith('marks') ? markViewOf(ctx.query) : null;
-    const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, edits: 0 };
+    const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, edits: 0, pending: 0, waiting: 0 };
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
     const count = h('p');
     const list = h('ol', { class: 'search-list' });
@@ -1014,12 +1014,14 @@
         return;
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
-      view.loading = false;
-      // A Remove or an Undo that succeeded meanwhile makes the page and its total stale: ask again from the marks shown now.
-      if (edits !== view.edits) {
-        loadPage();
+      // A Remove or an Undo that started meanwhile, or is still on its way, may have changed the list under the page and
+      // its total (the server can answer either first): ask again from the marks shown now, once no edit is pending.
+      if (edits !== view.edits || view.pending) {
+        if (view.pending) view.waiting = seq;
+        else { view.loading = false; loadPage(); }
         return;
       }
+      view.loading = false;
       view.loaded = true;
       const items = page.items || [];
       let added = 0;
@@ -1050,8 +1052,25 @@
       return li;
     };
 
+    // A Remove or an Undo is an edit from its start until its bookkeeping is done; a page that answered meanwhile
+    // waits for it (loadPage) and is then asked again.
+    const edit = (work) => async (...args) => {
+      view.edits += 1;
+      view.pending += 1;
+      try {
+        await work(...args);
+      } finally {
+        view.pending -= 1;
+        if (!view.pending && view.waiting) {
+          const again = view.waiting === view.seq;
+          view.waiting = 0;
+          if (again) { view.loading = false; loadPage(); }
+        }
+      }
+    };
+
     // The row goes at once and comes back on a failure; it stays hidden in place so Undo puts it back there.
-    const remove = async (m, li) => {
+    const remove = edit(async (m, li) => {
       li.hidden = true;
       try {
         await ctx.removeMark(m.key);
@@ -1067,14 +1086,16 @@
       if (!li.isConnected) return;
       view.shown.delete(m.key);
       view.total -= 1;
-      view.edits += 1;
       paint();
       ctx.toast(`Mark on ${m.title} removed`, { action: { label: 'Undo', onClick: () => undo(m, li) } });
-    };
+    });
 
-    const undo = async (m, li) => {
+    const undo = (m, li) => {
       if (!li.hidden || li.dataset.restoring) return;
       li.dataset.restoring = 'true';
+      restore(m, li);
+    };
+    const restore = edit(async (m, li) => {
       let mark;
       try {
         mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });
@@ -1088,9 +1109,8 @@
       li.replaceWith(row(mark));
       view.shown.add(mark.key);
       view.total += 1;
-      view.edits += 1;
       paint();
-    };
+    });
 
     const start = () => {
       view.seq += 1;
@@ -1100,6 +1120,7 @@
       view.minPage = 1;
       view.loading = false;
       view.loaded = false;
+      view.waiting = 0;
       list.replaceChildren();
       paint();
       loadPage();

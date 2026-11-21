@@ -256,7 +256,7 @@ under it.
 │                              │  results card: rows (name and year, group · type, Off, marks)
 │ Groups tab: Browse groups    │  type chips with group counts, one list of rows, playlist order
 │   open group                 │  All groups · title · count, entries card, More
-│ Marks tab: My marks          │  filter pills · count, marks card (title, meta, Remove), More
+│ Marks tab: My marks          │  head (title, count), view chips, marks card (title, meta, Remove)
 │ Tab bar (below 768px)        │  floating, dock colours: Search · Groups · Marks
 │ Film card                    │  sheet, or side pane from 1100px: poster, facts, marks, overview
 └──────────────────────────────┘

@@ -86,13 +86,13 @@ public class LibraryMyMarksTests
   public void Remove_AsksNothing_AndUndoSetsTheSameMarkAgain_BothWithCsrf()
   {
     var section = MyMarks();
-    var remove = Between(section, "const remove = async (m, li) => {", "const undo = async");
+    var remove = Between(section, "const remove = edit(async (m, li) => {", "const undo = (m, li) => {");
     Assert.DoesNotContain("confirm(", remove);
     Assert.Contains("li.hidden = true;\n      try {\n        await ctx.removeMark(m.key);", remove);
     Assert.Contains("ctx.toast(`Mark on ${m.title} removed`, { action: { label: 'Undo', onClick: () => undo(m, li) } });", remove);
     Assert.Contains("ctx.toast(`The mark was not removed. ${err.message || ''}`.trim(), { error: true });", remove);
 
-    var undo = Between(section, "const undo = async (m, li) => {", "const start = () => {");
+    var undo = Between(section, "const undo = (m, li) => {", "const start = () => {");
     Assert.Contains("mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });", undo);
     Assert.Contains("li.replaceWith(row(mark));", undo);
     Assert.Contains("if (!li.hidden || li.dataset.restoring) return;", undo);
