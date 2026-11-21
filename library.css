@@ -179,8 +179,10 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   .film-card::before { position: absolute; z-index: 5; top: 8px; left: calc(50% - 20px); margin: 0; background: color-mix(in srgb, var(--ink) 30%, transparent); }
 }
 
-/* The page behind the open card does not scroll (#430): it keeps its position, and the stable gutter its width. */
-html:has(.film-card[open]) { overflow: hidden; scrollbar-gutter: stable; }
+/* The page behind the open card does not scroll (#430): it keeps its position, and its width (a short page has no
+   gutter to keep; a scrolling one keeps the scrollbar's room). */
+html:has(.film-card[open]) { overflow: hidden; }
+html.has-scrollbar:has(.film-card[open]) { scrollbar-gutter: stable; }
 
 /* From 1100px a centred 560px dialog (#430) over the Library, which keeps its full width. */
 @media (min-width: 1100px) {

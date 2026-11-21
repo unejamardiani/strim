@@ -88,9 +88,16 @@ public class LibraryFilmCardUiTests
   {
     // Review of #430: wheel and touch over the backdrop scrolled the Library; the page now keeps its position and width.
     var css = Read("library.css");
-    Assert.Contains("html:has(.film-card[open]) { overflow: hidden; scrollbar-gutter: stable; }", css);
+    Assert.Contains("html:has(.film-card[open]) { overflow: hidden; }", css);
+    // Review of #430: a short page (no scrollbar) gets no gutter, a scrolling one keeps the scrollbar's room.
+    Assert.DoesNotContain("html:has(.film-card[open]) { overflow: hidden; scrollbar-gutter", css);
+    Assert.Contains("html.has-scrollbar:has(.film-card[open]) { scrollbar-gutter: stable; }", css);
+    var card = Card();
+    var measured = card.IndexOf("page.classList.toggle('has-scrollbar', window.innerWidth > page.clientWidth);", StringComparison.Ordinal);
+    Assert.True(measured >= 0);
+    Assert.True(measured < card.IndexOf("card.el.showModal();", StringComparison.Ordinal), "measured before the page locks");
     // Closing restores the focus without scrolling the page.
-    Assert.Contains("?.focus({ preventScroll: true });", Card());
+    Assert.Contains("?.focus({ preventScroll: true });", card);
   }
 
   [Fact]
@@ -104,6 +111,12 @@ public class LibraryFilmCardUiTests
     Assert.Contains("const tiles = [...ctx.root.querySelectorAll('button.lib-tile')].filter((t) => t.dataset.key === key);", card);
     Assert.Contains("return tiles.find((t) => railOf(t) === rail) || tiles[0]", card);
     Assert.Contains("|| [...ctx.root.querySelectorAll('.lib-rail')].find((r) => r.getAttribute('aria-label') === rail);", card);
+    // Review of #430: the only watchlist title marked seen leaves Home's rail for the empty note; the focus goes to the
+    // section's All link, which survives, before Home's search field.
+    Assert.Contains("card.sec = button.closest('.lib-sec');", card);
+    Assert.Contains("const sec = card.sec?.isConnected && !card.sec.hidden ? card.sec.querySelector('.lib-sec-head a') : null;", card);
+    Assert.Contains("again || sec || ctx.root.querySelector('.input-search')", card);
+    Assert.Contains("h('div', { class: 'lib-sec-head' }, h('h2', { text: title }), n, href ? h('a', { href, text: label }) : null);", Read("library.js"));
   }
 
   [Fact]

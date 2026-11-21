@@ -1858,7 +1858,7 @@
 
   // Film card (#367): a film row's name opens poster and details from TMDB in a <dialog>, a bottom sheet on a phone
   // and a centred dialog from 600px (#430). Only when /api/config reports TMDB on; it reads only and never changes the playlist.
-  const card = { el: null, film: null, button: null, tile: null, seq: 0, pending: null, answer: null, stack: [] };
+  const card = { el: null, film: null, button: null, tile: null, sec: null, seq: 0, pending: null, answer: null, stack: [] };
   const keyAlias = new Map();
   const answers = new Map();
   // The mark key that first used an answer's marks (#368).
@@ -1917,8 +1917,12 @@
     card.button = button;
     // A tile is found again by its key in its own rail (#430): a mark change can redraw the rail while the card is open.
     card.tile = button.classList.contains('lib-tile') ? { key: button.dataset.key, rail: railOf(button) } : null;
+    card.sec = button.closest('.lib-sec');
     card.stack = [];
     markOpen(ctx, button);
+    // The page keeps its width behind the card: the gutter is reserved only where a scrollbar took room before.
+    const page = document.documentElement;
+    page.classList.toggle('has-scrollbar', window.innerWidth > page.clientWidth);
     card.el.showModal();
     history.pushState({ filmCard: true }, '');
     loadFilm(ctx);
@@ -1950,7 +1954,9 @@
     const film = card.stack[0]?.film || card.film;
     const again = card.tile ? sameTile(ctx, card.tile)
       : [...ctx.root.querySelectorAll('.library-film-open')].find((b) => b.dataset.name === film.name && b.dataset.group === film.group);
-    (button?.isConnected ? button : again || ctx.root.querySelector('.input-search'))?.focus({ preventScroll: true });
+    // A Home section whose last title left (its empty note replaced the rail) keeps its head and the All link.
+    const sec = card.sec?.isConnected && !card.sec.hidden ? card.sec.querySelector('.lib-sec-head a') : null;
+    (button?.isConnected ? button : again || sec || ctx.root.querySelector('.input-search'))?.focus({ preventScroll: true });
   }
 
   // The tile that replaced the opening one: first in the rail of the same name, then anywhere in the Library; a tile
