@@ -1858,7 +1858,7 @@
 
   // Film card (#367): a film row's name opens poster and details from TMDB in a <dialog>, a bottom sheet on a phone
   // and a centred dialog from 600px (#430). Only when /api/config reports TMDB on; it reads only and never changes the playlist.
-  const card = { el: null, film: null, button: null, seq: 0, pending: null, answer: null, stack: [] };
+  const card = { el: null, film: null, button: null, tile: null, seq: 0, pending: null, answer: null, stack: [] };
   const keyAlias = new Map();
   const answers = new Map();
   // The mark key that first used an answer's marks (#368).
@@ -1915,6 +1915,8 @@
     if (!card.el?.isConnected) card.el = filmDialog(ctx);
     card.film = film;
     card.button = button;
+    // A tile is found again by its key in its own rail (#430): a mark change can redraw the rail while the card is open.
+    card.tile = button.classList.contains('lib-tile') ? { key: button.dataset.key, rail: railOf(button) } : null;
     card.stack = [];
     markOpen(ctx, button);
     card.el.showModal();
@@ -1946,8 +1948,18 @@
     markOpen(ctx, null);
     const { button } = card;
     const film = card.stack[0]?.film || card.film;
-    const again = [...ctx.root.querySelectorAll('.library-film-open')].find((b) => b.dataset.name === film.name && b.dataset.group === film.group);
+    const again = card.tile ? sameTile(ctx, card.tile)
+      : [...ctx.root.querySelectorAll('.library-film-open')].find((b) => b.dataset.name === film.name && b.dataset.group === film.group);
     (button?.isConnected ? button : again || ctx.root.querySelector('.input-search'))?.focus({ preventScroll: true });
+  }
+
+  // The tile that replaced the opening one: first in the rail of the same name, then anywhere in the Library; a tile
+  // that left (off the watchlist) hands the focus to its rail, never to Home's search field, which opens Search.
+  const railOf = (tile) => tile.closest('.lib-rail, .lib-grid')?.getAttribute('aria-label') ?? null;
+  function sameTile(ctx, { key, rail }) {
+    const tiles = [...ctx.root.querySelectorAll('button.lib-tile')].filter((t) => t.dataset.key === key);
+    return tiles.find((t) => railOf(t) === rail) || tiles[0]
+      || [...ctx.root.querySelectorAll('.lib-rail')].find((r) => r.getAttribute('aria-label') === rail);
   }
 
   // One request per opened card; a newer one aborts it. Matched answers are kept for the page session.

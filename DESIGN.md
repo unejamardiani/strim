@@ -168,8 +168,8 @@ candidates are buttons: a tap stores the match and reloads the card. A matched c
 your list as" (entry, group) and "Not this film", which clears the match. A failed request brings the
 previous card back with an error notice.
 
-Series card (#390): with TMDB on, a series row's name opens the same card from `series-card`, and
-another episode row swaps it in place. Everything is the film card's except: the kicker carries the
+Series card (#390): with TMDB on, a series row's name opens the same card from `series-card`; the
+card is modal, so no other row can be tapped while it is open. Everything is the film card's except: the kicker carries the
 Series square, "Series · 2019–2023", "Series · since 2019" while it runs or "Series · 2019"; under the
 genres a facts line (13px/550, `--ink-3`) joins state, seasons, episodes and network with " · ",
 leaving out what is missing; a missing poster shows the Series square on `--series-soft`; the marks
@@ -241,7 +241,7 @@ its chevron's room hidden. A changed mark shows in place on every control of the
 in the row, a card, Search or a group. A row whose mark is now empty or no longer fits the view (marked seen in
 the Watchlist, for example) leaves at once and the count in the head and the chip drops by one; the
 toast "Mark on <title> removed" (in the Watchlist "<title> is off your watchlist") offers Undo, which
-sets the previous mark again and puts the row back in its place. Below 1100px a change made in the
+sets the previous mark again and puts the row back in its place. At every width a change made in the
 modal card offers its toast when the card closes. While the Marks tab is hidden a row leaves without a
 toast. Outside the Watchlist a changed row that still fits moves to the top, and back when the save
 fails; a title marked elsewhere that now fits the view without a row loads the view again (when the

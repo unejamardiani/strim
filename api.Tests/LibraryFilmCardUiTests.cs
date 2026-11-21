@@ -84,6 +84,38 @@ public class LibraryFilmCardUiTests
   }
 
   [Fact]
+  public void Page_DoesNotScrollBehindTheCard()
+  {
+    // Review of #430: wheel and touch over the backdrop scrolled the Library; the page now keeps its position and width.
+    var css = Read("library.css");
+    Assert.Contains("html:has(.film-card[open]) { overflow: hidden; scrollbar-gutter: stable; }", css);
+    // Closing restores the focus without scrolling the page.
+    Assert.Contains("?.focus({ preventScroll: true });", Card());
+  }
+
+  [Fact]
+  public void Closing_RefocusesTheTileByKey_InItsOwnRail()
+  {
+    // Review of #430: a thumbs-up from a Home watchlist card redraws the rail; the focus goes to the new tile with the
+    // same key in the same rail, else to that rail, never to Home's search field (which opens the Search tab).
+    var card = Card();
+    Assert.Contains("card.tile = button.classList.contains('lib-tile') ? { key: button.dataset.key, rail: railOf(button) } : null;", card);
+    Assert.Contains("const again = card.tile ? sameTile(ctx, card.tile)", card);
+    Assert.Contains("const tiles = [...ctx.root.querySelectorAll('button.lib-tile')].filter((t) => t.dataset.key === key);", card);
+    Assert.Contains("return tiles.find((t) => railOf(t) === rail) || tiles[0]", card);
+    Assert.Contains("|| [...ctx.root.querySelectorAll('.lib-rail')].find((r) => r.getAttribute('aria-label') === rail);", card);
+  }
+
+  [Fact]
+  public void Design_DescribesTheModalCard_InTheSeriesAndMarksSections()
+  {
+    var design = Read("DESIGN.md");
+    Assert.DoesNotContain("another episode row swaps it in place", design);
+    Assert.DoesNotContain("Below 1100px a change made in the", design);
+    Assert.Contains("At every width a change made in the\nmodal card offers its toast when the card closes.", design);
+  }
+
+  [Fact]
   public void TheScrollArea_TakesItsContentHeight_SoSafariDoesNotCollapseTheSheet()
   {
     // 19 Nov 2026: with `flex: 1` (a 0% basis) the phone sheet had no height in iOS Safari; only the backdrop showed.
