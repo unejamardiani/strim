@@ -139,7 +139,7 @@ public class LibraryGroupViewUiTests
     // The titles route with the group, by 30, with the shared mark filters (and, #444, the filter and the sort).
     Assert.Contains("const params = { cacheKey: list.cacheKey, includeDisabled: includeOff, group: cur.group.key, offset: 0, limit: 30 };", open);
     Assert.Contains("if (hideSeen) params.hideSeen = true;\n      if (likedOnly) params.liked = true;", open);
-    Assert.Contains("first = await ctx.titles(params, ctx.controller.signal);", open);
+    Assert.Contains("first = await askTitles(ctx, params, ctx.controller.signal);", open);
     // An overtaken answer is dropped; a mark filter or another address starts again from the first page.
     InOrder(open, "const seq = ++state.seq;", "state.observer?.disconnect();", "if (seq !== state.seq || ctx.controller.signal.aborted", "if (seq !== state.seq || !ctx.isCurrent()) return;");
     Assert.Contains("const reload = () => { if (state.open) loadGroup(state.open); };", Browse());

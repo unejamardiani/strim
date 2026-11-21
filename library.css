@@ -97,7 +97,7 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   margin: 12px 18px;
 }
 
-/* My marks (#299): every mark of the user, search rows (#455) with a Remove button. */
+/* My marks (#299): every mark of the user, search rows (#455) with the search rows' mark controls (#456). */
 .library-mylist {
   display: flex;
   flex-direction: column;
@@ -107,12 +107,10 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 }
 
 /* The Marks tab's head (#446): the list follows 6px below the sticky head and chips; from 1100px at most 920px
-   (after the wide Library's block below). A row that opens no card keeps its chevron's room; Remove stays above the
-   row's tap target (#455). */
+   (after the wide Library's block below). A row that opens no card keeps its chevron's room (#455). */
 .library-mylist > .lib-sticky, .library-mylist > .lib-list { align-self: stretch; }
 .library-mylist > .lib-sticky + .lib-list { margin-top: -6px; }
 .lib-row.is-static .lib-chev { visibility: hidden; }
-.library-mylist .lib-row > .btn { position: relative; z-index: 1; flex-shrink: 0; min-height: var(--control-h); }
 
 /* Wide Library (#288, the editor's 1100px breakpoint): once the groups are loaded the page widens to
    1440px, and an open group (#443) shows its entries next to the group list, which keeps its own scroll; the page

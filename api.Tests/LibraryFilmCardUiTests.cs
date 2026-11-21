@@ -99,7 +99,7 @@ public class LibraryFilmCardUiTests
     Assert.Contains("notFound: 'TMDB has no film with this title. Your marks still work.',", card);
     Assert.Contains("failed: 'The film details could not be loaded.',", card);
     // The #298 controls and their shared state, so a change in the card repaints the rows.
-    Assert.Contains("const markEntry = { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given };", card);
+    Assert.Contains("const markEntry = { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given, keepMark: pending, asked: answer?.asked };", card);
     Assert.Contains("const el = markControls(cardCtx, markEntry);", card);
     Assert.Contains("if (answer?.tmdbData) body.append(filmCredit(ctx, entry));", card);
     // The approved layout: a glass Close, a kicker, the icon-only marks capsule and a grid of candidate tiles.
@@ -133,7 +133,7 @@ public class LibraryFilmCardUiTests
     Assert.Contains("const real = saved?.key || keyAlias.get(key);", Read("library.js"));
     // A kept answer reopened from a similar tile keeps the marks its row used, so a tap there cannot clear Seen.
     Assert.Contains("const answerMarkKey = new WeakMap();", card);
-    Assert.Contains("const given = !answer?.marks || owner === key ? now\n      : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0, watchlist: answer.marks.watchlist === true };", card);
+    Assert.Contains("const given = pending || !answer?.marks || owner === key ? now\n      : (owner && marks.get(owner)) || { seen: answer.marks.seen === true, rating: answer.marks.rating || 0, watchlist: answer.marks.watchlist === true };", card);
     Assert.Contains("if (answer?.marks && !owner) answerMarkKey.set(answer, key);", card);
     Assert.DoesNotContain("if (answer) answer.marks = null;", card);
     var css = Read("library.css");
