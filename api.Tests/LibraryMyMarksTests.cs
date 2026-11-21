@@ -36,7 +36,10 @@ public class LibraryMyMarksTests
     Assert.Contains("requested = Math.max(Math.floor(view.shown.size / MARKS_PAGE) + 1, view.minPage);", section);
     Assert.Contains("page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);", section);
     Assert.Contains("if (view.shown.has(m.key)) continue;", section);
-    Assert.Contains("h('button', { class: 'btn btn-sm', type: 'button', onclick: loadPage }, 'More')", section);
+    // #446: no More button; the next page loads once the sentinel comes within 600px of the screen.
+    Assert.DoesNotContain("'More'", section);
+    Assert.Contains("new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) loadPage(); }, { rootMargin: '600px' });", section);
+    Assert.Contains("foot.replaceChildren(sentinel);\n        observer.observe(sentinel);", section.ReplaceLineEndings("\n"));
 
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
     Assert.Contains("listMarks: (params, signal) => api(`/marks?${new URLSearchParams(params)}`, { signal }),", show);
@@ -73,7 +76,8 @@ public class LibraryMyMarksTests
     Assert.Contains("{ value: 'seen', label: 'Seen', params: { seen: true } },", section);
     Assert.Contains("{ value: 'liked', label: 'Liked', params: { rating: 1 } },", section);
     Assert.Contains("{ value: 'disliked', label: 'Disliked', params: { rating: -1 } },", section);
-    Assert.Contains("view.filter = option.value;", section);
+    Assert.Contains("onclick: () => choose(option.value),", section);
+    Assert.Contains("view.filter = name;", section);
     Assert.Contains("view.seq += 1;", section);
     Assert.Contains("if (seq !== view.seq || !ctx.isCurrent()) return;", section);
   }
@@ -82,13 +86,13 @@ public class LibraryMyMarksTests
   public void Remove_AsksNothing_AndUndoSetsTheSameMarkAgain_BothWithCsrf()
   {
     var section = MyMarks();
-    var remove = Between(section, "const remove = async (m, li) => {", "const undo = async");
+    var remove = Between(section, "const remove = edit(async (m, li) => {", "const undo = (m, li) => {");
     Assert.DoesNotContain("confirm(", remove);
     Assert.Contains("li.hidden = true;\n      try {\n        await ctx.removeMark(m.key);", remove);
     Assert.Contains("ctx.toast(`Mark on ${m.title} removed`, { action: { label: 'Undo', onClick: () => undo(m, li) } });", remove);
     Assert.Contains("ctx.toast(`The mark was not removed. ${err.message || ''}`.trim(), { error: true });", remove);
 
-    var undo = Between(section, "const undo = async (m, li) => {", "const start = () => {");
+    var undo = Between(section, "const undo = (m, li) => {", "const start = () => {");
     Assert.Contains("mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });", undo);
     Assert.Contains("li.replaceWith(row(mark));", undo);
     Assert.Contains("if (!li.hidden || li.dataset.restoring) return;", undo);
@@ -105,9 +109,9 @@ public class LibraryMyMarksTests
   [Fact]
   public void NoMarks_ShowsAnEmptyState()
   {
-    var paint = Between(MyMarks(), "const paint = () => {", "};");
-    Assert.Contains("else if (view.filter === 'all') foot.replaceChildren(status('No marks yet. Mark a film or series as seen, or give it a thumb, in the search or a group.'));", paint);
-    Assert.Contains("else foot.replaceChildren(status('No marks of this kind.'));", paint);
+    // The texts themselves are pinned in LibraryMarksTabUiTests (#446).
+    var paint = Between(MyMarks(), "const paint = () => {", "    };");
+    Assert.Contains("else foot.replaceChildren(status(MARK_EMPTY[view.filter] || 'No marks of this kind.'));", paint);
   }
 
   [Fact]

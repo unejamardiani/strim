@@ -122,10 +122,10 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   overflow: hidden;
 }
 
-.library-mylist > .card > .search-hit-meta {
-  margin: 0;
-  padding: 12px 18px 8px;
-}
+/* The Marks tab's head (#446): the card follows 6px below the sticky head and chips; from 1100px at most 920px
+   (after the wide Library's block below). */
+.library-mylist > .lib-sticky { align-self: stretch; }
+.library-mylist > .lib-sticky + .card { margin-top: -6px; }
 
 .library-mylist .search-hit-name {
   overflow-wrap: anywhere;
@@ -149,6 +149,7 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   .lib-groups-cols.has-open .lib-ghead .lib-ib { display: none; }
   .lib-groups-cols.has-open .lib-sticky { margin: 0; padding: 0 0 10px; top: calc(var(--topbar-h) + 12px); background: var(--bg); }
 }
+@media (min-width: 1100px) { .library-mylist { max-width: 920px; } }
 
 /* Film card (#367) and the row (#419) of a search result or a group entry, one rule per line: type marker, title
    and year, meta line, then the marks. A film or series row opens its card from anywhere on the row: the name's

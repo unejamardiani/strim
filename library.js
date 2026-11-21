@@ -63,6 +63,8 @@
     const first = view.tab !== null;
     view.tab = tab;
     if (tab === 'groups') view.groupAddress?.(view.groupKey, view.groupQuery);
+    // The Marks address (#446): "marks?view=…" switches the view, also of a Library already on screen.
+    if (tab === 'marks') view.ctx.marksView?.(query);
     if (same) return;
     window.scrollTo(0, 0);
     if (!first || !view.byKeyboard) return;
@@ -274,6 +276,14 @@
     const hash = `${view.base}/search${String(p) ? `?${p}` : ''}`;
     view.nav.querySelector('[data-tab="search"]').href = hash;
     if (view.tab === 'search' && location.hash !== hash) history.replaceState(history.state, '', hash);
+  }
+
+  // The Marks address (#446): #/…/marks?view=…, replaced, never a new entry, and only while the Marks panel is shown.
+  function keepMarksAddress(name) {
+    const hash = `${view.base}/marks?view=${name}`;
+    view.nav.querySelector('[data-tab="marks"]').href = hash;
+    // Through the router (#444), so a later link back to the address it replaced still routes.
+    if (!view.panels.marks.hidden && location.hash !== hash) view.ctx.replaceAddress(hash);
   }
 
   // The chips' counts from the answer's counts; All is their sum, and without a query no counts.
@@ -913,61 +923,112 @@
   // My marks (#299): every film and series the user marked, newest change first, including titles that are in no
   // playlist any more. A row is plain text, never a link to an entry. Remove asks nothing and offers Undo, which sets
   // the same mark again with the set call; main.js sends both with the CSRF token.
-  const MARK_FILTERS = [
+  // The Marks tab (#446): five views, each with its address #/…/marks?view=…, a head that counts the view and pages
+  // that load while scrolling.
+  const MARK_VIEWS = [
+    { value: 'watchlist', label: 'Watchlist', params: { watchlist: true, sort: 'watchlisted' } },
     { value: 'all', label: 'All', params: {} },
     { value: 'seen', label: 'Seen', params: { seen: true } },
     { value: 'liked', label: 'Liked', params: { rating: 1 } },
     { value: 'disliked', label: 'Disliked', params: { rating: -1 } },
   ];
+  const MARK_EMPTY = {
+    watchlist: 'Nothing on your watchlist yet. Add a film or series with the bookmark in its card.',
+    all: 'No marks yet. Mark a film or series as seen, or give it a thumb, in the search or a group.',
+  };
   const MARKS_PAGE = 50;
+  // A view named in an address's query, or null when it names none or an unknown one.
+  const markViewOf = (query) => {
+    const name = new URLSearchParams(query || '').get('view');
+    return MARK_VIEWS.some((v) => v.value === name) ? name : null;
+  };
 
   function myMarks(ctx) {
     const { h, fmt, plural } = ctx;
-    const view = { filter: 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1 };
+    const asked = String(ctx.sub || '').startsWith('marks') ? markViewOf(ctx.query) : null;
+    const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, edits: 0, pending: 0, waiting: 0 };
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
-    const count = h('p', { class: 'search-hit-meta' });
+    const count = h('p');
     const list = h('ol', { class: 'search-list' });
     const foot = h('div', { class: 'library-foot' });
-    const pills = h('div', { class: 'pills', role: 'group', 'aria-label': 'Show marks' });
-    for (const option of MARK_FILTERS) {
-      pills.append(h('button', {
-        type: 'button', 'aria-pressed': String(option.value === view.filter), dataset: { value: option.value },
-        onclick: () => {
-          view.filter = option.value;
-          for (const b of pills.children) b.setAttribute('aria-pressed', String(b.dataset.value === option.value));
-          start();
-        },
+    const sentinel = h('div', { 'aria-hidden': 'true' });
+    const observer = new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) loadPage(); }, { rootMargin: '600px' });
+    ctx.controller.signal.addEventListener('abort', () => observer.disconnect(), { once: true });
+    const chips = h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Show marks' });
+    for (const option of MARK_VIEWS) {
+      chips.append(h('button', {
+        class: 'lib-chip', type: 'button', 'aria-pressed': String(option.value === view.filter), dataset: { value: option.value },
+        onclick: () => choose(option.value),
       }, option.label));
     }
+    const choose = (name) => {
+      view.filter = name;
+      for (const b of chips.children) b.setAttribute('aria-pressed', String(b.dataset.value === name));
+      keepMarksAddress(name);
+      start();
+    };
+    // show() hands in the view of a Marks address; a missing or unknown one leaves the current view alone.
+    ctx.marksView = (query) => {
+      const name = markViewOf(query);
+      if (name && name !== view.filter) choose(name);
+      else keepMarksAddress(view.filter);
+    };
 
     const paint = () => {
-      count.textContent = plural(view.total, 'mark');
-      if (!view.done) foot.replaceChildren(h('button', { class: 'btn btn-sm', type: 'button', onclick: loadPage }, 'More'));
-      else if (view.total > 0) foot.replaceChildren(status(`All ${fmt(view.total)} shown`));
-      else if (view.filter === 'all') foot.replaceChildren(status('No marks yet. Mark a film or series as seen, or give it a thumb, in the search or a group.'));
-      else foot.replaceChildren(status('No marks of this kind.'));
+      count.textContent = !view.loaded ? ''
+        : view.filter === 'watchlist' ? `${plural(view.total, 'title')} · newest first` : `${plural(view.total, 'mark')} · newest change first`;
+      for (const b of chips.children) {
+        b.querySelector('.n')?.remove();
+        if (view.loaded && b.dataset.value === view.filter) b.append(h('span', { class: 'n', text: fmt(view.total) }));
+      }
+      if (view.loading) return;
+      if (!view.done) {
+        foot.replaceChildren(sentinel);
+        observer.observe(sentinel);
+      } else if (view.total > 0) foot.replaceChildren();
+      else foot.replaceChildren(status(MARK_EMPTY[view.filter] || 'No marks of this kind.'));
     };
 
     // The next page starts after the marks shown now; marks a page repeats after a remove or an undo are skipped.
     // A mark set in the search or a group moves to the top and shifts every position, so a page can add nothing
     // new: the list then moves on to the next page at once instead of asking for the same page again.
     const loadPage = async () => {
+      if (view.loading) return;
+      observer.unobserve(sentinel);
+      view.loading = true;
       const seq = view.seq;
+      const edits = view.edits;
       foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
+      // A page asked for while a Remove or an Undo is pending would count from rows about to change: it is asked for
+      // once the edit's bookkeeping is done.
+      if (view.pending) {
+        view.waiting = seq;
+        return;
+      }
       let page;
       let requested;
       try {
-        const filter = MARK_FILTERS.find((f) => f.value === view.filter).params;
+        const filter = MARK_VIEWS.find((f) => f.value === view.filter).params;
         requested = Math.max(Math.floor(view.shown.size / MARKS_PAGE) + 1, view.minPage);
         page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
       } catch (err) {
         if (seq !== view.seq || ctx.controller.signal.aborted) return;
+        view.loading = false;
         foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
           h('p', { text: err.message || 'Your marks could not be loaded.' }),
           h('button', { class: 'btn btn-sm', type: 'button', onclick: loadPage }, 'Try again')));
         return;
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
+      // A Remove or an Undo that started meanwhile, or is still on its way, may have changed the list under the page and
+      // its total (the server can answer either first): ask again from the marks shown now, once no edit is pending.
+      if (edits !== view.edits || view.pending) {
+        if (view.pending) view.waiting = seq;
+        else { view.loading = false; loadPage(); }
+        return;
+      }
+      view.loading = false;
+      view.loaded = true;
       const items = page.items || [];
       let added = 0;
       for (const m of items) {
@@ -997,8 +1058,25 @@
       return li;
     };
 
+    // A Remove or an Undo is an edit from its start until its bookkeeping is done; a page that answered meanwhile
+    // waits for it (loadPage) and is then asked again.
+    const edit = (work) => async (...args) => {
+      view.edits += 1;
+      view.pending += 1;
+      try {
+        await work(...args);
+      } finally {
+        view.pending -= 1;
+        if (!view.pending && view.waiting) {
+          const again = view.waiting === view.seq;
+          view.waiting = 0;
+          if (again) { view.loading = false; loadPage(); }
+        }
+      }
+    };
+
     // The row goes at once and comes back on a failure; it stays hidden in place so Undo puts it back there.
-    const remove = async (m, li) => {
+    const remove = edit(async (m, li) => {
       li.hidden = true;
       try {
         await ctx.removeMark(m.key);
@@ -1016,11 +1094,14 @@
       view.total -= 1;
       paint();
       ctx.toast(`Mark on ${m.title} removed`, { action: { label: 'Undo', onClick: () => undo(m, li) } });
-    };
+    });
 
-    const undo = async (m, li) => {
+    const undo = (m, li) => {
       if (!li.hidden || li.dataset.restoring) return;
       li.dataset.restoring = 'true';
+      restore(m, li);
+    };
+    const restore = edit(async (m, li) => {
       let mark;
       try {
         mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });
@@ -1035,7 +1116,7 @@
       view.shown.add(mark.key);
       view.total += 1;
       paint();
-    };
+    });
 
     const start = () => {
       view.seq += 1;
@@ -1043,16 +1124,20 @@
       view.total = 0;
       view.done = false;
       view.minPage = 1;
-      count.textContent = '';
+      view.loading = false;
+      view.loaded = false;
+      view.waiting = 0;
       list.replaceChildren();
+      paint();
       loadPage();
     };
+    keepMarksAddress(view.filter);
     start();
     return h('section', { class: 'library-mylist', 'aria-label': 'My marks' },
-      h('h2', { class: 'library-title', text: 'My marks' }),
-      h('p', { class: 'field-hint', text: 'Every film and series you marked, newest change first, also titles no longer in a playlist.' }),
-      pills,
-      h('div', { class: 'card' }, count, list, foot));
+      h('div', { class: 'lib-sticky' },
+        h('div', { class: 'lib-ghead' }, h('div', { class: 'lib-ghead-text' }, h('h2', { text: 'My marks' }), count)),
+        chips),
+      h('div', { class: 'card' }, list, foot));
   }
 
   // A remove or an undo in My marks shows on the rows of the same title in the search and the open group.

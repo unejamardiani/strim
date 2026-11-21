@@ -174,6 +174,24 @@ public sealed class LibraryFilmMatchTests
   }
 
   [Fact]
+  public async Task List_LeavesOutAMatchOnlyRecord()
+  {
+    // #446: a record kept only for a confirmed match is no mark, so the Marks tab neither lists nor counts it.
+    await using var host = await Host.StartAsync(Token);
+    await host.Client.SendAsync(HttpMethod.Put, "/api/marks", new { name = "The Matrix (1999)", kind = "film", seen = true });
+    Assert.Equal(HttpStatusCode.OK, (await host.ConfirmAsync("Heat (1995)", 949)).StatusCode);
+    Assert.Equal(2, host.Marks().Count);
+
+    var list = await host.Client.Http.GetAsync("/api/marks?page=1&pageSize=50");
+
+    Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+    var body = JsonDocument.Parse(await list.Content.ReadAsStringAsync()).RootElement;
+    Assert.Equal(1, body.GetProperty("total").GetInt32());
+    var item = Assert.Single(body.GetProperty("items").EnumerateArray());
+    Assert.Equal(MatrixKey, item.GetProperty("key").GetString());
+  }
+
+  [Fact]
   public async Task NoToken_NotFound()
   {
     await using var host = await Host.StartAsync(token: null);
