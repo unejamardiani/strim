@@ -409,7 +409,7 @@
     // "Show them" turns "Include switched-off groups" on, like the ⋯ menu.
     const showThem = hidden ? h('button', { type: 'button', onclick: () => { includeOff = true; ctx.onIncludeOff(); } }, 'Show them') : null;
     status(text, showThem ? ' ' : null, showThem);
-    const rowOf = (t) => hit(ctx, t, list.cacheKey);
+    const rowOf = (t) => thumbRow(ctx, hit(ctx, t, list.cacheKey), t);
     let nodes = [];
     if (!type.types.length && total) nodes = [sections(ctx, state, found, rowOf)];
     else if (titles.length) nodes = [pages(ctx, state, params, found, rowOf, seq)];
@@ -1065,6 +1065,20 @@
       m.enabled === false && !isViewer(ctx) ? h('span', { class: 'search-badge off', text: 'Off' }) : null);
   }
 
+  // A search result of a film or series (#429) starts with a 40×60 poster thumbnail in place of the type marker: the
+  // type's soft colour with the marker centred, the poster asked through the loader. Channels keep the marker.
+  function thumbRow(ctx, li, e) {
+    const type = li.dataset.type;
+    if (!view.posters || (type !== 'Movies' && type !== 'Series')) return li;
+    const dot = li.querySelector(':scope > .lib-dot');
+    const thumb = ctx.h('span', { class: 'lib-thumb', 'aria-hidden': 'true', dataset: { type, key: e.markKey || '' } });
+    dot.replaceWith(thumb);
+    thumb.append(dot);
+    li.classList.add('has-thumb');
+    view.posters.request(thumb, { name: e.name, group: e.group || '', type });
+    return li;
+  }
+
   // A series: bold seasons and episodes, then the group; a film in more than one entry: its versions; a channel: the
   // group. A viewer's group is the label in front.
   function titleMeta(ctx, t) {
@@ -1107,7 +1121,8 @@
   window.StrimLibrary = { mount, show };
 
   // Poster loader (#427): asks ctx.posters (…/library/posters) only for tiles within 300px of the viewport, collected for 150ms
-  // in batches of at most 24, one batch in flight at a time. Answers stay for the page session by mark key; a pending
+  // in batches of at most 24, one batch in flight at a time. Answers stay for the page session by mark key together with
+  // the name, group and type asked (#429), so an answer for one group never stands in for another; a pending
   // one is asked again after 4s, at most 3 times. A failed batch leaves its tiles as fallback until they are created
   // again, a 404 switches the loader off for the page session; no toast. It stops with ctx.controller.
   // The answers and the 404 flag live here, like marks, so a remount keeps them; queue, timer and observer are per mount.
@@ -1157,15 +1172,16 @@
     return {
       request: (tile, item) => {
         if (stopped() || !tile.dataset.key) return;
-        wanted.set(tile, { tile, item, key: tile.dataset.key, tries: 0 });
+        wanted.set(tile, { tile, item, key: [tile.dataset.key, item.name, item.group, item.type].join('\n'), tries: 0 });
         io.observe(tile);
       },
     };
   }
 
-  // The poster fades in over the fallback; an image that fails to load leaves the fallback again.
+  // The poster fades in over the fallback; an image that fails to load leaves the fallback again. A search row's
+  // thumbnail (#429) is its own art box.
   function showPoster(ctx, tile, url) {
-    const art = tile.querySelector('.lib-art');
+    const art = tile.matches('.lib-thumb') ? tile : tile.querySelector('.lib-art');
     if (!url || art.querySelector('img')) return;
     const img = ctx.h('img', { referrerpolicy: 'no-referrer', loading: 'lazy', decoding: 'async', alt: '', width: '342', height: '513', src: url });
     img.addEventListener('load', () => img.classList.add('is-loaded'));
@@ -1174,8 +1190,9 @@
   }
 
   // A poster tile (#427): a 2:3 art box that starts as the fallback (the type's soft colour and marker), the title and a
-  // meta line. A title that opens its card is a button; any other a div. The badges follow the shared marks.
-  function posterTile(ctx, { key, entry, title, year, group, type, meta, bar }) {
+  // meta line. A title that opens its card is a button; any other a div. The badges follow the shared marks. With
+  // poster false (a Marks tile whose lookup has not answered, #429) no poster is asked yet.
+  function posterTile(ctx, { key, entry, title, year, group, type, meta, bar, poster = true }) {
     const { h, icon } = ctx;
     const art = h('span', { class: 'lib-art', dataset: { type } },
       h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),
@@ -1190,7 +1207,7 @@
       ? h('button', { class: 'lib-tile', type: 'button', 'aria-haspopup': 'dialog', dataset: { key, label }, onclick: () => openFilm(ctx, film, tile) }, art, text)
       : h('div', { class: 'lib-tile', dataset: { key: key || '' } }, art, text);
     paintTile(tile);
-    view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });
+    if (poster) view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });
     return tile;
   }
 
@@ -1467,11 +1484,31 @@
     return MARK_VIEWS.some((v) => v.value === name) ? name : null;
   };
 
+  // The Marks tab's view (#429): "grid" or "list", kept per device; grid unless the device chose the list.
+  const MARKS_VIEW_KEY = 'strim.library.marksView';
+  function readMarksView() {
+    try {
+      return localStorage.getItem(MARKS_VIEW_KEY) === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  }
+  function writeMarksView(value) {
+    try {
+      localStorage.setItem(MARKS_VIEW_KEY, value);
+    } catch {
+      // Storage off: the choice lasts while the Library is on screen.
+    }
+  }
+
   function myMarks(ctx) {
     const { h, icon, fmt, plural } = ctx;
     const asked = String(ctx.sub || '').startsWith('marks') ? markViewOf(ctx.query) : null;
     // pages: the keys of every page loaded, looked up again on demand; asks: an answer for an earlier ask changes nothing.
     const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, pages: [], asks: 0 };
+    // With TMDB on (#429) the marks are poster tiles unless the device chose the list; otherwise the rows of #455.
+    const viewBtn = ctx.tmdbEnabled === true ? h('button', { class: 'lib-ib lib-view', type: 'button', onclick: () => switchView() }) : null;
+    view.grid = !!viewBtn && readMarksView() === 'grid';
     // The rows' state in one place: mark key → { li, mark (the server's record), title (the lookup's answer or null) }.
     const rows = new Map();
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
@@ -1606,6 +1643,7 @@
     // controls (#456) and the chevron, hidden unless the row opens the title's card. A lookup builds it again inside
     // the same <li>; the controls show the mark in marks and leave that object in place (keepMark).
     const build = (key) => {
+      if (view.grid) return buildTile(key);
       const state = rows.get(key);
       const { mark: m, title: t } = state;
       const type = m.kind === 'series' ? 'Series' : 'Movies';
@@ -1625,6 +1663,23 @@
       state.li = li;
       return li;
     };
+    // A tile (#429) in the same <li>: the year, or "Not in this list" (a div, no button). Its poster is asked with the
+    // lookup's name and group, else with "<title> (<year>)", the kind and no group, but only once a lookup answered that
+    // the title is not in this list (state.looked): a pending or failed lookup asks nothing, since the title may be in a
+    // group the poster endpoint excludes. Marks are changed in the card.
+    const buildTile = (key) => {
+      const state = rows.get(key);
+      const { mark: m, title: t } = state;
+      const type = m.kind === 'series' ? 'Series' : 'Movies';
+      const entry = t && { name: t.name, title: m.title, year: m.year, contentType: type, markKey: key, enabled: t.enabled };
+      const cell = state.li || h('li');
+      cell.className = 'lib-cell';
+      Object.assign(cell.dataset, { type, key });
+      cell.replaceChildren(posterTile(ctx, { key, entry, title: m.title, year: m.year, group: t?.group, type,
+        meta: !t ? 'Not in this list' : m.year ? String(m.year) : '', poster: !!state.looked }));
+      state.li = cell;
+      return cell;
+    };
 
     // In this list: one lookup per page once the list is there. An answer for a view left since, for an earlier ask
     // (asks) or for a Library left since changes nothing; a row whose key the answer lacks, and every row of a current
@@ -1642,6 +1697,11 @@
       for (const key of keys) {
         const state = rows.get(key);
         const title = answer?.titles?.[key] || null;
+        // Whether a lookup answered is kept for when the grid is chosen later (#429); a list row is drawn again only when its
+        // title changed (its mark buttons keep focus), a tile also when it may now ask for its poster.
+        const looked = !!answer;
+        if (state && view.grid && looked !== !!state.looked) state.title = undefined;
+        if (state) state.looked = looked;
         if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;
         state.title = title;
         build(key);
@@ -1717,13 +1777,34 @@
       paint();
       loadPage();
     };
-    keepMarksAddress(view.filter);
-    start();
-    return h('section', { class: 'library-mylist', 'aria-label': 'My marks' },
+    // Grid view shows the list icon to leave it, list view the grid icon. Switching draws the loaded marks again in
+    // place (rows that left stay hidden, their Undo still works) and starts at the top.
+    const section = h('section', { class: 'library-mylist', 'aria-label': 'My marks' },
       h('div', { class: 'lib-sticky' },
         h('div', { class: 'lib-ghead' }, h('div', { class: 'lib-ghead-text' }, h('h2', { text: 'My marks' }), count)),
         chips),
       h('div', { class: 'lib-list' }, list, foot));
+    const body = section.lastElementChild;
+    if (viewBtn) section.querySelector('.lib-ghead').append(viewBtn);
+    const paintView = () => {
+      section.classList.toggle('is-grid', view.grid);
+      body.className = view.grid ? 'lib-grid' : 'lib-list';
+      list.classList.toggle('lib-grid-items', view.grid);
+      if (!viewBtn) return;
+      viewBtn.setAttribute('aria-label', view.grid ? 'Show as list' : 'Show as posters');
+      viewBtn.replaceChildren(icon(view.grid ? 'list' : 'grid'));
+    };
+    const switchView = () => {
+      view.grid = !view.grid;
+      writeMarksView(view.grid ? 'grid' : 'list');
+      paintView();
+      for (const key of rows.keys()) build(key);
+      window.scrollTo(0, 0);
+    };
+    paintView();
+    keepMarksAddress(view.filter);
+    start();
+    return section;
   }
 
   // A mark saved under the API's key (#368) or taken from a card shows on the rows of that key.

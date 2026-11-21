@@ -475,3 +475,19 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
   .lib-panel[data-tab="groups"]:has(.is-grid) { max-width: 1280px; margin: 0 auto; }
   .lib-groups-cols.has-open .lib-ghead .lib-ib.lib-view { display: grid; }
 }
+
+/* The Marks tab as posters (#429): the grid of #428, 6px below the sticky head and chips, each tile in its <li>; from
+   1100px the tab is at most 1280px wide in grid view. A search row of a film or series starts with a 40×60 poster
+   thumbnail over the type's soft colour and marker. */
+.library-mylist > .lib-grid { align-self: stretch; }
+.library-mylist > .lib-sticky + .lib-grid { margin-top: -6px; }
+.library-mylist .lib-grid-items > li { display: grid; min-width: 0; }
+.lib-grid > .library-foot { grid-column: 1 / -1; }
+@media (min-width: 1100px) { .library-mylist.is-grid { max-width: 1280px; } }
+.lib-thumb { position: relative; flex-shrink: 0; width: 40px; height: 60px; overflow: hidden; border-radius: 8px; display: grid; place-items: center; background: var(--movies-soft); }
+.lib-thumb[data-type="Series"] { background: var(--series-soft); }
+.lib-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .2s; }
+.lib-thumb img.is-loaded { opacity: 1; }
+.lib-row.has-thumb { min-height: 76px; padding-left: 10px; }
+.lib-row.is-seen .lib-thumb img.is-loaded { opacity: .45; }
+@media (prefers-reduced-motion: reduce) { .lib-thumb img { transition: none; } }

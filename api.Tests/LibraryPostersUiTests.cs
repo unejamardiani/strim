@@ -64,7 +64,8 @@ public class LibraryPostersUiTests
     var loader = Loader();
     Assert.Contains("if (p.status !== 'pending') {", loader);
     Assert.Contains("} else if (b.tries < 3) setTimeout(() => ask({ ...b, tries: b.tries + 1 }), 4000);", loader);
-    Assert.Contains("wanted.set(tile, { tile, item, key: tile.dataset.key, tries: 0 });", loader);
+    // Answers are kept by mark key together with the name, group and type asked (#429).
+    Assert.Contains("wanted.set(tile, { tile, item, key: [tile.dataset.key, item.name, item.group, item.type].join('\\n'), tries: 0 });", loader);
   }
 
   [Fact]
