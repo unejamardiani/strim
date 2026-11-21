@@ -1064,19 +1064,21 @@
       const keys = items.map((m) => m.key);
       view.pages.push(keys);
       lookup(keys, seq);
-      view.done = items.length < MARKS_PAGE || view.shown.size - left() >= page.total;
+      const short = view.shown.size - left() < page.total;
+      view.done = items.length < MARKS_PAGE || !short;
+      // A save that overlapped the request may have moved a title onto an earlier page (a like cleared on page one
+      // pulls the 51st Liked up, before or after the server read this page): a page that added nothing or looks like
+      // the end while titles are missing is worked out again once no save is on its way.
+      if ((ticks !== saveTicks || saving.size) && short && (added === 0 || view.done)) {
+        view.loading = true;
+        whenSettled(() => {
+          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
+          view.loading = false;
+          loadPage();
+        });
+        return;
+      }
       if (!view.done && added === 0) {
-        // A save that overlapped the request may have moved a title onto this page after the server answered (a like
-        // cleared on page one pulls the 51st Liked up): once no save is on its way the page is worked out again.
-        if (ticks !== saveTicks || saving.size) {
-          view.loading = true;
-          whenSettled(() => {
-            if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
-            view.loading = false;
-            loadPage();
-          });
-          return;
-        }
         view.minPage = requested + 1;
         loadPage();
         return;

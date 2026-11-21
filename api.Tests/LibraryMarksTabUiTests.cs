@@ -194,15 +194,19 @@ public class LibraryMarksTabUiTests
     // A row edited out of the view moved every later title up by one on the server: the next page counts it out,
     // so the sentinel still reaches the 51st title of 51 Liked after a like on page one is cleared.
     Assert.Contains("requested = Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", load);
-    Assert.Contains("view.done = items.length < MARKS_PAGE || view.shown.size - left() >= page.total;", load);
+    Assert.Contains("const short = view.shown.size - left() < page.total;\n      view.done = items.length < MARKS_PAGE || !short;", load);
     Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", section);
-    // A save overlapping the request: page one answers with the 50 rows shown (the cleared like not yet saved), the
-    // save then pulls the 51st Liked onto page one. The page that added nothing does not move minPage on; once no save
-    // is on its way the page is worked out again (page one, which now holds the 51st).
+    // A save overlapping the request, in both orders: page one answers with the 50 rows shown (the cleared like not yet
+    // saved) and the save then pulls the 51st Liked onto page one; or the sentinel asks for page two first and the
+    // save lands before the server reads it, so page two comes back empty. Neither a page that added nothing nor a
+    // short page that leaves titles missing is taken as it is: once no save is on its way the page is worked out again.
     var ticks = load.IndexOf("const ticks = saveTicks;", StringComparison.Ordinal);
     Assert.True(ticks >= 0 && ticks < load.IndexOf("await ctx.listMarks(", StringComparison.Ordinal));
-    var skip = Between(load, "if (!view.done && added === 0) {", "paint();");
-    Assert.Contains("if (ticks !== saveTicks || saving.size) {\n          view.loading = true;\n          whenSettled(() => {\n            if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n            view.loading = false;\n            loadPage();\n          });\n          return;\n        }\n        view.minPage = requested + 1;", skip);
+    var retry = load.IndexOf("if ((ticks !== saveTicks || saving.size) && short && (added === 0 || view.done)) {\n        view.loading = true;\n        whenSettled(() => {\n          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n          view.loading = false;\n          loadPage();\n        });\n        return;\n      }", StringComparison.Ordinal);
+    Assert.True(retry > load.IndexOf("view.done = items.length", StringComparison.Ordinal));
+    Assert.True(retry < load.IndexOf("view.minPage = requested + 1;", StringComparison.Ordinal));
+    Assert.True(retry < load.IndexOf("paint();", StringComparison.Ordinal));
+    Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;", load);
     var library = Read("library.js");
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);\n    saveTicks += 1;", setMark);
