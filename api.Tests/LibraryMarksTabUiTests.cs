@@ -192,15 +192,14 @@ public class LibraryMarksTabUiTests
     // its Like cleared before or while the retry is on its way: "1 mark" after each answer, no empty message.
     Assert.Contains("if (!view.counted && (!overlapped || !view.loaded)) view.total = page.total + left();\n      view.counted = view.counted || !overlapped;\n      view.loaded = true;", load);
     Assert.True(load.IndexOf("const overlapped =", StringComparison.Ordinal) < load.IndexOf("if (!view.counted", StringComparison.Ordinal));
-    Assert.Contains("view.loaded = view.counted = false;\n      view.top = false;", section);
+    Assert.Contains("view.loaded = view.counted = false;\n      view.walk = 0;", section);
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(section, @"view\.total = page\.total"));
     // A row edited out of the view moved every later title up by one on the server: the next page counts it out,
     // so the sentinel still reaches the 51st title of 51 Liked after a like on page one is cleared.
-    Assert.Contains("requested = view.top ? 1 : Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", load);
-    // 52 marks, title 1 cleared while page 2 loads: page 2 returns title 52, title 51 moved onto page 1. And 51 Liked,
-    // title 51 marked Seen from Search while page 2 loads: it moves to the front, page 2 returns title 50 again. The
-    // retry starts at page 1, where a saved title moves to, so every key is reached (51 and 52; all 51).
-    Assert.Contains("view.top = overlapped;", load);
+    Assert.Contains("requested = view.walk || Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", load);
+    // 102 Liked, 100 shown, title 1 cleared while page 3 loads: page 3 returns 102, 101 moved onto page 2. The retry
+    // walks every page from 1 (1, 2, 3, 1, 2), not from the rows shown, so 101 and 102 are both reached.
+    Assert.Contains("view.walk = overlapped ? 1 : view.walk && requested + 1;", load);
     Assert.DoesNotContain("view.back", section);
     Assert.Contains("const short = view.shown.size - left() < page.total;\n      view.done = items.length < MARKS_PAGE || !short;", load);
     Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", section);
@@ -220,7 +219,7 @@ public class LibraryMarksTabUiTests
     // answer of an overlapped page and an error followed by Try again alike (a cleared mark moved title 100 onto page
     // 2 after minPage reached 3; the retry asks from the rows shown again).
     var reset = load.IndexOf("if (view.minAt !== ticks) view.minPage = 1;", StringComparison.Ordinal);
-    Assert.True(reset > ticks && reset < load.IndexOf("requested = view.top", StringComparison.Ordinal));
+    Assert.True(reset > ticks && reset < load.IndexOf("requested = view.walk", StringComparison.Ordinal));
     Assert.Contains("onclick: loadPage }, 'Try again')", load);
     var library = Read("library.js");
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
@@ -259,7 +258,7 @@ public class LibraryMarksTabUiTests
   }
 
   private const string KeepRule = "if (!entry.keepMark && (freshFor(key, entry.asked) || !marks.has(key))) marks.set(key, {";
-  private const string FreshPage = "if (freshFor(m.key, ticks)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });\n          markAt.set(m.key, Math.max(markAt.get(m.key) || 0, ticks + 0.5));\n          paintKey(ctx, m.key);\n        }";
+  private const string FreshPage = "if (freshFor(m.key, ticks + 0.5)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });\n          markAt.set(m.key, Math.max(markAt.get(m.key) || 0, ticks + 0.5));\n          paintKey(ctx, m.key);\n        }";
 
   [Fact]
   public void AnswerOverlappedByASave_LeavesTheSavedMarkAlone()
@@ -276,17 +275,20 @@ public class LibraryMarksTabUiTests
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(library, @"ctx\.titles\("));
     Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(library, @"await askTitles\(ctx, ").Count);
     // A Like from a similar film's card on a Seen title, All opened before the PUT ends: pending under the API key too,
-    // so the Marks row shows the Like and its Seen tap sends rating 1; a failed save rolls both back.
-    Assert.Contains("const alias = keyAlias.get(key);\n    if (alias) { saving.set(alias, (saving.get(alias) || 0) + 1); markAt.set(alias, saveTicks); marks.set(alias, next); }", setMark);
+    // so the Marks row shows the Like and its Seen tap sends rating 1; a failed save rolls each key back to its own value
+    // (Liked from the card, Seen from the row, the card's failed clear leaves Seen pressed).
+    Assert.Contains("const alias = keyAlias.get(key), prior = alias && marks.get(alias);\n    if (alias) { saving.set(alias, (saving.get(alias) || 0) + 1); markAt.set(alias, saveTicks); marks.set(alias, next); }", setMark);
     Assert.True(setMark.IndexOf("marks.set(alias, next)", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
-    Assert.Contains("if (alias && marks.get(alias) === next) marks.set(alias, before);", setMark);
+    Assert.Contains("if (alias && marks.get(alias) === next) marks.set(alias, prior);", setMark);
+    Assert.DoesNotContain("marks.set(alias, before)", setMark);
     Assert.Contains("if (alias && saving.get(alias) > 1) saving.set(alias, saving.get(alias) - 1);\n      else if (alias) saving.delete(alias);", setMark);
     Assert.Contains(KeepRule, Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
 
-    // Marks: a repeated key takes the server's mark too, before it is skipped. A page returns Seen, then an older Search
-    // answer arrives unseen: the page's stamp (ticks + 0.5) makes it stale, so the row and its rebuild keep Seen.
+    // Marks: a repeated key takes the server's mark too, before it is skipped. A page Seen, then an older Search answer
+    // unseen: stale (ticks < ticks + 0.5). Two pages at one tick, unseen then Seen: the later one is fresh, Seen shows.
     var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     Assert.Contains(FreshPage + "\n        if (view.shown.has(m.key)) continue;", load);
+    Assert.DoesNotContain("freshFor(m.key, ticks)", load);
 
     // An overlapped page asks again with minPage from 1: a page skipped as repeated may hold a title the save moved up.
     Assert.Contains("if (view.minAt !== ticks) view.minPage = 1;", load);
@@ -303,7 +305,7 @@ public class LibraryMarksTabUiTests
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(controls, @"marks\.set\("));
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     var fail = Between(setMark, "} catch (err) {", "} finally {");
-    Assert.Contains("if (marks.get(key) !== next) return;\n      if (alias && marks.get(alias) === next) marks.set(alias, before);\n      marks.set(key, before);\n      repaint();\n      ctx.toast(", fail);
+    Assert.Contains("if (marks.get(key) !== next) return;\n      if (alias && marks.get(alias) === next) marks.set(alias, prior);\n      marks.set(key, before);\n      repaint();\n      ctx.toast(", fail);
     // The Search and Groups rows go through markControls (directly or through rowMarks), with the entry they render.
     Assert.DoesNotContain("keepMark", Between(library, "// Browse (#287)", "function myMarks("));
   }

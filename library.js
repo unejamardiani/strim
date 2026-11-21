@@ -534,7 +534,7 @@
     saveTicks += 1;
     markAt.set(key, saveTicks);
     // A similar film's card (#368) saves under a local key; once the API's key is known, the save is pending there too.
-    const alias = keyAlias.get(key);
+    const alias = keyAlias.get(key), prior = alias && marks.get(alias);
     if (alias) { saving.set(alias, (saving.get(alias) || 0) + 1); markAt.set(alias, saveTicks); marks.set(alias, next); }
     const repaint = () => [key, alias].forEach((k) => k && paintKey(ctx, k));
     marks.set(key, next);
@@ -555,7 +555,7 @@
     } catch (err) {
       // A later tap on the same title already replaced this change.
       if (marks.get(key) !== next) return;
-      if (alias && marks.get(alias) === next) marks.set(alias, before);
+      if (alias && marks.get(alias) === next) marks.set(alias, prior);
       marks.set(key, before);
       repaint();
       ctx.toast(`The mark was not changed. ${err.message || ''}`.trim(), { error: true });
@@ -1054,7 +1054,7 @@
       if (view.minAt !== ticks) view.minPage = 1;
       try {
         const filter = MARK_VIEWS.find((f) => f.value === view.filter).params;
-        requested = view.top ? 1 : Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);
+        requested = view.walk || Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);
         page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
       } catch (err) {
         if (seq !== view.seq || ctx.controller.signal.aborted) return;
@@ -1078,8 +1078,8 @@
       let added = 0;
       for (const m of items) {
         // A fresh page shows the server's mark unless a save overlapped it, on every control of the title; its stamp
-        // outranks a Search or Groups answer asked before it that arrives later.
-        if (freshFor(m.key, ticks)) {
+        // outranks a Search or Groups answer asked at the same tick, not a later page's.
+        if (freshFor(m.key, ticks + 0.5)) {
           marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
           markAt.set(m.key, Math.max(markAt.get(m.key) || 0, ticks + 0.5));
           paintKey(ctx, m.key);
@@ -1090,8 +1090,8 @@
         list.append(build(m.key));
         added += 1;
       }
-      // The retry after an overlapped answer starts at page 1, where a saved title moves to; minPage skips on from there.
-      view.top = overlapped;
+      // After an overlapped answer the list walks every page from 1 again: a save may have moved titles onto any of them.
+      view.walk = overlapped ? 1 : view.walk && requested + 1;
       // One lookup with the keys of the whole page, repeated rows included.
       const keys = items.map((m) => m.key);
       view.pages.push(keys);
@@ -1177,7 +1177,7 @@
       view.minPage = 1;
       view.loading = false;
       view.loaded = view.counted = false;
-      view.top = false;
+      view.walk = 0;
       view.pages = [];
       rows.clear();
       list.replaceChildren();
