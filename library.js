@@ -33,6 +33,8 @@
     // query: the search address's "q=…&type=…" (#421), groupQuery the Groups address's query (#422) and groupKey its
     // group (#442, null for the list), applied once the list is loaded; show() fills them from the address.
     view = { ctx, nav, panels, base, tab: null, byKeyboard: false, query: '', search: null, groupQuery: '', groupKey: null, groupAddress: null };
+    // One poster loader per mounted Library (#427), only with TMDB on.
+    view.posters = ctx.tmdbEnabled === true ? posterLoader(ctx) : null;
     // A link activated by keyboard clicks with detail 0; show() then moves the focus into the tab.
     nav.addEventListener('click', (e) => { view.byKeyboard = e.detail === 0; });
     // A viewer (#383) gets the list's cover as the head and the tabs under it; no ⋯ menu, nothing would be in it.
@@ -581,6 +583,7 @@
   // Every mounted control of the key (Search, Groups, Marks, the card) shows the mark in marks.
   function paintKey(ctx, key) {
     for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
+    for (const el of ctx.root.querySelectorAll('.lib-tile')) if (el.dataset.key === key) paintTile(el);
   }
 
   // Shown at once on every row of the title; a failed request puts the mark back and says so. next is the new mark or
@@ -1043,6 +1046,102 @@
   // mount() runs only after this file has run to its end, so Home and My marks below may follow the export.
   window.StrimLibrary = { mount, show };
 
+  // Poster loader (#427): asks ctx.posters (…/library/posters) only for tiles within 300px of the viewport, collected for 150ms
+  // in batches of at most 24, one batch in flight at a time. Answers stay for the page session by mark key; a pending
+  // one is asked again after 4s, at most 3 times. A failed batch leaves its tiles as fallback until they are created
+  // again, a 404 switches the loader off for the page session; no toast. It stops with ctx.controller.
+  // The answers and the 404 flag live here, like marks, so a remount keeps them; queue, timer and observer are per mount.
+  const posterAnswers = new Map();
+  let postersOff = false;
+  function posterLoader(ctx) {
+    const wanted = new WeakMap();
+    let queue = [], timer = 0, busy = false;
+    const signal = ctx.controller.signal;
+    const stopped = () => postersOff || signal.aborted;
+    const ask = (b) => {
+      if (stopped()) return;
+      const p = posterAnswers.get(b.key);
+      if (p) return void (p.status === 'ok' && showPoster(ctx, b.tile, p.posterUrl));
+      queue.push(b);
+      timer ||= setTimeout(flush, 150);
+    };
+    const flush = async () => {
+      timer = 0;
+      if (busy || stopped() || !queue.length) return;
+      const batch = queue.splice(0, 24);
+      busy = true;
+      let answer = null;
+      try {
+        answer = await ctx.posters({ cacheKey: ctx.list?.cacheKey ?? null, items: batch.map((b) => b.item) }, signal);
+      } catch (err) {
+        if (err?.status === 404) postersOff = true;
+      }
+      busy = false;
+      if (stopped()) return;
+      (answer?.posters || []).forEach((p, i) => {
+        const b = batch[i];
+        if (p.status !== 'pending') {
+          posterAnswers.set(b.key, p);
+          if (p.status === 'ok') showPoster(ctx, b.tile, p.posterUrl);
+        } else if (b.tries < 3) setTimeout(() => ask({ ...b, tries: b.tries + 1 }), 4000);
+      });
+      if (queue.length && !timer) timer = setTimeout(flush, 150);
+    };
+    const io = new IntersectionObserver((seen) => {
+      for (const e of seen.filter((x) => x.isIntersecting)) {
+        io.unobserve(e.target);
+        ask(wanted.get(e.target));
+      }
+    }, { rootMargin: '300px' });
+    signal.addEventListener('abort', () => { io.disconnect(); clearTimeout(timer); queue = []; });
+    return {
+      request: (tile, item) => {
+        if (stopped() || !tile.dataset.key) return;
+        wanted.set(tile, { tile, item, key: tile.dataset.key, tries: 0 });
+        io.observe(tile);
+      },
+    };
+  }
+
+  // The poster fades in over the fallback; an image that fails to load leaves the fallback again.
+  function showPoster(ctx, tile, url) {
+    const art = tile.querySelector('.lib-art');
+    if (!url || art.querySelector('img')) return;
+    const img = ctx.h('img', { referrerpolicy: 'no-referrer', loading: 'lazy', decoding: 'async', alt: '', width: '342', height: '513', src: url });
+    img.addEventListener('load', () => img.classList.add('is-loaded'));
+    img.addEventListener('error', () => img.remove());
+    art.querySelector('.lib-dot').after(img);
+  }
+
+  // A poster tile (#427): a 2:3 art box that starts as the fallback (the type's soft colour and marker), the title and a
+  // meta line. A title that opens its card is a button; any other a div. The badges follow the shared marks.
+  function posterTile(ctx, { key, entry, title, year, group, type, meta, bar }) {
+    const { h, icon } = ctx;
+    const art = h('span', { class: 'lib-art', dataset: { type } },
+      h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),
+      bar ? h('span', { class: 'lib-art-bar', text: bar }) : null,
+      h('span', { class: 'lib-art-seen', 'aria-hidden': 'true', hidden: true }, icon('check')),
+      h('span', { class: 'lib-art-watch', 'aria-hidden': 'true', hidden: true }, icon('bookmark')));
+    const text = [h('span', { class: 'lib-title', text: title }), h('span', { class: 'lib-meta', text: meta })];
+    const label = [title, year, group].filter(Boolean).join(', ');
+    const film = entry && opens(ctx, entry) ? { name: entry.name, group: group || '', cacheKey: ctx.list?.cacheKey, markKey: entry.markKey,
+      off: entry.enabled === false, collapsed: true, type: opensSeriesCard(ctx, entry) ? 'Series' : 'Movies' } : null;
+    const tile = film
+      ? h('button', { class: 'lib-tile', type: 'button', 'aria-haspopup': 'dialog', dataset: { key, label }, onclick: () => openFilm(ctx, film, tile) }, art, text)
+      : h('div', { class: 'lib-tile', dataset: { key: key || '' } }, art, text);
+    paintTile(tile);
+    view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });
+    return tile;
+  }
+
+  function paintTile(tile) {
+    const m = marks.get(tile.dataset.key) || markOf({});
+    tile.classList.toggle('is-seen', m.seen);
+    tile.querySelector('.lib-art-seen').hidden = !m.seen;
+    tile.querySelector('.lib-art-watch').hidden = !m.watchlist;
+    if (tile.dataset.label) tile.setAttribute('aria-label', m.seen ? `${tile.dataset.label}, seen` : tile.dataset.label);
+  }
+
   // Home (#425): the cover with a search field, then Your watchlist, Series you follow, New in your groups and Browse.
   // Each section loads and fails on its own; the marks sections show also when the list failed. The device's group
   // counts (#422) are only read here: opening a group stores them, Home never does.
@@ -1052,11 +1151,30 @@
     const part = (title, href, label) => {
       const n = h('span', { class: 'n' });
       const body = h('div');
-      const el = h('section', { class: 'lib-sec', hidden: true },
-        h('div', { class: 'lib-sec-head' }, h('h2', { text: title }), n, href ? h('a', { href, text: label }) : null), body);
-      return { el, n, body };
+      const head = h('div', { class: 'lib-sec-head' }, h('h2', { text: title }), n, href ? h('a', { href, text: label }) : null);
+      const el = h('section', { class: 'lib-sec', hidden: true }, head, body);
+      return { el, n, body, head };
     };
-    const busy = (p) => { p.el.hidden = false; p.n.textContent = ''; p.body.replaceChildren(h('p', { class: 'lib-empty', role: 'status', text: 'Loading…' })); };
+    // With TMDB on (#427) Home shows rails of poster tiles; otherwise the rows of #425.
+    const rails = ctx.tmdbEnabled === true;
+    const unnav = (p) => p.head.querySelector('.film-rail-nav')?.remove();
+    // A rail scrolls sideways and snaps to tiles; from 1100px the head carries the similar rail's Previous and Next.
+    const rail = (p, label, tiles) => {
+      const el = h('div', { class: 'lib-rail', role: 'group', 'aria-label': label, tabindex: '0' }, tiles);
+      const step = (dir) => el.scrollBy({ left: dir * el.clientWidth });
+      unnav(p);
+      p.head.append(h('span', { class: 'film-rail-nav' },
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Previous', onclick: () => step(-1) }, icon('back')),
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Next', onclick: () => step(1) }, icon('chevron'))));
+      return el;
+    };
+    // A mark's tile: in this list it opens the card; otherwise it reads "Not in this list".
+    const markTile = (m, t, meta, bar) => {
+      const type = m.kind === 'series' ? 'Series' : 'Movies';
+      const entry = t && { name: t.name, title: m.title, year: m.year, contentType: type, markKey: m.key, enabled: t.enabled };
+      return posterTile(ctx, { key: m.key, entry, title: m.title, year: m.year, group: t?.group, type, meta: t ? meta(t) : 'Not in this list', bar: t ? bar?.(t) : null });
+    };
+    const busy = (p) => { unnav(p); p.el.hidden = false; p.n.textContent = ''; p.body.replaceChildren(h('p', { class: 'lib-empty', role: 'status', text: 'Loading…' })); };
     const failed = (p, err, again) => {
       p.el.hidden = false;
       p.body.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
@@ -1145,7 +1263,9 @@
         const kept = s.items.filter(s.fits);
         s.p.el.hidden = false;
         s.p.n.textContent = fmt(Math.max(0, s.total - (s.items.length - kept.length)));
-        s.p.body.replaceChildren(kept.length ? rows(s, kept)
+        unnav(s.p);
+        s.p.body.replaceChildren(kept.length && rails ? rail(s.p, 'Your watchlist', kept.slice(0, 12).map((m) => markTile(m, s.titles?.[m.key] || null, () => (m.year ? String(m.year) : ''))))
+          : kept.length ? rows(s, kept)
           : h('p', { class: 'lib-empty', text: 'Nothing on your watchlist yet. Add a film or series with the bookmark in its card.' }));
       });
     // Series you follow: the series with a thumbs up, newest change first, only those in this list; none: left out.
@@ -1154,8 +1274,44 @@
         const kept = s.items.filter((m) => m.kind === 'series' && s.fits(m) && s.titles?.[m.key]);
         s.p.el.hidden = !kept.length;
         s.p.n.textContent = `${fmt(kept.length)} liked series`;
-        s.p.body.replaceChildren(rows(s, kept));
+        s.p.body.replaceChildren(rails ? rail(s.p, 'Series you follow', kept.slice(0, 12).map((m) => markTile(m, s.titles[m.key], (t) => t.group,
+          (t) => (t.episodes ? `${plural(t.episodes, 'episode')} in list` : null)))) : rows(s, kept));
       });
+
+    // New in <group> (#427): with TMDB on, the group with the largest "+N new" gets a rail of its first 12 titles in
+    // playlist order; the rows below keep the other groups. Without such a group the section is left out.
+    const newIn = part('', `${base}/groups`, 'Open group');
+    const [newTitle, , newLink] = newIn.head.children;
+    newTitle.className = 'lib-sec-one';
+    const shown = { key: null, seq: 0 };
+    const loadNewIn = async (g) => {
+      const seq = ++shown.seq;
+      unnav(newIn);
+      newIn.body.replaceChildren(h('p', { class: 'lib-empty', role: 'status', text: 'Loading…' }));
+      let found;
+      try {
+        found = await askTitles(ctx, { cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, group: g.key, sort: 'playlist', offset: 0, limit: 12 }, ctx.controller.signal);
+      } catch (err) {
+        if (seq === shown.seq && live() && !accessGone(ctx, err)) failed(newIn, err, () => loadNewIn(g));
+        return;
+      }
+      if (seq !== shown.seq || !live()) return;
+      const titles = found?.titles || [];
+      for (const t of titles) if (t.markKey) applyMark(ctx, t.markKey, t, t.asked);
+      newIn.body.replaceChildren(rail(newIn, newTitle.textContent, titles.map((t) => posterTile(ctx, {
+        key: t.markKey, entry: t, title: t.title || t.name, year: t.year, group: t.group, type: t.contentType,
+        meta: t.contentType === 'Series' ? seasonsLine(ctx, t) : t.year ? String(t.year) : '' }))));
+    };
+    const paintNewIn = (top) => {
+      newIn.el.hidden = !top;
+      if (!top) return void (shown.key = null);
+      const [g, n] = top;
+      newTitle.textContent = newTitle.title = `New in ${g.title || 'Untitled group'}`;
+      newIn.n.textContent = `+${fmt(n)} since your last visit`;
+      newLink.href = `${base}/groups/${encodeURIComponent(g.key)}`;
+      if (shown.key !== g.key) loadNewIn(g);
+      shown.key = g.key;
+    };
 
     // New in your groups: the groups with "+N new", largest first, up to 3; nothing new or nothing stored: left out.
     const fresh = part('New in your groups', `${base}/groups`, 'All groups');
@@ -1166,10 +1322,12 @@
     view.homeFresh = () => {
       const list = ctx.list;
       fresh.el.hidden = true;
-      if (!list || ctx.listState === 'loading') return;
+      if (!list || ctx.listState === 'loading') return void (newIn.el.hidden = true);
       const seen = readCounts(ctx) || {};
-      const grown = browseGroups(list, includeOff).sorted.map((g) => [g, newSince(seen, g)]).filter(([, n]) => n > 0)
-        .sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const ranked = browseGroups(list, includeOff).sorted.map((g) => [g, newSince(seen, g)]).filter(([, n]) => n > 0)
+        .sort((a, b) => b[1] - a[1]);
+      if (rails) paintNewIn(ranked.shift());
+      const grown = ranked.slice(0, 3);
       fresh.el.hidden = !grown.length;
       fresh.body.replaceChildren(h('div', { class: 'lib-list' }, grown.map(([g, n]) => {
         const t = GROUP_TYPES.find((x) => x.type === g.type);
@@ -1218,7 +1376,7 @@
     watch.load();
     follow.load();
     return h('div', { class: 'library-home' }, cover,
-      h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), fresh.el, types.el);
+      h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), newIn.el, fresh.el, types.el);
   }
 
   // My marks (#299): every film and series the user marked, newest change first, including titles that are in no

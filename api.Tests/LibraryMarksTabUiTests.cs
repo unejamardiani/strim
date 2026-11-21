@@ -242,9 +242,10 @@ public class LibraryMarksTabUiTests
   [Fact]
   public void SearchOrGroupsRowDuringASave_LeavesThePendingMarkInPlace()
   {
-    // Search, its next pages and Groups ask through askTitles, which stamps every title with the clock at the request.
+    // Search, its next pages, Groups and Home's New in <group> (#427) ask through askTitles, which stamps every title
+    // with the clock at the request.
     var library = Read("library.js");
-    Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(library, @"await askTitles\(ctx, ").Count);
+    Assert.Equal(4,System.Text.RegularExpressions.Regex.Matches(library, @"await askTitles\(ctx, ").Count);
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(library, @"ctx\.titles\("));
     var ask = Between(Core(), "async function askTitles(ctx, params, signal) {", "\n  }\n");
     Assert.Contains("const asked = ++clock;\n    const found = await ctx.titles(params, signal);\n    for (const t of found?.titles || []) t.asked = asked;", ask);

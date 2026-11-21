@@ -1587,6 +1587,8 @@ function showLibrary(playlist) {
     // The series card (#390) and its match, the same way.
     seriesCard: (params, signal) => api(`/playlists/${playlist.id}/library/series-card?${new URLSearchParams(params)}`, { signal }),
     setSeriesMatch: (body) => api('/marks/series-match', { method: 'PUT', body }),
+    // Poster addresses for a batch of tiles (#427); read-only, only asked with TMDB on.
+    posters: (body, signal) => api(`/playlists/${playlist.id}/library/posters`, { method: 'POST', body, signal }),
     // The viewer's Library (#383) replaces the loaders with its playlist-scoped ones.
     ...playlist.scope,
   });
@@ -1623,6 +1625,7 @@ function showSharedLibrary(id) {
     lookupTitles: (body) => api(`${base}/titles/lookup`, { method: 'POST', body: scoped(body) }),
     filmCard: (params, signal) => api(`${base}/film-card?${new URLSearchParams(scoped(params))}`, { signal }),
     seriesCard: (params, signal) => api(`${base}/series-card?${new URLSearchParams(scoped(params))}`, { signal }),
+    posters: (body, signal) => api(`${base}/posters`, { method: 'POST', body: scoped(body), signal }),
   } });
 }
 

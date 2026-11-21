@@ -282,6 +282,24 @@ Each section shows its own "Loading…" line and its own error with Try again; t
 show also when the list failed. From 1100px the page is at most 1280px wide and the two lists sit
 side by side. Marks set anywhere repaint Home's rows; a title marked seen leaves the watchlist.
 
+Poster tiles (#427), only with TMDB on: `.lib-tile` is a 2:3 art box (`.lib-art`, radius 12px, 112px
+wide, 148px from 768px), the title (13.5px, one line, ellipsis) and a meta line (12px). The art starts
+as the fallback, the type's soft colour with its marker centred; a poster address fades the `<img>`
+in over it (lazy, `referrerpolicy="no-referrer"`, `alt=""`, 342×513), an image error returns to the
+fallback. Badges follow the shared marks: a seen check top right (the image then at 45%), a bookmark
+bottom left when on the watchlist. A series tile can carry a bar "21 episodes in list" on a dark
+gradient (`#fff`, the one fixed colour). A title in the list is a button opening its card (label:
+title, year, group, "seen"); any other a div. One loader per Library asks the posters of tiles within
+300px of the viewport, 24 at most per batch after 150ms, one batch at a time; pending ones again after
+4s, three times at most; failures leave the fallback without a toast, a 404 stops it.
+
+Home's rails (#427), with TMDB on: Your watchlist and Series you follow show up to 12 tiles in a
+`.lib-rail` (meta: year or "Not in this list"; the group with the episodes bar) instead of rows, and
+"New in <group>" (one line, ellipsis) shows the first 12 titles of the group with the largest "+N
+new" in playlist order, "+38 since your last visit" and "Open group"; New in your groups keeps the
+other groups below it. Rails scroll sideways, snap to tiles and, from 1100px, carry the similar
+rail's Previous and Next (`.film-rail-nav`) in the section head. With TMDB off Home keeps its rows.
+
 ```
 ┌──────────────────────────────┐
 │ Head                         │  ‹ · LIBRARY / playlist name · tabs (from 768px) · ⋯
