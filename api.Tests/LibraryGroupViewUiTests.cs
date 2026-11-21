@@ -267,7 +267,7 @@ public class LibraryGroupViewUiTests
     // All three values go to the titles route, playlist order too; only the address leaves the default out.
     Assert.Contains("params.sort = cur.sort;", load);
     Assert.DoesNotContain("if (cur.sort !== 'playlist') params.sort", load);
-    Assert.Contains("sort: '<path d=\"M7 5v14M7 19l-3-3M7 19l3-3M17 19V5M17 5l-3 3M17 5l3 3\"/>',", Read("main.js"));
+    Assert.Contains("sort: '<path d=\"M7.5 5v13.5M4 15.3l3.5 3.5 3.5-3.5M16.5 19V5.5M13 8.7l3.5-3.5L20 8.7\"/>',", Read("main.js"));
   }
 
   [Fact]
