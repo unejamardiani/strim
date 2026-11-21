@@ -12,11 +12,12 @@ public class TouchTargetUiTests
   private static readonly (string Selector, string Inset)[] EditorTargets =
   [
     (".link-box .btn", "-3px 0"),
+    (".share-link .link-box .btn", "-5px 0"),
     (".pills button", "-4px 0"),
     (".bulk .btn", "-6px 0"),
-    (".account", "-2px 0"),
+    (".account", "-3px 0"),
     (".playlist-title a", "-7px 0"),
-    (".site-links a", "-6px -4px"),
+    (".site-links > a", "-7px -4px"),
     (".sharing-line", "-12px -8px"),
     (".adult-switch", "-11px 0 -2px"),
   ];
@@ -90,21 +91,35 @@ public class TouchTargetUiTests
   }
 
   [Fact]
+  public void FooterTargets_SkipTheTmdbLogo_AndKeepWrappedRowsApart()
+  {
+    var block = PhoneBlocks(Read("app.css")).Single(b => b.Contains(AfterRule(".pills button", "-4px 0")));
+    Assert.DoesNotContain(".site-links a::after", block);
+    // Two wrapped rows with 7px of target above and below each link need a row gap of at least 14px.
+    Assert.Contains(".site-links { row-gap: 14px; }", block);
+  }
+
+  [Fact]
   public void Targets_AreNotDrawn()
   {
-    var rules = new List<string>();
+    var targets = EditorTargets.Select(t => t.Selector)
+      .Concat([".btn-sm", ".lib-sec-head a", ".lib-sec-head button"])
+      .Select(s => s + "::after")
+      .ToHashSet();
+    var found = new HashSet<string>();
     foreach (var file in new[] { "library.css", "theme.css", "app.css" })
       foreach (var block in PhoneBlocks(Read(file)))
-        rules.AddRange(Regex.Matches(block, @"[^{}]+::after \{[^}]*\}").Select(m => m.Value.Trim()));
-
-    var targets = EditorTargets.Select(t => t.Selector).Append(".btn-sm").Append(".lib-sec-head a").ToArray();
-    var newRules = rules.Where(r => targets.Any(t => r.StartsWith(t + "::after", StringComparison.Ordinal))).ToList();
-    Assert.Equal(targets.Length, newRules.Count);
-    foreach (var rule in newRules)
-    {
-      Assert.DoesNotContain("background", rule);
-      Assert.DoesNotContain("border", rule);
-      Assert.DoesNotContain("box-shadow", rule);
-    }
+        foreach (Match m in Regex.Matches(block, @"([^{}]+)\{([^}]*)\}", RegexOptions.CultureInvariant))
+        {
+          var hit = m.Groups[1].Value.Split(',').Select(s => s.Trim()).Where(targets.Contains).ToList();
+          if (hit.Count == 0) continue;
+          found.UnionWith(hit);
+          var body = m.Groups[2].Value;
+          Assert.DoesNotContain("background", body);
+          Assert.DoesNotContain("border", body);
+          Assert.DoesNotContain("box-shadow", body);
+          Assert.DoesNotContain("outline", body);
+        }
+    Assert.Equal(targets.OrderBy(t => t, StringComparer.Ordinal), found.OrderBy(t => t, StringComparer.Ordinal));
   }
 }
