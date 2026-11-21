@@ -12,9 +12,17 @@ public enum TmdbStatus { Ok, Disabled, NotFound, Unavailable, RateLimited }
 
 public sealed record TmdbResult<T>(TmdbStatus Status, T? Value) where T : class;
 
-public sealed record TmdbMovieSummary(int Id, string? Title, string? ReleaseDate, string? PosterPath, double VoteAverage);
+public sealed record TmdbMovieSummary(int Id, string? Title, string? ReleaseDate, string? PosterPath, double VoteAverage)
+{
+  public string? OriginalTitle { get; init; }
+  public bool Adult { get; init; }
+}
 
-public sealed record TmdbMoviePage(IReadOnlyList<TmdbMovieSummary>? Results);
+public sealed record TmdbMoviePage(IReadOnlyList<TmdbMovieSummary>? Results)
+{
+  public int Page { get; init; }
+  public int TotalPages { get; init; }
+}
 
 public sealed record TmdbGenre(int Id, string? Name);
 
@@ -22,9 +30,17 @@ public sealed record TmdbMovieDetails(
   int Id, string? Title, string? Overview, string? ReleaseDate, string? PosterPath, double VoteAverage,
   IReadOnlyList<TmdbGenre>? Genres, TmdbMoviePage? Similar);
 
-public sealed record TmdbTvSummary(int Id, string? Name, string? FirstAirDate, string? PosterPath, double VoteAverage);
+public sealed record TmdbTvSummary(int Id, string? Name, string? FirstAirDate, string? PosterPath, double VoteAverage)
+{
+  public string? OriginalName { get; init; }
+  public bool Adult { get; init; }
+}
 
-public sealed record TmdbTvPage(IReadOnlyList<TmdbTvSummary>? Results);
+public sealed record TmdbTvPage(IReadOnlyList<TmdbTvSummary>? Results)
+{
+  public int Page { get; init; }
+  public int TotalPages { get; init; }
+}
 
 public sealed record TmdbTvSeason(int SeasonNumber, int? EpisodeCount);
 
@@ -82,6 +98,24 @@ public sealed class TmdbClient
   /// <summary>The longest pause a Retry-After can ask for, so a bad header cannot switch TMDB off for days.</summary>
   public static readonly TimeSpan MaxBackoff = TimeSpan.FromHours(1);
 
+  /// <summary>How long a trending answer is kept: TMDB updates the list daily.</summary>
+  public static readonly TimeSpan TrendingLifetime = TimeSpan.FromHours(6);
+
+  /// <summary>Films trending this week; <paramref name="page"/> 1 to 3, page 1 without a query string.</summary>
+  public Task<TmdbResult<TmdbMoviePage>> GetTrendingMoviesAsync(int page, CancellationToken cancellationToken) =>
+    SendAsync<TmdbMoviePage>(TrendingPath("trending/movie/week", page), cancellationToken, TrendingLifetime);
+
+  /// <summary>Series trending this week; <paramref name="page"/> 1 to 3, page 1 without a query string.</summary>
+  public Task<TmdbResult<TmdbTvPage>> GetTrendingTvAsync(int page, CancellationToken cancellationToken) =>
+    SendAsync<TmdbTvPage>(TrendingPath("trending/tv/week", page), cancellationToken, TrendingLifetime);
+
+  private static string TrendingPath(string path, int page)
+  {
+    ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+    ArgumentOutOfRangeException.ThrowIfGreaterThan(page, 3);
+    return page == 1 ? path : path + "?page=" + page.ToString(CultureInfo.InvariantCulture);
+  }
+
   public Task<TmdbResult<TmdbMoviePage>> SearchMovieAsync(string title, int? year, CancellationToken cancellationToken)
   {
     ArgumentException.ThrowIfNullOrWhiteSpace(title);
@@ -123,7 +157,8 @@ public sealed class TmdbClient
       cancellationToken);
   }
 
-  private async Task<TmdbResult<T>> SendAsync<T>(string relativeUri, CancellationToken cancellationToken) where T : class
+  private async Task<TmdbResult<T>> SendAsync<T>(string relativeUri, CancellationToken cancellationToken,
+    TimeSpan? lifetime = null) where T : class
   {
     if (_token is null)
     {
@@ -178,7 +213,7 @@ public sealed class TmdbClient
         return new(TmdbStatus.Unavailable, null);
       }
       // Only successful answers are cached; errors, rate limits and timeouts return before this line.
-      _cache?.Set(relativeUri, body);
+      _cache?.Set(relativeUri, body, lifetime);
       return new(TmdbStatus.Ok, value);
     }
     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
