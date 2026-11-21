@@ -9,7 +9,7 @@
     { name: 'home', label: 'Home', icon: 'home' },
     { name: 'search', label: 'Search', icon: 'search' },
     { name: 'groups', label: 'Groups', icon: 'grid' },
-    { name: 'marks', label: 'Marks', icon: 'check' },
+    { name: 'marks', label: 'Marks', icon: 'marks' },
   ];
   // The Library on screen: its ctx, tab links, panels and open tab, for show().
   let view = null;
