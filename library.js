@@ -1121,7 +1121,8 @@
   window.StrimLibrary = { mount, show };
 
   // Poster loader (#427): asks ctx.posters (…/library/posters) only for tiles within 300px of the viewport, collected for 150ms
-  // in batches of at most 24, one batch in flight at a time. Answers stay for the page session by mark key; a pending
+  // in batches of at most 24, one batch in flight at a time. Answers stay for the page session by mark key together with
+  // the name, group and type asked (#429), so an answer for one group never stands in for another; a pending
   // one is asked again after 4s, at most 3 times. A failed batch leaves its tiles as fallback until they are created
   // again, a 404 switches the loader off for the page session; no toast. It stops with ctx.controller.
   // The answers and the 404 flag live here, like marks, so a remount keeps them; queue, timer and observer are per mount.
@@ -1171,7 +1172,7 @@
     return {
       request: (tile, item) => {
         if (stopped() || !tile.dataset.key) return;
-        wanted.set(tile, { tile, item, key: tile.dataset.key, tries: 0 });
+        wanted.set(tile, { tile, item, key: [tile.dataset.key, item.name, item.group, item.type].join('\n'), tries: 0 });
         io.observe(tile);
       },
     };
@@ -1189,8 +1190,9 @@
   }
 
   // A poster tile (#427): a 2:3 art box that starts as the fallback (the type's soft colour and marker), the title and a
-  // meta line. A title that opens its card is a button; any other a div. The badges follow the shared marks.
-  function posterTile(ctx, { key, entry, title, year, group, type, meta, bar }) {
+  // meta line. A title that opens its card is a button; any other a div. The badges follow the shared marks. With
+  // poster false (a Marks tile whose lookup has not answered, #429) no poster is asked yet.
+  function posterTile(ctx, { key, entry, title, year, group, type, meta, bar, poster = true }) {
     const { h, icon } = ctx;
     const art = h('span', { class: 'lib-art', dataset: { type } },
       h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),
@@ -1205,7 +1207,7 @@
       ? h('button', { class: 'lib-tile', type: 'button', 'aria-haspopup': 'dialog', dataset: { key, label }, onclick: () => openFilm(ctx, film, tile) }, art, text)
       : h('div', { class: 'lib-tile', dataset: { key: key || '' } }, art, text);
     paintTile(tile);
-    view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });
+    if (poster) view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });
     return tile;
   }
 
@@ -1662,7 +1664,9 @@
       return li;
     };
     // A tile (#429) in the same <li>: the year, or "Not in this list" (a div, no button). Its poster is asked with the
-    // lookup's name and group, else with "<title> (<year>)", the kind and no group. Marks are changed in the card.
+    // lookup's name and group, else with "<title> (<year>)", the kind and no group, but only once a lookup answered that
+    // the title is not in this list (state.looked): a pending or failed lookup asks nothing, since the title may be in a
+    // group the poster endpoint excludes. Marks are changed in the card.
     const buildTile = (key) => {
       const state = rows.get(key);
       const { mark: m, title: t } = state;
@@ -1672,7 +1676,7 @@
       cell.className = 'lib-cell';
       Object.assign(cell.dataset, { type, key });
       cell.replaceChildren(posterTile(ctx, { key, entry, title: m.title, year: m.year, group: t?.group, type,
-        meta: !t ? 'Not in this list' : m.year ? String(m.year) : '' }));
+        meta: !t ? 'Not in this list' : m.year ? String(m.year) : '', poster: !!state.looked }));
       state.li = cell;
       return cell;
     };
@@ -1693,7 +1697,10 @@
       for (const key of keys) {
         const state = rows.get(key);
         const title = answer?.titles?.[key] || null;
+        // A first answer, or a failure after one, draws the row again (#429): a tile asks for its poster only once looked.
+        if (state && state.looked !== !!answer) state.title = undefined;
         if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;
+        state.looked = !!answer;
         state.title = title;
         build(key);
       }

@@ -44,7 +44,7 @@ public class LibraryMarksGridUiTests
     var tile = Tile();
     Assert.Contains("const entry = t && { name: t.name, title: m.title, year: m.year, contentType: type, markKey: key, enabled: t.enabled };", tile);
     Assert.Contains("cell.replaceChildren(posterTile(ctx, { key, entry, title: m.title, year: m.year, group: t?.group, type,", tile);
-    Assert.Contains("meta: !t ? 'Not in this list' : m.year ? String(m.year) : '' }));", tile);
+    Assert.Contains("meta: !t ? 'Not in this list' : m.year ? String(m.year) : '', poster: !!state.looked }));", tile);
   }
 
   [Fact]
@@ -84,7 +84,31 @@ public class LibraryMarksGridUiTests
     Assert.Contains("const tile = film\n", posterTile);
     Assert.Contains("const film = entry && opens(ctx, entry) ?", posterTile);
     Assert.Contains(": h('div', { class: 'lib-tile', dataset: { key: key || '' } }, art, text);", posterTile);
-    Assert.Contains("view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });", posterTile);
+    Assert.Contains("if (poster) view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });", posterTile);
+    Assert.Contains("function posterTile(ctx, { key, entry, title, year, group, type, meta, bar, poster = true }) {", Library());
+  }
+
+  [Fact]
+  public void Marks_PendingLookup_AsksNoPoster_MatchUsesItsGroup_ConfirmedMissUsesTheFallback()
+  {
+    // Pending (or failed) lookup: state.looked is not set, so the tile asks for nothing; a fallback with an empty group
+    // would bypass the endpoint's exclusion of a group the title turns out to be in.
+    var tile = Tile();
+    Assert.Contains("poster: !!state.looked }));", tile);
+    var lookup = Between(MyMarks(), "const lookup = async (keys, seq) => {", "ctx.lookupMarks = () => {");
+    // A delayed match: the answer sets title and looked together and draws the tile again, now asking with the lookup's
+    // name and group (entry = t && { name: t.name, ... }, group: t?.group).
+    Assert.Contains("if (state && state.looked !== !!answer) state.title = undefined;", lookup);
+    Assert.Contains("state.looked = !!answer;\n        state.title = title;\n        build(key);", lookup);
+    Assert.Contains("const entry = t && { name: t.name,", tile);
+    Assert.Contains("group: t?.group,", tile);
+    // A confirmed miss (an answer without the key): looked with no title, so the tile is a div asking with the fallback.
+    Assert.Contains("const title = answer?.titles?.[key] || null;", lookup);
+    Assert.Contains("meta: !t ? 'Not in this list'", tile);
+    // A cached answer is kept per name, group and type, so a fallback's poster never stands in for the resolved group.
+    var loader = Between(Library(), "function posterLoader(ctx) {", "function showPoster(");
+    Assert.Contains("key: [tile.dataset.key, item.name, item.group, item.type].join('\\n')", loader);
+    Assert.Contains("const p = posterAnswers.get(b.key);", loader);
   }
 
   [Fact]
