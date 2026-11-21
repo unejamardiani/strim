@@ -18,7 +18,7 @@ public class TouchTargetUiTests
     (".bulk .btn", "-6px 0"),
     (".account", "-3px 0"),
     (".playlist-title a", "-7px 0"),
-    (".site-links > a", "-8px -4px -4px"),
+    (".site-links > a", "-8px -4px -5px"),
     (".sharing-line", "-12px -8px"),
     (".adult-switch", "-11px 0 -2px"),
   ];
@@ -97,14 +97,20 @@ public class TouchTargetUiTests
     var css = Read("app.css");
     var block = PhoneBlocks(css).Single(b => b.Contains(AfterRule(".pills button", "-4px 0")));
     Assert.DoesNotContain(".site-links a::after", block);
+    Assert.Contains("<a href=\"https://github.com/unejamardiani/strim\" rel=\"noopener\">Source</a>\n      <p id=\"tmdb-attribution\"",
+      Read("app.html"));
     // The footer must not move: no gap, margin or padding change on the footer row.
     Assert.DoesNotContain(".site-links {", block);
     Assert.DoesNotContain("row-gap", block);
-    // Wrapped rows on narrow phones are 36px apart (32px links, 4px gap): each target adds only the gap above it.
+    // 31.5px links: 8px up and 5px down give 44.5px, short of the TMDB attribution 12px below.
+    // On narrow phones Source wraps alone 4px under the first row: the first row reaches 44.5px upwards, Source
+    // downwards, and both stop in the middle of the gap, so the rows' targets never overlap.
     var narrow = Assert.Single(PhoneBlocks(css, NarrowPhoneQuery));
-    Assert.Equal(AfterRule(".site-links > a", "-4px -4px 0"), narrow.Trim());
+    Assert.Equal(
+      AfterRule(".site-links > a", "-11px -4px -2px") + "\n  " + AfterRule(".site-links > a:last-of-type", "-2px -4px -11px"),
+      narrow.Trim());
     Assert.True(css.IndexOf(NarrowPhoneQuery, StringComparison.Ordinal) >
-      css.IndexOf(AfterRule(".site-links > a", "-8px -4px -4px"), StringComparison.Ordinal),
+      css.IndexOf(AfterRule(".site-links > a", "-8px -4px -5px"), StringComparison.Ordinal),
       "The narrow-phone footer rule must come after the phone rule to override it.");
   }
 
