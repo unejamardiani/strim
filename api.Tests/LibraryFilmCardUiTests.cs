@@ -41,31 +41,110 @@ public class LibraryFilmCardUiTests
   }
 
   [Fact]
-  public void PaneWidth_IsDeclaredWhereThePageCanReadIt()
+  public void Card_IsAlwaysModal()
   {
-    // #413: on .film-card the property never reached .page (custom properties do not inherit upwards), so the
-    // reserved padding was 0px and the pane covered the rows' marks.
-    var css = Read("library.css");
-    Assert.Contains("body { --film-pane-w: 420px; }", css);
-    Assert.Contains("body:has(.film-card.is-viewer) { --film-pane-w: 448px; }", css);
-    Assert.Contains("width: var(--film-pane-w);", css);
-    var rules = System.Text.RegularExpressions.Regex.Matches(css, @"(?<sel>[^{}]*\.film-card[^{}]*)\{(?<body>[^{}]*)\}");
-    Assert.NotEmpty(rules);
-    foreach (System.Text.RegularExpressions.Match rule in rules)
-    {
-      if (rule.Groups["sel"].Value.TrimStart().StartsWith("body", StringComparison.Ordinal)) continue;
-      Assert.DoesNotContain("--film-pane-w:", rule.Groups["body"].Value);
-    }
+    // #430: the side pane from 1100px is gone; the card opens with showModal() at every width.
+    var library = Read("library.js");
+    var card = Card();
+    Assert.DoesNotContain("card.el.show()", library);
+    Assert.DoesNotContain(".show();", card);
+    Assert.DoesNotContain("matchMedia('(min-width: 1100px)')", library);
+    Assert.Contains("card.el.showModal();", card);
+    // No reopen on a breakpoint change and no Escape handler for a non-modal card.
+    Assert.DoesNotContain("const reopen = ", card);
+    Assert.DoesNotContain(".addEventListener('change', () => { if (el.open)", card);
+    Assert.DoesNotContain("!el.matches(':modal')", card);
   }
 
   [Fact]
-  public void OpenPane_KeepsTheListStretchedBelow1440()
+  public void Card_Wide_IsCentredAt560()
   {
     var css = Read("library.css");
-    var start = css.IndexOf("@media (min-width: 1100px) and (max-width: 1439px) {", StringComparison.Ordinal);
-    Assert.True(start >= 0);
-    var block = css[start..css.IndexOf("\n}", start, StringComparison.Ordinal)];
-    Assert.Contains(".page:has(> .film-card[open]) .library-browse { display: flex; align-items: stretch; }", block);
+    Assert.Contains("@media (min-width: 1100px) {\n  .film-card { --film-poster-w: 208px; width: 560px; max-width: none; height: auto; max-height: min(88dvh, 860px); margin: auto; }\n  .film-card.is-viewer { width: 588px; }\n}", css);
+    // The pane's fixed placement is gone; the viewer keeps its larger poster.
+    Assert.DoesNotContain("right: max(18px, calc((100vw - 1440px) / 2 + 18px))", css);
+    Assert.Contains(".film-card.is-viewer { --film-poster-w: 244px; }", css);
+    // Review 4 of #430: the height cap holds for every centred dialog, from 600px (a 1000 × 700 card grew to 630px).
+    Assert.Contains("@media (min-width: 600px) { .film-card { max-height: min(88dvh, 860px); } }", css);
+    Assert.Contains("from 1100px a centred 560px dialog", Read("DESIGN.md"));
+    Assert.Contains("from 600px it is at most `min(88dvh, 860px)` high", Read("DESIGN.md"));
+    Assert.DoesNotContain("side pane", Read("DESIGN.md"));
+  }
+
+  [Fact]
+  public void Page_ReservesNoRoomForThePane()
+  {
+    var css = Read("library.css");
+    Assert.DoesNotContain("--film-pane-w", css);
+    var rules = System.Text.RegularExpressions.Regex.Matches(css, @"(?<sel>[^{}]*)\{(?<body>[^{}]*)\}");
+    Assert.NotEmpty(rules);
+    foreach (System.Text.RegularExpressions.Match rule in rules)
+    {
+      if (!rule.Groups["sel"].Value.Contains(".film-card[open]", StringComparison.Ordinal)) continue;
+      Assert.DoesNotContain("padding-right", rule.Groups["body"].Value);
+    }
+    Assert.DoesNotContain("@media (min-width: 1100px) and (max-width: 1439px)", css);
+  }
+
+  [Fact]
+  public void Page_DoesNotScrollBehindTheCard()
+  {
+    // Review of #430: wheel and touch over the backdrop scrolled the Library; the page now keeps its position and width.
+    var css = Read("library.css");
+    Assert.Contains("html:has(.film-card[open]) { overflow: hidden; }", css);
+    // Review of #430: a short page (no scrollbar) gets no gutter, a scrolling one keeps the scrollbar's room.
+    Assert.DoesNotContain("html:has(.film-card[open]) { overflow: hidden; scrollbar-gutter", css);
+    Assert.Contains("html.has-scrollbar:has(.film-card[open]) { scrollbar-gutter: stable; }", css);
+    var card = Card();
+    var measured = card.IndexOf("page.classList.toggle('has-scrollbar', window.innerWidth > page.clientWidth);", StringComparison.Ordinal);
+    Assert.True(measured >= 0);
+    Assert.True(measured < card.IndexOf("card.el.showModal();", StringComparison.Ordinal), "measured before the page locks");
+    // Closing restores the focus without scrolling the page.
+    Assert.Contains("?.focus({ preventScroll: true });", card);
+  }
+
+  [Fact]
+  public void Closing_RefocusesTheTileByKey_InItsOwnRail()
+  {
+    // Review of #430: a thumbs-up from a Home watchlist card redraws the rail; the focus goes to the new tile with the
+    // same key in the same rail, else to that rail, never to Home's search field (which opens the Search tab).
+    var card = Card();
+    Assert.Contains("card.tile = button.classList.contains('lib-tile') ? { key: button.dataset.key, rail: railOf(button) } : null;", card);
+    Assert.Contains("const again = card.tile ? sameTile(ctx, card.tile)", card);
+    // Review 3 of #430: the same title's tile in a hidden tab (Groups visited earlier) never takes the focus, so the
+    // last watchlist title marked seen hands it to Home's All link.
+    Assert.Contains("const shown = (el) => !el.closest('[hidden]');", card);
+    Assert.Contains("const tiles = [...ctx.root.querySelectorAll('button.lib-tile')].filter((t) => t.dataset.key === key && shown(t));", card);
+    Assert.Contains("return tiles.find((t) => railOf(t) === rail) || tiles[0]", card);
+    Assert.Contains("|| [...ctx.root.querySelectorAll('.lib-rail')].find((r) => r.getAttribute('aria-label') === rail && shown(r));", card);
+    Assert.Contains("for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;", Read("library.js"));
+    // Review of #430: the only watchlist title marked seen leaves Home's rail for the empty note; the focus goes to the
+    // section's All link, which survives, before Home's search field.
+    Assert.Contains("card.sec = button.closest('.lib-sec');", card);
+    Assert.Contains("const sec = card.sec?.isConnected && shown(card.sec) ? card.sec.querySelector('.lib-sec-head a') : null;", card);
+    // Review 4 of #430: a title taken off Marks → Watchlist keeps its row or poster connected in a hidden list item; the
+    // opener must be shown, and rows found again must be shown too.
+    Assert.Contains("const opener = button?.isConnected && shown(button) ? button : null;", card);
+    Assert.Contains("b.dataset.name === film.name && b.dataset.group === film.group && shown(b));", card);
+    Assert.Contains("r.li.hidden = !fits;", Read("library.js"));
+    // Review 4 of #430: with no opener, tile or section left (the only followed series un-liked on Home, the last
+    // watchlist title in Marks), the focus goes to the open tab's selected filter, else its tab link; never to the
+    // search field, which opens Search and scrolls to the top.
+    Assert.Contains("(opener || again || sec || tabControl())?.focus({ preventScroll: true });", card);
+    Assert.Contains("const chip = [...(view.panels[view.tab]?.querySelectorAll('.lib-chip[aria-pressed=\"true\"]') ?? [])].find(shown);", card);
+    Assert.Contains("return chip || view.nav.querySelector('a[aria-current=\"page\"]');", card);
+    Assert.Contains("if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');", Read("library.js"));
+    Assert.DoesNotContain("ctx.root.querySelector('.input-search'))?.focus", card);
+    Assert.Contains("h('div', { class: 'lib-sec-head' }, h('h2', { text: title }), n, href ? h('a', { href, text: label }) : null);", Read("library.js"));
+  }
+
+  [Fact]
+  public void Design_DescribesTheModalCard_InTheSeriesAndMarksSections()
+  {
+    var design = Read("DESIGN.md");
+    Assert.DoesNotContain("another episode row swaps it in place", design);
+    Assert.DoesNotContain("Below 1100px a change made in the", design);
+    Assert.Contains("At every width a change made in the\nmodal card offers its toast when the card closes.", design);
   }
 
   [Fact]
@@ -78,14 +157,13 @@ public class LibraryFilmCardUiTests
   }
 
   [Fact]
-  public void TheCard_IsASheetOrASidePane_ClosedByBackWithoutMovingThePage()
+  public void TheCard_IsClosedByBackdropOrBack_WithoutMovingThePage()
   {
     var card = Card();
-    Assert.Contains("const showCard = () => (wide.matches ? card.el.show() : card.el.showModal());", card);
     Assert.Contains("history.pushState({ filmCard: true }, '');", card);
     Assert.Contains("window.addEventListener('popstate', () => { if (el.open) el.close(); }, { signal });", card);
+    Assert.Contains("el.addEventListener('click', (e) => { if (e.target === el) el.close(); });", card);
     Assert.Contains("?.focus({ preventScroll: true });", card);
-    Assert.Contains("body:has(.film-card[open]) .site-links { padding-right: calc(18px + var(--film-pane-w) + 24px); }", Read("library.css"));
   }
 
   [Fact]

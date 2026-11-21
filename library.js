@@ -1749,7 +1749,7 @@
       const offer = () => ctx.toast(text, { action: { label: 'Undo', onClick: () => {
         if (r.li.hidden) setMark(ctx, name, m.kind, key, markOf(r.fit || m));
       } } });
-      // Below 1100px the card is a modal and the page behind it inert: the toast waits until the card closes.
+      // The card is a modal and the page behind it inert: the toast waits until the card closes.
       if (card.el?.matches(':modal')) card.el.addEventListener('close', () => { if (r.li.hidden) offer(); }, { once: true });
       else offer();
     };
@@ -1857,13 +1857,12 @@
   const groupLabel = (ctx, group) => ctx.h('span', { class: 'group-label' }, ctx.icon('folder'), ctx.h('span', { text: group }));
 
   // Film card (#367): a film row's name opens poster and details from TMDB in a <dialog>, a bottom sheet on a phone
-  // and a side pane from 1100px. Only when /api/config reports TMDB on; it reads only and never changes the playlist.
-  const card = { el: null, film: null, button: null, seq: 0, pending: null, answer: null, stack: [] };
+  // and a centred dialog from 600px (#430). Only when /api/config reports TMDB on; it reads only and never changes the playlist.
+  const card = { el: null, film: null, button: null, tile: null, sec: null, seq: 0, pending: null, answer: null, stack: [] };
   const keyAlias = new Map();
   const answers = new Map();
   // The mark key that first used an answer's marks (#368).
   const answerMarkKey = new WeakMap();
-  const wide = window.matchMedia('(min-width: 1100px)');
   const opensCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Movies' && !!e.markKey;
   // A series row opens the same card with the series answer (#390); words and calls follow the entry's type.
   const opensSeriesCard = (ctx, e) => ctx.tmdbEnabled === true && e.contentType === 'Series' && !!e.markKey;
@@ -1911,19 +1910,21 @@
     }
   }
 
-  const showCard = () => (wide.matches ? card.el.show() : card.el.showModal());
-
-  // The pane does not block the page: another film row swaps the content in place. Back closes the card.
+  // The card is modal at every width (#430): no row can be tapped while it is open. Back closes it.
   function openFilm(ctx, film, button) {
     if (!card.el?.isConnected) card.el = filmDialog(ctx);
     card.film = film;
     card.button = button;
+    // A tile is found again by its key in its own rail (#430): a mark change can redraw the rail while the card is open.
+    card.tile = button.classList.contains('lib-tile') ? { key: button.dataset.key, rail: railOf(button) } : null;
+    card.sec = button.closest('.lib-sec');
     card.stack = [];
     markOpen(ctx, button);
-    if (!card.el.open) {
-      showCard();
-      history.pushState({ filmCard: true }, '');
-    }
+    // The page keeps its width behind the card: the gutter is reserved only where a scrollbar took room before.
+    const page = document.documentElement;
+    page.classList.toggle('has-scrollbar', window.innerWidth > page.clientWidth);
+    card.el.showModal();
+    history.pushState({ filmCard: true }, '');
     loadFilm(ctx);
   }
 
@@ -1936,14 +1937,7 @@
     const el = h('dialog', { class: isViewer(ctx) ? 'sheet film-card is-viewer' : 'sheet film-card', 'aria-labelledby': 'film-card-title' }, head, h('div', { class: 'film-scroll' }));
     el.addEventListener('click', (e) => { if (e.target === el) el.close(); });
     el.addEventListener('close', () => filmClosed(ctx));
-    // A new mode closes and reopens the card with the same content; the close handler sees it open again.
-    const reopen = () => { el.close(); showCard(); el.querySelector('#film-card-title')?.focus(); };
-    wide.addEventListener('change', () => { if (el.open) reopen(); }, { signal });
     window.addEventListener('popstate', () => { if (el.open) el.close(); }, { signal });
-    document.addEventListener('keydown', (e) => {
-      const here = el.contains(document.activeElement) || document.activeElement === card.button;
-      if (e.key === 'Escape' && el.open && !el.matches(':modal') && here) el.close();
-    }, { signal });
     signal.addEventListener('abort', () => { card.pending?.abort(); el.close(); }, { once: true });
     ctx.root.append(el);
     return el;
@@ -1958,8 +1952,31 @@
     markOpen(ctx, null);
     const { button } = card;
     const film = card.stack[0]?.film || card.film;
-    const again = [...ctx.root.querySelectorAll('.library-film-open')].find((b) => b.dataset.name === film.name && b.dataset.group === film.group);
-    (button?.isConnected ? button : again || ctx.root.querySelector('.input-search'))?.focus({ preventScroll: true });
+    const again = card.tile ? sameTile(ctx, card.tile)
+      : [...ctx.root.querySelectorAll('.library-film-open')].find((b) => b.dataset.name === film.name && b.dataset.group === film.group && shown(b));
+    // A Home section whose last title left (its empty note replaced the rail) keeps its head and the All link.
+    const sec = card.sec?.isConnected && shown(card.sec) ? card.sec.querySelector('.lib-sec-head a') : null;
+    // An opener that left or hides (a title taken off the Marks watchlist, a Home section that emptied) hands the focus
+    // to a control of the open tab: its selected filter, else the tab's own link. Never Home's search field (it opens Search).
+    const opener = button?.isConnected && shown(button) ? button : null;
+    (opener || again || sec || tabControl())?.focus({ preventScroll: true });
+  }
+
+  function tabControl() {
+    if (!view) return null;
+    const chip = [...(view.panels[view.tab]?.querySelectorAll('.lib-chip[aria-pressed="true"]') ?? [])].find(shown);
+    return chip || view.nav.querySelector('a[aria-current="page"]');
+  }
+
+  // The tile that replaced the opening one: first in the rail of the same name, then anywhere in the Library; a tile
+  // that left (off the watchlist) hands the focus to its rail, never to Home's search field, which opens Search.
+  // Tiles of another tab stay in the page, hidden: they never take the focus.
+  const railOf = (tile) => tile.closest('.lib-rail, .lib-grid')?.getAttribute('aria-label') ?? null;
+  const shown = (el) => !el.closest('[hidden]');
+  function sameTile(ctx, { key, rail }) {
+    const tiles = [...ctx.root.querySelectorAll('button.lib-tile')].filter((t) => t.dataset.key === key && shown(t));
+    return tiles.find((t) => railOf(t) === rail) || tiles[0]
+      || [...ctx.root.querySelectorAll('.lib-rail')].find((r) => r.getAttribute('aria-label') === rail && shown(r));
   }
 
   // One request per opened card; a newer one aborts it. Matched answers are kept for the page session.
