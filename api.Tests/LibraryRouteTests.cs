@@ -83,11 +83,12 @@ public class LibraryRouteTests
     Assert.DoesNotMatch(@"\bswitch\b", library);
     foreach (var forbidden in new[] { "checkbox", "bulk", "Bulk", "Save", "dock", "action-bar", "setActionBar" })
       Assert.DoesNotContain(forbidden, library);
-    // The only stored values are this device's group counts for the "+N new" badge (#422) and its group view (#428),
-    // never the playlist.
+    // The only stored values are this device's group counts for the "+N new" badge (#422), its group view (#428) and
+    // its Marks view (#429), never the playlist.
     Assert.Equal(2, Regex.Matches(library, Regex.Escape("localStorage.") + @"\w+Item\(countsKey\(ctx\)").Count);
     Assert.Equal(2, Regex.Matches(library, Regex.Escape("localStorage.") + @"\w+Item\(GROUP_VIEW_KEY").Count);
-    Assert.Equal(4, Regex.Matches(library, "localStorage").Count);
+    Assert.Equal(2, Regex.Matches(library, Regex.Escape("localStorage.") + @"\w+Item\(MARKS_VIEW_KEY").Count);
+    Assert.Equal(6, Regex.Matches(library, "localStorage").Count);
 
     // main.js hides the dock and the picker before the Library renders.
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");

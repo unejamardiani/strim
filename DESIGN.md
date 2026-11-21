@@ -210,7 +210,11 @@ Rows (#419): a search result and a group entry share one row, 56px minimum: the 
 circle, Movies diamond, Series square), the name without a trailing "(YYYY)" and the year in
 `--ink-3` (the full name stays the accessible name), a meta line in `--ink-3` with the group in
 `--ink-2` and the type word (search results only, then the language labels), "Off", the marks and,
-for a row that opens a card, the chevron.
+for a row that opens a card, the chevron. With TMDB on (#429) a search result of a film or series
+starts with a 40×60 poster thumbnail (`.lib-thumb`, 8px radius, the poster loader of the tiles) in
+place of the marker, over the type's soft colour with the marker centred, at 45% opacity when seen;
+such a row (`.has-thumb`) is 76px minimum with 10px left padding. Channels and group entries keep
+the marker.
 
 My marks (#299): the Marks tab lists every mark of the user, newest change first, including titles
 no longer in any playlist; a record kept only for a confirmed TMDB match is no mark and is neither
@@ -245,6 +249,16 @@ a page a save overlapped is shown, and once no save is on its way the list asks 
 from page 1 ("Loading more…" meanwhile). With no marks it says so
 and how to mark a title: the Watchlist "Nothing on your watchlist yet. Add a film or series with the
 bookmark in its card.", All how to mark a title, the other views "No marks of this kind.".
+
+Marks grid (#429): with TMDB on the Marks tab shows the same views and pages as poster tiles in the
+`.lib-grid` of #428 (3, 5 and 7 columns), 6px below the sticky head and chips; from 1100px the tab
+is at most 1280px wide in grid view. A tile's meta is the year; a title not in this list reads "Not
+in this list" and is no button. Posters are asked with the lookup's name and group, for a title not
+in this list with "<title> (<year>)", its kind and no group. Marks are changed in the card; a tile
+whose mark became empty or left the view goes at once with the same Undo toast. The head's view
+button (`.lib-ib`, `list` icon "Show as list" / `grid` icon "Show as posters") switches to the rows
+and back, kept per device in `localStorage` `strim.library.marksView` (default grid); switching
+keeps the loaded marks and starts at the top. With TMDB off the tab keeps the rows without the button.
 
 My list by default: the Library shows the entries of the groups that are on. One switch in the ⋯
 menu, "Include switched-off groups", adds the groups that are off and marks their groups and entries "Off". It is
