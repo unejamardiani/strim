@@ -352,7 +352,7 @@
     status('Searching…');
     let found;
     try {
-      found = await ctx.titles(params, ctx.controller.signal);
+      found = await askTitles(ctx, params, ctx.controller.signal);
     } catch (err) {
       if (seq !== state.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
       results.head.replaceChildren();
@@ -410,7 +410,7 @@
       state.observer?.disconnect();
       let page;
       try {
-        page = await ctx.titles({ ...params, offset: ul.children.length, limit: 30 }, ctx.controller.signal);
+        page = await askTitles(ctx, { ...params, offset: ul.children.length, limit: 30 }, ctx.controller.signal);
       } catch (err) {
         if (seq !== state.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
         foot.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
@@ -438,9 +438,9 @@
     if (!entry.markKey || !kind) return null;
     const { h, icon } = ctx;
     const key = entry.markKey;
-    // A Marks row (#447), and any row while a save for the title is on its way, leaves the object in marks: setMark
-    // takes a replaced object for a later tap and would skip the rollback of a failed save.
-    if (!entry.keepMark && !saving.has(key)) marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });
+    // A Marks row (#447), and any row whose answer a save of the title overlapped (freshFor), leaves the object in
+    // marks: setMark takes a replaced object for a later tap and would skip the rollback of a failed save.
+    if (!entry.keepMark && (freshFor(key, entry.asked) || !marks.has(key))) marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });
     // Tapping an active control again undoes it.
     const control = (label, name, next) => h('button', {
       class: 'icon-btn library-mark', type: 'button', 'aria-label': label, title: label, 'aria-pressed': 'false',
@@ -518,14 +518,25 @@
   // still on their way per key (#447), so a fresh Marks page does not paint over a pending value.
   // saveTicks moves when a save starts or ends; settleQueue runs once no save is on its way (a Marks page that
   // overlapped one is worked out again then).
+  // markAt holds per key the tick of the last start or end of a save: an answer asked for before it (asked, stamped by
+  // askTitles and loadPage) is stale for that key and leaves its mark alone.
   const saving = new Map();
+  const markAt = new Map();
   let saveTicks = 0;
   const settleQueue = new Set();
   const whenSettled = (fn) => (saving.size ? settleQueue.add(fn) : fn());
+  const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));
+  const askTitles = async (ctx, params, signal) => {
+    const asked = saveTicks;
+    const found = await ctx.titles(params, signal);
+    for (const t of found?.titles || []) t.asked = asked;
+    return found;
+  };
   async function setMark(ctx, name, kind, key, next) {
     const before = marks.get(key);
     saving.set(key, (saving.get(key) || 0) + 1);
     saveTicks += 1;
+    markAt.set(key, saveTicks);
     const repaint = () => paintKey(ctx, key);
     marks.set(key, next);
     repaint();
@@ -552,6 +563,7 @@
       if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);
       else saving.delete(key);
       saveTicks += 1;
+      for (const k of [key, keyAlias.get(key)]) if (k) markAt.set(k, saveTicks);
       if (!saving.size) {
         const waiting = [...settleQueue];
         settleQueue.clear();
@@ -858,7 +870,7 @@
       cur.body.replaceChildren(status('Loading entries…'));
       let first;
       try {
-        first = await ctx.titles(params, ctx.controller.signal);
+        first = await askTitles(ctx, params, ctx.controller.signal);
       } catch (err) {
         if (seq !== state.seq || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
         cur.body.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
@@ -1051,11 +1063,13 @@
       if (seq !== view.seq || !ctx.isCurrent()) return;
       // A save that overlapped the request may have moved titles between pages (a like cleared on page one pulls the
       // 51st Liked up, before or after the server read this page): the page is dropped before any row of it is shown
-      // and asked again from the same position once no save is on its way.
+      // and asked again from the rows shown once no save is on its way. A page skipped as repeated may hold new titles
+      // after such a save, so minPage starts over.
       if (ticks !== saveTicks || saving.size) {
         whenSettled(() => {
           if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
           view.loading = false;
+          view.minPage = 1;
           loadPage();
         });
         return;
@@ -1067,14 +1081,14 @@
       const items = page.items || [];
       let added = 0;
       for (const m of items) {
-        if (view.shown.has(m.key)) continue;
-        view.shown.add(m.key);
-        // A fresh page shows the server's mark, unless a save for the title is still on its way.
-        // Controls of the title already shown in Search or Groups follow it, so their next tap starts from it.
-        if (!saving.has(m.key)) {
+        // A fresh page shows the server's mark, unless a save for the title overlapped it; a repeated row takes it in
+        // place. Controls of the title already shown in Search or Groups follow it, so their next tap starts from it.
+        if (freshFor(m.key, ticks)) {
           marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
           paintKey(ctx, m.key);
         }
+        if (view.shown.has(m.key)) continue;
+        view.shown.add(m.key);
         rows.set(m.key, { li: null, mark: m, title: null });
         list.append(build(m.key));
         added += 1;

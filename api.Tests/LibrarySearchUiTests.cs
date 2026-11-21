@@ -35,7 +35,7 @@ public class LibrarySearchUiTests
 
     var run = Run();
     Assert.DoesNotContain("ctx.search(", Library());
-    Assert.Contains("found = await ctx.titles(params, ctx.controller.signal);", run);
+    Assert.Contains("found = await askTitles(ctx, params, ctx.controller.signal);", run);
     Assert.Contains("const params = { cacheKey: list.cacheKey, includeDisabled: includeOff, q: state.query };", run);
   }
 

@@ -203,7 +203,7 @@ public class LibraryMarksTabUiTests
     // the retry asks again from the position before it, once no save is on its way.
     var ticks = load.IndexOf("const ticks = saveTicks;", StringComparison.Ordinal);
     Assert.True(ticks >= 0 && ticks < load.IndexOf("await ctx.listMarks(", StringComparison.Ordinal));
-    var retry = load.IndexOf("if (ticks !== saveTicks || saving.size) {\n        whenSettled(() => {\n          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n          view.loading = false;\n          loadPage();\n        });\n        return;\n      }\n      view.loading = false;", StringComparison.Ordinal);
+    var retry = load.IndexOf("if (ticks !== saveTicks || saving.size) {\n        whenSettled(() => {\n          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n          view.loading = false;\n          view.minPage = 1;\n          loadPage();\n        });\n        return;\n      }\n      view.loading = false;", StringComparison.Ordinal);
     Assert.True(retry > load.IndexOf("if (seq !== view.seq || !ctx.isCurrent()) return;", StringComparison.Ordinal));
     Assert.True(retry < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
     Assert.True(retry < load.IndexOf("view.shown.add(m.key);", StringComparison.Ordinal));
@@ -215,7 +215,7 @@ public class LibraryMarksTabUiTests
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);\n    saveTicks += 1;", setMark);
     Assert.True(setMark.IndexOf("saveTicks += 1;", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
-    Assert.Contains("else saving.delete(key);\n      saveTicks += 1;\n      if (!saving.size) {\n        const waiting = [...settleQueue];\n        settleQueue.clear();\n        for (const fn of waiting) fn();\n      }", Between(setMark, "} finally {", "\n  }"));
+    Assert.Contains("else saving.delete(key);\n      saveTicks += 1;\n      for (const k of [key, keyAlias.get(key)]) if (k) markAt.set(k, saveTicks);\n      if (!saving.size) {\n        const waiting = [...settleQueue];\n        settleQueue.clear();\n        for (const fn of waiting) fn();\n      }", Between(setMark, "} finally {", "\n  }"));
     Assert.Contains("const whenSettled = (fn) => (saving.size ? settleQueue.add(fn) : fn());", library);
 
     var fits = Between(section, "const MARK_FITS = {", "};");
@@ -238,7 +238,36 @@ public class LibraryMarksTabUiTests
     Assert.Contains("const given = pending || !answer?.marks || owner === key ? now", card);
     Assert.Contains("markEntry = { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given, keepMark: pending };", card);
     Assert.True(card.IndexOf("const pending", StringComparison.Ordinal) < card.IndexOf("markControls(cardCtx, markEntry)", StringComparison.Ordinal));
-    Assert.Contains("if (!entry.keepMark && !saving.has(key)) marks.set(key, {", Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
+    Assert.Contains(KeepRule, Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
+  }
+
+  private const string KeepRule = "if (!entry.keepMark && (freshFor(key, entry.asked) || !marks.has(key))) marks.set(key, {";
+  private const string FreshPage = "if (freshFor(m.key, ticks)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });\n          paintKey(ctx, m.key);\n        }";
+
+  [Fact]
+  public void AnswerOverlappedByASave_LeavesTheSavedMarkAlone()
+  {
+    var library = Read("library.js");
+    // One save tick per key, moved at the start and the end of every save of it (and of its API key).
+    var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
+    Assert.Contains("saveTicks += 1;\n    markAt.set(key, saveTicks);", setMark);
+    Assert.True(setMark.IndexOf("markAt.set(key, saveTicks);", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
+    Assert.Contains("const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", library);
+
+    // Search and Groups: every titles answer carries the tick it was asked at. A Like tapped, then the type chip
+    // reselected before the PUT ended: the answer arrives after the save with the title unliked and does not replace
+    // the mark, so the Like stays pressed and the next Seen tap sends rating 1.
+    Assert.Contains("const asked = saveTicks;\n    const found = await ctx.titles(params, signal);\n    for (const t of found?.titles || []) t.asked = asked;", library);
+    Assert.Single(System.Text.RegularExpressions.Regex.Matches(library, @"ctx\.titles\("));
+    Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(library, @"await askTitles\(ctx, ").Count);
+    Assert.Contains(KeepRule, Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
+
+    // Marks: a repeated key takes the server's mark too, in place, before it is skipped as shown.
+    var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
+    Assert.Contains(FreshPage + "\n        if (view.shown.has(m.key)) continue;", load);
+
+    // A dropped page retries with minPage from 1: a page skipped as repeated may hold a title the save moved up.
+    Assert.Contains("view.loading = false;\n          view.minPage = 1;\n          loadPage();", load);
   }
 
   [Fact]
@@ -249,7 +278,7 @@ public class LibraryMarksTabUiTests
     // row of the title while a Marks-row save is on its way must not replace the pending object, or a failed Seen
     // save would skip the rollback and the toast and leave Seen pressed.
     var controls = Between(library, "function markControls(ctx, entry) {", "function paintMarks(");
-    Assert.Contains("if (!entry.keepMark && !saving.has(key)) marks.set(key, {", controls);
+    Assert.Contains(KeepRule, controls);
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(controls, @"marks\.set\("));
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     var fail = Between(setMark, "} catch (err) {", "} finally {");
@@ -265,7 +294,7 @@ public class LibraryMarksTabUiTests
     var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     // The server's mark taken by a fresh page shows on every mounted control of the key, so the next tap on an
     // existing Search row starts from it (Seen cleared on another device stays cleared).
-    Assert.Contains("if (!saving.has(m.key)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });\n          paintKey(ctx, m.key);\n        }", load);
+    Assert.Contains(FreshPage, load);
     Assert.True(load.IndexOf("paintKey(ctx, m.key);", StringComparison.Ordinal) < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
     Assert.Contains("function paintKey(ctx, key) {\n    for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);\n  }", library);
     // The Seen button of a Search row and its capsule read marks at tap time, which paintKey has just repainted from.
@@ -317,7 +346,7 @@ public class LibraryMarksTabUiTests
 
     // A fresh page takes the server's mark unless a save for the key is still on its way.
     var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
-    Assert.Contains("if (!saving.has(m.key)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });", load);
+    Assert.Contains(FreshPage, load);
     Assert.True(load.IndexOf("marks.set(m.key", StringComparison.Ordinal) < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);", setMark);
@@ -325,7 +354,7 @@ public class LibraryMarksTabUiTests
     Assert.True(setMark.IndexOf("saving.set(key, (saving", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
 
     // A rebuilt row keeps the object in marks, so a failed save still rolls back and says so.
-    Assert.Contains("if (!entry.keepMark && !saving.has(key)) marks.set(key, {", Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
+    Assert.Contains(KeepRule, Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
     Assert.DoesNotContain("marks.set(", build);
     Assert.DoesNotContain("marks.set(", Between(section, "const lookup = async", "const start = () => {"));
     Assert.Contains("if (marks.get(key) !== next) return;", setMark);
