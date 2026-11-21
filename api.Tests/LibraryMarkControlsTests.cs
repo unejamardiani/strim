@@ -50,7 +50,7 @@ public class LibraryMarkControlsTests
     // The icons exist; the tap target is the phone control height.
     var js = Read("main.js");
     Assert.Contains("  up: '<path ", js);
-    Assert.Contains("  down: '<path transform=\"rotate(180 12 12)\" ", js);
+    Assert.Contains("  down: '<g transform=\"rotate(180 12 12)\">", js);
     var css = Read("library.css");
     Assert.Matches(@"\.library-mark\s*\{\s*width:\s*var\(--control-h\);\s*height:\s*var\(--control-h\);", css);
     Assert.Matches(@"\.library-mark\[aria-pressed=""true""\]\s*\{\s*background:\s*var\(--accent-soft\);", css);

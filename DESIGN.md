@@ -71,6 +71,11 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
 - **Sheets**: native `<dialog>`; bottom sheet with grab handle below 600px, centred above.
 - **Toasts**: inverted pills at the top, coloured status dot.
 - **Icons**: 24px grid line icons built by `icon()`, class `.icon`: `currentColor` stroke 2px with round caps and joins, no fill. A holder rule (`.btn svg`, `.lib-seen svg`, …) may set the size, the stroke width or a fill; only state marks are filled (watchlist badge, pressed bookmark, rating star, the dots of ⋯).
+  The icons are one family, Stem and dot, built like the wordmark's "ı": stems are 2px strokes with round ends,
+  and the signal is a filled dot (class `sig`, filled with `currentColor` by `.icon .sig`). Every object glyph
+  carries exactly one dot (⋯ is three), while direction and operator glyphs (chevron, close, plus, check, sort)
+  and the star carry none. The dot's radius is 1.5 to 2.2 on the 24 grid, and a new icon follows the rule and is
+  added to `ICONS`.
 
 ### Voice
 

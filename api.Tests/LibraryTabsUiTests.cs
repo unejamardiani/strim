@@ -64,8 +64,8 @@ public class LibraryTabsUiTests
     Assert.Contains("window.scrollTo(0, 0);", show);
     Assert.Contains("show(ctx.sub, ctx.query);", mount);
     var main = Read("main.js");
-    Assert.Contains("search: '<circle cx=\"11\" cy=\"11\" r=\"6.5\"/>", main);
-    Assert.Contains("grid: '<rect x=\"4\" y=\"4\" width=\"7\" height=\"7\" rx=\"1.5\"/>", main);
+    Assert.Contains("search: '<circle class=\"b\" cx=\"10\" cy=\"10\" r=\"6\"/>", main);
+    Assert.Contains("grid: '<rect class=\"b\" x=\"4\" y=\"4\" width=\"6.6\" height=\"6.6\" rx=\"1.9\"/>", main);
   }
 
   [Fact]
