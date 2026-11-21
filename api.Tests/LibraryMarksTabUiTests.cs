@@ -198,14 +198,18 @@ public class LibraryMarksTabUiTests
     Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", section);
     // A save overlapping the request, in both orders: page one answers with the 50 rows shown (the cleared like not yet
     // saved) and the save then pulls the 51st Liked onto page one; or the sentinel asks for page two first and the
-    // save lands before the server reads it, so page two comes back empty. Neither a page that added nothing nor a
-    // short page that leaves titles missing is taken as it is: once no save is on its way the page is worked out again.
+    // save lands before the server reads it, so page two comes back empty, or with title 52 of 52 while title 51 moved
+    // onto page one. No such page is taken: it is dropped before any of its rows is appended or the count is set, so
+    // the retry asks again from the position before it, once no save is on its way.
     var ticks = load.IndexOf("const ticks = saveTicks;", StringComparison.Ordinal);
     Assert.True(ticks >= 0 && ticks < load.IndexOf("await ctx.listMarks(", StringComparison.Ordinal));
-    var retry = load.IndexOf("if ((ticks !== saveTicks || saving.size) && short && (added === 0 || view.done)) {\n        view.loading = true;\n        whenSettled(() => {\n          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n          view.loading = false;\n          loadPage();\n        });\n        return;\n      }", StringComparison.Ordinal);
-    Assert.True(retry > load.IndexOf("view.done = items.length", StringComparison.Ordinal));
-    Assert.True(retry < load.IndexOf("view.minPage = requested + 1;", StringComparison.Ordinal));
-    Assert.True(retry < load.IndexOf("paint();", StringComparison.Ordinal));
+    var retry = load.IndexOf("if (ticks !== saveTicks || saving.size) {\n        whenSettled(() => {\n          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n          view.loading = false;\n          loadPage();\n        });\n        return;\n      }\n      view.loading = false;", StringComparison.Ordinal);
+    Assert.True(retry > load.IndexOf("if (seq !== view.seq || !ctx.isCurrent()) return;", StringComparison.Ordinal));
+    Assert.True(retry < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
+    Assert.True(retry < load.IndexOf("view.shown.add(m.key);", StringComparison.Ordinal));
+    Assert.True(retry < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
+    Assert.True(retry < load.IndexOf("view.pages.push(keys);", StringComparison.Ordinal));
+    Assert.DoesNotContain("short && (added === 0 || view.done)", load);
     Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;", load);
     var library = Read("library.js");
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
@@ -234,7 +238,40 @@ public class LibraryMarksTabUiTests
     Assert.Contains("const given = pending || !answer?.marks || owner === key ? now", card);
     Assert.Contains("markEntry = { name: entry.name, contentType: entry.type === 'Series' ? 'Series' : 'Movies', markKey: entry.markKey, ...given, keepMark: pending };", card);
     Assert.True(card.IndexOf("const pending", StringComparison.Ordinal) < card.IndexOf("markControls(cardCtx, markEntry)", StringComparison.Ordinal));
-    Assert.Contains("if (!entry.keepMark) marks.set(key, {", Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
+    Assert.Contains("if (!entry.keepMark && !saving.has(key)) marks.set(key, {", Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
+  }
+
+  [Fact]
+  public void SearchOrGroupsRowDuringASave_LeavesThePendingMarkInPlace()
+  {
+    var library = Read("library.js");
+    // Search and Groups stay mounted beside Marks and render their rows without keepMark: a response that renders a
+    // row of the title while a Marks-row save is on its way must not replace the pending object, or a failed Seen
+    // save would skip the rollback and the toast and leave Seen pressed.
+    var controls = Between(library, "function markControls(ctx, entry) {", "function paintMarks(");
+    Assert.Contains("if (!entry.keepMark && !saving.has(key)) marks.set(key, {", controls);
+    Assert.Single(System.Text.RegularExpressions.Regex.Matches(controls, @"marks\.set\("));
+    var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
+    var fail = Between(setMark, "} catch (err) {", "} finally {");
+    Assert.Contains("if (marks.get(key) !== next) return;\n      marks.set(key, before);\n      repaint();\n      ctx.toast(", fail);
+    // The Search and Groups rows go through markControls (directly or through rowMarks), with the entry they render.
+    Assert.DoesNotContain("keepMark", Between(library, "// Browse (#287)", "function myMarks("));
+  }
+
+  [Fact]
+  public void FreshMarksPage_RepaintsTheTitlesControlsInSearchAndGroups()
+  {
+    var library = Read("library.js");
+    var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
+    // The server's mark taken by a fresh page shows on every mounted control of the key, so the next tap on an
+    // existing Search row starts from it (Seen cleared on another device stays cleared).
+    Assert.Contains("if (!saving.has(m.key)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });\n          paintKey(ctx, m.key);\n        }", load);
+    Assert.True(load.IndexOf("paintKey(ctx, m.key);", StringComparison.Ordinal) < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
+    Assert.Contains("function paintKey(ctx, key) {\n    for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);\n  }", library);
+    // The Seen button of a Search row and its capsule read marks at tap time, which paintKey has just repainted from.
+    Assert.Contains("onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen(marks.get(key))),", library);
+    Assert.Contains("onclick: () => setMark(ctx, entry.name, kind, key, next(marks.get(key))),", library);
+    Assert.Contains("const m = marks.get(el.dataset.key);", Between(library, "function paintMarks(el) {", "function rowMarks("));
   }
 
   [Fact]
@@ -280,7 +317,7 @@ public class LibraryMarksTabUiTests
 
     // A fresh page takes the server's mark unless a save for the key is still on its way.
     var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
-    Assert.Contains("if (!saving.has(m.key)) marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });", load);
+    Assert.Contains("if (!saving.has(m.key)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });", load);
     Assert.True(load.IndexOf("marks.set(m.key", StringComparison.Ordinal) < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);", setMark);
@@ -288,7 +325,7 @@ public class LibraryMarksTabUiTests
     Assert.True(setMark.IndexOf("saving.set(key, (saving", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
 
     // A rebuilt row keeps the object in marks, so a failed save still rolls back and says so.
-    Assert.Contains("if (!entry.keepMark) marks.set(key, {", Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
+    Assert.Contains("if (!entry.keepMark && !saving.has(key)) marks.set(key, {", Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
     Assert.DoesNotContain("marks.set(", build);
     Assert.DoesNotContain("marks.set(", Between(section, "const lookup = async", "const start = () => {"));
     Assert.Contains("if (marks.get(key) !== next) return;", setMark);

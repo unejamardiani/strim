@@ -438,8 +438,9 @@
     if (!entry.markKey || !kind) return null;
     const { h, icon } = ctx;
     const key = entry.markKey;
-    // A Marks row (#447) leaves the object in marks: setMark takes a replaced object for a later tap.
-    if (!entry.keepMark) marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });
+    // A Marks row (#447), and any row while a save for the title is on its way, leaves the object in marks: setMark
+    // takes a replaced object for a later tap and would skip the rollback of a failed save.
+    if (!entry.keepMark && !saving.has(key)) marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });
     // Tapping an active control again undoes it.
     const control = (label, name, next) => h('button', {
       class: 'icon-btn library-mark', type: 'button', 'aria-label': label, title: label, 'aria-pressed': 'false',
@@ -525,9 +526,7 @@
     const before = marks.get(key);
     saving.set(key, (saving.get(key) || 0) + 1);
     saveTicks += 1;
-    const repaint = () => {
-      for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
-    };
+    const repaint = () => paintKey(ctx, key);
     marks.set(key, next);
     repaint();
     try {
@@ -559,6 +558,11 @@
         for (const fn of waiting) fn();
       }
     }
+  }
+
+  // Every mounted control of the key (Search, Groups, Marks, the card) shows the mark in marks.
+  function paintKey(ctx, key) {
+    for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
   }
 
   // Browse (#287): the analysed groups by type, then in playlist order. Opening one (#443) pages through its titles
@@ -1045,6 +1049,17 @@
         return;
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
+      // A save that overlapped the request may have moved titles between pages (a like cleared on page one pulls the
+      // 51st Liked up, before or after the server read this page): the page is dropped before any row of it is shown
+      // and asked again from the same position once no save is on its way.
+      if (ticks !== saveTicks || saving.size) {
+        whenSettled(() => {
+          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
+          view.loading = false;
+          loadPage();
+        });
+        return;
+      }
       view.loading = false;
       // The count is the first page's until the view is loaded again (#447), also after a row was edited out of it.
       if (!view.loaded) view.total = page.total;
@@ -1055,7 +1070,11 @@
         if (view.shown.has(m.key)) continue;
         view.shown.add(m.key);
         // A fresh page shows the server's mark, unless a save for the title is still on its way.
-        if (!saving.has(m.key)) marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
+        // Controls of the title already shown in Search or Groups follow it, so their next tap starts from it.
+        if (!saving.has(m.key)) {
+          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
+          paintKey(ctx, m.key);
+        }
         rows.set(m.key, { li: null, mark: m, title: null });
         list.append(build(m.key));
         added += 1;
@@ -1066,18 +1085,6 @@
       lookup(keys, seq);
       const short = view.shown.size - left() < page.total;
       view.done = items.length < MARKS_PAGE || !short;
-      // A save that overlapped the request may have moved a title onto an earlier page (a like cleared on page one
-      // pulls the 51st Liked up, before or after the server read this page): a page that added nothing or looks like
-      // the end while titles are missing is worked out again once no save is on its way.
-      if ((ticks !== saveTicks || saving.size) && short && (added === 0 || view.done)) {
-        view.loading = true;
-        whenSettled(() => {
-          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
-          view.loading = false;
-          loadPage();
-        });
-        return;
-      }
       if (!view.done && added === 0) {
         view.minPage = requested + 1;
         loadPage();
@@ -1164,7 +1171,7 @@
   function syncRows(ctx, key, mark) {
     if (!marks.has(key)) return;
     marks.set(key, mark);
-    for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
+    paintKey(ctx, key);
   }
 
   // The viewer's head (#383): the list's cover as on its "Shared with you" card, filled from library/open.
