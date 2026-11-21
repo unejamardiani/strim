@@ -17,7 +17,8 @@ Light follows the system by default; dark is a warm charcoal, never pure black.
 | `--surface` | `#fffcf7` | `#1e1a16` | Cards, sheets |
 | `--surface-2/3` | `#efe8dc` / `#e7dfd1` | `#29231d` / `#352d26` | Inputs, pill tracks, secondary buttons |
 | `--ink` / `--ink-2` / `--ink-3` | `#1d1a16` / `#50483f` / `#6b6258` | `#f5eee4` / `#b5aa9c` / `#a09588` | Text levels |
-| `--accent` | `#ff5b1f` | `#ff6a2e` | Tangerine signal: primary buttons, switches on, focus, live |
+| `--accent` | `#ff5b1f` | `#ff6a2e` | Tangerine signal: primary buttons, switches on, live |
+| `--focus` | `#c2410c` | `#ff6a2e` | Keyboard focus ring; 3:1 or more on every surface incl. the dock |
 | `--on-accent` | `#1d0e05` | `#1d0e05` | Text on accent (dark ink, never white) |
 | `--dock-bg` | `#1d1a16` | `#2b251f` | Floating dock and toasts (inverted in light mode) |
 

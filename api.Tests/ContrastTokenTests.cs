@@ -86,6 +86,14 @@ public class ContrastTokenTests
   }
 
   [Fact]
+  public void FocusRing_Has3To1OnEverySurface()
+  {
+    foreach (var (name, t) in Themes())
+      foreach (var surface in Surfaces.Append("--dock-bg"))
+        AssertAtLeast(3, name, t, "--focus", surface);
+  }
+
+  [Fact]
   public void InkLevels_StayApart()
   {
     foreach (var (name, t) in Themes())

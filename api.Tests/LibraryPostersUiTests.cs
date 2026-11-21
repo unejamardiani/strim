@@ -158,7 +158,7 @@ public class LibraryPostersUiTests
       ".lib-art-watch { position: absolute; left: 6px; bottom: 6px;",
       ".lib-art-bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 8px 6px; background: linear-gradient(transparent, rgba(0, 0, 0, .7)); color: #fff; font: 700 11.5px var(--font-ui); }",
       ".lib-art-bar ~ .lib-art-watch { bottom: auto; top: 6px; }",
-      ".lib-tile:focus-visible .lib-art { outline: 2px solid var(--accent); outline-offset: 2px; }",
+      ".lib-tile:focus-visible .lib-art { outline: 2px solid var(--focus); outline-offset: 2px; }",
       "@media (prefers-color-scheme: dark) { .lib-art { box-shadow: none; border: 1px solid var(--line); } }",
       "@media (prefers-reduced-motion: reduce) { .lib-art img { transition: none; } }",
       "@media (min-width: 768px) { .lib-tile { flex-basis: 148px; } }",
