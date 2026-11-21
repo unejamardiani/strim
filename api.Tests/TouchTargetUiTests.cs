@@ -9,6 +9,7 @@ public class TouchTargetUiTests
 {
   private const string PhoneQuery = "@media (max-width: 767px) {";
   private const string NarrowPhoneQuery = "@media (max-width: 379px) {";
+  private const string ThreeRowQuery = "@media (max-width: 229px) {";
 
   private static readonly (string Selector, string Inset)[] EditorTargets =
   [
@@ -117,13 +118,22 @@ public class TouchTargetUiTests
     Assert.True(css.IndexOf(NarrowPhoneQuery, StringComparison.Ordinal) >
       css.IndexOf(AfterRule(".site-links > a", "-8px -5px -5px"), StringComparison.Ordinal),
       "The narrow-phone footer rule must come after the phone rule to override it.");
+    // Below about 230px three rows: Home and Features, How to use and Compare, Source. The middle row has a row above
+    // and below, so How to use and Compare stop 2px into both gaps instead of reaching 11px into a neighbour's row.
+    var threeRows = Assert.Single(PhoneBlocks(css, ThreeRowQuery));
+    Assert.Equal(
+      ".site-links > a:nth-of-type(3)::after, " + AfterRule(".site-links > a:nth-of-type(4)", "-2px -5px"),
+      threeRows.Trim());
+    Assert.True(css.IndexOf(ThreeRowQuery, StringComparison.Ordinal) > css.IndexOf(NarrowPhoneQuery, StringComparison.Ordinal),
+      "The three-row footer rule must come after the narrow-phone rule to override it.");
   }
 
   [Fact]
   public void Targets_AreNotDrawn()
   {
     var targets = EditorTargets.Select(t => t.Selector)
-      .Concat([".btn-sm", ".lib-sec-head a", ".lib-sec-head button", ".site-links > a:nth-of-type(n+4)"])
+      .Concat([".btn-sm", ".lib-sec-head a", ".lib-sec-head button", ".site-links > a:nth-of-type(n+4)",
+        ".site-links > a:nth-of-type(3)", ".site-links > a:nth-of-type(4)"])
       .Select(s => s + "::after")
       .ToHashSet();
     var found = new HashSet<string>();
@@ -131,7 +141,7 @@ public class TouchTargetUiTests
     {
       // Comments would otherwise become part of the selector text and hide a painted rule.
       var css = Regex.Replace(Read(file), @"/\*.*?\*/", "", RegexOptions.Singleline | RegexOptions.CultureInvariant);
-      foreach (var block in PhoneBlocks(css).Concat(PhoneBlocks(css, NarrowPhoneQuery)))
+      foreach (var block in PhoneBlocks(css).Concat(PhoneBlocks(css, NarrowPhoneQuery)).Concat(PhoneBlocks(css, ThreeRowQuery)))
         foreach (Match m in Regex.Matches(block, @"([^{}]+)\{([^}]*)\}", RegexOptions.CultureInvariant))
         {
           var hit = m.Groups[1].Value.Split(',').Select(s => s.Trim()).Where(targets.Contains).ToList();

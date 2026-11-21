@@ -2071,6 +2071,12 @@ select.input {
   .site-links > a::after { content: ""; position: absolute; inset: -11px -5px -2px; }
   .site-links > a:nth-of-type(n+4)::after { content: ""; position: absolute; inset: -2px -5px -11px; }
 }
+/* Below about 230px the footer wraps onto three rows: Home and Features, How to use and Compare, Source. The first
+   row keeps its upward and Source its downward target; How to use and Compare have a row above and below and stop
+   in the middle of both gaps (35.5px), so no target overlaps a neighbour. No phone is this narrow. */
+@media (max-width: 229px) {
+  .site-links > a:nth-of-type(3)::after, .site-links > a:nth-of-type(4)::after { content: ""; position: absolute; inset: -2px -5px; }
+}
 .btn-xs svg { width: 15px; height: 15px; }
 .btn-quiet { background: none; color: var(--ink-2); }
 .btn-danger { background: var(--danger); color: var(--on-danger); }
