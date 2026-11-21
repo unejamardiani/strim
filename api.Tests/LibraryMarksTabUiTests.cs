@@ -21,7 +21,7 @@ public class LibraryMarksTabUiTests
     return source[from..to];
   }
 
-  private static string MyMarks() => Between(Read("library.js"), "// My marks (#299)", "// A remove or an undo in My marks");
+  private static string MyMarks() => Between(Read("library.js"), "// My marks (#299)", "function syncRows(");
 
   [Fact]
   public void Views_AreFiveChipsWithTheirQueries()
@@ -99,33 +99,6 @@ public class LibraryMarksTabUiTests
     Assert.True(mount.IndexOf("view = { ctx,", StringComparison.Ordinal) < mount.IndexOf("myMarks(ctx)", StringComparison.Ordinal));
   }
 
-  [Fact]
-  public void Page_OverlappingARemoveOrUndo_IsAskedAgain()
-  {
-    var section = MyMarks();
-    // A page that answers while a Remove or Undo started meanwhile or is still pending may carry a total from before or
-    // after the server's change, in either response order: it is dropped and asked again once no edit is pending.
-    var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
-    Assert.Contains("const edits = view.edits;", load);
-    Assert.Contains("if (edits !== view.edits || view.pending) {\n        if (view.pending) view.waiting = seq;\n        else { view.loading = false; loadPage(); }\n        return;\n      }", load);
-    Assert.True(load.IndexOf("if (edits !== view.edits", StringComparison.Ordinal) < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
-    Assert.True(load.IndexOf("const edits = view.edits;", StringComparison.Ordinal) < load.IndexOf("await ctx.listMarks", StringComparison.Ordinal));
-    // A page that would start while an edit is pending (Remove on the last row, the sentinel firing before DELETE
-    // answers) is not requested with the old row count: it waits, still loading, and is asked for after the edit.
-    const string defer = "if (view.pending) {\n        view.waiting = seq;\n        return;\n      }";
-    Assert.Contains(defer, load);
-    Assert.True(load.IndexOf("view.loading = true;", StringComparison.Ordinal) < load.IndexOf(defer, StringComparison.Ordinal));
-    Assert.True(load.IndexOf(defer, StringComparison.Ordinal) < load.IndexOf("requested = Math.max(", StringComparison.Ordinal));
-    // The edit counts from its start (before the request) until its bookkeeping is done, then a waiting page is asked again.
-    var edit = Between(section, "const edit = (work) =>", "const remove = edit(");
-    Assert.True(edit.IndexOf("view.edits += 1;\n      view.pending += 1;", StringComparison.Ordinal) < edit.IndexOf("await work(...args);", StringComparison.Ordinal));
-    Assert.Contains("} finally {\n        view.pending -= 1;\n        if (!view.pending && view.waiting) {", edit);
-    Assert.Contains("if (again) { view.loading = false; loadPage(); }", edit);
-    Assert.Contains("const restore = edit(async (m, li) => {", section);
-    Assert.DoesNotContain("view.edits += 1;", Between(section, "const remove = edit(", "const start = () => {"));
-    Assert.Contains("view.waiting = 0;", Between(section, "const start = () => {", "keepMarksAddress(view.filter);\n    start();"));
-  }
-
   private static string Lookup() => Between(MyMarks(), "const lookup = async (keys, seq) => {", "ctx.lookupMarks = () => {");
 
   [Fact]
@@ -183,53 +156,172 @@ public class LibraryMarksTabUiTests
     // The row is built from that title: it opens the card only with an answer.
     var build = Between(MyMarks(), "const build = (key) => {", "return li;");
     Assert.Contains("const { mark: m, title: t } = state;", build);
-    Assert.Contains("markKey: t ? key : null", build);
+    Assert.Contains("const opened = t ? { ...e, name: t.name, enabled: t.enabled } : { ...e, markKey: null };", build);
   }
 
   [Fact]
   public void Row_InList_OpensTheCard_OtherwiseSaysNotInThisList()
   {
     var build = Between(MyMarks(), "const build = (key) => {", "return li;");
-    // Film: the group; series: bold seasons and episodes · group; otherwise one wording; then the mark's words.
-    Assert.Contains("const where = !t ? ['Not in this list'] : type === 'Series' ? [h('b', { text: seasonsLine(ctx, t) }), ' · ', t.group] : [t.group];", build);
-    Assert.Contains("h('span', { class: 'lib-meta' }, [...where, ...words].flatMap((p, i) => (i ? [' · ', p] : [p])))", build);
+    // Film: the group; series: bold seasons and episodes · group; otherwise one wording (#456: no mark words).
+    Assert.Contains("const where = !t ? 'Not in this list' : type === 'Series' ? [h('b', { text: seasonsLine(ctx, t) }), ' · ', t.group] : t.group;", build);
+    Assert.Contains("h('span', { class: 'lib-meta' }, where)", build);
     Assert.DoesNotContain("'Film'", build);
     // The card with the lookup's name, group and enabled, the list's cacheKey and the mark's key.
-    Assert.Contains("const e = { name: t ? t.name : m.title, title: m.title, year: m.year, contentType: type, markKey: t ? key : null, enabled: t?.enabled };", build);
-    Assert.Contains("filmName(ctx, e, t?.group, ctx.list?.cacheKey)", build);
-    Assert.Contains("li.className = opens(ctx, e) ? 'lib-row' : 'lib-row is-static';", build);
+    Assert.Contains("filmName(ctx, opened, t?.group, ctx.list?.cacheKey)", build);
+    Assert.Contains("li.className = opens(ctx, opened) ? 'lib-row' : 'lib-row is-static';", build);
     Assert.Contains("Object.assign(li.dataset, { type, key });", build);
-    // Remove unchanged, before the chevron that every row renders.
-    const string remove = "h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Remove the mark on ${m.title}`, onclick: () => remove(m, li) }, 'Remove'),";
+    // The controls before the chevron that every row renders.
+    const string controls = "...rowMarks(ctx, e),";
     const string chev = "h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));";
-    Assert.Contains(remove, build);
-    Assert.True(build.IndexOf(remove, StringComparison.Ordinal) < build.IndexOf(chev, StringComparison.Ordinal));
+    Assert.Contains(controls, build);
+    Assert.True(build.IndexOf(controls, StringComparison.Ordinal) < build.IndexOf(chev, StringComparison.Ordinal));
     Assert.Contains("h('div', { class: 'lib-list' }, list, foot));", MyMarks());
     Assert.DoesNotContain("Not in your list", Read("library.js"));
 
     var css = Read("library.css");
     Assert.Contains(".lib-row.is-static .lib-chev { visibility: hidden; }", css);
-    Assert.Contains(".library-mylist .lib-row > .btn { position: relative; z-index: 1; flex-shrink: 0; min-height: var(--control-h); }", css);
+    Assert.DoesNotContain(".library-mylist .lib-row > .btn", css);
     foreach (var gone in new[] { ".library-hit", ".library-mylist > .card", ".library-mylist .search-hit-name" })
       Assert.DoesNotContain(gone, css);
   }
 
+  // The marks core of #298, #420 and #456: the rule every control of a title follows.
+  private static string Core() => Between(Read("library.js"), "const MARK_KINDS = {", "// Browse (#287)");
+  private static string SetMark() => Between(Core(), "async function setMark(ctx, name, kind, key, next) {", "\n  }\n");
+  private static string MarkControls() => Between(Core(), "function markControls(ctx, entry) {", "\n  }\n");
+  private static string CardMarks() => Between(Read("library.js"), "function cardMarks(ctx, entry, answer) {", "\n  }\n");
+
   [Fact]
-  public void LookupRebuild_KeepsTheRowElement_ForRemoveAndUndo()
+  public void Row_UsesTheSharedMarkControls_NoRemoveButton()
   {
     var build = Between(MyMarks(), "const build = (key) => {", "return li;");
-    // The same <li> for the row's whole life: its children replaced, hidden left alone.
+    // The search rows' controls with the name "<title> (<year>)", or the title alone, and the mark's own key.
+    Assert.Contains("const e = { name: m.year ? `${m.title} (${m.year})` : m.title, title: m.title, year: m.year, contentType: type, markKey: key, keepMark: true };", build);
+    Assert.Contains("...rowMarks(ctx, e),", build);
+    Assert.Contains("paintMarks(li.querySelector('.library-marks'));", build);
+    // The same <li> for the row's whole life, rebuilt by a lookup.
     Assert.Contains("const li = state.li || h('li');", build);
     Assert.Contains("li.replaceChildren(", build);
-    Assert.Contains("state.li = li;", build);
-    Assert.DoesNotContain("replaceWith", build + Lookup());
-    Assert.DoesNotContain(".hidden", build + Lookup());
 
-    // Undo builds the restored row with the lookup answer of the row it replaces, and moves its key in pages.
-    var restore = Between(MyMarks(), "const restore = edit(async (m, li) => {", "const start = () => {");
-    Assert.Contains("const title = rows.get(m.key)?.title ?? null;\n      rows.delete(m.key);\n      rows.set(mark.key, { li: null, mark, title });", restore);
-    Assert.Contains("if (mark.key !== m.key) view.pages = view.pages.map((keys) => keys.map((k) => (k === m.key ? mark.key : k)));", restore);
-    Assert.True(restore.IndexOf("rows.set(mark.key", StringComparison.Ordinal) < restore.IndexOf("li.replaceWith(build(mark.key));", StringComparison.Ordinal));
+    // A rebuilt row (keepMark) paints from marks and leaves the object in place; only a key marks lacks takes a value.
+    var controls = MarkControls();
+    Assert.Contains("if (!entry.keepMark) applyMark(ctx, key, entry, entry.asked);\n    else if (!marks.has(key)) marks.set(key, markOf(entry));", controls);
+    Assert.DoesNotContain("marks.set(key, { seen: entry.seen", controls);
+
+    // Remove, Undo and their bookkeeping are gone; DELETE stays in the API, unused by the frontend.
+    var library = Read("library.js");
+    var main = Read("main.js");
+    foreach (var gone in new[] { "'Remove'", "'Undo'", "undo(", "removeMark", "restore(", "view.edits", "view.pending", "view.waiting", "const edit = " })
+      Assert.DoesNotContain(gone, library);
+    Assert.DoesNotContain("removeMark", main);
+    Assert.DoesNotContain("/marks/${encodeURIComponent(key)}", main);
+    Assert.Contains("mutations.MapDelete(\"/{key}\"", Read("api/Endpoints/MarkEndpoints.cs"));
+  }
+
+  [Fact]
+  public void CardOpenedDuringASave_LeavesThePendingMarkInPlace()
+  {
+    // The card request is stamped with the clock; the answer carries it.
+    var library = Read("library.js");
+    var load = Between(library, "let answer = answers.get(key);", "renderFilm(ctx, answer);");
+    Assert.Contains("const asked = ++clock;", load);
+    Assert.True(load.IndexOf("const asked = ++clock;", StringComparison.Ordinal) < load.IndexOf("await ctx.seriesCard", StringComparison.Ordinal));
+    Assert.Contains("answer.asked = asked;\n      if (answer.status === 'matched') answers.set(key, answer);", load);
+
+    // While a save of the title is on its way (saving) or one overlapped the request (markAt), the card shows marks'
+    // value and its controls keep the object: the failed save then still finds its own object, rolls back and says so.
+    var card = CardMarks();
+    Assert.Contains("const pending = marks.has(key) && !freshFor(key, answer?.asked);\n    const given = pending || !answer?.marks || owner === key ? now", card);
+    Assert.Contains("...given, keepMark: pending, asked: answer?.asked };", card);
+    Assert.Contains("const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", Core());
+    var set = SetMark();
+    Assert.Contains("if (marks.get(key) !== next) return;\n      marks.set(key, before);\n      repaint();\n      ctx.toast(`The mark was not changed. ${err.message || ''}`.trim(), { error: true });", set);
+  }
+
+  [Fact]
+  public void SearchOrGroupsRowDuringASave_LeavesThePendingMarkInPlace()
+  {
+    // Search, its next pages and Groups ask through askTitles, which stamps every title with the clock at the request.
+    var library = Read("library.js");
+    Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(library, @"await askTitles\(ctx, ").Count);
+    Assert.Single(System.Text.RegularExpressions.Regex.Matches(library, @"ctx\.titles\("));
+    var ask = Between(Core(), "async function askTitles(ctx, params, signal) {", "\n  }\n");
+    Assert.Contains("const asked = ++clock;\n    const found = await ctx.titles(params, signal);\n    for (const t of found?.titles || []) t.asked = asked;", ask);
+
+    // A row of such an answer (rowMarks → markControls) applies its mark only when fresh; during a save it is not, so
+    // the object stays and the failed save rolls back on every control (paintKey) and toasts.
+    var apply = Between(Core(), "function applyMark(ctx, key, m, asked) {", "\n  }\n");
+    Assert.Contains("if (marks.has(key) && !freshFor(key, asked)) return;", apply);
+    var set = SetMark();
+    Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);", set);
+    Assert.True(set.IndexOf("saving.set(key, (saving.get(key) || 0) + 1);", StringComparison.Ordinal) < set.IndexOf("await ctx.setMark(", StringComparison.Ordinal));
+    Assert.Contains("const repaint = () => paintKey(ctx, key);", set);
+    Assert.Contains("for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);", Between(Core(), "function paintKey(ctx, key) {", "\n  }\n"));
+  }
+
+  [Fact]
+  public void FreshMarksPage_RepaintsTheTitlesControlsInSearchAndGroups()
+  {
+    var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
+    // Every item, repeated keys included, before the skip; applying repaints every mounted control of the key.
+    Assert.Contains("applyMark(ctx, m.key, m, at);\n        if (view.shown.has(m.key)) continue;", load);
+    var apply = Between(Core(), "function applyMark(ctx, key, m, asked) {", "\n  }\n");
+    Assert.Contains("marks.set(key, markOf(m));", apply);
+    Assert.Contains("paintKey(ctx, key);", apply);
+    // The next tap on an earlier Search row starts from marks when it is handled, not from a value taken at render.
+    var core = Core();
+    Assert.Contains("onclick: () => setMark(ctx, entry.name, kind, key, next),", core);
+    Assert.Contains("onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen),", core);
+    Assert.Contains("onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, (m) => ({ ...m, watchlist: !m.watchlist })),", core);
+    Assert.Contains("if (typeof next === 'function') next = next(marks.get(key));", SetMark());
+    Assert.DoesNotContain("marks.get(key)))", core);
+    // A page fetched during a save is rendered at once: nothing in loadPage waits for saving.
+    Assert.DoesNotContain("saving", load);
+    Assert.Contains("if (seq !== view.seq || !ctx.isCurrent()) return;\n      view.loading = false;\n      view.loaded = true;", load);
+  }
+
+  [Fact]
+  public void AnswerOverlappedByASave_LeavesTheSavedMarkAlone()
+  {
+    var set = SetMark();
+    // A save moves the clock at its start and its end and records both for its key: any answer asked before is older.
+    Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);\n    markAt.set(key, ++clock);", set);
+    Assert.Contains("} finally {\n      if (epoch === markEpoch) {\n        if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);\n        else saving.delete(key);\n        markAt.set(key, ++clock);", set);
+    // An answer is applied only when markAt is not above its request clock; an applied one records that clock, so an
+    // older Marks page arriving last (or the earlier of two pages) leaves it; markAt only grows.
+    Assert.Contains("const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", Core());
+    var apply = Between(Core(), "function applyMark(ctx, key, m, asked) {", "\n  }\n");
+    Assert.Contains("if (asked) markAt.set(key, Math.max(markAt.get(key) || 0, asked));", apply);
+    // A Marks page takes its clock before its request; a Search or Groups row passes its title's stamp; a late card
+    // answer is checked against the save that happened while it loaded.
+    var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
+    Assert.True(load.IndexOf("const at = ++clock;", StringComparison.Ordinal) < load.IndexOf("await ctx.listMarks", StringComparison.Ordinal));
+    Assert.Contains("applyMark(ctx, key, entry, entry.asked);", MarkControls());
+    Assert.Contains("const pending = marks.has(key) && !freshFor(key, answer?.asked);", CardMarks());
+    // A lookup rebuild never applies the page's (older) mark again.
+    Assert.Contains("keepMark: true", Between(MyMarks(), "const build = (key) => {", "return li;"));
+  }
+
+  [Fact]
+  public void AnotherUser_StartsWithoutTheLastUsersMarksAndSaves()
+  {
+    // Both contexts of main.js pass the same user; the shared Library's scope too, so own ↔ shared resets nothing.
+    var main = Read("main.js");
+    Assert.Contains("user: libraryUser(),", Between(main, "function showLibrary(playlist)", "function libraryUser("));
+    Assert.Contains("user: libraryUser(),", Between(main, "function showSharedLibrary(", "function linkCard("));
+    Assert.Contains("return state.user?.userName || state.user?.email || null;", Between(main, "function libraryUser(", "\n}"));
+
+    // Only a changed user clears the maps and starts a new epoch.
+    var mount = Between(Read("library.js"), "function mount(ctx)", "const base = ");
+    Assert.Contains("if (ctx.user !== markUser) {\n      markUser = ctx.user;\n      markEpoch += 1;\n      for (const m of [marks, markAt, saving, keyAlias, answers]) m.clear();\n    }", mount);
+
+    // A save of the last account changes nothing when it answers, fails or ends.
+    var set = SetMark();
+    Assert.True(set.IndexOf("const epoch = markEpoch;", StringComparison.Ordinal) < set.IndexOf("await ctx.setMark(", StringComparison.Ordinal));
+    Assert.Contains("await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating, watchlist: next.watchlist });\n      // A save of the last account changes nothing for this one.\n      if (epoch !== markEpoch) return;", set);
+    Assert.Contains("} catch (err) {\n      // Another account signed in, or a later tap on the same title already replaced this change.\n      if (epoch !== markEpoch) return;", set);
+    Assert.Contains("} finally {\n      if (epoch === markEpoch) {", set);
   }
 
   [Fact]

@@ -1533,6 +1533,8 @@ function showLibrary(playlist) {
     icon,
     fmt,
     plural,
+    // The marks are the signed-in user's (#456): the own and a shared Library pass the same account.
+    user: libraryUser(),
     // The tab to open (#418) and the app's sheet for the Library's ⋯ menu.
     sub: target.sub,
     query: target.query,
@@ -1563,9 +1565,8 @@ function showLibrary(playlist) {
     titles: (params, signal) => api(`/playlists/${playlist.id}/library/titles?${new URLSearchParams(params)}`, { signal }),
     // A film or series mark (#298), stored per user; api() sends the CSRF token. It never touches the playlist.
     setMark: (mark) => api('/marks', { method: 'PUT', body: mark }),
-    // My marks (#299): one page of the caller's marks, and removing one by key (api() sends the CSRF token).
+    // My marks (#299): one page of the caller's marks.
     listMarks: (params, signal) => api(`/marks?${new URLSearchParams(params)}`, { signal }),
-    removeMark: (key) => api(`/marks/${encodeURIComponent(key)}`, { method: 'DELETE' }),
     // Which marked titles are in this list (#455): the read-only lookup route, without the CSRF filter.
     lookupTitles: (body) => api(`/playlists/${playlist.id}/library/titles/lookup`, { method: 'POST', body }),
     toast,
@@ -1590,6 +1591,11 @@ function showLibrary(playlist) {
   });
 }
 
+// The account whose marks a Library shows (#456).
+function libraryUser() {
+  return state.user?.userName || state.user?.email || null;
+}
+
 // The viewer's Library (#383): the same Library, read-only, on the routes scoped to one shared playlist. It opens with
 // library/open, which names the owner and counts only the groups the viewer sees; its key replaces the cacheKey.
 function showSharedLibrary(id) {
@@ -1597,6 +1603,7 @@ function showSharedLibrary(id) {
   const base = `/playlists/${id}/library`;
   showLibrary({ id, scope: {
     role: 'viewer',
+    user: libraryUser(),
     pick,
     isCurrent: () => {
       const target = parseRoute();
