@@ -16,10 +16,16 @@ Light follows the system by default; dark is a warm charcoal, never pure black.
 | `--bg` | `#f4efe6` | `#14110e` | Page (with two soft radial glows: tangerine top right, violet top left) |
 | `--surface` | `#fffcf7` | `#1e1a16` | Cards, sheets |
 | `--surface-2/3` | `#efe8dc` / `#e7dfd1` | `#29231d` / `#352d26` | Inputs, pill tracks, secondary buttons |
-| `--ink` / `--ink-2` / `--ink-3` | `#1d1a16` / `#665d53` / `#9a9084` | `#f5eee4` / `#b5aa9c` / `#7e7468` | Text levels |
+| `--ink` / `--ink-2` / `--ink-3` | `#1d1a16` / `#50483f` / `#6b6258` | `#f5eee4` / `#b5aa9c` / `#a09588` | Text levels |
 | `--accent` | `#ff5b1f` | `#ff6a2e` | Tangerine signal: primary buttons, switches on, focus, live |
 | `--on-accent` | `#1d0e05` | `#1d0e05` | Text on accent (dark ink, never white) |
 | `--dock-bg` | `#1d1a16` | `#2b251f` | Floating dock and toasts (inverted in light mode) |
+
+Contrast: the text tokens (`--ink`, `--ink-2`, `--ink-3`, `--accent-ink`) are at least 4.5:1 on `--bg`,
+`--surface`, `--surface-2` and `--surface-3` in both themes (WCAG 2.2 AA; light `--accent-ink` also on
+`--accent-soft`). `--ink-3` is the quietest text colour; nothing lighter may carry text. Text is never dimmed
+with `opacity`. Glyphs drawn into fields (search lens, select arrow) use `#857a6d`, at least 3:1 on the field
+colours of both themes. `ContrastTokenTests` computes these ratios from `theme.css`.
 
 Content types have their own colour and shape, so colour is never the only cue:
 
