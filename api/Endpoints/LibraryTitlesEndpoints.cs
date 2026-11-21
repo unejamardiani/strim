@@ -148,7 +148,7 @@ public static class LibraryTitlesEndpoints
     return app;
   }
 
-  private static LibraryTitleResult Result(PlaylistTitle t, bool? seen, int? rating, bool? watchlist) => new(
+  internal static LibraryTitleResult Result(PlaylistTitle t, bool? seen, int? rating, bool? watchlist) => new(
     t.Name, t.Title, t.Year, t.ContentType.ToString(), t.MarkKey, t.OutputGroup, t.GroupKey, t.Enabled, t.Entries, t.Groups,
     t.SeasonFirst, t.SeasonLast, t.Episodes, seen, rating, watchlist,
     t.Languages.Audio, t.Languages.Subtitles, t.Languages.Markers, t.Languages.PrefixTags, t.Languages.Source);

@@ -199,6 +199,7 @@ public static class LibraryEndpoints
 
     app.MapLibraryTitlesEndpoints();
     app.MapLibraryPostersEndpoints();
+    app.MapLibrarySuggestionsEndpoints();
     return app;
   }
 
@@ -224,7 +225,7 @@ public static class LibraryEndpoints
     return new CardAccess(access.DisabledGroups ?? [], !access.IsOwner || includeDisabled != true, index) { IsOwner = access.IsOwner };
   }
 
-  private static Task<List<FilmMark>> MarksAsync(AppDbContext db, string userId, CancellationToken ct) =>
+  internal static Task<List<FilmMark>> MarksAsync(AppDbContext db, string userId, CancellationToken ct) =>
     db.TitleMarks.AsNoTracking().Where(m => m.UserId == userId)
       .Select(m => new FilmMark(m.TitleKey, m.Seen, m.Rating, m.Watchlist, m.FilmDbId)).ToListAsync(ct);
 
