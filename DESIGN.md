@@ -63,6 +63,7 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
 - **Link card**: tangerine-tinted corner glow, "Player link" label with signal dot, mono URL, primary Copy.
 - **Sheets**: native `<dialog>`; bottom sheet with grab handle below 600px, centred above.
 - **Toasts**: inverted pills at the top, coloured status dot.
+- **Icons**: 24px grid line icons built by `icon()`, class `.icon`: `currentColor` stroke 2px with round caps and joins, no fill. A holder rule (`.btn svg`, `.lib-seen svg`, …) may set the size, the stroke width or a fill; only state marks are filled (watchlist badge, pressed bookmark, rating star, the dots of ⋯).
 
 ### Voice
 
