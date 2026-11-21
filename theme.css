@@ -59,6 +59,7 @@
   --on-accent: #1d0e05;
   --accent-ink: #b23a08;
   --accent-soft: #ffe2d2;
+  --focus: #c2410c;
 
   --live: #ff5b1f;
   --live-soft: #ffe2d2;
@@ -117,6 +118,7 @@
     --on-accent: #1d0e05;
     --accent-ink: #ff9466;
     --accent-soft: rgba(255, 106, 46, 0.16);
+    --focus: #ff6a2e;
 
     --live: #ff6a2e;
     --live-soft: rgba(255, 106, 46, 0.16);
@@ -225,7 +227,7 @@ select {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 

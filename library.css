@@ -449,7 +449,7 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .lib-art-bar ~ .lib-art-watch { bottom: auto; top: 6px; }
 .lib-tile .lib-title { font-size: 13.5px; }
 .lib-tile .lib-meta { font-size: 12px; }
-.lib-tile:focus-visible .lib-art { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lib-tile:focus-visible .lib-art { outline: 2px solid var(--focus); outline-offset: 2px; }
 .lib-sec-head .lib-sec-one { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .lib-sec-head > :not(.lib-sec-one) { flex-shrink: 0; }
 .lib-home-lists > * { min-width: 0; }

@@ -292,7 +292,7 @@ body.has-dock .site-links > a {
 
 .input:focus {
   background-color: var(--surface);
-  border-color: var(--accent);
+  border-color: var(--focus);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
@@ -1867,7 +1867,7 @@ select.input {
 }
 
 .toast-action:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
