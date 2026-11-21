@@ -420,10 +420,12 @@
 
   // A single type (#421) or an open group (#443): 30 titles a page, the next one once the sentinel comes within 600px
   // of the screen; end, when given, is shown below the rows once everything is loaded.
+  // An open group in grid view (#428, state.grid) puts its tiles in .lib-grid; the titles loaded stay in first.titles,
+  // so the other view draws them again without asking.
   function pages(ctx, state, params, first, rowOf, seq, end) {
     const { h } = ctx;
-    const ul = h('ul', { class: 'search-list' }, first.titles.map(rowOf));
-    const foot = h('div');
+    const ul = state.grid ? h('div', { class: 'lib-grid-items' }, first.titles.map(rowOf)) : h('ul', { class: 'search-list' }, first.titles.map(rowOf));
+    const foot = h('div', { class: 'lib-pages-foot' });
     const sentinel = h('div', { 'aria-hidden': 'true' });
     const watch = (page) => {
       foot.replaceChildren();
@@ -449,12 +451,14 @@
         return;
       }
       if (seq !== state.seq || !ctx.isCurrent()) return;
+      first.titles.push(...(page.titles || []));
+      first.hasMore = page.hasMore;
       ul.append(...(page.titles || []).map(rowOf));
       ctx.fitSearchLanguages(ul);
       watch(page);
     };
     watch(first);
-    return h('div', { class: 'lib-list' }, ul, foot);
+    return h('div', { class: state.grid ? 'lib-grid' : 'lib-list' }, ul, foot);
   }
 
   // Marks (#298): seen and thumbs on a film or series, stored per user by the marks API that main.js hands in; they
@@ -677,6 +681,23 @@
   // The chosen type is kept for the page session, like the toggles.
   let groupType = null;
 
+  // An open group's view (#428): "grid" or "list", kept per device; grid unless the device chose the list.
+  const GROUP_VIEW_KEY = 'strim.library.groupView';
+  function readGroupView() {
+    try {
+      return localStorage.getItem(GROUP_VIEW_KEY) === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  }
+  function writeGroupView(value) {
+    try {
+      localStorage.setItem(GROUP_VIEW_KEY, value);
+    } catch {
+      // Storage off: the choice lasts while the group is open.
+    }
+  }
+
   // "+N new" (#422): the group counts this device saw last, per playlist, { "<groupKey>": count }. Never sent to the
   // server. null when nothing is stored, storage is unavailable or the value is not valid: then nothing is new.
   const countsKey = (ctx) => `strim.library.counts.${ctx.playlist.id}`;
@@ -870,6 +891,8 @@
       state.observer?.disconnect();
       entriesEl.replaceChildren();
       el.classList.remove('has-open');
+      el.classList.remove('is-grid');
+      state.grid = false;
       markOpenGroup();
     };
 
@@ -919,6 +942,10 @@
         onclick: () => { cur.sort = SORTS[(SORTS.findIndex((s) => s.value === cur.sort) + 1) % SORTS.length].value; loadGroup(cur); },
       }, icon('sort'), sortLabel);
       cur.sortLabel = sortLabel;
+      // The view button (#428) only for a film or series group with TMDB on; any other group keeps the list.
+      cur.viewBtn = gridable(g) ? h('button', { class: 'lib-ib lib-view', type: 'button', onclick: () => switchView(cur) }) : null;
+      cur.grid = !!cur.viewBtn && readGroupView() === 'grid';
+      paintView(cur);
       entriesEl.replaceChildren(
         h('div', { class: 'lib-sticky' },
           h('div', { class: 'lib-ghead' },
@@ -928,6 +955,8 @@
           h('div', { class: 'lib-search lib-gfilter' }, input, clear),
           h('div', { class: 'lib-chips', role: 'group', 'aria-label': 'Filters' }, cur.seenChip, cur.likedChip, cur.sortChip)),
         cur.body);
+      // The view button at the head's right end, after the Off badge.
+      if (cur.viewBtn) entriesEl.querySelector('.lib-ghead').append(cur.viewBtn);
       if (scroll) window.scrollTo(0, 0);
       loadGroup(cur);
     };
@@ -938,6 +967,33 @@
       return x.contentType === 'Movies' && x.entries > 1 ? plural(x.entries, 'version') : null;
     };
     const entryRow = (x) => row(ctx, x, x.group, list.cacheKey, groupMeta(x), null);
+    // A grid tile (#428): the S15 tile with the year, or "S1–S3 · 21 episodes" for a series; it opens the card.
+    const entryTile = (x) => {
+      if (x.markKey) applyMark(ctx, x.markKey, x, x.asked);
+      return posterTile(ctx, { key: x.markKey, entry: x, title: x.title || x.name, year: x.year, group: x.group, type: x.contentType,
+        meta: x.contentType === 'Series' ? seasonsLine(ctx, x) : x.year ? String(x.year) : '' });
+    };
+
+    // Grid view shows the list icon to leave it, list view the grid icon; from 1100px .is-grid hides the group list.
+    const gridable = (g) => ctx.tmdbEnabled === true && (g.type === 'Movies' || g.type === 'Series');
+    const paintView = (cur) => {
+      state.grid = cur.grid;
+      el.classList.toggle('is-grid', cur.grid);
+      if (!cur.viewBtn) return;
+      cur.viewBtn.setAttribute('aria-label', cur.grid ? 'Show as list' : 'Show as posters');
+      cur.viewBtn.replaceChildren(icon(cur.grid ? 'list' : 'grid'));
+    };
+    // The other view keeps the titles loaded (a page still on its way is dropped and asked again) and starts at the top.
+    const switchView = (cur) => {
+      cur.grid = !cur.grid;
+      writeGroupView(cur.grid ? 'grid' : 'list');
+      paintView(cur);
+      if (cur.first) {
+        state.observer?.disconnect();
+        cur.body.replaceChildren(pages(ctx, state, cur.params, cur.first, cur.grid ? entryTile : entryRow, ++state.seq, cur.end()));
+      }
+      window.scrollTo(0, 0);
+    };
 
     // The first page replaces what was shown; a failed one shows the error with Try again in place of the rows.
     // Every change of filter, chip or sort starts here (#444): the chips are painted, the address replaced.
@@ -955,6 +1011,7 @@
       params.sort = cur.sort;
       if (hideSeen) params.hideSeen = true;
       if (likedOnly) params.liked = true;
+      cur.first = null;
       cur.body.replaceChildren(status('Loading entries…'));
       let first;
       try {
@@ -976,7 +1033,10 @@
         cur.body.replaceChildren(foot(hideSeen || likedOnly || cur.q ? 'Nothing in this group matches.' : 'No entries in this group.'));
         return;
       }
-      cur.body.replaceChildren(pages(ctx, state, params, first, entryRow, seq, foot(`All ${fmt(total)} shown`)));
+      // Kept for the other view (#428): the pages loaded, their query and the foot.
+      [cur.first, cur.params, cur.end] = [Object.assign(first, { titles }), params, () => foot(`All ${fmt(total)} shown`)];
+      if (cur.grid) cur.body.replaceChildren(pages(ctx, state, params, first, entryTile, seq, cur.end()));
+      else cur.body.replaceChildren(pages(ctx, state, params, first, entryRow, seq, foot(`All ${fmt(total)} shown`)));
     };
 
     // The shared toggle: an open group stays open unless it is off and switched-off groups are left out again; then
