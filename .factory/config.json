@@ -13,7 +13,7 @@
     {"cmd": ["dotnet", "test", "strim.sln"], "timeout": 1800}
   ],
   "limits": {
-    "max_added_lines": 400,
+    "max_added_lines": 500,
     "implement_per_day": 100,
     "attempts_per_story_per_day": 2,
     "fix_rounds": 2,
