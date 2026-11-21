@@ -20,6 +20,7 @@
     if (ctx.user !== markUser) {
       markUser = ctx.user;
       markEpoch += 1;
+      blindPending = 0;
       for (const m of [marks, markAt, saving, keyAlias, answers, blindQueue]) m.clear();
     }
     const base = isViewer(ctx) ? `#/shared/${playlist.id}` : `#/p/${playlist.id}/library`;
@@ -535,9 +536,11 @@
   const whenSettled = (fn) => (settled() ? fn() : settleQueue.add(fn));
   const unsave = (k) => (saving.get(k) > 1 ? saving.set(k, saving.get(k) - 1) : saving.delete(k));
   // A first save from a similar film's card (#368) has no API key yet and may be of any title (blind): until it has
-  // answered, a tap on any other key waits in blindQueue and a Marks page is not shown (#458).
+  // answered, a tap on any other key waits in blindQueue and a Marks page is not shown (#458). blindPending counts every
+  // save started without an alias, also a second one of the same card that is still on its way after the first answered.
   const blindQueue = new Set();
-  const blind = () => [...saving.keys()].some((k) => k.startsWith('similar:') && !keyAlias.has(k));
+  let blindPending = 0;
+  const blind = () => blindPending > 0;
   const markOf = (m) => ({ seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
   // An answer asked at `asked` is newer than marks holds for the key: no save on its way, nothing recorded after it.
   const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));
@@ -571,6 +574,8 @@
     // Once the API key of a similar card's local key is known, the save is on its way under both (#458); prior is the
     // API key's own value, there since the first save's answer put the saved mark under it.
     const alias = keyAlias.get(key), prior = alias && marks.get(alias);
+    const unknown = key.startsWith('similar:') && !alias;
+    if (unknown) blindPending += 1;
     const repaint = () => [key, alias].forEach((k) => k && paintKey(ctx, k));
     saving.set(key, (saving.get(key) || 0) + 1);
     markAt.set(key, ++clock);
@@ -611,6 +616,7 @@
       if (epoch === markEpoch) {
         unsave(key);
         if (alias) unsave(alias);
+        if (unknown) blindPending -= 1;
         markAt.set(key, ++clock);
         // The API key takes the same stamp, also the one the first save's answer just gave its mark.
         if (keyAlias.has(key)) markAt.set(keyAlias.get(key), clock);

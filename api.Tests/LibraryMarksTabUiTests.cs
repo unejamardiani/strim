@@ -363,7 +363,7 @@ public class LibraryMarksTabUiTests
     var set = SetMark();
     // A save moves the clock at its start and its end and records both for its key: any answer asked before is older.
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);\n    markAt.set(key, ++clock);", set);
-    Assert.Contains("} finally {\n      if (epoch === markEpoch) {\n        unsave(key);\n        if (alias) unsave(alias);\n        markAt.set(key, ++clock);", set);
+    Assert.Contains("} finally {\n      if (epoch === markEpoch) {\n        unsave(key);\n        if (alias) unsave(alias);\n        if (unknown) blindPending -= 1;\n        markAt.set(key, ++clock);", set);
     Assert.Contains("const unsave = (k) => (saving.get(k) > 1 ? saving.set(k, saving.get(k) - 1) : saving.delete(k));", Core());
     // An answer is applied only when markAt is not above its request clock; an applied one records that clock, so an
     // older Marks page arriving last (or the earlier of two pages) leaves it; markAt only grows.
@@ -391,7 +391,7 @@ public class LibraryMarksTabUiTests
 
     // Only a changed user clears the maps and starts a new epoch.
     var mount = Between(Read("library.js"), "function mount(ctx)", "const base = ");
-    Assert.Contains("if (ctx.user !== markUser) {\n      markUser = ctx.user;\n      markEpoch += 1;\n      for (const m of [marks, markAt, saving, keyAlias, answers, blindQueue]) m.clear();\n    }", mount);
+    Assert.Contains("if (ctx.user !== markUser) {\n      markUser = ctx.user;\n      markEpoch += 1;\n      blindPending = 0;\n      for (const m of [marks, markAt, saving, keyAlias, answers, blindQueue]) m.clear();\n    }", mount);
 
     // A save of the last account changes nothing when it answers, fails or ends.
     var set = SetMark();
@@ -459,7 +459,18 @@ public class LibraryMarksTabUiTests
     var core = Core();
     var set = SetMark();
     // Blind: a save of a similar card's local key with no API key yet.
-    Assert.Contains("const blind = () => [...saving.keys()].some((k) => k.startsWith('similar:') && !keyAlias.has(k));", core);
+    Assert.Contains("const blind = () => blindPending > 0;", core);
+    // (d) Two card taps during the first PUT, then a tap on the title's row: the second card save started without an
+    // alias, so it is counted when it starts and stays blind after the first answer set the alias. The row tap waits
+    // until the second save has answered too, and then computes from (and sends) the latest mark; the second save's
+    // answer cannot paint the card's mark over a row save that went out before it.
+    Assert.Contains("const unknown = key.startsWith('similar:') && !alias;\n    if (unknown) blindPending += 1;", set);
+    Assert.True(set.IndexOf("if (unknown) blindPending += 1;", StringComparison.Ordinal) < set.IndexOf("await ctx.setMark(", StringComparison.Ordinal));
+    var tail = set[set.IndexOf("} finally {", StringComparison.Ordinal)..];
+    var counted = tail.IndexOf("if (unknown) blindPending -= 1;", StringComparison.Ordinal);
+    Assert.True(counted >= 0 && counted < tail.IndexOf("if (!blind()) [...blindQueue]", StringComparison.Ordinal));
+    Assert.DoesNotContain("keyAlias", Between(core, "const blind = ", ";\n"));
+    Assert.Contains("markEpoch += 1;\n      blindPending = 0;", Read("library.js"));
     // (b) A tap on any other key, a row already on screen included, waits; it is taken before the next mark is
     // computed, so it computes from the mark in marks when it runs (rating 1 after the Like).
     var hold = "if (blind() && !key.startsWith('similar:')) return void blindQueue.add(() => setMark(ctx, name, kind, key, next));";
