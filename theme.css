@@ -370,6 +370,12 @@ select {
   border-radius: 12px;
 }
 
+/* Phones (#490): the 38px small button keeps its size; ::after gives it a 44px touch target. */
+@media (max-width: 767px) {
+  .btn-sm { position: relative; }
+  .btn-sm::after { content: ""; position: absolute; inset: -3px 0; }
+}
+
 .btn-block {
   width: 100%;
 }

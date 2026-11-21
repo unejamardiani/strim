@@ -2043,6 +2043,40 @@ select.input {
 /* ---------- Compact controls (#382): visible 32-36px, the 44px touch target comes from ::after ---------- */
 .btn-xs { position: relative; min-height: 32px; padding: 0 11px; font-size: 13px; font-weight: 700; border-radius: 10px; gap: 6px; }
 .btn-xs::after, .icon-btn.is-sm::after { content: ""; position: absolute; inset: -6px -2px; }
+/* Phones (#490): the same for the editor's and the cards' small controls. Nothing changes size; the insets were
+   measured at 390px so no target overlaps a neighbour. The insets start at the padding box, so the account pill's
+   1px border counts against it. The adult switch reaches 41px between the sort select and the All on / All off row.
+   A short playlist title ("A") still gets 44px of width: the target grows to the right, where the card head is empty.
+   Footer links (not the TMDB logo) are 31.5px: they reach 44.5px into the footer's 24px top padding and 5px down,
+   short of the TMDB attribution 12px below (4px row gap, 8px margin), and 5px sideways into the 18px column gap so
+   the 35.6px "Home" reaches 45.6px; the footer itself does not move. */
+@media (max-width: 767px) {
+  .link-box .btn, .share-link .link-box .btn, .pills button, .bulk .btn, .account, .playlist-title a, .site-links > a, .sharing-line, .adult-switch { position: relative; }
+  .link-box .btn::after { content: ""; position: absolute; inset: -3px 0; }
+  .share-link .link-box .btn::after { content: ""; position: absolute; inset: -5px 0; }
+  .pills button::after { content: ""; position: absolute; inset: -4px 0; }
+  .bulk .btn::after { content: ""; position: absolute; inset: -6px 0; }
+  .account::after { content: ""; position: absolute; inset: -3px 0; }
+  .playlist-title a::after { content: ""; position: absolute; inset: -7px min(0px, calc(100% - 44px)) -7px 0; }
+  .site-links > a::after { content: ""; position: absolute; inset: -8px -5px -5px; }
+  .sharing-line::after { content: ""; position: absolute; inset: -12px -8px; }
+  .adult-switch::after { content: ""; position: absolute; inset: -11px 0 -2px; }
+}
+/* Below about 380px the footer wraps onto two rows, 4px apart: Source alone, and below about 305px Compare too
+   (Home, Features and How to use share the first row down to 241px). The first three links reach 44.5px
+   upwards, Compare and Source downwards; vertical neighbours stop in the middle of the 4px gap. While Compare is
+   still on the first row it sits at the row's right end, clear of the centred Source, so its downward target
+   overlaps nothing. */
+@media (max-width: 379px) {
+  .site-links > a::after { content: ""; position: absolute; inset: -11px -5px -2px; }
+  .site-links > a:nth-of-type(n+4)::after { content: ""; position: absolute; inset: -2px -5px -11px; }
+}
+/* Up to 240px the footer wraps onto three rows: Home and Features, How to use and Compare, Source. The first
+   row keeps its upward and Source its downward target; How to use and Compare have a row above and below and stop
+   in the middle of both gaps (35.5px), so no target overlaps a neighbour. No phone is this narrow. */
+@media (max-width: 240px) {
+  .site-links > a:nth-of-type(3)::after, .site-links > a:nth-of-type(4)::after { content: ""; position: absolute; inset: -2px -5px; }
+}
 .btn-xs svg { width: 15px; height: 15px; }
 .btn-quiet { background: none; color: var(--ink-2); }
 .btn-danger { background: var(--danger); color: var(--on-danger); }
