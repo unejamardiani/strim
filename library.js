@@ -1184,8 +1184,9 @@
       }
       paint();
     };
-    // Rows shown whose mark no longer fits the view: the server's pages after them moved up by as many places.
-    const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;
+    // Rows shown whose mark no longer fits the view: the server's pages after them moved up by as many places. Only
+    // rows still in the list (view.shown): a row that left is already out of view.shown and view.total (#448).
+    const left = () => [...view.shown].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;
 
     // A row: type marker, title and year, where the title is in this list (or "Not in this list"), the shared mark
     // controls (#456) and the chevron, hidden unless the row opens the title's card. A lookup builds it again inside

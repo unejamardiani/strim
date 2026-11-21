@@ -293,7 +293,7 @@ public class LibraryMarksTabUiTests
     // What fits each view, and the rows shown that no longer fit it.
     Assert.Contains("watchlist: (m) => m.watchlist === true, all: (m) => m.seen || m.rating !== 0 || m.watchlist === true,", section);
     Assert.Contains("seen: (m) => m.seen, liked: (m) => m.rating === 1, disliked: (m) => m.rating === -1,", section);
-    Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", load);
+    Assert.Contains("const left = () => [...view.shown].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", load);
 
     // 51 Liked, a Like on page one cleared, then scroll: page two is computed from the 49 rows that still count
     // (title 51 now sits at position 50), and the view is complete only when those reach the total.
@@ -584,6 +584,17 @@ public class LibraryMarksTabUiTests
       "if (rows.has(m.key)) continue;", "view.walk = overlapped ? 1 : view.walk && requested + 1;");
     // The leaving row lowers the count itself; a returning one raises it.
     Assert.Contains("view.total += fits ? 1 : -1;", Changed());
+    // A row that left is counted once: it leaves view.shown together with view.total, and left() counts only the rows
+    // in view.shown, so neither the total (page.total + left()) nor the page arithmetic (view.shown.size - left()) adds
+    // or subtracts it again. Seen with one mark: clear it, tap Seen while the PUT is on its way, the GET brings the old
+    // record (row visible, count 1), the PUT succeeds and the row leaves (count 0); the settled page then counts
+    // 0 + left() = 0, so the count stays 0 and the empty state shows.
+    Assert.Contains("const left = () => [...view.shown].filter(", load);
+    Assert.DoesNotContain("[...rows.keys()].filter(", load);
+    var changed = Changed();
+    InOrder(changed, "r.li.hidden = !fits;", "view.total += fits ? 1 : -1;", "if (fits) view.shown.add(key);\n      else view.shown.delete(key);");
+    InOrder(Between(SetMark(), "const saved = await ctx.setMark(", "} finally {"), "if (marks.get(key) === next) report('saved');");
+    Assert.Contains("if (!view.counted && (!overlapped || !view.loaded)) view.total = page.total + left();", load);
   }
 
   [Fact]
