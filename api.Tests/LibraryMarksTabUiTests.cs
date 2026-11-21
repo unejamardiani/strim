@@ -110,6 +110,12 @@ public class LibraryMarksTabUiTests
     Assert.Contains("if (edits !== view.edits || view.pending) {\n        if (view.pending) view.waiting = seq;\n        else { view.loading = false; loadPage(); }\n        return;\n      }", load);
     Assert.True(load.IndexOf("if (edits !== view.edits", StringComparison.Ordinal) < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
     Assert.True(load.IndexOf("const edits = view.edits;", StringComparison.Ordinal) < load.IndexOf("await ctx.listMarks", StringComparison.Ordinal));
+    // A page that would start while an edit is pending (Remove on the last row, the sentinel firing before DELETE
+    // answers) is not requested with the old row count: it waits, still loading, and is asked for after the edit.
+    const string defer = "if (view.pending) {\n        view.waiting = seq;\n        return;\n      }";
+    Assert.Contains(defer, load);
+    Assert.True(load.IndexOf("view.loading = true;", StringComparison.Ordinal) < load.IndexOf(defer, StringComparison.Ordinal));
+    Assert.True(load.IndexOf(defer, StringComparison.Ordinal) < load.IndexOf("requested = Math.max(", StringComparison.Ordinal));
     // The edit counts from its start (before the request) until its bookkeeping is done, then a waiting page is asked again.
     var edit = Between(section, "const edit = (work) =>", "const remove = edit(");
     Assert.True(edit.IndexOf("view.edits += 1;\n      view.pending += 1;", StringComparison.Ordinal) < edit.IndexOf("await work(...args);", StringComparison.Ordinal));

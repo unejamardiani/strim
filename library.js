@@ -999,6 +999,12 @@
       const seq = view.seq;
       const edits = view.edits;
       foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
+      // A page asked for while a Remove or an Undo is pending would count from rows about to change: it is asked for
+      // once the edit's bookkeeping is done.
+      if (view.pending) {
+        view.waiting = seq;
+        return;
+      }
       let page;
       let requested;
       try {
