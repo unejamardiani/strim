@@ -146,9 +146,24 @@ public class LibraryMarksTabUiTests
     // A current failure that is no lost access goes on with no answer: every row of the page, also one matched by
     // the lookup before (the switch turned off, then the lookup failed), loses its card and says "Not in this list".
     Assert.Contains("let answer = null;", lookup);
+    // The catch holds the guard and nothing else, and the loop over the page follows it directly: no return in
+    // between keeps a row matched by an earlier lookup tappable.
+    Assert.Equal("} catch (err) {\n        if (!(seq === view.seq && ask === view.asks && ctx.isCurrent() && !ctx.controller.signal.aborted) || accessGone(ctx, err)) return;", failure);
+    Assert.Contains("|| accessGone(ctx, err)) return;\n      }\n      if (seq !== view.seq || ask !== view.asks || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n      for (const key of keys) {", lookup);
     var apply = lookup[lookup.IndexOf("if (seq !== view.seq || ask !== view.asks", StringComparison.Ordinal)..];
     Assert.Contains("const title = answer?.titles?.[key] || null;", apply);
     Assert.Contains("state.title = title;\n        build(key);", apply);
+    // A successful match, then a failed refresh: the title stored by the match differs from null, so the same row is
+    // built again without it, static and reading "Not in this list".
+    Assert.Contains("if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;", apply);
+    var build = Between(MyMarks(), "const build = (key) => {", "const lookup = async");
+    Assert.Contains("const opened = t ? { ...e, name: t.name, enabled: t.enabled } : { ...e, markKey: null };", build);
+    Assert.Contains("const meta = !t ? 'Not in this list'", build);
+    Assert.Contains("class: opens(ctx, opened) ? 'lib-row' : 'lib-row is-static'", build);
+    Assert.Contains("state.li?.replaceWith(li);", build);
+    // opens() needs a mark key, which a row without a title does not hand on.
+    Assert.Contains("e.contentType === 'Movies' && !!e.markKey;", Read("library.js"));
+    Assert.Contains("e.contentType === 'Series' && !!e.markKey;", Read("library.js"));
   }
 
   [Fact]
@@ -181,6 +196,20 @@ public class LibraryMarksTabUiTests
     Assert.Contains("requested = Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", load);
     Assert.Contains("view.done = items.length < MARKS_PAGE || view.shown.size - left() >= page.total;", load);
     Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", section);
+    // A save overlapping the request: page one answers with the 50 rows shown (the cleared like not yet saved), the
+    // save then pulls the 51st Liked onto page one. The page that added nothing does not move minPage on; once no save
+    // is on its way the page is worked out again (page one, which now holds the 51st).
+    var ticks = load.IndexOf("const ticks = saveTicks;", StringComparison.Ordinal);
+    Assert.True(ticks >= 0 && ticks < load.IndexOf("await ctx.listMarks(", StringComparison.Ordinal));
+    var skip = Between(load, "if (!view.done && added === 0) {", "paint();");
+    Assert.Contains("if (ticks !== saveTicks || saving.size) {\n          view.loading = true;\n          whenSettled(() => {\n            if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n            view.loading = false;\n            loadPage();\n          });\n          return;\n        }\n        view.minPage = requested + 1;", skip);
+    var library = Read("library.js");
+    var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
+    Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);\n    saveTicks += 1;", setMark);
+    Assert.True(setMark.IndexOf("saveTicks += 1;", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
+    Assert.Contains("else saving.delete(key);\n      saveTicks += 1;\n      if (!saving.size) {\n        const waiting = [...settleQueue];\n        settleQueue.clear();\n        for (const fn of waiting) fn();\n      }", Between(setMark, "} finally {", "\n  }"));
+    Assert.Contains("const whenSettled = (fn) => (saving.size ? settleQueue.add(fn) : fn());", library);
+
     var fits = Between(section, "const MARK_FITS = {", "};");
     foreach (var rule in new[]
     {
@@ -251,7 +280,7 @@ public class LibraryMarksTabUiTests
     Assert.True(load.IndexOf("marks.set(m.key", StringComparison.Ordinal) < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);", setMark);
-    Assert.Contains("} finally {\n      if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);\n      else saving.delete(key);\n    }", setMark);
+    Assert.Contains("} finally {\n      if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);\n      else saving.delete(key);\n", setMark);
     Assert.True(setMark.IndexOf("saving.set(key, (saving", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
 
     // A rebuilt row keeps the object in marks, so a failed save still rolls back and says so.

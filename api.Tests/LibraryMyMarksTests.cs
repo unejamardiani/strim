@@ -52,7 +52,9 @@ public class LibraryMyMarksTests
     // from the shown count can repeat only marks already shown; More must not ask for that page forever.
     var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     Assert.Contains("added += 1;", load);
-    Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        loadPage();\n        return;\n      }", load.ReplaceLineEndings("\n"));
+    // Without a save overlapping the request (see LibraryMarksTabUiTests) it moves on to the next page at once.
+    Assert.Contains("if (!view.done && added === 0) {\n        // A save", load.ReplaceLineEndings("\n"));
+    Assert.Contains("          return;\n        }\n        view.minPage = requested + 1;\n        loadPage();\n        return;\n      }", load.ReplaceLineEndings("\n"));
     Assert.True(load.IndexOf("view.done = items.length", StringComparison.Ordinal) < load.IndexOf("if (!view.done && added === 0)", StringComparison.Ordinal));
     Assert.Contains("view.minPage = 1;", Between(MyMarks(), "const start = () => {", "start();"));
   }

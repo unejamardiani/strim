@@ -515,10 +515,16 @@
 
   // Shown at once on every row of the title; a failed request puts the mark back and says so. saving counts the saves
   // still on their way per key (#447), so a fresh Marks page does not paint over a pending value.
+  // saveTicks moves when a save starts or ends; settleQueue runs once no save is on its way (a Marks page that
+  // overlapped one is worked out again then).
   const saving = new Map();
+  let saveTicks = 0;
+  const settleQueue = new Set();
+  const whenSettled = (fn) => (saving.size ? settleQueue.add(fn) : fn());
   async function setMark(ctx, name, kind, key, next) {
     const before = marks.get(key);
     saving.set(key, (saving.get(key) || 0) + 1);
+    saveTicks += 1;
     const repaint = () => {
       for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
     };
@@ -546,6 +552,12 @@
     } finally {
       if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);
       else saving.delete(key);
+      saveTicks += 1;
+      if (!saving.size) {
+        const waiting = [...settleQueue];
+        settleQueue.clear();
+        for (const fn of waiting) fn();
+      }
     }
   }
 
@@ -1019,6 +1031,7 @@
       foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
       let page;
       let requested;
+      const ticks = saveTicks;
       try {
         const filter = MARK_VIEWS.find((f) => f.value === view.filter).params;
         requested = Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);
@@ -1053,6 +1066,17 @@
       lookup(keys, seq);
       view.done = items.length < MARKS_PAGE || view.shown.size - left() >= page.total;
       if (!view.done && added === 0) {
+        // A save that overlapped the request may have moved a title onto this page after the server answered (a like
+        // cleared on page one pulls the 51st Liked up): once no save is on its way the page is worked out again.
+        if (ticks !== saveTicks || saving.size) {
+          view.loading = true;
+          whenSettled(() => {
+            if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
+            view.loading = false;
+            loadPage();
+          });
+          return;
+        }
         view.minPage = requested + 1;
         loadPage();
         return;
