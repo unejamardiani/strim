@@ -103,7 +103,7 @@ const ICONS = {
 
 function icon(name) {
   const tpl = document.createElement('template');
-  tpl.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+  tpl.innerHTML = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
   return tpl.content.firstChild;
 }
 
