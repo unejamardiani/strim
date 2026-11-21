@@ -35,18 +35,26 @@ public class LibraryTabsUiTests
     var show = route.IndexOf("window.StrimLibrary.show(target.sub, target.query);", StringComparison.Ordinal);
     Assert.True(show > 0 && show < route.IndexOf("libraryController?.abort();", StringComparison.Ordinal));
     Assert.Contains("!libraryController.signal.aborted\n    && libraryMounted?.name === target.name && libraryMounted.id === target.id", route);
-    // The root and an unknown tab open Search and replace the address.
+    // The root and an unknown tab open Home (#425) and replace the address.
     var tab = Between(main, "function libraryTab(target)", "function closeSheets()");
     Assert.Contains("if (LIBRARY_TABS.includes(target.sub.split('/')[0])) return target.sub;", tab);
-    Assert.Contains("const hash = `${base}/search", tab);
+    Assert.Contains("const hash = `${base}/home`;", tab);
+    Assert.Contains("return 'home';", tab);
+    Assert.Contains("const LIBRARY_TABS = ['home', 'search', 'groups', 'marks'];", main);
   }
 
   [Fact]
   public void Tabs_AreLinksWithAriaCurrent()
   {
     var library = Read("library.js");
-    foreach (var tab in new[] { "{ name: 'search', label: 'Search', icon: 'search' }", "{ name: 'groups', label: 'Groups', icon: 'grid' }", "{ name: 'marks', label: 'Marks', icon: 'check' }" })
-      Assert.Contains(tab, library);
+    var tabs = Between(library, "const TABS = [", "];");
+    var at = -1;
+    foreach (var tab in new[] { "{ name: 'home', label: 'Home', icon: 'home' }", "{ name: 'search', label: 'Search', icon: 'search' }", "{ name: 'groups', label: 'Groups', icon: 'grid' }", "{ name: 'marks', label: 'Marks', icon: 'check' }" })
+    {
+      var next = tabs.IndexOf(tab, StringComparison.Ordinal);
+      Assert.True(next > at, $"'{tab}' missing or out of order.");
+      at = next;
+    }
     var mount = Mount();
     Assert.Contains("const base = isViewer(ctx) ? `#/shared/${playlist.id}` : `#/p/${playlist.id}/library`;", mount);
     Assert.Contains("h('nav', { class: 'lib-tabs', 'aria-label': 'Library' },", mount);
@@ -66,7 +74,7 @@ public class LibraryTabsUiTests
     var mount = Mount();
     Assert.Single(Regex.Matches(mount, Regex.Escape("class: 'lib-panel'")));
     Assert.Contains("h('section', { class: 'lib-panel', dataset: { tab: t.name }, hidden: true })", mount);
-    Assert.Contains("root.replaceChildren(...head, panels.search, panels.groups, panels.marks);", mount);
+    Assert.Contains("root.replaceChildren(...head, panels.home, panels.search, panels.groups, panels.marks);", mount);
     var library = Read("library.js");
     Assert.Contains("for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;", Between(library, "function show(sub, query)", "function inPanels("));
     // Search and Groups fill their panels once the list is loaded; nothing else replaces the root.

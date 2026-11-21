@@ -6,6 +6,7 @@
   // ctx.controller is aborted by main.js when the route leaves the Library, so a pending load stops waiting.
   // The tabs (#418): each one a link to its own route, its content a panel that stays in the DOM while hidden.
   const TABS = [
+    { name: 'home', label: 'Home', icon: 'home' },
     { name: 'search', label: 'Search', icon: 'search' },
     { name: 'groups', label: 'Groups', icon: 'grid' },
     { name: 'marks', label: 'Marks', icon: 'check' },
@@ -39,10 +40,12 @@
     const head = ctx.cover ? [ctx.cover.el, h('div', { class: 'lib-tabs-row' }, nav)] : [ownerHead(ctx, nav)];
     // The marks (#299) do not hang on the playlist, so they show even when it has no source or fails to load.
     panels.marks.append(myMarks(ctx));
-    root.replaceChildren(...head, panels.search, panels.groups, panels.marks);
+    panels.home.append(homeSection(ctx));
+    root.replaceChildren(...head, panels.home, panels.search, panels.groups, panels.marks);
     show(ctx.sub, ctx.query);
     if (!isViewer(ctx) && !playlist.sourceUrl) {
       ctx.listState = 'none';
+      view.homeList();
       inPanels(ctx, () => h('div', { class: 'notice' }, 'This playlist has no source URL. Add one in the editor to see what it holds.'));
       return;
     }
@@ -53,7 +56,7 @@
   function show(sub, query) {
     if (!view) return;
     const name = String(sub || '').split('/')[0];
-    const tab = TABS.some((t) => t.name === name) ? name : 'search';
+    const tab = TABS.some((t) => t.name === name) ? name : 'home';
     if (tab === 'search' && query) {
       view.query = query;
       view.search?.(query);
@@ -69,6 +72,10 @@
       else a.removeAttribute('aria-current');
     }
     for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;
+    // On Home (#425) the cover carries the name as the page's h1; the owner's head keeps only the kicker.
+    view.homeHead?.(tab === 'home');
+    // "New in your groups" (#425) reads the stored counts again: a group opened since no longer counts as new.
+    if (tab === 'home') view.homeFresh?.();
     const same = view.tab === tab;
     const first = view.tab !== null;
     view.tab = tab;
@@ -79,7 +86,8 @@
     window.scrollTo(0, 0);
     if (!first || !view.byKeyboard) return;
     view.byKeyboard = false;
-    const target = view.panels[tab].querySelector('input, h2, h3');
+    // Home's field would hand over to Search at once (#425): there the focus goes to its first heading.
+    const target = view.panels[tab].querySelector(tab === 'home' ? 'h1, h2' : 'input, h2, h3');
     if (target && target.tagName !== 'INPUT') target.tabIndex = -1;
     target?.focus();
   }
@@ -104,11 +112,15 @@
   function ownerHead(ctx, nav) {
     const { h, icon, playlist } = ctx;
     const name = playlist.name || 'Untitled';
+    const kicker = h('p', { class: 'lib-kicker', text: 'Library' });
+    const title = h('h1', { class: 'lib-name', text: name, title: name });
+    view.homeHead = (home) => {
+      kicker.textContent = home ? `Library · ${name}` : 'Library';
+      title.hidden = home;
+    };
     return h('header', { class: 'lib-head' },
       h('a', { class: 'lib-ib is-quiet', href: '#/', 'aria-label': 'Back to playlists' }, icon('back')),
-      h('div', { class: 'lib-head-text' },
-        h('p', { class: 'lib-kicker', text: 'Library' }),
-        h('h1', { class: 'lib-name', text: name, title: name })),
+      h('div', { class: 'lib-head-text' }, kicker, title),
       nav,
       h('button', { class: 'lib-ib', type: 'button', 'aria-label': 'More', 'aria-haspopup': 'dialog', onclick: () => libraryMenu(ctx) }, icon('more')));
   }
@@ -139,6 +151,7 @@
   async function load(ctx, own) {
     const { h } = ctx;
     ctx.listState = 'loading';
+    view.homeList();
     inPanels(ctx, () => h('div', { class: 'card loading-card' },
       h('span', { class: 'spinner', 'aria-hidden': 'true' }),
       h('div', { class: 'grow', text: isViewer(ctx) ? 'Loading the list' : 'Loading the playlist from your provider' })));
@@ -149,6 +162,7 @@
       if (own.signal.aborted || !ctx.isCurrent()) return;
       if (accessGone(ctx, err)) return;
       ctx.listState = 'failed';
+      view.homeList(() => load(ctx, own));
       // A viewer gets the server's neutral message, never the provider's.
       inPanels(ctx, () => h('div', { class: 'notice error' },
         isViewer(ctx) ? h('p', null, h('b', { text: 'The list cannot be loaded right now' }), ' ', err.message || '') : h('p', { text: ctx.errorMessage(err) }),
@@ -164,6 +178,10 @@
     const browse = browseSection(ctx, result);
     view.panels.search.replaceChildren(searchSection(ctx, result, browse.refresh, browse.reload));
     view.panels.groups.replaceChildren(browse.el);
+    view.homeList();
+    // Home's search field handed over before the list was there (#425): the focus goes to the Search field now.
+    if (view.focusSearch && view.tab === 'search') view.panels.search.querySelector('input')?.focus();
+    view.focusSearch = false;
   }
 
   // The type control's choices and the content types each one sends; All sends none.
@@ -1022,8 +1040,186 @@
     return li;
   }
 
-  // mount() runs only after this file has run to its end, so My marks below may follow the export.
+  // mount() runs only after this file has run to its end, so Home and My marks below may follow the export.
   window.StrimLibrary = { mount, show };
+
+  // Home (#425): the cover with a search field, then Your watchlist, Series you follow, New in your groups and Browse.
+  // Each section loads and fails on its own; the marks sections show also when the list failed. The device's group
+  // counts (#422) are only read here: opening a group stores them, Home never does.
+  function homeSection(ctx) {
+    const { h, icon, fmt, plural, playlist } = ctx;
+    const base = view.base;
+    const part = (title, href, label) => {
+      const n = h('span', { class: 'n' });
+      const body = h('div');
+      const el = h('section', { class: 'lib-sec', hidden: true },
+        h('div', { class: 'lib-sec-head' }, h('h2', { text: title }), n, href ? h('a', { href, text: label }) : null), body);
+      return { el, n, body };
+    };
+    const busy = (p) => { p.el.hidden = false; p.n.textContent = ''; p.body.replaceChildren(h('p', { class: 'lib-empty', role: 'status', text: 'Loading…' })); };
+    const failed = (p, err, again) => {
+      p.el.hidden = false;
+      p.body.replaceChildren(h('div', { class: 'notice error', role: 'alert' },
+        h('p', { text: err?.message || 'This could not be loaded.' }),
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: again }, 'Try again')));
+    };
+    const live = () => ctx.isCurrent() && !ctx.controller.signal.aborted;
+
+    // The search field hands over to the Search tab: the text typed so far, or the search left there, with the focus.
+    const toSearch = () => {
+      const q = input.value.trim();
+      input.value = '';
+      const link = view.nav.querySelector('[data-tab="search"]');
+      if (q) link.href = `${base}/search?${new URLSearchParams({ q })}`;
+      const hash = link.getAttribute('href');
+      [view.byKeyboard, view.focusSearch] = [true, true];
+      location.hash = hash;
+      show('search', hash.split('?')[1] || '');
+    };
+    const input = h('input', {
+      class: 'input input-search', type: 'search', placeholder: 'Search this list', 'aria-label': 'Search this list',
+      autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search', onfocus: toSearch, oninput: toSearch,
+    });
+    const field = h('div', { class: 'lib-search' }, input);
+    const facts = h('p');
+    const name = playlist.name || 'Untitled';
+    const cover = isViewer(ctx) ? field
+      : h('div', { class: 'lib-hero' }, h('div', null, h('h1', { class: 'lib-hero-name', text: name, title: name }), facts), field);
+
+    // A mark's row as in the Marks tab: a title in this list opens its card, any other reads "Not in this list".
+    const markRow = (m, t) => {
+      const type = m.kind === 'series' ? 'Series' : 'Movies';
+      const e = { name: m.year ? `${m.title} (${m.year})` : m.title, title: m.title, year: m.year, contentType: type, markKey: m.key, keepMark: true };
+      const opened = t ? { ...e, name: t.name, enabled: t.enabled } : { ...e, markKey: null };
+      const where = !t ? 'Not in this list' : type === 'Series' ? [h('b', { text: seasonsLine(ctx, t) }), ' · ', t.group] : t.group;
+      const li = h('li', { class: opens(ctx, opened) ? 'lib-row' : 'lib-row is-static', dataset: { type, key: m.key } },
+        h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),
+        h('span', { class: 'lib-text' }, filmName(ctx, opened, t?.group, ctx.list?.cacheKey), h('span', { class: 'lib-meta' }, where)),
+        ...(rowMarks(ctx, e) || []),
+        h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));
+      const capsule = li.querySelector('.library-marks');
+      if (capsule) paintMarks(capsule);
+      return li;
+    };
+    // A marks section: one page of marks, then one lookup of its keys once the list is there (failed: none in it).
+    const marked = (p, params, fits, paint) => {
+      const s = { p, items: [], total: 0, titles: null, seq: 0, loaded: false };
+      s.fits = (m) => fits(marks.get(m.key) || markOf(m));
+      s.paint = () => (!s.loaded || (!s.titles && ctx.listState === 'loading') ? busy(p) : paint(s));
+      s.lookup = async () => {
+        const seq = s.seq;
+        if (!s.loaded || !ctx.list) return s.paint();
+        let answer = null;
+        try {
+          if (s.items.length) answer = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys: s.items.map((m) => m.key) });
+        } catch (err) {
+          if (accessGone(ctx, err)) return;
+        }
+        if (seq !== s.seq || !live()) return;
+        s.titles = answer?.titles || {};
+        s.paint();
+      };
+      s.load = async () => {
+        const seq = ++s.seq, at = ++clock;
+        [s.loaded, s.titles] = [false, null];
+        busy(p);
+        let page;
+        try {
+          page = await ctx.listMarks(params, ctx.controller.signal);
+        } catch (err) {
+          if (seq === s.seq && live()) failed(p, err, s.load);
+          return;
+        }
+        if (seq !== s.seq || !live()) return;
+        for (const m of page.items || []) applyMark(ctx, m.key, m, at);
+        [s.items, s.total, s.loaded] = [page.items || [], page.total || 0, true];
+        s.lookup();
+      };
+      return s;
+    };
+    const rows = (s, items) => h('div', { class: 'lib-list' }, h('ul', { class: 'search-list' }, items.slice(0, 5).map((m) => markRow(m, s.titles?.[m.key] || null))));
+
+    // Your watchlist: newest first; a title marked seen or taken off leaves at once.
+    const watch = marked(part('Your watchlist', `${base}/marks?view=watchlist`, 'All'),
+      { watchlist: true, sort: 'watchlisted', pageSize: 12 }, (m) => m.watchlist === true && !m.seen, (s) => {
+        const kept = s.items.filter(s.fits);
+        s.p.el.hidden = false;
+        s.p.n.textContent = fmt(Math.max(0, s.total - (s.items.length - kept.length)));
+        s.p.body.replaceChildren(kept.length ? rows(s, kept)
+          : h('p', { class: 'lib-empty', text: 'Nothing on your watchlist yet. Add a film or series with the bookmark in its card.' }));
+      });
+    // Series you follow: the series with a thumbs up, newest change first, only those in this list; none: left out.
+    const follow = marked(part('Series you follow', `${base}/marks?view=liked`, 'All'),
+      { rating: 1, pageSize: 200 }, (m) => m.rating === 1, (s) => {
+        const kept = s.items.filter((m) => m.kind === 'series' && s.fits(m) && s.titles?.[m.key]);
+        s.p.el.hidden = !kept.length;
+        s.p.n.textContent = `${fmt(kept.length)} liked series`;
+        s.p.body.replaceChildren(rows(s, kept));
+      });
+
+    // New in your groups: the groups with "+N new", largest first, up to 3; nothing new or nothing stored: left out.
+    const fresh = part('New in your groups', `${base}/groups`, 'All groups');
+    // Browse: one tile per type with groups that are on, opening the Groups tab with that type.
+    const types = part('Browse');
+    // Painted from the stored counts whenever the list arrives and whenever Home is shown again (show()), so a group
+    // opened since (which stores its count) no longer reads "+N new" here either. Reading only, never writing.
+    view.homeFresh = () => {
+      const list = ctx.list;
+      fresh.el.hidden = true;
+      if (!list || ctx.listState === 'loading') return;
+      const seen = readCounts(ctx) || {};
+      const grown = browseGroups(list, includeOff).sorted.map((g) => [g, newSince(seen, g)]).filter(([, n]) => n > 0)
+        .sort((a, b) => b[1] - a[1]).slice(0, 3);
+      fresh.el.hidden = !grown.length;
+      fresh.body.replaceChildren(h('div', { class: 'lib-list' }, grown.map(([g, n]) => {
+        const t = GROUP_TYPES.find((x) => x.type === g.type);
+        const href = `${base}/groups/${encodeURIComponent(g.key)}`;
+        // As a Groups row does (#444), the address carries the shared Unseen and Liked of the moment of the tap.
+        const tap = (e) => {
+          const p = new URLSearchParams([...(hideSeen ? [['unseen', '1']] : []), ...(likedOnly ? [['liked', '1']] : [])]);
+          e.currentTarget.href = String(p) ? `${href}?${p}` : href;
+        };
+        return h('a', { class: 'lib-row is-group', href, dataset: { key: g.key, type: g.type }, onclick: tap },
+          h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type: g.type } }),
+          h('span', { class: 'lib-text' }, h('span', { class: 'lib-title', text: g.title || 'Untitled group' }), h('span', { class: 'lib-meta', text: plural(g.count, t.one, t.many) })),
+          h('span', { class: 'lib-new', text: `+${fmt(n)} new` }),
+          h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));
+      })));
+    };
+    view.homeList = (again) => {
+      const list = ctx.list;
+      facts.textContent = { none: 'This playlist has no source URL', failed: 'The list could not be loaded' }[ctx.listState] || 'Loading the list';
+      view.homeFresh();
+      if (ctx.listState === 'loading') return busy(types);
+      for (const s of [watch, follow]) s.lookup();
+      if (ctx.listState === 'none') return void (types.el.hidden = true);
+      if (!list) return failed(types, null, again);
+      const on = list.groups.filter((g) => !list.disabled.has(g.key));
+      facts.textContent = `${plural(on.reduce((sum, g) => sum + g.count, 0), 'entry', 'entries')} in ${plural(on.length, 'group')} · read-only`;
+      const tiles = GROUP_TYPES.map((t) => ({ ...t, on: on.filter((g) => g.type === t.type) })).filter((t) => t.on.length);
+      types.el.hidden = !tiles.length;
+      types.body.replaceChildren(h('div', { class: 'lib-types' }, tiles.map((t) => h('a', { class: 'lib-type', href: `${base}/groups?type=${t.value}` },
+        h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type: t.type } }),
+        h('span', null, h('b', { text: t.label }), h('small', { text: `${plural(t.on.length, 'group')} · ${fmt(t.on.reduce((sum, g) => sum + g.count, 0))}` }))))));
+    };
+
+    // Marks set anywhere (#448) repaint Home's rows; a title that newly fits a section loads it again once saved.
+    const before = view.marksChanged;
+    view.marksChanged = (key, mark, how) => {
+      before?.(key, mark, how);
+      if (key.startsWith('similar:') || !live()) return;
+      for (const s of [watch, follow]) {
+        if (!s.loaded) continue;
+        const item = s.items.find((m) => m.key === key);
+        if (item) s.paint();
+        else if (how === 'saved' && s.fits({ key, ...mark })) s.load();
+      }
+    };
+    watch.load();
+    follow.load();
+    return h('div', { class: 'library-home' }, cover,
+      h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), fresh.el, types.el);
+  }
 
   // My marks (#299): every film and series the user marked, newest change first, including titles that are in no
   // playlist any more. A row (#455) says whether its title is in this list and then opens its card; it changes the mark
