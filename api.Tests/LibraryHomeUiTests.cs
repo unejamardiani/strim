@@ -95,7 +95,8 @@ public class LibraryHomeUiTests
     var home = Home();
     Assert.Contains("const fresh = part('New in your groups', `${base}/groups`, 'All groups');", home);
     Assert.Contains("const seen = readCounts(ctx) || {};", home);
-    Assert.Contains(".sort((a, b) => b[1] - a[1]).slice(0, 3);", home);
+    Assert.Contains(".sort((a, b) => b[1] - a[1]);", home);
+    Assert.Contains("const grown = ranked.slice(0, 3);", home);
     Assert.Contains("fresh.el.hidden = !grown.length;", home);
     Assert.Contains("h('span', { class: 'lib-new', text: `+${fmt(n)} new` })", home);
     Assert.Contains("const href = `${base}/groups/${encodeURIComponent(g.key)}`;", home);
@@ -122,7 +123,7 @@ public class LibraryHomeUiTests
     Assert.Contains("h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type: t.type } }),", home);
     Assert.Contains("`${plural(t.on.length, 'group')} · ${fmt(t.on.reduce((sum, g) => sum + g.count, 0))}`", home);
     // Sections in their order; from 1100px the two lists sit side by side.
-    Assert.Contains("h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), fresh.el, types.el);", home);
+    Assert.Contains("h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), newIn.el, fresh.el, types.el);", home);
   }
 
   [Fact]
