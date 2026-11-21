@@ -67,7 +67,7 @@ public class LibraryMarksTabUiTests
 
     var css = Read("library.css");
     Assert.Contains("@media (min-width: 1100px) { .library-mylist { max-width: 920px; } }", css);
-    Assert.Contains(".library-mylist > .lib-sticky + .card { margin-top: -6px; }", css);
+    Assert.Contains(".library-mylist > .lib-sticky + .lib-list { margin-top: -6px; }", css);
   }
 
   [Fact]
@@ -105,7 +105,7 @@ public class LibraryMarksTabUiTests
     var section = MyMarks();
     // A page that answers while a Remove or Undo started meanwhile or is still pending may carry a total from before or
     // after the server's change, in either response order: it is dropped and asked again once no edit is pending.
-    var load = Between(section, "const loadPage = async () => {", "const row = (m) => {");
+    var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
     Assert.Contains("const edits = view.edits;", load);
     Assert.Contains("if (edits !== view.edits || view.pending) {\n        if (view.pending) view.waiting = seq;\n        else { view.loading = false; loadPage(); }\n        return;\n      }", load);
     Assert.True(load.IndexOf("if (edits !== view.edits", StringComparison.Ordinal) < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
@@ -124,6 +124,112 @@ public class LibraryMarksTabUiTests
     Assert.Contains("const restore = edit(async (m, li) => {", section);
     Assert.DoesNotContain("view.edits += 1;", Between(section, "const remove = edit(", "const start = () => {"));
     Assert.Contains("view.waiting = 0;", Between(section, "const start = () => {", "keepMarksAddress(view.filter);\n    start();"));
+  }
+
+  private static string Lookup() => Between(MyMarks(), "const lookup = async (keys, seq) => {", "ctx.lookupMarks = () => {");
+
+  [Fact]
+  public void Rows_AskLookupOncePerPage()
+  {
+    var section = MyMarks();
+    var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
+    // One call site, with the keys of the whole page (items), after the loop that skips repeated rows and before the
+    // move to the next page for a page that added nothing: a fully repeated page is looked up too.
+    Assert.Single(System.Text.RegularExpressions.Regex.Matches(load, @"\blookup\("));
+    // The other is the re-ask of ctx.lookupMarks.
+    Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(section, @"\blookup\(").Count);
+    Assert.Contains("const keys = items.map((m) => m.key);\n      view.pages.push(keys);\n      lookup(keys, seq);", load);
+    var call = load.IndexOf("lookup(keys, seq);", StringComparison.Ordinal);
+    Assert.True(load.IndexOf("if (view.shown.has(m.key)) continue;", StringComparison.Ordinal) < call);
+    Assert.True(call < load.IndexOf("if (!view.done && added === 0) {", StringComparison.Ordinal));
+
+    var main = Read("main.js");
+    Assert.Contains("lookupTitles: (body) => api(`/playlists/${playlist.id}/library/titles/lookup`, { method: 'POST', body }),", Between(main, "function showLibrary(playlist)", "function showSharedLibrary("));
+    Assert.Contains("lookupTitles: (body) => api(`${base}/titles/lookup`, { method: 'POST', body: scoped(body) }),", Between(main, "function showSharedLibrary(", "function linkCard("));
+
+    // A page loaded before the list waits for it; the switch asks again for every page loaded so far.
+    var lookup = Lookup();
+    Assert.Contains("if (!ctx.list || !keys.length) return;", lookup);
+    Assert.Contains("answer = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys });", lookup);
+    var library = Read("library.js");
+    Assert.Contains("ctx.list = result;\n    // Marks pages loaded before the list get their lookup now (#455).\n    ctx.lookupMarks?.();", Between(library, "async function load(", "const TYPES = ["));
+    Assert.Contains("run();\n      onToggle();\n      ctx.lookupMarks?.();", Between(library, "ctx.onIncludeOff = () => {", "};"));
+    Assert.Contains("ctx.lookupMarks = () => {\n      view.asks += 1;\n      for (const keys of view.pages) lookup(keys, view.seq);\n    };", section);
+    Assert.Contains("view.pages = [];\n      rows.clear();", Between(section, "const start = () => {", "keepMarksAddress(view.filter);\n    start();"));
+
+    // An answer for an earlier setting of the switch, a view or a Library left since changes nothing.
+    Assert.Contains("const ask = view.asks;", lookup);
+    Assert.Contains("if (seq !== view.seq || ask !== view.asks || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n      for (const key of keys) {", lookup);
+  }
+
+  [Fact]
+  public void LookupFailure_LeavesTheNextScreenAlone()
+  {
+    var lookup = Lookup();
+    // The catch holds only its guard: cancellation and the route are checked before accessGone, and a failed current
+    // lookup falls through with no answer, so every row of its keys (also one matched before) reads "Not in this list".
+    Assert.Contains("let answer = null;", lookup);
+    var catchBody = Between(lookup, "} catch (err) {", "\n      }");
+    Assert.Equal("} catch (err) {\n        if (seq !== view.seq || ask !== view.asks || !ctx.isCurrent() || ctx.controller.signal.aborted || accessGone(ctx, err)) return;", catchBody);
+    Assert.Contains("const title = answer?.titles?.[key] || null;", lookup);
+    Assert.Contains("if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;", lookup);
+  }
+
+  [Fact]
+  public void LookupSuccess_TurnsAnAbsentRowIntoACardLink()
+  {
+    var lookup = Lookup();
+    Assert.Contains("state.title = title;\n        build(key);\n      }", lookup);
+    // The row is built from that title: it opens the card only with an answer.
+    var build = Between(MyMarks(), "const build = (key) => {", "return li;");
+    Assert.Contains("const { mark: m, title: t } = state;", build);
+    Assert.Contains("markKey: t ? key : null", build);
+  }
+
+  [Fact]
+  public void Row_InList_OpensTheCard_OtherwiseSaysNotInThisList()
+  {
+    var build = Between(MyMarks(), "const build = (key) => {", "return li;");
+    // Film: the group; series: bold seasons and episodes · group; otherwise one wording; then the mark's words.
+    Assert.Contains("const where = !t ? ['Not in this list'] : type === 'Series' ? [h('b', { text: seasonsLine(ctx, t) }), ' · ', t.group] : [t.group];", build);
+    Assert.Contains("h('span', { class: 'lib-meta' }, [...where, ...words].flatMap((p, i) => (i ? [' · ', p] : [p])))", build);
+    Assert.DoesNotContain("'Film'", build);
+    // The card with the lookup's name, group and enabled, the list's cacheKey and the mark's key.
+    Assert.Contains("const e = { name: t ? t.name : m.title, title: m.title, year: m.year, contentType: type, markKey: t ? key : null, enabled: t?.enabled };", build);
+    Assert.Contains("filmName(ctx, e, t?.group, ctx.list?.cacheKey)", build);
+    Assert.Contains("li.className = opens(ctx, e) ? 'lib-row' : 'lib-row is-static';", build);
+    Assert.Contains("Object.assign(li.dataset, { type, key });", build);
+    // Remove unchanged, before the chevron that every row renders.
+    const string remove = "h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Remove the mark on ${m.title}`, onclick: () => remove(m, li) }, 'Remove'),";
+    const string chev = "h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));";
+    Assert.Contains(remove, build);
+    Assert.True(build.IndexOf(remove, StringComparison.Ordinal) < build.IndexOf(chev, StringComparison.Ordinal));
+    Assert.Contains("h('div', { class: 'lib-list' }, list, foot));", MyMarks());
+    Assert.DoesNotContain("Not in your list", Read("library.js"));
+
+    var css = Read("library.css");
+    Assert.Contains(".lib-row.is-static .lib-chev { visibility: hidden; }", css);
+    Assert.Contains(".library-mylist .lib-row > .btn { position: relative; z-index: 1; flex-shrink: 0; min-height: var(--control-h); }", css);
+    foreach (var gone in new[] { ".library-hit", ".library-mylist > .card", ".library-mylist .search-hit-name" })
+      Assert.DoesNotContain(gone, css);
+  }
+
+  [Fact]
+  public void LookupRebuild_KeepsTheRowElement_ForRemoveAndUndo()
+  {
+    var build = Between(MyMarks(), "const build = (key) => {", "return li;");
+    // The same <li> for the row's whole life: its children replaced, hidden left alone.
+    Assert.Contains("const li = state.li || h('li');", build);
+    Assert.Contains("li.replaceChildren(", build);
+    Assert.Contains("state.li = li;", build);
+    Assert.DoesNotContain("replaceWith", build + Lookup());
+    Assert.DoesNotContain(".hidden", build + Lookup());
+
+    // Undo builds the restored row with the lookup answer of the row it replaces, and moves its key in pages.
+    var restore = Between(MyMarks(), "const restore = edit(async (m, li) => {", "const start = () => {");
+    Assert.Contains("const title = rows.get(m.key)?.title ?? null;\n      rows.delete(m.key);\n      rows.set(mark.key, { li: null, mark, title });", restore);
+    Assert.Contains("if (mark.key !== m.key) view.pages = view.pages.map((keys) => keys.map((k) => (k === m.key ? mark.key : k)));", restore);
+    Assert.True(restore.IndexOf("rows.set(mark.key", StringComparison.Ordinal) < restore.IndexOf("li.replaceWith(build(mark.key));", StringComparison.Ordinal));
   }
 
   [Fact]

@@ -149,6 +149,8 @@
     if (own.signal.aborted || !ctx.isCurrent()) return;
     if (isViewer(ctx)) ctx.cover.fill(result);
     ctx.list = result;
+    // Marks pages loaded before the list get their lookup now (#455).
+    ctx.lookupMarks?.();
     const browse = browseSection(ctx, result);
     view.panels.search.replaceChildren(searchSection(ctx, result, browse.refresh, browse.reload));
     view.panels.groups.replaceChildren(browse.el);
@@ -231,6 +233,7 @@
     ctx.onIncludeOff = () => {
       run();
       onToggle();
+      ctx.lookupMarks?.();
     };
     const markFilter = (label, get, set) => {
       const b = h('button', {
@@ -922,7 +925,8 @@
 
   // My marks (#299): every film and series the user marked, newest change first, including titles that are in no
   // playlist any more. A row is plain text, never a link to an entry. Remove asks nothing and offers Undo, which sets
-  // the same mark again with the set call; main.js sends both with the CSRF token.
+  // the same mark again with the set call; main.js sends both with the CSRF token. A row (#455) says whether its title
+// is in this list and then opens its card.
   // The Marks tab (#446): five views, each with its address #/…/marks?view=…, a head that counts the view and pages
   // that load while scrolling.
   const MARK_VIEWS = [
@@ -944,9 +948,12 @@
   };
 
   function myMarks(ctx) {
-    const { h, fmt, plural } = ctx;
+    const { h, icon, fmt, plural } = ctx;
     const asked = String(ctx.sub || '').startsWith('marks') ? markViewOf(ctx.query) : null;
-    const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, edits: 0, pending: 0, waiting: 0 };
+    // pages: the keys of every page loaded, looked up again on demand; asks: an answer for an earlier ask changes nothing.
+    const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, edits: 0, pending: 0, waiting: 0, pages: [], asks: 0 };
+    // The rows' state in one place: mark key → { li, mark (as the page sent it), title (the lookup's answer or null) }.
+    const rows = new Map();
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
     const count = h('p');
     const list = h('ol', { class: 'search-list' });
@@ -1034,9 +1041,14 @@
       for (const m of items) {
         if (view.shown.has(m.key)) continue;
         view.shown.add(m.key);
-        list.append(row(m));
+        rows.set(m.key, { li: null, mark: m, title: null });
+        list.append(build(m.key));
         added += 1;
       }
+      // One lookup with the keys of the whole page, repeated rows included.
+      const keys = items.map((m) => m.key);
+      view.pages.push(keys);
+      lookup(keys, seq);
       view.total = page.total;
       view.done = items.length < MARKS_PAGE || view.shown.size >= page.total;
       if (!view.done && added === 0) {
@@ -1047,15 +1059,54 @@
       paint();
     };
 
-    const row = (m) => {
-      const meta = [m.year, m.kind === 'series' ? 'Series' : 'Film', m.seen ? 'Seen' : '',
-        { 1: 'Liked', '-1': 'Disliked' }[m.rating] || ''].filter(Boolean).join(' · ');
-      const li = h('li', { class: 'library-hit' },
-        h('span', { class: 'search-hit-text' },
-          h('span', { class: 'search-hit-name', text: m.title }),
-          h('span', { class: 'search-hit-meta', text: meta })),
-        h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Remove the mark on ${m.title}`, onclick: () => remove(m, li) }, 'Remove'));
+    // A row: type marker, title and year, where the title is in this list (or "Not in this list") and the page's
+    // words for the mark, Remove and the chevron, hidden unless the row opens the title's card. A lookup builds it
+    // again inside the same <li>, which Remove and Undo hold.
+    const build = (key) => {
+      const state = rows.get(key);
+      const { mark: m, title: t } = state;
+      const type = m.kind === 'series' ? 'Series' : 'Movies';
+      const e = { name: t ? t.name : m.title, title: m.title, year: m.year, contentType: type, markKey: t ? key : null, enabled: t?.enabled };
+      const where = !t ? ['Not in this list'] : type === 'Series' ? [h('b', { text: seasonsLine(ctx, t) }), ' · ', t.group] : [t.group];
+      const words = [m.seen ? 'Seen' : '', { 1: 'Liked', '-1': 'Disliked' }[m.rating] || ''].filter(Boolean);
+      const li = state.li || h('li');
+      li.className = opens(ctx, e) ? 'lib-row' : 'lib-row is-static';
+      Object.assign(li.dataset, { type, key });
+      li.replaceChildren(
+        h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),
+        h('span', { class: 'lib-text' }, filmName(ctx, e, t?.group, ctx.list?.cacheKey),
+          h('span', { class: 'lib-meta' }, [...where, ...words].flatMap((p, i) => (i ? [' · ', p] : [p])))),
+        h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Remove the mark on ${m.title}`, onclick: () => remove(m, li) }, 'Remove'),
+        h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));
+      state.li = li;
       return li;
+    };
+
+    // In this list: one lookup per page once the list is there. An answer for a view left since, for an earlier ask
+    // (asks) or for a Library left since changes nothing; a row whose key the answer lacks, and every row of a current
+    // lookup that failed, says "Not in this list".
+    const lookup = async (keys, seq) => {
+      if (!ctx.list || !keys.length) return;
+      const ask = view.asks;
+      let answer = null;
+      try {
+        answer = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys });
+      } catch (err) {
+        if (seq !== view.seq || ask !== view.asks || !ctx.isCurrent() || ctx.controller.signal.aborted || accessGone(ctx, err)) return;
+      }
+      if (seq !== view.seq || ask !== view.asks || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
+      for (const key of keys) {
+        const state = rows.get(key);
+        const title = answer?.titles?.[key] || null;
+        if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;
+        state.title = title;
+        build(key);
+      }
+    };
+    // The list loaded, or "Include switched-off groups" changed: every page loaded so far is asked again.
+    ctx.lookupMarks = () => {
+      view.asks += 1;
+      for (const keys of view.pages) lookup(keys, view.seq);
     };
 
     // A Remove or an Undo is an edit from its start until its bookkeeping is done; a page that answered meanwhile
@@ -1112,7 +1163,12 @@
       }
       syncRows(ctx, mark.key, { seen: mark.seen, rating: mark.rating, watchlist: mark.watchlist === true });
       if (!li.isConnected || view.shown.has(mark.key)) return;
-      li.replaceWith(row(mark));
+      // The restored row keeps the lookup answer of the row it replaces; another key replaces the old one in pages.
+      const title = rows.get(m.key)?.title ?? null;
+      rows.delete(m.key);
+      rows.set(mark.key, { li: null, mark, title });
+      if (mark.key !== m.key) view.pages = view.pages.map((keys) => keys.map((k) => (k === m.key ? mark.key : k)));
+      li.replaceWith(build(mark.key));
       view.shown.add(mark.key);
       view.total += 1;
       paint();
@@ -1127,6 +1183,8 @@
       view.loading = false;
       view.loaded = false;
       view.waiting = 0;
+      view.pages = [];
+      rows.clear();
       list.replaceChildren();
       paint();
       loadPage();
@@ -1137,7 +1195,7 @@
       h('div', { class: 'lib-sticky' },
         h('div', { class: 'lib-ghead' }, h('div', { class: 'lib-ghead-text' }, h('h2', { text: 'My marks' }), count)),
         chips),
-      h('div', { class: 'card' }, list, foot));
+      h('div', { class: 'lib-list' }, list, foot));
   }
 
   // A remove or an undo in My marks shows on the rows of the same title in the search and the open group.

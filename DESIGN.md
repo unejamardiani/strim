@@ -221,10 +221,16 @@ the watchlist first), All, Seen, Liked or Disliked; the tab opens on All and the
 count in its `.n`. The view is kept in the address, `#/…/marks?view=watchlist|all|seen|liked|disliked`,
 replaced and never a new history entry, only while the Marks panel is shown; the Marks tab link carries
 it, and a link to it switches a Library already on screen. Pages of 50 load while scrolling, once a
-sentinel comes within 600px of the screen. The card follows 6px below the head; the list keeps the
-760px column and from 1100px is at most 920px wide. A row is plain text, never a link to
-an entry: display title, then year (when known) · Film or Series · Seen · Liked or Disliked, and a
-Remove button at `--control-h`. Remove asks no confirmation: the row goes at once and a toast offers
+sentinel comes within 600px of the screen. The list (`.lib-list`) follows 6px below the head; it keeps
+the 760px column and from 1100px is at most 920px wide. A row (#455) is a search row (`.lib-row`,
+mark key in `data-key`): type marker, display title and year, a meta line, a Remove button at
+`--control-h` above the row's tap target, and the chevron. After each page the tab asks the titles
+lookup once with the page's keys (again for every loaded page when the list arrives or "Include
+switched-off groups" changes; an answer for a view, setting or Library left since changes nothing).
+A title in this list shows its group, for a series bold "S1–S3 · 21 episodes" · group, and its row
+opens the film or series card (with TMDB on), never a link to an entry; any other row, also while the
+list loads or after a failed lookup, reads "Not in this list", opens nothing (`is-static`) and keeps
+its chevron's room hidden. The meta ends with the page's Seen · Liked or Disliked. Remove asks no confirmation: the row goes at once and a toast offers
 Undo, which sets the same mark again and puts the row back in its place. With no marks it says so
 and how to mark a title: the Watchlist "Nothing on your watchlist yet. Add a film or series with the
 bookmark in its card.", All how to mark a title, the other views "No marks of this kind.".
@@ -256,7 +262,7 @@ under it.
 │                              │  results card: rows (name and year, group · type, Off, marks)
 │ Groups tab: Browse groups    │  type chips with group counts, one list of rows, playlist order
 │   open group                 │  All groups · title · count, entries card, More
-│ Marks tab: My marks          │  head (title, count), view chips, marks card (title, meta, Remove)
+│ Marks tab: My marks          │  head (title, count), view chips, rows (title, in this list or not, Remove, card)
 │ Tab bar (below 768px)        │  floating, dock colours: Search · Groups · Marks
 │ Film card                    │  sheet, or side pane from 1100px: poster, facts, marks, overview
 └──────────────────────────────┘
