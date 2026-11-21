@@ -161,7 +161,8 @@ Similar films and the match (#368): below the overview a "Similar films" rail ("
 in-list tile is a button with a green dot and its group (hollow dot and an "Off" flag when the group
 is off) and opens that film's card in place, with a glass Back circle top left that returns to the
 previous card and its scroll; device Back still closes the whole card. Other tiles are greyed out,
-"Not in your list", and open nothing. A seen film carries a small check on its poster. "choose"
+"Not in your list", and open nothing. A mark set in a card opened from a tile shows on the title's
+rows in Search, Groups and Marks at once, while it is still being saved (#458). A seen film carries a small check on its poster. "choose"
 candidates are buttons: a tap stores the match and reloads the card. A matched card ends with "In
 your list as" (entry, group) and "Not this film", which clears the match. A failed request brings the
 previous card back with an error notice.
