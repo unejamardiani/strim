@@ -236,7 +236,7 @@ public class LibraryMarksTabUiTests
     Assert.Contains("...given, keepMark: pending, asked: answer?.asked };", card);
     Assert.Contains("const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", Core());
     var set = SetMark();
-    Assert.Contains("if (marks.get(key) !== next) return;\n      marks.set(key, before);\n      repaint();\n      ctx.toast(`The mark was not changed. ${err.message || ''}`.trim(), { error: true });", set);
+    Assert.Contains("if (marks.get(key) !== next) return;\n      // The API key goes back to its own value unless a later tap replaced it.\n      if (alias && marks.get(alias) === next) marks.set(alias, prior || before);\n      marks.set(key, before);\n      repaint();\n      ctx.toast(`The mark was not changed. ${err.message || ''}`.trim(), { error: true });", set);
   }
 
   [Fact]
@@ -256,7 +256,7 @@ public class LibraryMarksTabUiTests
     var set = SetMark();
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);", set);
     Assert.True(set.IndexOf("saving.set(key, (saving.get(key) || 0) + 1);", StringComparison.Ordinal) < set.IndexOf("await ctx.setMark(", StringComparison.Ordinal));
-    Assert.Contains("const repaint = () => paintKey(ctx, key);", set);
+    Assert.Contains("const repaint = () => [key, alias].forEach((k) => k && paintKey(ctx, k));", set);
     Assert.Contains("for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);", Between(Core(), "function paintKey(ctx, key) {", "\n  }\n"));
   }
 
@@ -302,8 +302,8 @@ public class LibraryMarksTabUiTests
 
     // A save moves saveTicks at its start and its end; the queue of pages waiting for saves runs once none is left.
     var set = SetMark();
-    Assert.Contains("markAt.set(key, ++clock);\n    saveTicks += 1;\n    marks.set(key, next);", set);
-    Assert.Contains("markAt.set(key, ++clock);\n        saveTicks += 1;\n        if (settled()) [...settleQueue].forEach((fn) => settleQueue.delete(fn) && fn());", set);
+    Assert.Contains("    }\n    saveTicks += 1;\n    marks.set(key, next);", set);
+    Assert.Contains("if (keyAlias.has(key)) markAt.set(keyAlias.get(key), clock);\n        saveTicks += 1;\n        if (!blind()) [...blindQueue].forEach((fn) => blindQueue.delete(fn) && fn());\n        if (settled()) [...settleQueue].forEach((fn) => settleQueue.delete(fn) && fn());", set);
     Assert.Contains("const settled = () => !saving.size;", Core());
     Assert.Contains("const whenSettled = (fn) => (settled() ? fn() : settleQueue.add(fn));", Core());
 
@@ -363,7 +363,8 @@ public class LibraryMarksTabUiTests
     var set = SetMark();
     // A save moves the clock at its start and its end and records both for its key: any answer asked before is older.
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);\n    markAt.set(key, ++clock);", set);
-    Assert.Contains("} finally {\n      if (epoch === markEpoch) {\n        if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);\n        else saving.delete(key);\n        markAt.set(key, ++clock);", set);
+    Assert.Contains("} finally {\n      if (epoch === markEpoch) {\n        unsave(key);\n        if (alias) unsave(alias);\n        markAt.set(key, ++clock);", set);
+    Assert.Contains("const unsave = (k) => (saving.get(k) > 1 ? saving.set(k, saving.get(k) - 1) : saving.delete(k));", Core());
     // An answer is applied only when markAt is not above its request clock; an applied one records that clock, so an
     // older Marks page arriving last (or the earlier of two pages) leaves it; markAt only grows.
     Assert.Contains("const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", Core());
@@ -390,7 +391,7 @@ public class LibraryMarksTabUiTests
 
     // Only a changed user clears the maps and starts a new epoch.
     var mount = Between(Read("library.js"), "function mount(ctx)", "const base = ");
-    Assert.Contains("if (ctx.user !== markUser) {\n      markUser = ctx.user;\n      markEpoch += 1;\n      for (const m of [marks, markAt, saving, keyAlias, answers]) m.clear();\n    }", mount);
+    Assert.Contains("if (ctx.user !== markUser) {\n      markUser = ctx.user;\n      markEpoch += 1;\n      for (const m of [marks, markAt, saving, keyAlias, answers, blindQueue]) m.clear();\n    }", mount);
 
     // A save of the last account changes nothing when it answers, fails or ends.
     var set = SetMark();
@@ -398,6 +399,109 @@ public class LibraryMarksTabUiTests
     Assert.Contains("await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating, watchlist: next.watchlist });\n      // A save of the last account changes nothing for this one.\n      if (epoch !== markEpoch) return;", set);
     Assert.Contains("} catch (err) {\n      // Another account signed in, or a later tap on the same title already replaced this change.\n      if (epoch !== markEpoch) return;", set);
     Assert.Contains("} finally {\n      if (epoch === markEpoch) {", set);
+  }
+
+  // A save from a similar film's card (#368) under its local key, carried to the title's API key (#458).
+  private static string SyncRows() => Between(Read("library.js"), "function syncRows(ctx, key, mark) {", "\n  }\n");
+
+  [Fact]
+  public void SimilarCardSave_IsPendingUnderTheApiKeyToo()
+  {
+    var set = SetMark();
+    // A Seen film liked from the card, All opened before the save ends: the API key counts the save (saving), carries
+    // its stamp and its mark, and every control of it is repainted, so the Marks row (keepMark) shows Like pressed and
+    // its Seen tap computes from that mark: rating 1.
+    Assert.Contains("const alias = keyAlias.get(key), prior = alias && marks.get(alias);", set);
+    Assert.Contains("if (alias) {\n      saving.set(alias, (saving.get(alias) || 0) + 1);\n      markAt.set(alias, clock);\n      marks.set(alias, next);\n    }", set);
+    Assert.Contains("const repaint = () => [key, alias].forEach((k) => k && paintKey(ctx, k));", set);
+    // All of it before the request goes out, and the repaint after the marks are set.
+    var request = set.IndexOf("await ctx.setMark(", StringComparison.Ordinal);
+    var aliasMark = set.IndexOf("marks.set(alias, next);", StringComparison.Ordinal);
+    Assert.True(set.IndexOf("markAt.set(key, ++clock);", StringComparison.Ordinal) < aliasMark);
+    Assert.True(aliasMark < set.IndexOf("repaint();", StringComparison.Ordinal));
+    Assert.True(set.IndexOf("repaint();", StringComparison.Ordinal) < request);
+    // A row or page answering meanwhile leaves the API key's pending mark (saving.has → not fresh); the save ends for
+    // both keys, so a page asked afterwards is fresh again.
+    Assert.Contains("const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", Core());
+    Assert.Contains("unsave(key);\n        if (alias) unsave(alias);", set);
+    Assert.Contains("onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen),", Core());
+    Assert.Contains("const toggleSeen = (m) => (m.seen ? { ...m, seen: false } : { ...m, seen: true, watchlist: false });", Core());
+  }
+
+  [Fact]
+  public void SimilarCardSave_Failed_RollsTheApiKeyBackToItsOwnValue()
+  {
+    var set = SetMark();
+    var failure = Between(set, "} catch (err) {", "} finally {");
+    // Liked from the card, Seen from the Marks row, then a failed request to clear the Like from the card: the row's
+    // Seen save replaced the API key's mark, so it stays; untouched, the API key takes its own prior value, not the
+    // card's before. prior is read before the save sets the alias, so it is the value the row showed.
+    Assert.Contains("if (alias && marks.get(alias) === next) marks.set(alias, prior || before);", failure);
+    Assert.True(set.IndexOf("prior = alias && marks.get(alias);", StringComparison.Ordinal) < set.IndexOf("marks.set(alias, next);", StringComparison.Ordinal));
+    // Never undefined into marks: paintMarks reads m.seen. An alias is only recorded together with a mark under the
+    // API key (syncRows sets it even when no row showed it), so prior is there; before is the fallback.
+    var sync = SyncRows();
+    Assert.DoesNotContain("if (!marks.has(key)) return;", sync);
+    Assert.Contains("marks.set(key, mark);\n    paintKey(ctx, key);", sync);
+    var success = Between(set, "const real = saved?.key || keyAlias.get(key);", "} catch (err) {");
+    Assert.Contains("keyAlias.set(key, real);\n        syncRows(ctx, real, marks.get(key));", success);
+    Assert.Contains("const m = marks.get(el.dataset.key);\n    const [seen, up, down] = el.children;\n    seen.setAttribute('aria-pressed', String(m.seen));", Core());
+    // The rollback repaints both keys before the toast.
+    Assert.True(failure.IndexOf("marks.set(alias, prior || before);", StringComparison.Ordinal) < failure.IndexOf("repaint();", StringComparison.Ordinal));
+    Assert.True(failure.IndexOf("repaint();", StringComparison.Ordinal) < failure.IndexOf("ctx.toast(", StringComparison.Ordinal));
+    // A later answer of the card's save does not carry its mark over a later tap on the API key's rows.
+    Assert.Contains("if (real && real !== key && (real !== alias || marks.get(alias) === next)) {", success);
+  }
+
+  [Fact]
+  public void FirstSimilarCardSave_HoldsTapsAndMarksPagesUntilItsKeyIsKnown()
+  {
+    var core = Core();
+    var set = SetMark();
+    // Blind: a save of a similar card's local key with no API key yet.
+    Assert.Contains("const blind = () => [...saving.keys()].some((k) => k.startsWith('similar:') && !keyAlias.has(k));", core);
+    // (b) A tap on any other key, a row already on screen included, waits; it is taken before the next mark is
+    // computed, so it computes from the mark in marks when it runs (rating 1 after the Like).
+    var hold = "if (blind() && !key.startsWith('similar:')) return void blindQueue.add(() => setMark(ctx, name, kind, key, next));";
+    Assert.Contains(hold, set);
+    Assert.True(set.IndexOf(hold, StringComparison.Ordinal) < set.IndexOf("if (typeof next === 'function') next = next(marks.get(key));", StringComparison.Ordinal));
+    // Held taps run in the order tapped (a Set keeps insertion order) once the save has answered: after syncRows gave the
+    // API key its mark, and before the Marks pages so that these wait for the held saves too.
+    var end = set[set.IndexOf("} finally {", StringComparison.Ordinal)..];
+    var release = end.IndexOf("if (!blind()) [...blindQueue].forEach((fn) => blindQueue.delete(fn) && fn());", StringComparison.Ordinal);
+    Assert.True(end.IndexOf("unsave(key);", StringComparison.Ordinal) < release);
+    Assert.True(release >= 0 && release < end.IndexOf("if (settled()) [...settleQueue]", StringComparison.Ordinal));
+    Assert.Contains("const blindQueue = new Set();", core);
+    // (a) A Marks page answering meanwhile is not rendered: it returns before any applyMark or row and walks from
+    // page 1 once saves end, so no row shows the title unliked and the walk brings the Like.
+    var load = LoadPage();
+    var wait = load.IndexOf("if (blind()) {", StringComparison.Ordinal);
+    Assert.True(wait >= 0 && wait < load.IndexOf("applyMark(ctx, m.key, m, at);", StringComparison.Ordinal));
+    Assert.True(wait < load.IndexOf("view.loaded = true;", StringComparison.Ordinal));
+    Assert.Contains("if (blind()) {\n        return void whenSettled(() => {\n          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n          [view.walk, view.loading] = [1, false];\n          loadPage();\n        });\n      }", load);
+    // (c) Search, Groups and the card are judged per key: blind is in neither freshFor nor applyMark.
+    Assert.Contains("const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", core);
+    Assert.DoesNotContain("blind", Between(core, "function applyMark(ctx, key, m, asked) {", "\n  }\n"));
+    Assert.DoesNotContain("blind", CardMarks());
+    // Another signed-in user starts without held taps.
+    Assert.Contains("[marks, markAt, saving, keyAlias, answers, blindQueue]) m.clear();", Read("library.js"));
+  }
+
+  [Fact]
+  public void FirstSimilarCardSave_AnsweringBeforeAMarksPage_LeavesThePageRenderable()
+  {
+    var set = SetMark();
+    // The save's answer puts the saved mark under the API key even when marks has none, and the end of the save stamps
+    // it with the clock: the Marks GET asked earlier finds markAt above its clock and leaves the saved mark.
+    Assert.DoesNotContain("if (!marks.has(key)) return;", SyncRows());
+    var end = set[set.IndexOf("} finally {", StringComparison.Ordinal)..];
+    Assert.Contains("markAt.set(key, ++clock);\n        // The API key takes the same stamp, also the one the first save's answer just gave its mark.\n        if (keyAlias.has(key)) markAt.set(keyAlias.get(key), clock);", end);
+    // A page key marks has no value for takes the server's mark, so the row renders; the page overlapped the save
+    // (saveTicks moved) and walks again.
+    Assert.Contains("if (marks.has(key) && !freshFor(key, asked)) return;\n    marks.set(key, markOf(m));", Core());
+    var load = LoadPage();
+    Assert.Contains("const overlapped = ticks !== saveTicks || !settled();", load);
+    Assert.Contains("view.walk = overlapped ? 1 : view.walk && requested + 1;", load);
   }
 
   [Fact]
