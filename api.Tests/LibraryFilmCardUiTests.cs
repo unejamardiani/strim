@@ -108,9 +108,13 @@ public class LibraryFilmCardUiTests
     var card = Card();
     Assert.Contains("card.tile = button.classList.contains('lib-tile') ? { key: button.dataset.key, rail: railOf(button) } : null;", card);
     Assert.Contains("const again = card.tile ? sameTile(ctx, card.tile)", card);
-    Assert.Contains("const tiles = [...ctx.root.querySelectorAll('button.lib-tile')].filter((t) => t.dataset.key === key);", card);
+    // Review 3 of #430: the same title's tile in a hidden tab (Groups visited earlier) never takes the focus, so the
+    // last watchlist title marked seen hands it to Home's All link.
+    Assert.Contains("const shown = (el) => !el.closest('[hidden]');", card);
+    Assert.Contains("const tiles = [...ctx.root.querySelectorAll('button.lib-tile')].filter((t) => t.dataset.key === key && shown(t));", card);
     Assert.Contains("return tiles.find((t) => railOf(t) === rail) || tiles[0]", card);
-    Assert.Contains("|| [...ctx.root.querySelectorAll('.lib-rail')].find((r) => r.getAttribute('aria-label') === rail);", card);
+    Assert.Contains("|| [...ctx.root.querySelectorAll('.lib-rail')].find((r) => r.getAttribute('aria-label') === rail && shown(r));", card);
+    Assert.Contains("for (const [key, panel] of Object.entries(view.panels)) panel.hidden = key !== tab;", Read("library.js"));
     // Review of #430: the only watchlist title marked seen leaves Home's rail for the empty note; the focus goes to the
     // section's All link, which survives, before Home's search field.
     Assert.Contains("card.sec = button.closest('.lib-sec');", card);

@@ -1961,11 +1961,13 @@
 
   // The tile that replaced the opening one: first in the rail of the same name, then anywhere in the Library; a tile
   // that left (off the watchlist) hands the focus to its rail, never to Home's search field, which opens Search.
+  // Tiles of another tab stay in the page, hidden: they never take the focus.
   const railOf = (tile) => tile.closest('.lib-rail, .lib-grid')?.getAttribute('aria-label') ?? null;
+  const shown = (el) => !el.closest('[hidden]');
   function sameTile(ctx, { key, rail }) {
-    const tiles = [...ctx.root.querySelectorAll('button.lib-tile')].filter((t) => t.dataset.key === key);
+    const tiles = [...ctx.root.querySelectorAll('button.lib-tile')].filter((t) => t.dataset.key === key && shown(t));
     return tiles.find((t) => railOf(t) === rail) || tiles[0]
-      || [...ctx.root.querySelectorAll('.lib-rail')].find((r) => r.getAttribute('aria-label') === rail);
+      || [...ctx.root.querySelectorAll('.lib-rail')].find((r) => r.getAttribute('aria-label') === rail && shown(r));
   }
 
   // One request per opened card; a newer one aborts it. Matched answers are kept for the page session.
