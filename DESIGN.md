@@ -295,8 +295,8 @@ to Liked; left out when none), New in your groups (up to 3 groups with "+N new",
 the device's counts, read without writing; left out when nothing is new) and Browse (one tile per
 type with groups that are on: marker, name, "11 groups · 17,817", opening Groups with that type).
 Each section shows its own "Loading…" line and its own error with Try again; the marks sections
-show also when the list failed. From 1100px the page is at most 1280px wide and the two lists sit
-side by side. Marks set anywhere repaint Home's rows; a title marked seen leaves the watchlist.
+show also when the list failed. From 1100px the Home panel fills the page up to 1280px, never scrolls the page
+sideways, and the two lists sit side by side. Marks set anywhere repaint Home's rows; a title marked seen leaves the watchlist.
 
 Poster tiles (#427), only with TMDB on: `.lib-tile` is a 2:3 art box (`.lib-art`, radius 12px, 112px
 wide, 148px from 768px), the title (13.5px, one line, ellipsis) and a meta line (12px). The art starts
@@ -366,7 +366,7 @@ where the marks are set. The head's right end has the view button (`.lib-ib`): t
 ("Show as list") in grid view, the `grid` icon ("Show as posters") in list view, the choice kept
 per device in `localStorage` `strim.library.groupView` (default grid). Filter, Unseen, Liked and
 sort work in both views; switching keeps the loaded titles and starts at the top. From 1100px the
-grid takes the full Library width (at most 1280px) without the group list beside it (Back returns
+grid fills the page width (up to 1280px) without the group list beside it (Back returns
 to it); list view keeps the two columns. Channel groups, and every group with TMDB off, keep the
 list without the button. An open group has its
 own address (#442),
