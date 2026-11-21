@@ -1533,6 +1533,7 @@ function showLibrary(playlist) {
     icon,
     fmt,
     plural,
+    user: state.user?.userName || state.user?.email || null,
     // The tab to open (#418) and the app's sheet for the Library's ⋯ menu.
     sub: target.sub,
     query: target.query,

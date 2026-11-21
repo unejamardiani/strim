@@ -11,10 +11,12 @@
     { name: 'marks', label: 'Marks', icon: 'check' },
   ];
   // The Library on screen: its ctx, tab links, panels and open tab, for show().
-  let view = null;
+  let view = null, markUser = null;
 
   function mount(ctx) {
     const { root, playlist, h, icon, controller } = ctx;
+    // The marks are the signed-in user's (#447): another account in the same tab starts without the last one's.
+    if (ctx.user !== markUser) { markUser = ctx.user; for (const m of [marks, markAt, keyAlias, answers]) m.clear(); }
     const base = isViewer(ctx) ? `#/shared/${playlist.id}` : `#/p/${playlist.id}/library`;
     const nav = h('nav', { class: 'lib-tabs', 'aria-label': 'Library' },
       TABS.map((t) => h('a', { href: `${base}/${t.name}`, dataset: { tab: t.name } }, icon(t.icon), t.label)));
@@ -515,15 +517,19 @@
   }
 
   // Shown at once on every row of the title; a failed request puts the mark back and says so. Per key (#447): saving
-  // counts the saves on their way, markAt the tick of the last start or end of one (an answer asked before is stale).
+  // counts the saves on their way, markAt the clock of the last save start or end or Marks page (an answer asked before
+  // is stale); every request and save moves the clock. saveTicks moves only with saves.
   const saving = new Map();
   const markAt = new Map();
-  let saveTicks = 0;
+  let saveTicks = 0, clock = 0;
   const settleQueue = new Set();
   const whenSettled = (fn) => (saving.size ? settleQueue.add(fn) : fn());
-  const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));
+  // A first save from a similar film's card (#368) has no API key yet: until it ends no answer is fresh for any key.
+  const blind = () => [...saving.keys()].some((k) => k.startsWith('similar:') && !keyAlias.has(k));
+  const freshFor = (key, asked) => !blind() && !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));
+  const unsave = (k) => (saving.get(k) > 1 ? saving.set(k, saving.get(k) - 1) : saving.delete(k));
   const askTitles = async (ctx, params, signal) => {
-    const asked = saveTicks;
+    const asked = ++clock;
     const found = await ctx.titles(params, signal);
     for (const t of found?.titles || []) t.asked = asked;
     return found;
@@ -532,10 +538,10 @@
     const before = marks.get(key);
     saving.set(key, (saving.get(key) || 0) + 1);
     saveTicks += 1;
-    markAt.set(key, saveTicks);
+    markAt.set(key, ++clock);
     // A similar film's card (#368) saves under a local key; once the API's key is known, the save is pending there too.
     const alias = keyAlias.get(key), prior = alias && marks.get(alias);
-    if (alias) { saving.set(alias, (saving.get(alias) || 0) + 1); markAt.set(alias, saveTicks); marks.set(alias, next); }
+    if (alias) { saving.set(alias, (saving.get(alias) || 0) + 1); markAt.set(alias, clock); marks.set(alias, next); }
     const repaint = () => [key, alias].forEach((k) => k && paintKey(ctx, k));
     marks.set(key, next);
     repaint();
@@ -560,17 +566,12 @@
       repaint();
       ctx.toast(`The mark was not changed. ${err.message || ''}`.trim(), { error: true });
     } finally {
-      if (alias && saving.get(alias) > 1) saving.set(alias, saving.get(alias) - 1);
-      else if (alias) saving.delete(alias);
-      if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);
-      else saving.delete(key);
+      if (alias) unsave(alias);
+      unsave(key);
       saveTicks += 1;
-      for (const k of [key, keyAlias.get(key)]) if (k) markAt.set(k, saveTicks);
-      if (!saving.size) {
-        const waiting = [...settleQueue];
-        settleQueue.clear();
-        for (const fn of waiting) fn();
-      }
+      clock += 1;
+      for (const k of [key, keyAlias.get(key)]) if (k) markAt.set(k, clock);
+      if (!saving.size) [...settleQueue].forEach((fn) => settleQueue.delete(fn) && fn());
     }
   }
 
@@ -991,8 +992,7 @@
   function myMarks(ctx) {
     const { h, icon, fmt, plural } = ctx;
     const asked = String(ctx.sub || '').startsWith('marks') ? markViewOf(ctx.query) : null;
-    // pages: the keys of every page loaded, asked again when the list comes or includeOff changes; asks counts the
-    // lookups' settings, so an answer for an earlier one changes nothing.
+    // pages: every loaded page's keys, looked up again on demand; asks: an answer for an earlier ask changes nothing.
     const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, pages: [], asks: 0 };
     // The rows' state in one place: mark key → { li, mark (the server's record), title (the lookup's answer or null) }.
     const rows = new Map();
@@ -1049,9 +1049,10 @@
       foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
       let page;
       let requested;
-      const ticks = saveTicks;
-      // minPage holds only while no save started or ended since it was raised (a save may move a title onto its pages).
+      const ticks = saveTicks, at = ++clock;
+      // minPage and a walk hold only while no save started or ended since they were set: both start again at page 1.
       if (view.minAt !== ticks) view.minPage = 1;
+      if (view.walkAt !== ticks) [view.walk, view.walkAt] = [view.walk && 1, ticks];
       try {
         const filter = MARK_VIEWS.find((f) => f.value === view.filter).params;
         requested = view.walk || Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);
@@ -1065,12 +1066,13 @@
         return;
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
-      // A save that overlapped the request may have moved titles between pages: the page is shown and asked again once
-      // no save is on its way.
+      // A first save from a similar film's card (blind) may be of a title on any page: the list waits for its API key
+      // and then walks from page 1.
+      if (blind()) return void whenSettled(() => { if (seq === view.seq && ctx.isCurrent()) { view.walk = 1; view.loading = false; loadPage(); } });
+      // A save that overlapped the request may have moved titles: the page is shown and asked again once saves end.
       const overlapped = ticks !== saveTicks || saving.size > 0;
       view.loading = false;
-      // The count is the first settled page's until the view is loaded again (#447), rows edited out (left) included;
-      // a later overlapped page leaves it alone, as its server count may still hold a row counted in left.
+      // The count is the first settled page's, rows edited out (left) included, until the view is loaded again (#447).
       if (!view.counted && (!overlapped || !view.loaded)) view.total = page.total + left();
       view.counted = view.counted || !overlapped;
       view.loaded = true;
@@ -1078,10 +1080,10 @@
       let added = 0;
       for (const m of items) {
         // A fresh page shows the server's mark unless a save overlapped it, on every control of the title; its stamp
-        // outranks a Search or Groups answer asked at the same tick, not a later page's.
-        if (freshFor(m.key, ticks + 0.5)) {
+        // outranks an answer asked before it, not one asked after.
+        if (freshFor(m.key, at)) {
           marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
-          markAt.set(m.key, Math.max(markAt.get(m.key) || 0, ticks + 0.5));
+          markAt.set(m.key, Math.max(markAt.get(m.key) || 0, at));
           paintKey(ctx, m.key);
         }
         if (view.shown.has(m.key)) continue;
@@ -1118,11 +1120,10 @@
       paint();
     };
 
-    // A row: type marker, title and year, where the title is, the shared controls (#419) and the chevron, hidden on a
-    // row that opens no card. Built again after a lookup it shows the mark in marks and leaves that object in place.
     // Rows shown whose mark no longer fits the view: the server's pages after them moved up by as many places.
     const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;
 
+    // A row; built again after a lookup it shows the mark in marks and leaves that object in place.
     const build = (key) => {
       const state = rows.get(key);
       const { mark: m, title: t } = state;
@@ -1357,7 +1358,7 @@
     if (!answer) {
       renderFilm(ctx, null);
       const own = (card.pending = new AbortController());
-      const asked = saveTicks;
+      const asked = ++clock;
       try {
         const params = { name: film.name, group: film.group, type: 'Movies', cacheKey: film.cacheKey, includeDisabled: includeOff, hideSeen };
         if (film.type === 'Series') answer = await ctx.seriesCard({ ...params, type: 'Series' }, own.signal);

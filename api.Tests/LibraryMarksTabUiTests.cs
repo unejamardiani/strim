@@ -104,8 +104,7 @@ public class LibraryMarksTabUiTests
   {
     var section = MyMarks();
     var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
-    // One call site, with the keys of the whole page, after the loop that skips repeated rows and before a page that
-    // added nothing moves on: an overlapping or fully repeated page is looked up as well.
+    // One call site with the whole page's keys, after the skip of repeated rows: a repeated page is looked up as well.
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(load, @"lookup\("));
     Assert.Contains("const keys = items.map((m) => m.key);\n      view.pages.push(keys);\n      lookup(keys, seq);", load);
     Assert.True(load.IndexOf("added += 1;\n      }", StringComparison.Ordinal) < load.IndexOf("lookup(keys, seq);", StringComparison.Ordinal));
@@ -143,25 +142,16 @@ public class LibraryMarksTabUiTests
       Assert.True(at >= 0 && at < gone, $"'{check}' must come before accessGone.");
     }
     Assert.DoesNotContain("toast", failure);
-    // A current failure that is no lost access goes on with no answer: every row of the page, also one matched by
-    // the lookup before (the switch turned off, then the lookup failed), loses its card and says "Not in this list".
+    // A current failure that is no lost access goes on with no answer: every row of the page says "Not in this list".
     Assert.Contains("let answer = null;", lookup);
-    // The catch holds the guard and nothing else, and the loop over the page follows it directly: no return in
-    // between keeps a row matched by an earlier lookup tappable.
     Assert.Equal("} catch (err) {\n        if (!(seq === view.seq && ask === view.asks && ctx.isCurrent() && !ctx.controller.signal.aborted) || accessGone(ctx, err)) return;", failure);
     Assert.Contains("|| accessGone(ctx, err)) return;\n      }\n      if (seq !== view.seq || ask !== view.asks || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n      for (const key of keys) {", lookup);
     var apply = lookup[lookup.IndexOf("if (seq !== view.seq || ask !== view.asks", StringComparison.Ordinal)..];
     Assert.Contains("const title = answer?.titles?.[key] || null;", apply);
     Assert.Contains("state.title = title;\n        build(key);", apply);
-    // A successful match, then a failed refresh: the title stored by the match differs from null, so the same row is
-    // built again without it, static and reading "Not in this list".
+    // A match, then a failed refresh: the row is built again without its title (see the next test), static.
     Assert.Contains("if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;", apply);
-    var build = Between(MyMarks(), "const build = (key) => {", "const lookup = async");
-    Assert.Contains("const opened = t ? { ...e, name: t.name, enabled: t.enabled } : { ...e, markKey: null };", build);
-    Assert.Contains("const meta = !t ? 'Not in this list'", build);
-    Assert.Contains("class: opens(ctx, opened) ? 'lib-row' : 'lib-row is-static'", build);
-    Assert.Contains("state.li?.replaceWith(li);", build);
-    // opens() needs a mark key, which a row without a title does not hand on.
+    Assert.Contains("const meta = !t ? 'Not in this list'", Between(MyMarks(), "const build = (key) => {", "const lookup = async"));
     Assert.Contains("e.contentType === 'Movies' && !!e.markKey;", Read("library.js"));
     Assert.Contains("e.contentType === 'Series' && !!e.markKey;", Read("library.js"));
   }
@@ -170,13 +160,11 @@ public class LibraryMarksTabUiTests
   public void LookupSuccess_TurnsAnAbsentRowIntoACardLink()
   {
     var section = MyMarks();
-    // A row starts without a title and is built static.
+    // A row starts without a title; the answer's title is stored in its state and the row is built again in place.
     Assert.Contains("rows.set(m.key, { li: null, mark: m, title: null });\n        list.append(build(m.key));", section);
     var lookup = Between(section, "const lookup = async (keys, seq) => {", "ctx.lookupMarks = () => {");
-    // The answer's title is stored in the row's state and the row is built again in place.
     Assert.Contains("for (const key of keys) {\n        const state = rows.get(key);\n        const title = answer?.titles?.[key] || null;\n        if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;\n        state.title = title;\n        build(key);\n      }", lookup);
     var build = Between(section, "const build = (key) => {", "const lookup = async");
-    // build reads the stored title: with it the row opens the card and loses is-static, and it replaces the old row.
     Assert.Contains("const { mark: m, title: t } = state;", build);
     Assert.Contains("const opened = t ? { ...e, name: t.name, enabled: t.enabled } : { ...e, markKey: null };", build);
     Assert.Contains("class: opens(ctx, opened) ? 'lib-row' : 'lib-row is-static'", build);
@@ -188,14 +176,12 @@ public class LibraryMarksTabUiTests
   {
     var section = MyMarks();
     var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
-    // The first page sets the count, the first settled page fixes it. Liked opened during a save, its one row shown,
-    // its Like cleared before or while the retry is on its way: "1 mark" after each answer, no empty message.
+    // The first page sets the count, the first settled page fixes it: "1 mark" after each answer of a retried Liked.
     Assert.Contains("if (!view.counted && (!overlapped || !view.loaded)) view.total = page.total + left();\n      view.counted = view.counted || !overlapped;\n      view.loaded = true;", load);
     Assert.True(load.IndexOf("const overlapped =", StringComparison.Ordinal) < load.IndexOf("if (!view.counted", StringComparison.Ordinal));
     Assert.Contains("view.loaded = view.counted = false;\n      view.walk = 0;", section);
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(section, @"view\.total = page\.total"));
-    // A row edited out of the view moved every later title up by one on the server: the next page counts it out,
-    // so the sentinel still reaches the 51st title of 51 Liked after a like on page one is cleared.
+    // A row edited out of the view moved every later title up by one on the server: the next page counts it out.
     Assert.Contains("requested = view.walk || Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", load);
     // 102 Liked, 100 shown, title 1 cleared while page 3 loads: page 3 returns 102, 101 moved onto page 2. The retry
     // walks every page from 1 (1, 2, 3, 1, 2), not from the rows shown, so 101 and 102 are both reached.
@@ -203,9 +189,8 @@ public class LibraryMarksTabUiTests
     Assert.DoesNotContain("view.back", section);
     Assert.Contains("const short = view.shown.size - left() < page.total;\n      view.done = items.length < MARKS_PAGE || !short;", load);
     Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", section);
-    // A page a save overlapped is shown (the pending title with the pending value) and asked again once no save is on
-    // its way; repeated rows are skipped and the loading state keeps the sentinel away meanwhile.
-    var ticks = load.IndexOf("const ticks = saveTicks;", StringComparison.Ordinal);
+    // A page a save overlapped is shown and asked again once no save is on its way; loading keeps the sentinel away.
+    var ticks = load.IndexOf("const ticks = saveTicks, at = ++clock;", StringComparison.Ordinal);
     Assert.True(ticks >= 0 && ticks < load.IndexOf("await ctx.listMarks(", StringComparison.Ordinal));
     Assert.Contains("const overlapped = ticks !== saveTicks || saving.size > 0;\n      view.loading = false;", load);
     Assert.DoesNotContain("if (ticks !== saveTicks || saving.size) {", load);
@@ -215,9 +200,7 @@ public class LibraryMarksTabUiTests
     Assert.True(retry < load.IndexOf("if (!view.done && added === 0) {", StringComparison.Ordinal));
     Assert.DoesNotContain("short && (added === 0 || view.done)", load);
     Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        view.minAt = ticks;", load);
-    // minPage holds only while no save started or ended since it was raised, on every path to the next request: the
-    // answer of an overlapped page and an error followed by Try again alike (a cleared mark moved title 100 onto page
-    // 2 after minPage reached 3; the retry asks from the rows shown again).
+    // minPage holds only while no save started or ended since it was raised, on every path, Try again included.
     var reset = load.IndexOf("if (view.minAt !== ticks) view.minPage = 1;", StringComparison.Ordinal);
     Assert.True(reset > ticks && reset < load.IndexOf("requested = view.walk", StringComparison.Ordinal));
     Assert.Contains("onclick: loadPage }, 'Try again')", load);
@@ -225,7 +208,10 @@ public class LibraryMarksTabUiTests
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);\n    saveTicks += 1;", setMark);
     Assert.True(setMark.IndexOf("saveTicks += 1;", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
-    Assert.Contains("else saving.delete(key);\n      saveTicks += 1;\n      for (const k of [key, keyAlias.get(key)]) if (k) markAt.set(k, saveTicks);\n      if (!saving.size) {\n        const waiting = [...settleQueue];\n        settleQueue.clear();\n        for (const fn of waiting) fn();\n      }", Between(setMark, "} finally {", "\n  }"));
+    Assert.Contains("unsave(key);\n      saveTicks += 1;\n      clock += 1;\n      for (const k of [key, keyAlias.get(key)]) if (k) markAt.set(k, clock);\n      if (!saving.size) [...settleQueue].forEach((fn) => settleQueue.delete(fn) && fn());", Between(setMark, "} finally {", "\n  }"));
+    // 101 Liked, the retry walked pages 1 and 2, then a Like cleared moves title 101 onto page 2: the walk starts at 1 again.
+    var walk = load.IndexOf("if (view.walkAt !== ticks) [view.walk, view.walkAt] = [view.walk && 1, ticks];", StringComparison.Ordinal);
+    Assert.True(walk > ticks && walk < load.IndexOf("requested = view.walk", StringComparison.Ordinal));
     Assert.Contains("const whenSettled = (fn) => (saving.size ? settleQueue.add(fn) : fn());", library);
 
     var fits = Between(section, "const MARK_FITS = {", "};");
@@ -242,13 +228,11 @@ public class LibraryMarksTabUiTests
   {
     var library = Read("library.js");
     var card = Between(library, "function cardMarks(ctx, entry, answer) {", "const cardToast");
-    // While a save is on its way the card shows the pending value and markControls keeps that object, so a failed
-    // save still rolls back and says so. A save that overlapped the card's request counts too: a Seen title's card
-    // opened, a Like saved while it loads, the older answer then arrives unliked; the card keeps the saved Like, so the
-    // next Seen tap sends rating 1 instead of 0.
+    // During a save, or after one that overlapped the card's request, the card shows the value in marks and keeps
+    // that object, so a failed save still rolls back and the next Seen tap sends the saved Like.
     Assert.Contains("const pending = !freshFor(key, answer?.asked) && marks.has(key);", card);
     var load = Between(library, "async function loadFilm(ctx) {", "function renderFilm(");
-    var asked = load.IndexOf("const asked = saveTicks;", StringComparison.Ordinal);
+    var asked = load.IndexOf("const asked = ++clock;", StringComparison.Ordinal);
     Assert.True(asked >= 0 && asked < load.IndexOf("await ctx.seriesCard(", StringComparison.Ordinal));
     Assert.Contains("if (seq !== card.seq || !ctx.isCurrent()) return;\n      // Stamped like the titles' answers (#447): a save of the title that overlapped the request outranks its marks.\n      answer.asked = asked;\n      if (answer.status === 'matched') answers.set(key, answer);", load);
     Assert.Contains("const given = pending || !answer?.marks || owner === key ? now", card);
@@ -258,7 +242,7 @@ public class LibraryMarksTabUiTests
   }
 
   private const string KeepRule = "if (!entry.keepMark && (freshFor(key, entry.asked) || !marks.has(key))) marks.set(key, {";
-  private const string FreshPage = "if (freshFor(m.key, ticks + 0.5)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });\n          markAt.set(m.key, Math.max(markAt.get(m.key) || 0, ticks + 0.5));\n          paintKey(ctx, m.key);\n        }";
+  private const string FreshPage = "if (freshFor(m.key, at)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });\n          markAt.set(m.key, Math.max(markAt.get(m.key) || 0, at));\n          paintKey(ctx, m.key);\n        }";
 
   [Fact]
   public void AnswerOverlappedByASave_LeavesTheSavedMarkAlone()
@@ -266,29 +250,41 @@ public class LibraryMarksTabUiTests
     var library = Read("library.js");
     // One save tick per key, moved at the start and the end of every save of it (and of its API key).
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
-    Assert.Contains("saveTicks += 1;\n    markAt.set(key, saveTicks);", setMark);
-    Assert.True(setMark.IndexOf("markAt.set(key, saveTicks);", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
-    Assert.Contains("const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", library);
+    Assert.Contains("saveTicks += 1;\n    markAt.set(key, ++clock);", setMark);
+    Assert.True(setMark.IndexOf("markAt.set(key, ++clock);", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
+    Assert.Contains("const freshFor = (key, asked) => !blind() && !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", library);
 
-    // Search and Groups answers carry the tick they were asked at: one that a save overlapped keeps the saved Like.
-    Assert.Contains("const asked = saveTicks;\n    const found = await ctx.titles(params, signal);\n    for (const t of found?.titles || []) t.asked = asked;", library);
+    // Search, Groups, card and Marks requests take the next clock value when asked: one that a save overlapped keeps the
+    // saved Like, a Search asked after a Marks page (no save since) takes the server's marks again.
+    Assert.Contains("const asked = ++clock;\n    const found = await ctx.titles(params, signal);\n    for (const t of found?.titles || []) t.asked = asked;", library);
+    Assert.DoesNotContain("asked = saveTicks", library);
+    Assert.DoesNotContain("ticks + 0.5", library);
+    // Another account signed in in the same tab: the Library starts without the last user's marks.
+    Assert.Contains("if (ctx.user !== markUser) { markUser = ctx.user; for (const m of [marks, markAt, keyAlias, answers]) m.clear(); }", Between(library, "function mount(ctx) {", "load(ctx, controller);"));
+    Assert.Contains("    plural,\n    user: state.user?.userName || state.user?.email || null,", Read("main.js"));
+    // The first Like from a similar film's card has no API key yet (blind): no answer is fresh and a Marks page waits
+    // for the save before it renders, so its row shows the Like and its Seen tap sends rating 1.
+    Assert.Contains("const blind = () => [...saving.keys()].some((k) => k.startsWith('similar:') && !keyAlias.has(k));", library);
+    var hold = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
+    var wait = hold.IndexOf("if (blind()) return void whenSettled(() => { if (seq === view.seq && ctx.isCurrent()) { view.walk = 1; view.loading = false; loadPage(); } });", StringComparison.Ordinal);
+    Assert.True(wait > hold.IndexOf("await ctx.listMarks(", StringComparison.Ordinal) && wait < hold.IndexOf("for (const m of items)", StringComparison.Ordinal));
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(library, @"ctx\.titles\("));
     Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(library, @"await askTitles\(ctx, ").Count);
     // A Like from a similar film's card on a Seen title, All opened before the PUT ends: pending under the API key too,
     // so the Marks row shows the Like and its Seen tap sends rating 1; a failed save rolls each key back to its own value
     // (Liked from the card, Seen from the row, the card's failed clear leaves Seen pressed).
-    Assert.Contains("const alias = keyAlias.get(key), prior = alias && marks.get(alias);\n    if (alias) { saving.set(alias, (saving.get(alias) || 0) + 1); markAt.set(alias, saveTicks); marks.set(alias, next); }", setMark);
+    Assert.Contains("const alias = keyAlias.get(key), prior = alias && marks.get(alias);\n    if (alias) { saving.set(alias, (saving.get(alias) || 0) + 1); markAt.set(alias, clock); marks.set(alias, next); }", setMark);
     Assert.True(setMark.IndexOf("marks.set(alias, next)", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
     Assert.Contains("if (alias && marks.get(alias) === next) marks.set(alias, prior);", setMark);
     Assert.DoesNotContain("marks.set(alias, before)", setMark);
-    Assert.Contains("if (alias && saving.get(alias) > 1) saving.set(alias, saving.get(alias) - 1);\n      else if (alias) saving.delete(alias);", setMark);
+    Assert.Contains("if (alias) unsave(alias);\n      unsave(key);", setMark);
+    Assert.Contains("const unsave = (k) => (saving.get(k) > 1 ? saving.set(k, saving.get(k) - 1) : saving.delete(k));", library);
     Assert.Contains(KeepRule, Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
 
     // Marks: a repeated key takes the server's mark too, before it is skipped. A page Seen, then an older Search answer
-    // unseen: stale (ticks < ticks + 0.5). Two pages at one tick, unseen then Seen: the later one is fresh, Seen shows.
+    // unseen: stale. Two pages, unseen then Seen: the later one is fresh, Seen shows.
     var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     Assert.Contains(FreshPage + "\n        if (view.shown.has(m.key)) continue;", load);
-    Assert.DoesNotContain("freshFor(m.key, ticks)", load);
 
     // An overlapped page asks again with minPage from 1: a page skipped as repeated may hold a title the save moved up.
     Assert.Contains("if (view.minAt !== ticks) view.minPage = 1;", load);
@@ -373,7 +369,7 @@ public class LibraryMarksTabUiTests
     Assert.True(load.IndexOf("marks.set(m.key", StringComparison.Ordinal) < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);", setMark);
-    Assert.Contains("\n      if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);\n      else saving.delete(key);\n", setMark);
+    Assert.Contains("\n      unsave(key);\n", Between(setMark, "} finally {", "\n  }"));
     Assert.True(setMark.IndexOf("saving.set(key, (saving", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
 
     // A rebuilt row keeps the object in marks, so a failed save still rolls back and says so.
