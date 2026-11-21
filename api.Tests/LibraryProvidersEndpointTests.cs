@@ -63,6 +63,20 @@ public sealed class LibraryProvidersEndpointTests
   }
 
   [Fact]
+  public async Task Providers_AtTheCutoff_RankedMaxPriorityBeatsUnranked()
+  {
+    var many = Enumerable.Range(1, 39).Select(i => Provider(i, $"Service {i:D2}", i)).ToList();
+    await using var host = await TestHost.StartAsync(Token, Tmdb(
+      () => List([Provider(200, "Alpha"), Provider(201, "Zulu", int.MaxValue), .. many]),
+      () => List()));
+
+    var providers = All(await ProvidersAsync(host));
+    Assert.Equal(40, providers.Count);
+    Assert.Equal((201, (string?)"Zulu"), providers[^1]);
+    Assert.DoesNotContain((200, (string?)"Alpha"), providers);
+  }
+
+  [Fact]
   public async Task Providers_WhenOneListFails_AnswerTheOther()
   {
     await using var host = await TestHost.StartAsync(Token, Tmdb(

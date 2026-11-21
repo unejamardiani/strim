@@ -35,20 +35,21 @@ public static class LibraryProvidersEndpoints
   {
     var movies = await tmdb.GetMovieProvidersAsync(ct);
     var tv = await tmdb.GetTvProvidersAsync(ct);
-    var merged = new Dictionary<int, (string Name, int Priority)>();
+    var merged = new Dictionary<int, (string Name, int? Priority)>();
     foreach (var answer in new[] { movies, tv })
     {
       if (answer.Status != TmdbStatus.Ok) continue;
       foreach (var p in answer.Value!.Results ?? [])
       {
         if (p is null || p.ProviderId <= 0 || string.IsNullOrWhiteSpace(p.ProviderName)) continue;
-        var priority = p.DisplayPriorities?.TryGetValue(TmdbClient.WatchRegion, out var value) == true ? value : int.MaxValue;
+        var priority = p.DisplayPriorities?.TryGetValue(TmdbClient.WatchRegion, out var value) == true ? value : (int?)null;
         merged[p.ProviderId] = merged.TryGetValue(p.ProviderId, out var known)
-          ? (known.Name, Math.Min(known.Priority, priority))
+          ? (known.Name, known.Priority is int k && priority is int n ? Math.Min(k, n) : known.Priority ?? priority)
           : (p.ProviderName.Trim(), priority);
       }
     }
-    var providers = merged.OrderBy(p => p.Value.Priority).ThenBy(p => p.Value.Name, StringComparer.OrdinalIgnoreCase)
+    var providers = merged.OrderBy(p => p.Value.Priority is null).ThenBy(p => p.Value.Priority)
+      .ThenBy(p => p.Value.Name, StringComparer.OrdinalIgnoreCase)
       .Take(MaxProviders).Select(p => new LibraryProvider(p.Key, p.Value.Name)).ToList();
     return (providers, movies.Status == TmdbStatus.Ok || tv.Status == TmdbStatus.Ok);
   }
