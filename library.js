@@ -1049,15 +1049,18 @@
   // Poster loader (#427): asks ctx.posters (…/library/posters) only for tiles within 300px of the viewport, collected for 150ms
   // in batches of at most 24, one batch in flight at a time. Answers stay for the page session by mark key; a pending
   // one is asked again after 4s, at most 3 times. A failed batch leaves its tiles as fallback until they are created
-  // again, a 404 switches the loader off; no toast. It stops with ctx.controller.
+  // again, a 404 switches the loader off for the page session; no toast. It stops with ctx.controller.
+  // The answers and the 404 flag live here, like marks, so a remount keeps them; queue, timer and observer are per mount.
+  const posterAnswers = new Map();
+  let postersOff = false;
   function posterLoader(ctx) {
-    const known = new Map(), wanted = new WeakMap();
-    let queue = [], timer = 0, busy = false, off = false;
+    const wanted = new WeakMap();
+    let queue = [], timer = 0, busy = false;
     const signal = ctx.controller.signal;
-    const stopped = () => off || signal.aborted;
+    const stopped = () => postersOff || signal.aborted;
     const ask = (b) => {
       if (stopped()) return;
-      const p = known.get(b.key);
+      const p = posterAnswers.get(b.key);
       if (p) return void (p.status === 'ok' && showPoster(ctx, b.tile, p.posterUrl));
       queue.push(b);
       timer ||= setTimeout(flush, 150);
@@ -1071,14 +1074,14 @@
       try {
         answer = await ctx.posters({ cacheKey: ctx.list?.cacheKey ?? null, items: batch.map((b) => b.item) }, signal);
       } catch (err) {
-        if (err?.status === 404) off = true;
+        if (err?.status === 404) postersOff = true;
       }
       busy = false;
       if (stopped()) return;
       (answer?.posters || []).forEach((p, i) => {
         const b = batch[i];
         if (p.status !== 'pending') {
-          known.set(b.key, p);
+          posterAnswers.set(b.key, p);
           if (p.status === 'ok') showPoster(ctx, b.tile, p.posterUrl);
         } else if (b.tries < 3) setTimeout(() => ask({ ...b, tries: b.tries + 1 }), 4000);
       });

@@ -31,8 +31,12 @@ public class LibraryPostersUiTests
     Assert.Contains("const batch = queue.splice(0, 24);", loader);
     Assert.Contains("answer = await ctx.posters({ cacheKey: ctx.list?.cacheKey ?? null, items: batch.map((b) => b.item) }, signal);", loader);
     Assert.Contains("if (queue.length && !timer) timer = setTimeout(flush, 150);", loader);
-    // Answers stay for the page session by mark key, ok and none alike; one per mounted Library, only with TMDB on.
-    Assert.Contains("known.set(b.key, p);", loader);
+    // Answers stay for the page session by mark key, ok and none alike: declared outside posterLoader, so a remount keeps
+    // them, while the loader itself is one per mounted Library, only with TMDB on.
+    Assert.Contains("posterAnswers.set(b.key, p);", loader);
+    Assert.Contains("const p = posterAnswers.get(b.key);", loader);
+    Assert.DoesNotContain("new Map()", loader);
+    Assert.Contains("const posterAnswers = new Map();\n  let postersOff = false;\n  function posterLoader(ctx) {", Read("library.js"));
     Assert.Contains("if (p) return void (p.status === 'ok' && showPoster(ctx, b.tile, p.posterUrl));", loader);
     var library = Read("library.js");
     Assert.Contains("view.posters = ctx.tmdbEnabled === true ? posterLoader(ctx) : null;", Between(library, "function mount(ctx) {", "function show(sub, query)"));
@@ -68,8 +72,11 @@ public class LibraryPostersUiTests
   {
     var loader = Loader();
     var failure = Between(loader, "} catch (err) {", "busy = false;");
-    Assert.Contains("if (err?.status === 404) off = true;", failure);
-    Assert.Contains("const stopped = () => off || signal.aborted;", loader);
+    Assert.Contains("if (err?.status === 404) postersOff = true;", failure);
+    Assert.Contains("const stopped = () => postersOff || signal.aborted;", loader);
+    // The flag is declared outside posterLoader, so it holds for the page session, not only for one mount.
+    Assert.DoesNotContain("let postersOff", loader);
+    Assert.Contains("let postersOff = false;\n  function posterLoader(ctx) {", Read("library.js"));
     Assert.DoesNotContain("toast", loader);
     Assert.DoesNotContain("setTimeout(flush", failure);
   }
