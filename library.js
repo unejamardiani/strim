@@ -1071,8 +1071,8 @@
       const overlapped = ticks !== saveTicks || saving.size > 0;
       view.loading = false;
       // The count is the first settled page's (one no save overlapped) until the view is loaded again (#447), also
-      // after a row was edited out of it.
-      if (!view.counted) view.total = page.total;
+      // after a row was edited out of it; the rows shown that were edited out of it (left) still count then.
+      if (!view.counted) view.total = page.total + left();
       view.counted = view.counted || !overlapped;
       view.loaded = true;
       const items = page.items || [];

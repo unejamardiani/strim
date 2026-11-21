@@ -190,8 +190,9 @@ public class LibraryMarksTabUiTests
     var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
     // The count is set by the first settled page only; later pages do not lower it after a row was edited out of the
     // view. A first page a save overlapped (Liked opened while the first Like saves, the page empty) leaves the count
-    // to the retry, which shows the row with "1 mark" and no empty message.
-    Assert.Contains("if (!view.counted) view.total = page.total;\n      view.counted = view.counted || !overlapped;\n      view.loaded = true;", load);
+    // to the retry, which shows the row with "1 mark" and no empty message. The only Like shown cleared while that retry
+    // waits: the settled page counts 0 on the server, plus the row left in place, so "1 mark" and no empty message.
+    Assert.Contains("if (!view.counted) view.total = page.total + left();\n      view.counted = view.counted || !overlapped;\n      view.loaded = true;", load);
     Assert.True(load.IndexOf("const overlapped =", StringComparison.Ordinal) < load.IndexOf("if (!view.counted)", StringComparison.Ordinal));
     Assert.Contains("view.loaded = view.counted = false;\n      view.back = 0;", section);
     Assert.Single(System.Text.RegularExpressions.Regex.Matches(section, @"view\.total = page\.total"));
