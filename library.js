@@ -149,6 +149,8 @@
     if (own.signal.aborted || !ctx.isCurrent()) return;
     if (isViewer(ctx)) ctx.cover.fill(result);
     ctx.list = result;
+    // Marks pages loaded before the list get their lookup now (#447).
+    ctx.lookupMarks?.();
     const browse = browseSection(ctx, result);
     view.panels.search.replaceChildren(searchSection(ctx, result, browse.refresh, browse.reload));
     view.panels.groups.replaceChildren(browse.el);
@@ -231,6 +233,7 @@
     ctx.onIncludeOff = () => {
       run();
       onToggle();
+      ctx.lookupMarks?.();
     };
     const markFilter = (label, get, set) => {
       const b = h('button', {
@@ -435,7 +438,8 @@
     if (!entry.markKey || !kind) return null;
     const { h, icon } = ctx;
     const key = entry.markKey;
-    marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });
+    // A Marks row (#447) leaves the object in marks: setMark takes a replaced object for a later tap.
+    if (!entry.keepMark) marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });
     // Tapping an active control again undoes it.
     const control = (label, name, next) => h('button', {
       class: 'icon-btn library-mark', type: 'button', 'aria-label': label, title: label, 'aria-pressed': 'false',
@@ -509,9 +513,12 @@
     el.title = label;
   }
 
-  // Shown at once on every row of the title; a failed request puts the mark back and says so.
+  // Shown at once on every row of the title; a failed request puts the mark back and says so. saving counts the saves
+  // still on their way per key (#447), so a fresh Marks page does not paint over a pending value.
+  const saving = new Map();
   async function setMark(ctx, name, kind, key, next) {
     const before = marks.get(key);
+    saving.set(key, (saving.get(key) || 0) + 1);
     const repaint = () => {
       for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);
     };
@@ -536,6 +543,9 @@
       marks.set(key, before);
       repaint();
       ctx.toast(`The mark was not changed. ${err.message || ''}`.trim(), { error: true });
+    } finally {
+      if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);
+      else saving.delete(key);
     }
   }
 
@@ -921,8 +931,8 @@
   window.StrimLibrary = { mount, show };
 
   // My marks (#299): every film and series the user marked, newest change first, including titles that are in no
-  // playlist any more. A row is plain text, never a link to an entry. Remove asks nothing and offers Undo, which sets
-  // the same mark again with the set call; main.js sends both with the CSRF token.
+  // playlist any more. A row (#447) says whether its title is in this list, opens its card when it is and changes the
+  // mark with the controls of every other row.
   // The Marks tab (#446): five views, each with its address #/…/marks?view=…, a head that counts the view and pages
   // that load while scrolling.
   const MARK_VIEWS = [
@@ -944,9 +954,13 @@
   };
 
   function myMarks(ctx) {
-    const { h, fmt, plural } = ctx;
+    const { h, icon, fmt, plural } = ctx;
     const asked = String(ctx.sub || '').startsWith('marks') ? markViewOf(ctx.query) : null;
-    const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, edits: 0, pending: 0, waiting: 0 };
+    // pages: the keys of every page loaded, asked again when the list comes or includeOff changes; asks counts the
+    // lookups' settings, so an answer for an earlier one changes nothing.
+    const view = { filter: asked || 'all', seq: 0, shown: new Set(), total: 0, done: false, minPage: 1, loading: false, loaded: false, pages: [], asks: 0 };
+    // The rows' state in one place: mark key → { li, mark (the server's record), title (the lookup's answer or null) }.
+    const rows = new Map();
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
     const count = h('p');
     const list = h('ol', { class: 'search-list' });
@@ -989,22 +1003,15 @@
       else foot.replaceChildren(status(MARK_EMPTY[view.filter] || 'No marks of this kind.'));
     };
 
-    // The next page starts after the marks shown now; marks a page repeats after a remove or an undo are skipped.
-    // A mark set in the search or a group moves to the top and shifts every position, so a page can add nothing
-    // new: the list then moves on to the next page at once instead of asking for the same page again.
+    // The next page starts after the marks shown now; marks a page repeats are skipped. A mark set anywhere moves to
+    // the top and shifts every position, so a page can add nothing new: the list then moves on to the next page at
+    // once instead of asking for the same page again.
     const loadPage = async () => {
       if (view.loading) return;
       observer.unobserve(sentinel);
       view.loading = true;
       const seq = view.seq;
-      const edits = view.edits;
       foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
-      // A page asked for while a Remove or an Undo is pending would count from rows about to change: it is asked for
-      // once the edit's bookkeeping is done.
-      if (view.pending) {
-        view.waiting = seq;
-        return;
-      }
       let page;
       let requested;
       try {
@@ -1020,13 +1027,6 @@
         return;
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
-      // A Remove or an Undo that started meanwhile, or is still on its way, may have changed the list under the page and
-      // its total (the server can answer either first): ask again from the marks shown now, once no edit is pending.
-      if (edits !== view.edits || view.pending) {
-        if (view.pending) view.waiting = seq;
-        else { view.loading = false; loadPage(); }
-        return;
-      }
       view.loading = false;
       view.loaded = true;
       const items = page.items || [];
@@ -1034,9 +1034,16 @@
       for (const m of items) {
         if (view.shown.has(m.key)) continue;
         view.shown.add(m.key);
-        list.append(row(m));
+        // A fresh page shows the server's mark, unless a save for the title is still on its way.
+        if (!saving.has(m.key)) marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
+        rows.set(m.key, { li: null, mark: m, title: null });
+        list.append(build(m.key));
         added += 1;
       }
+      // One lookup with the keys of the whole page, repeated rows included.
+      const keys = items.map((m) => m.key);
+      view.pages.push(keys);
+      lookup(keys, seq);
       view.total = page.total;
       view.done = items.length < MARKS_PAGE || view.shown.size >= page.total;
       if (!view.done && added === 0) {
@@ -1047,76 +1054,54 @@
       paint();
     };
 
-    const row = (m) => {
-      const meta = [m.year, m.kind === 'series' ? 'Series' : 'Film', m.seen ? 'Seen' : '',
-        { 1: 'Liked', '-1': 'Disliked' }[m.rating] || ''].filter(Boolean).join(' · ');
-      const li = h('li', { class: 'library-hit' },
-        h('span', { class: 'search-hit-text' },
-          h('span', { class: 'search-hit-name', text: m.title }),
-          h('span', { class: 'search-hit-meta', text: meta })),
-        h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Remove the mark on ${m.title}`, onclick: () => remove(m, li) }, 'Remove'));
+    // A row: type marker, title and year, where the title is, the shared controls (#419) and the chevron, hidden on a
+    // row that opens no card. Built again after a lookup it shows the mark in marks and leaves that object in place.
+    const build = (key) => {
+      const state = rows.get(key);
+      const { mark: m, title: t } = state;
+      const type = m.kind === 'series' ? 'Series' : 'Movies';
+      const e = { name: m.year ? `${m.title} (${m.year})` : m.title, title: m.title, year: m.year, contentType: type, markKey: key, keepMark: true };
+      // Only a title in this list opens its card, with the lookup's name and group.
+      const opened = t ? { ...e, name: t.name, enabled: t.enabled } : { ...e, markKey: null };
+      const meta = !t ? 'Not in this list' : type === 'Series' ? [h('b', { text: seasonsLine(ctx, t) }), ' · ', t.group] : t.group;
+      const li = h('li', { class: opens(ctx, opened) ? 'lib-row' : 'lib-row is-static', dataset: { type, key } },
+        h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),
+        h('span', { class: 'lib-text' }, filmName(ctx, opened, t?.group, ctx.list?.cacheKey), h('span', { class: 'lib-meta' }, meta)),
+        rowMarks(ctx, e),
+        h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));
+      paintMarks(li.querySelector('.library-marks'));
+      state.li?.replaceWith(li);
+      state.li = li;
       return li;
     };
 
-    // A Remove or an Undo is an edit from its start until its bookkeeping is done; a page that answered meanwhile
-    // waits for it (loadPage) and is then asked again.
-    const edit = (work) => async (...args) => {
-      view.edits += 1;
-      view.pending += 1;
+    // In this list: one lookup per page once the list is there. An answer for a view left since, for an earlier
+    // setting of "Include switched-off groups" (asks) or for a Library left since changes nothing; a row whose key
+    // the answer lacks says "Not in this list".
+    const lookup = async (keys, seq) => {
+      if (!ctx.list || !keys.length) return;
+      const ask = view.asks;
+      let answer;
       try {
-        await work(...args);
-      } finally {
-        view.pending -= 1;
-        if (!view.pending && view.waiting) {
-          const again = view.waiting === view.seq;
-          view.waiting = 0;
-          if (again) { view.loading = false; loadPage(); }
-        }
-      }
-    };
-
-    // The row goes at once and comes back on a failure; it stays hidden in place so Undo puts it back there.
-    const remove = edit(async (m, li) => {
-      li.hidden = true;
-      try {
-        await ctx.removeMark(m.key);
+        answer = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys });
       } catch (err) {
-        // 404: the mark is already gone, for example removed on another device.
-        if (err.status !== 404) {
-          li.hidden = false;
-          ctx.toast(`The mark was not removed. ${err.message || ''}`.trim(), { error: true });
-          return;
-        }
-      }
-      syncRows(ctx, m.key, { seen: false, rating: 0, watchlist: false });
-      if (!li.isConnected) return;
-      view.shown.delete(m.key);
-      view.total -= 1;
-      paint();
-      ctx.toast(`Mark on ${m.title} removed`, { action: { label: 'Undo', onClick: () => undo(m, li) } });
-    });
-
-    const undo = (m, li) => {
-      if (!li.hidden || li.dataset.restoring) return;
-      li.dataset.restoring = 'true';
-      restore(m, li);
-    };
-    const restore = edit(async (m, li) => {
-      let mark;
-      try {
-        mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });
-      } catch (err) {
-        delete li.dataset.restoring;
-        ctx.toast(`The mark was not restored. ${err.message || ''}`.trim(), { error: true });
+        if (seq === view.seq && ask === view.asks && ctx.isCurrent() && !ctx.controller.signal.aborted) accessGone(ctx, err);
         return;
       }
-      syncRows(ctx, mark.key, { seen: mark.seen, rating: mark.rating, watchlist: mark.watchlist === true });
-      if (!li.isConnected || view.shown.has(mark.key)) return;
-      li.replaceWith(row(mark));
-      view.shown.add(mark.key);
-      view.total += 1;
-      paint();
-    });
+      if (seq !== view.seq || ask !== view.asks || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
+      for (const key of keys) {
+        const state = rows.get(key);
+        const title = answer?.titles?.[key] || null;
+        if (!state || JSON.stringify(title) === JSON.stringify(state.title)) continue;
+        state.title = title;
+        build(key);
+      }
+    };
+    // The list loaded, or includeOff changed: every page loaded so far is asked again.
+    ctx.lookupMarks = () => {
+      view.asks += 1;
+      for (const keys of view.pages) lookup(keys, view.seq);
+    };
 
     const start = () => {
       view.seq += 1;
@@ -1126,7 +1111,8 @@
       view.minPage = 1;
       view.loading = false;
       view.loaded = false;
-      view.waiting = 0;
+      view.pages = [];
+      rows.clear();
       list.replaceChildren();
       paint();
       loadPage();
@@ -1137,10 +1123,10 @@
       h('div', { class: 'lib-sticky' },
         h('div', { class: 'lib-ghead' }, h('div', { class: 'lib-ghead-text' }, h('h2', { text: 'My marks' }), count)),
         chips),
-      h('div', { class: 'card' }, list, foot));
+      h('div', { class: 'lib-list' }, list, foot));
   }
 
-  // A remove or an undo in My marks shows on the rows of the same title in the search and the open group.
+  // A mark saved under the API's key (#368) shows on the rows of that key in the search, the open group and Marks.
   function syncRows(ctx, key, mark) {
     if (!marks.has(key)) return;
     marks.set(key, mark);

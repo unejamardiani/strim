@@ -1563,9 +1563,10 @@ function showLibrary(playlist) {
     titles: (params, signal) => api(`/playlists/${playlist.id}/library/titles?${new URLSearchParams(params)}`, { signal }),
     // A film or series mark (#298), stored per user; api() sends the CSRF token. It never touches the playlist.
     setMark: (mark) => api('/marks', { method: 'PUT', body: mark }),
-    // My marks (#299): one page of the caller's marks, and removing one by key (api() sends the CSRF token).
+    // My marks (#299): one page of the caller's marks.
     listMarks: (params, signal) => api(`/marks?${new URLSearchParams(params)}`, { signal }),
-    removeMark: (key) => api(`/marks/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+    // Which marked titles are in this list (#447): the read-only lookup route, no CSRF filter.
+    lookupTitles: (body) => api(`/playlists/${playlist.id}/library/titles/lookup`, { method: 'POST', body }),
     toast,
     // The editor's language labels and language filter (#265, #266), passed in rather than copied. The filter works
     // on a host shaped like the editor's state (searchLang, searchLanguages) and calls host.onLangChoice on a change.
@@ -1610,6 +1611,7 @@ function showSharedLibrary(id) {
     },
     search: (body, signal) => api(`${base}/search`, { method: 'POST', body: scoped(body), signal }),
     titles: (params, signal) => api(`${base}/titles?${new URLSearchParams(scoped(params))}`, { signal }),
+    lookupTitles: (body) => api(`${base}/titles/lookup`, { method: 'POST', body: scoped(body) }),
     filmCard: (params, signal) => api(`${base}/film-card?${new URLSearchParams(scoped(params))}`, { signal }),
     seriesCard: (params, signal) => api(`${base}/series-card?${new URLSearchParams(scoped(params))}`, { signal }),
   } });

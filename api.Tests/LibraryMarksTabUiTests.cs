@@ -21,7 +21,7 @@ public class LibraryMarksTabUiTests
     return source[from..to];
   }
 
-  private static string MyMarks() => Between(Read("library.js"), "// My marks (#299)", "// A remove or an undo in My marks");
+  private static string MyMarks() => Between(Read("library.js"), "// My marks (#299)", "// A mark saved under the API's key");
 
   [Fact]
   public void Views_AreFiveChipsWithTheirQueries()
@@ -67,7 +67,7 @@ public class LibraryMarksTabUiTests
 
     var css = Read("library.css");
     Assert.Contains("@media (min-width: 1100px) { .library-mylist { max-width: 920px; } }", css);
-    Assert.Contains(".library-mylist > .lib-sticky + .card { margin-top: -6px; }", css);
+    Assert.Contains(".library-mylist > .lib-sticky + .lib-list { margin-top: -6px; }", css);
   }
 
   [Fact]
@@ -100,30 +100,108 @@ public class LibraryMarksTabUiTests
   }
 
   [Fact]
-  public void Page_OverlappingARemoveOrUndo_IsAskedAgain()
+  public void Rows_AskLookupOncePerPage()
   {
     var section = MyMarks();
-    // A page that answers while a Remove or Undo started meanwhile or is still pending may carry a total from before or
-    // after the server's change, in either response order: it is dropped and asked again once no edit is pending.
-    var load = Between(section, "const loadPage = async () => {", "const row = (m) => {");
-    Assert.Contains("const edits = view.edits;", load);
-    Assert.Contains("if (edits !== view.edits || view.pending) {\n        if (view.pending) view.waiting = seq;\n        else { view.loading = false; loadPage(); }\n        return;\n      }", load);
-    Assert.True(load.IndexOf("if (edits !== view.edits", StringComparison.Ordinal) < load.IndexOf("view.total = page.total;", StringComparison.Ordinal));
-    Assert.True(load.IndexOf("const edits = view.edits;", StringComparison.Ordinal) < load.IndexOf("await ctx.listMarks", StringComparison.Ordinal));
-    // A page that would start while an edit is pending (Remove on the last row, the sentinel firing before DELETE
-    // answers) is not requested with the old row count: it waits, still loading, and is asked for after the edit.
-    const string defer = "if (view.pending) {\n        view.waiting = seq;\n        return;\n      }";
-    Assert.Contains(defer, load);
-    Assert.True(load.IndexOf("view.loading = true;", StringComparison.Ordinal) < load.IndexOf(defer, StringComparison.Ordinal));
-    Assert.True(load.IndexOf(defer, StringComparison.Ordinal) < load.IndexOf("requested = Math.max(", StringComparison.Ordinal));
-    // The edit counts from its start (before the request) until its bookkeeping is done, then a waiting page is asked again.
-    var edit = Between(section, "const edit = (work) =>", "const remove = edit(");
-    Assert.True(edit.IndexOf("view.edits += 1;\n      view.pending += 1;", StringComparison.Ordinal) < edit.IndexOf("await work(...args);", StringComparison.Ordinal));
-    Assert.Contains("} finally {\n        view.pending -= 1;\n        if (!view.pending && view.waiting) {", edit);
-    Assert.Contains("if (again) { view.loading = false; loadPage(); }", edit);
-    Assert.Contains("const restore = edit(async (m, li) => {", section);
-    Assert.DoesNotContain("view.edits += 1;", Between(section, "const remove = edit(", "const start = () => {"));
-    Assert.Contains("view.waiting = 0;", Between(section, "const start = () => {", "keepMarksAddress(view.filter);\n    start();"));
+    var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
+    // One call site, with the keys of the whole page, after the loop that skips repeated rows and before a page that
+    // added nothing moves on: an overlapping or fully repeated page is looked up as well.
+    Assert.Single(System.Text.RegularExpressions.Regex.Matches(load, @"lookup\("));
+    Assert.Contains("const keys = items.map((m) => m.key);\n      view.pages.push(keys);\n      lookup(keys, seq);", load);
+    Assert.True(load.IndexOf("added += 1;\n      }", StringComparison.Ordinal) < load.IndexOf("lookup(keys, seq);", StringComparison.Ordinal));
+    Assert.True(load.IndexOf("lookup(keys, seq);", StringComparison.Ordinal) < load.IndexOf("if (!view.done && added === 0)", StringComparison.Ordinal));
+
+    var main = Read("main.js");
+    Assert.Contains("lookupTitles: (body) => api(`/playlists/${playlist.id}/library/titles/lookup`, { method: 'POST', body }),", Between(main, "function showLibrary(playlist)", "function showSharedLibrary("));
+    Assert.Contains("lookupTitles: (body) => api(`${base}/titles/lookup`, { method: 'POST', body: scoped(body) }),", Between(main, "function showSharedLibrary(", "function linkCard("));
+
+    var lookup = Between(section, "const lookup = async (keys, seq) => {", "const start = () => {");
+    // Not before the list is there; load() asks for the pages loaded so far once it sets ctx.list, and so does the switch.
+    Assert.Contains("if (!ctx.list || !keys.length) return;", lookup);
+    Assert.Contains("answer = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys });", lookup);
+    Assert.Contains("ctx.lookupMarks = () => {\n      view.asks += 1;\n      for (const keys of view.pages) lookup(keys, view.seq);\n    };", lookup);
+    var library = Read("library.js");
+    Assert.Contains("ctx.list = result;\n    // Marks pages loaded before the list get their lookup now (#447).\n    ctx.lookupMarks?.();", library);
+    Assert.Contains("run();\n      onToggle();\n      ctx.lookupMarks?.();", Between(library, "ctx.onIncludeOff = () => {", "};"));
+    // An answer for an earlier switch setting, a view left since or a Library left since changes nothing.
+    Assert.Contains("const ask = view.asks;", lookup);
+    Assert.Contains("if (seq !== view.seq || ask !== view.asks || !ctx.isCurrent() || ctx.controller.signal.aborted) return;", lookup);
+    Assert.True(lookup.IndexOf("const ask = view.asks;", StringComparison.Ordinal) < lookup.IndexOf("await ctx.lookupTitles", StringComparison.Ordinal));
+    Assert.Contains("view.pages = [];\n      rows.clear();", Between(section, "const start = () => {", "keepMarksAddress(view.filter);\n    start();"));
+  }
+
+  [Fact]
+  public void LookupFailure_LeavesTheNextScreenAlone()
+  {
+    var lookup = Between(MyMarks(), "const lookup = async (keys, seq) => {", "ctx.lookupMarks = () => {");
+    var failure = Between(lookup, "} catch (err) {", "return;\n      }");
+    Assert.Contains("if (seq === view.seq && ask === view.asks && ctx.isCurrent() && !ctx.controller.signal.aborted) accessGone(ctx, err);", failure);
+    var gone = failure.IndexOf("accessGone(", StringComparison.Ordinal);
+    foreach (var check in new[] { "seq === view.seq", "ctx.isCurrent()", "!ctx.controller.signal.aborted" })
+    {
+      var at = failure.IndexOf(check, StringComparison.Ordinal);
+      Assert.True(at >= 0 && at < gone, $"'{check}' must come before accessGone.");
+    }
+    // Nothing else happens: an owner's rows keep "Not in this list".
+    Assert.DoesNotContain("build(", failure);
+    Assert.DoesNotContain("toast", failure);
+  }
+
+  [Fact]
+  public void Row_InList_OpensTheCard_OtherwiseSaysNotInThisList()
+  {
+    var section = MyMarks();
+    var build = Between(section, "const build = (key) => {", "const lookup = async");
+    Assert.Contains("const type = m.kind === 'series' ? 'Series' : 'Movies';", build);
+    Assert.Contains("h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),", build);
+    Assert.Contains("dataset: { type, key } }", build);
+    // Film: the group; series: bold seasons and episodes · group; otherwise one wording for owner and viewer.
+    Assert.Contains("const meta = !t ? 'Not in this list' : type === 'Series' ? [h('b', { text: seasonsLine(ctx, t) }), ' · ', t.group] : t.group;", build);
+    Assert.DoesNotContain("Not in your list", Read("library.js"));
+    // Opened with the lookup's name, group and enabled and the list's cacheKey; any other row opens nothing.
+    Assert.Contains("const opened = t ? { ...e, name: t.name, enabled: t.enabled } : { ...e, markKey: null };", build);
+    Assert.Contains("filmName(ctx, opened, t?.group, ctx.list?.cacheKey)", build);
+    Assert.Contains("class: opens(ctx, opened) ? 'lib-row' : 'lib-row is-static'", build);
+    // The chevron on every row, as its last child.
+    Assert.Contains("h('span', { class: 'lib-chev', 'aria-hidden': 'true' }, icon('chevron')));", build);
+    Assert.DoesNotContain("filmChevron", build);
+    // A key the answer lacks reads "Not in this list" again.
+    Assert.Contains("const title = answer?.titles?.[key] || null;", Between(section, "const lookup = async", "ctx.lookupMarks = () => {"));
+    Assert.Contains("h('div', { class: 'lib-list' }, list, foot));", section);
+
+    var css = Read("library.css");
+    Assert.Contains(".lib-row.is-static .lib-chev { visibility: hidden; }", css);
+  }
+
+  [Fact]
+  public void Row_UsesTheSharedMarkControls_NoRemoveButton()
+  {
+    var library = Read("library.js");
+    var section = MyMarks();
+    var build = Between(section, "const build = (key) => {", "const lookup = async");
+    Assert.Contains("const e = { name: m.year ? `${m.title} (${m.year})` : m.title, title: m.title, year: m.year, contentType: type, markKey: key, keepMark: true };", build);
+    Assert.Contains("rowMarks(ctx, e),", build);
+    // main.js keeps "Remove" for shared lists only; no mark is removed from the frontend.
+    Assert.DoesNotContain("removeMark", library);
+    Assert.DoesNotContain("removeMark", Read("main.js"));
+    Assert.DoesNotContain("api(`/marks/${encodeURIComponent(key)}`, { method: 'DELETE' })", Read("main.js"));
+    Assert.DoesNotContain("Remove", library);
+    Assert.DoesNotContain("const undo", section);
+
+    // A fresh page takes the server's mark unless a save for the key is still on its way.
+    var load = Between(section, "const loadPage = async () => {", "const build = (key) => {");
+    Assert.Contains("if (!saving.has(m.key)) marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });", load);
+    Assert.True(load.IndexOf("marks.set(m.key", StringComparison.Ordinal) < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
+    var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
+    Assert.Contains("saving.set(key, (saving.get(key) || 0) + 1);", setMark);
+    Assert.Contains("} finally {\n      if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);\n      else saving.delete(key);\n    }", setMark);
+    Assert.True(setMark.IndexOf("saving.set(key, (saving", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
+
+    // A rebuilt row keeps the object in marks, so a failed save still rolls back and says so.
+    Assert.Contains("if (!entry.keepMark) marks.set(key, {", Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
+    Assert.DoesNotContain("marks.set(", build);
+    Assert.DoesNotContain("marks.set(", Between(section, "const lookup = async", "const start = () => {"));
+    Assert.Contains("if (marks.get(key) !== next) return;", setMark);
   }
 
   [Fact]

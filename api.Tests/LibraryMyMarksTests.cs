@@ -21,7 +21,7 @@ public class LibraryMyMarksTests
     return source[from..to];
   }
 
-  private static string MyMarks() => Between(Read("library.js"), "// My marks (#299)", "// A remove or an undo in My marks");
+  private static string MyMarks() => Between(Read("library.js"), "// My marks (#299)", "// A mark saved under the API's key");
 
   [Fact]
   public void MyMarks_IsPartOfTheLibrary_AndPagesThroughTheListEndpoint()
@@ -50,7 +50,7 @@ public class LibraryMyMarksTests
   {
     // A mark set in the search or a group goes to the top and shifts every position by one, so the page computed
     // from the shown count can repeat only marks already shown; More must not ask for that page forever.
-    var load = Between(MyMarks(), "const loadPage = async () => {", "const row = (m) => {");
+    var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     Assert.Contains("added += 1;", load);
     Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        loadPage();\n        return;\n      }", load.ReplaceLineEndings("\n"));
     Assert.True(load.IndexOf("view.done = items.length", StringComparison.Ordinal) < load.IndexOf("if (!view.done && added === 0)", StringComparison.Ordinal));
@@ -58,15 +58,18 @@ public class LibraryMyMarksTests
   }
 
   [Fact]
-  public void ARow_ShowsTitleYearKindSeenAndRating_AsPlainText()
+  public void ARow_IsALibraryRow_WithTitleYearAndTheMarkControls()
   {
-    var row = Between(MyMarks(), "const row = (m) => {", "return li;");
-    Assert.Contains("const meta = [m.year, m.kind === 'series' ? 'Series' : 'Film', m.seen ? 'Seen' : '',", row);
-    Assert.Contains("{ 1: 'Liked', '-1': 'Disliked' }[m.rating] || ''].filter(Boolean).join(' · ');", row);
-    Assert.Contains("h('span', { class: 'search-hit-name', text: m.title }),", row);
-    // Titles no longer in a playlist show the same way: no row links to an entry.
+    var row = Between(MyMarks(), "const build = (key) => {", "return li;");
+    // #447: a .lib-row with the title and year from the mark (filmName's title path) and the search rows' controls.
+    Assert.Contains("title: m.title, year: m.year,", row);
+    Assert.Contains("h('span', { class: 'lib-text' }, filmName(ctx, opened, t?.group, ctx.list?.cacheKey), h('span', { class: 'lib-meta' }, meta)),", row);
+    Assert.Contains("rowMarks(ctx, e),", row);
+    Assert.Contains("paintMarks(li.querySelector('.library-marks'));", row);
+    // A row opens a card, never an entry: no link.
     Assert.DoesNotContain("h('a'", row);
     Assert.DoesNotContain("href", MyMarks());
+    Assert.DoesNotContain("library-hit", MyMarks());
   }
 
   [Fact]
@@ -83,23 +86,17 @@ public class LibraryMyMarksTests
   }
 
   [Fact]
-  public void Remove_AsksNothing_AndUndoSetsTheSameMarkAgain_BothWithCsrf()
+  public void ARowsControls_SetTheMarkWithCsrf_AndNoRemoveIsLeft()
   {
     var section = MyMarks();
-    var remove = Between(section, "const remove = edit(async (m, li) => {", "const undo = (m, li) => {");
-    Assert.DoesNotContain("confirm(", remove);
-    Assert.Contains("li.hidden = true;\n      try {\n        await ctx.removeMark(m.key);", remove);
-    Assert.Contains("ctx.toast(`Mark on ${m.title} removed`, { action: { label: 'Undo', onClick: () => undo(m, li) } });", remove);
-    Assert.Contains("ctx.toast(`The mark was not removed. ${err.message || ''}`.trim(), { error: true });", remove);
+    // #447: the row's controls set the mark through setMark, which sends the PUT; Remove, Undo and removeMark are gone.
+    Assert.DoesNotContain("Remove", section);
+    Assert.DoesNotContain("undo", section);
+    Assert.Contains("const e = { name: m.year ? `${m.title} (${m.year})` : m.title,", section);
 
-    var undo = Between(section, "const undo = (m, li) => {", "const start = () => {");
-    Assert.Contains("mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });", undo);
-    Assert.Contains("li.replaceWith(row(mark));", undo);
-    Assert.Contains("if (!li.hidden || li.dataset.restoring) return;", undo);
-
-    // Both requests go through main.js's api(), which sends the CSRF token on every mutating call.
+    // The PUT goes through main.js's api(), which sends the CSRF token on every mutating call.
     var show = Between(Read("main.js"), "function showLibrary(playlist)", "function linkCard(");
-    Assert.Contains("removeMark: (key) => api(`/marks/${encodeURIComponent(key)}`, { method: 'DELETE' }),", show);
+    Assert.DoesNotContain("removeMark", show);
     Assert.Contains("setMark: (mark) => api('/marks', { method: 'PUT', body: mark }),", show);
     var api = Between(Read("main.js"), "async function api(path", "async function isCsrfRejection(");
     Assert.Contains("const mutating = method !== 'GET' && method !== 'HEAD';", api);
@@ -119,13 +116,19 @@ public class LibraryMyMarksTests
   {
     Assert.DoesNotContain("style", MyMarks());
     var css = Read("library.css");
-    Assert.Matches(@"\.library-mylist \.library-hit > \.btn\s*\{\s*flex-shrink:\s*0;\s*min-height:\s*var\(--control-h\);", css);
+    // #447: the rows are .lib-row; the plain-text row's rules are gone.
+    Assert.DoesNotContain(".library-hit", css);
+    Assert.DoesNotContain(".library-mylist > .card", css);
+    Assert.DoesNotContain(".library-mylist .search-hit-name", css);
 
     var design = Read("DESIGN.md").ReplaceLineEndings("\n");
     var section = Between(design, "### Library (", "\n### ").Replace("\n", " ");
     Assert.Contains("My marks (#299):", section);
     foreach (var phrase in new[] { "newest change first", "no longer in any playlist", "All, Seen, Liked or Disliked",
-      "never a link to an entry", "Remove asks no confirmation", "Undo, which sets the same mark again", "With no marks it says so" })
+      "\"Not in this list\"", "opens its film or series card on tap", "(`is-static`)", "The controls are the search rows'",
+      "With no marks it says so" })
       Assert.Contains(phrase, section);
+    Assert.DoesNotContain("Remove", Between(section, "My marks (#299):", "With no marks"));
+    Assert.Contains("rows (name and year, group or Not in this list, marks)", design);
   }
 }

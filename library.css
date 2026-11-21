@@ -43,16 +43,6 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 /* Below 600px the result status takes its own line and the Language chip goes below it. */
 @media (max-width: 599px) { .library-search .search-head { flex-direction: column; align-items: stretch; gap: 8px; } }
 
-/* My marks rows: text, not a control, with the search row's look. */
-.library-hit {
-  min-height: var(--row-h);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 14px 8px 18px;
-  border-top: 1px solid var(--line);
-}
-
 /* Marks (#298): seen, thumbs up and thumbs down at the end of a film or series row, phone-sized tap targets.
    A pressed control is tangerine-tinted; tapping it again undoes it. */
 .library-marks {
@@ -107,7 +97,7 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   margin: 12px 18px;
 }
 
-/* My marks (#299): every mark of the user, plain text rows with a Remove button, below Browse. */
+/* My marks (#299): every mark of the user, rows with the search rows' controls (#447). */
 .library-mylist {
   display: flex;
   flex-direction: column;
@@ -116,25 +106,11 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
   margin-top: 22px;
 }
 
-.library-mylist > .card {
-  align-self: stretch;
-  padding: 0;
-  overflow: hidden;
-}
-
-/* The Marks tab's head (#446): the card follows 6px below the sticky head and chips; from 1100px at most 920px
-   (after the wide Library's block below). */
-.library-mylist > .lib-sticky { align-self: stretch; }
-.library-mylist > .lib-sticky + .card { margin-top: -6px; }
-
-.library-mylist .search-hit-name {
-  overflow-wrap: anywhere;
-}
-
-.library-mylist .library-hit > .btn {
-  flex-shrink: 0;
-  min-height: var(--control-h);
-}
+/* The Marks tab's head (#446): the list follows 6px below the sticky head and chips; from 1100px at most 920px
+   (after the wide Library's block below). A row that opens no card keeps its chevron's room (#447). */
+.library-mylist > .lib-sticky, .library-mylist > .lib-list { align-self: stretch; }
+.library-mylist > .lib-sticky + .lib-list { margin-top: -6px; }
+.lib-row.is-static .lib-chev { visibility: hidden; }
 
 /* Wide Library (#288, the editor's 1100px breakpoint): once the groups are loaded the page widens to
    1440px, and an open group (#443) shows its entries next to the group list, which keeps its own scroll; the page
