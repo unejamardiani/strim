@@ -2046,7 +2046,8 @@ select.input {
 /* Phones (#490): the same for the editor's and the cards' small controls. Nothing changes size; the insets were
    measured at 390px so no target overlaps a neighbour. The insets start at the padding box, so the account pill's
    1px border counts against it. The adult switch reaches 41px between the sort select and the All on / All off row.
-   Footer links (not the TMDB logo) get a 14px row gap so wrapped rows on narrow phones keep their targets apart. */
+   Footer links (not the TMDB logo) reach 44px upwards and stop at the 4px row gap, so the TMDB attribution below
+   keeps its own target; the footer itself does not move. */
 @media (max-width: 767px) {
   .link-box .btn, .share-link .link-box .btn, .pills button, .bulk .btn, .account, .playlist-title a, .site-links > a, .sharing-line, .adult-switch { position: relative; }
   .link-box .btn::after { content: ""; position: absolute; inset: -3px 0; }
@@ -2055,10 +2056,14 @@ select.input {
   .bulk .btn::after { content: ""; position: absolute; inset: -6px 0; }
   .account::after { content: ""; position: absolute; inset: -3px 0; }
   .playlist-title a::after { content: ""; position: absolute; inset: -7px 0; }
-  .site-links { row-gap: 14px; }
-  .site-links > a::after { content: ""; position: absolute; inset: -7px -4px; }
+  .site-links > a::after { content: ""; position: absolute; inset: -8px -4px -4px; }
   .sharing-line::after { content: ""; position: absolute; inset: -12px -8px; }
   .adult-switch::after { content: ""; position: absolute; inset: -11px 0 -2px; }
+}
+/* Below about 380px the five footer links wrap onto two rows 36px apart (32px links, 4px gap). A 44px target per
+   row would overlap the other row, so each link's target there adds only the gap above it (36px). */
+@media (max-width: 379px) {
+  .site-links > a::after { content: ""; position: absolute; inset: -4px -4px 0; }
 }
 .btn-xs svg { width: 15px; height: 15px; }
 .btn-quiet { background: none; color: var(--ink-2); }
