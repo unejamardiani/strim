@@ -11,12 +11,13 @@
     { name: 'marks', label: 'Marks', icon: 'check' },
   ];
   // The Library on screen: its ctx, tab links, panels and open tab, for show().
-  let view = null, markUser = null;
+  let view = null, markUser = null, markEpoch = 0;
 
   function mount(ctx) {
     const { root, playlist, h, icon, controller } = ctx;
     // The marks are the signed-in user's (#447): another account in the same tab starts without the last one's.
-    if (ctx.user !== markUser) { markUser = ctx.user; for (const m of [marks, markAt, keyAlias, answers]) m.clear(); }
+    // Its saves too: one still on its way belongs to the last account and leaves this one's state alone (markEpoch).
+    if (ctx.user !== markUser) { markUser = ctx.user; markEpoch += 1; for (const m of [marks, markAt, keyAlias, answers, saving, settleQueue, blindQueue]) m.clear(); }
     const base = isViewer(ctx) ? `#/shared/${playlist.id}` : `#/p/${playlist.id}/library`;
     const nav = h('nav', { class: 'lib-tabs', 'aria-label': 'Library' },
       TABS.map((t) => h('a', { href: `${base}/${t.name}`, dataset: { tab: t.name } }, icon(t.icon), t.label)));
@@ -442,11 +443,15 @@
     const key = entry.markKey;
     // A Marks row (#447), and any row whose answer a save of the title overlapped (freshFor), leaves the object in
     // marks: setMark takes a replaced object for a later tap and would skip the rollback of a failed save.
-    if (!entry.keepMark && (freshFor(key, entry.asked) || !marks.has(key))) marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });
+    // A Search or Groups answer applied stamps its request time, so an older Marks page does not paint over it.
+    if (!entry.keepMark && (freshFor(key, entry.asked) || !marks.has(key))) {
+      marks.set(key, { seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });
+      if (entry.asked) markAt.set(key, Math.max(markAt.get(key) || 0, entry.asked));
+    }
     // Tapping an active control again undoes it.
     const control = (label, name, next) => h('button', {
       class: 'icon-btn library-mark', type: 'button', 'aria-label': label, title: label, 'aria-pressed': 'false',
-      onclick: () => setMark(ctx, entry.name, kind, key, next(marks.get(key))),
+      onclick: () => setMark(ctx, entry.name, kind, key, next),
     }, icon(name));
     // Rows use the film card's capsule (#383) in both Libraries.
     const el = h('span', { class: 'library-marks film-marks', role: 'group', 'aria-label': 'Your marks', dataset: { key } },
@@ -491,7 +496,7 @@
     const key = entry.markKey;
     const seen = h('button', {
       class: 'lib-seen', type: 'button', 'aria-label': 'Seen', 'aria-pressed': 'false',
-      onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen(marks.get(key))),
+      onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen),
     }, icon('check'));
     const like = h('span', { class: 'lib-like', 'aria-hidden': 'true' }, icon('up'), icon('down'));
     return [h('span', { class: 'lib-quick', role: 'group' }, like, seen), watchButton(ctx, entry), capsule];
@@ -503,7 +508,7 @@
     const key = entry.markKey;
     const el = ctx.h('button', {
       class: 'lib-watch', type: 'button', dataset: { key },
-      onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, { ...marks.get(key), watchlist: !marks.get(key).watchlist }),
+      onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, (m) => ({ ...m, watchlist: !m.watchlist })),
     }, ctx.icon('bookmark'));
     paintWatch(el, marks.get(key));
     return el;
@@ -524,9 +529,11 @@
   let saveTicks = 0, clock = 0;
   const settleQueue = new Set();
   const whenSettled = (fn) => (saving.size ? settleQueue.add(fn) : fn());
-  // A first save from a similar film's card (#368) has no API key yet: until it ends no answer is fresh for any key.
+  // A first save from a similar film's card (#368) has no API key yet: a Marks page and a tap on any other title wait
+  // for it (blindQueue), as it may be of that title; its API key then takes its mark (syncRows).
+  const blindQueue = new Set();
   const blind = () => [...saving.keys()].some((k) => k.startsWith('similar:') && !keyAlias.has(k));
-  const freshFor = (key, asked) => !blind() && !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));
+  const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));
   const unsave = (k) => (saving.get(k) > 1 ? saving.set(k, saving.get(k) - 1) : saving.delete(k));
   const askTitles = async (ctx, params, signal) => {
     const asked = ++clock;
@@ -534,8 +541,14 @@
     for (const t of found?.titles || []) t.asked = asked;
     return found;
   };
+  // next is the new mark or a function of the current one, taken when the save starts.
   async function setMark(ctx, name, kind, key, next) {
+    if (typeof next === 'function') {
+      if (blind() && !key.startsWith('similar:')) return void blindQueue.add(() => setMark(ctx, name, kind, key, next));
+      next = next(marks.get(key));
+    }
     const before = marks.get(key);
+    const epoch = markEpoch;
     saving.set(key, (saving.get(key) || 0) + 1);
     saveTicks += 1;
     markAt.set(key, ++clock);
@@ -547,6 +560,7 @@
     repaint();
     try {
       const saved = await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating, watchlist: next.watchlist });
+      if (epoch !== markEpoch) return;
       // The server's watchlist (#414) is taken over, unless a later tap already replaced this change.
       if (saved && marks.get(key) === next && saved.watchlist !== next.watchlist) {
         marks.set(key, { ...next, watchlist: saved.watchlist === true });
@@ -559,19 +573,23 @@
         syncRows(ctx, real, marks.get(key));
       }
     } catch (err) {
-      // A later tap on the same title already replaced this change.
+      // Another account signed in, or a later tap on the same title already replaced this change.
+      if (epoch !== markEpoch) return;
       if (marks.get(key) !== next) return;
       if (alias && marks.get(alias) === next) marks.set(alias, prior);
       marks.set(key, before);
       repaint();
       ctx.toast(`The mark was not changed. ${err.message || ''}`.trim(), { error: true });
     } finally {
+      // A save of the last account leaves this one's counts alone.
+      if (epoch !== markEpoch) return;
       if (alias) unsave(alias);
       unsave(key);
       saveTicks += 1;
       clock += 1;
       for (const k of [key, keyAlias.get(key)]) if (k) markAt.set(k, clock);
       if (!saving.size) [...settleQueue].forEach((fn) => settleQueue.delete(fn) && fn());
+      if (!blind()) [...blindQueue].forEach((fn) => blindQueue.delete(fn) && fn());
     }
   }
 
@@ -1080,8 +1098,8 @@
       let added = 0;
       for (const m of items) {
         // A fresh page shows the server's mark unless a save overlapped it, on every control of the title; its stamp
-        // outranks an answer asked before it, not one asked after.
-        if (freshFor(m.key, at)) {
+        // outranks an answer asked before it, not one asked after. A key with no mark yet takes the server's.
+        if (freshFor(m.key, at) || !marks.has(m.key)) {
           marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
           markAt.set(m.key, Math.max(markAt.get(m.key) || 0, at));
           paintKey(ctx, m.key);
@@ -1195,8 +1213,8 @@
   }
 
   // A mark saved under the API's key (#368) shows on the rows of that key in the search, the open group and Marks.
+  // Also when no row of the key was shown yet: the save is newer than any answer still on its way (#447).
   function syncRows(ctx, key, mark) {
-    if (!marks.has(key)) return;
     marks.set(key, mark);
     paintKey(ctx, key);
   }

@@ -54,7 +54,7 @@ public class LibraryWatchlistUiTests
     Assert.Contains("const toggleSeen = (m) => (m.seen ? { ...m, seen: false } : { ...m, seen: true, watchlist: false });", marks);
     // Both Seen controls, the capsule's and the phone row's, use it.
     Assert.Contains("control('Seen', 'check', toggleSeen),", marks);
-    Assert.Contains("key, toggleSeen(marks.get(key))),", Between(marks, "function rowMarks(", "function watchButton("));
+    Assert.Contains("key, toggleSeen),", Between(marks, "function rowMarks(", "function watchButton("));
     // The local state and every control of the title change before the request goes out.
     Assert.Contains("marks.set(key, next);\n    repaint();\n    try {", Between(marks, "async function setMark(", "} catch (err) {"));
     // A repaint of the capsule repaints the Watchlist button beside it.
@@ -69,7 +69,7 @@ public class LibraryWatchlistUiTests
     var marks = Marks();
     var button = Between(marks, "function watchButton(", "// Shown at once on every row");
     Assert.Contains("class: 'lib-watch', type: 'button', dataset: { key },", button);
-    Assert.Contains("{ ...marks.get(key), watchlist: !marks.get(key).watchlist }", button);
+    Assert.Contains("(m) => ({ ...m, watchlist: !m.watchlist })", button);
     Assert.Contains("ctx.icon('bookmark')", button);
     Assert.Contains("const label = m.watchlist === true ? 'On your watchlist' : 'Add to watchlist';", button);
     Assert.Contains("el.setAttribute('aria-pressed', String(m.watchlist === true));", button);

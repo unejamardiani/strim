@@ -65,7 +65,7 @@ public class LibraryRowsUiTests
     var rowMarks = Between(library, "function rowMarks(ctx, entry)", "// Shown at once on every row");
     Assert.Contains("const capsule = markControls(ctx, entry);", rowMarks);
     Assert.Contains("class: 'lib-seen', type: 'button', 'aria-label': 'Seen', 'aria-pressed': 'false',", rowMarks);
-    Assert.Contains("setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen(marks.get(key)))", rowMarks);
+    Assert.Contains("setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen)", rowMarks);
     Assert.Contains("h('span', { class: 'lib-like', 'aria-hidden': 'true' }, icon('up'), icon('down'))", rowMarks);
     Assert.Contains("return [h('span', { class: 'lib-quick', role: 'group' }, like, seen), watchButton(ctx, entry), capsule];", rowMarks);
     // Search results and group entries share the row, so both carry the controls.

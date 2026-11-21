@@ -241,8 +241,8 @@ public class LibraryMarksTabUiTests
     Assert.Contains(KeepRule, Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
   }
 
-  private const string KeepRule = "if (!entry.keepMark && (freshFor(key, entry.asked) || !marks.has(key))) marks.set(key, {";
-  private const string FreshPage = "if (freshFor(m.key, at)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });\n          markAt.set(m.key, Math.max(markAt.get(m.key) || 0, at));\n          paintKey(ctx, m.key);\n        }";
+  private const string KeepRule = "if (!entry.keepMark && (freshFor(key, entry.asked) || !marks.has(key))) {\n      marks.set(key, {";
+  private const string FreshPage = "if (freshFor(m.key, at) || !marks.has(m.key)) {\n          marks.set(m.key, { seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });\n          markAt.set(m.key, Math.max(markAt.get(m.key) || 0, at));\n          paintKey(ctx, m.key);\n        }";
 
   [Fact]
   public void AnswerOverlappedByASave_LeavesTheSavedMarkAlone()
@@ -252,7 +252,7 @@ public class LibraryMarksTabUiTests
     var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
     Assert.Contains("saveTicks += 1;\n    markAt.set(key, ++clock);", setMark);
     Assert.True(setMark.IndexOf("markAt.set(key, ++clock);", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
-    Assert.Contains("const freshFor = (key, asked) => !blind() && !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", library);
+    Assert.Contains("const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));", library);
 
     // Search, Groups, card and Marks requests take the next clock value when asked: one that a save overlapped keeps the
     // saved Like, a Search asked after a Marks page (no save since) takes the server's marks again.
@@ -260,9 +260,9 @@ public class LibraryMarksTabUiTests
     Assert.DoesNotContain("asked = saveTicks", library);
     Assert.DoesNotContain("ticks + 0.5", library);
     // Another account signed in in the same tab: the Library starts without the last user's marks.
-    Assert.Contains("if (ctx.user !== markUser) { markUser = ctx.user; for (const m of [marks, markAt, keyAlias, answers]) m.clear(); }", Between(library, "function mount(ctx) {", "load(ctx, controller);"));
+    Assert.Contains("if (ctx.user !== markUser) { markUser = ctx.user; markEpoch += 1; for (const m of [marks, markAt, keyAlias, answers, saving, settleQueue, blindQueue]) m.clear(); }", Between(library, "function mount(ctx) {", "load(ctx, controller);"));
     Assert.Contains("    plural,\n    user: state.user?.userName || state.user?.email || null,", Read("main.js"));
-    // The first Like from a similar film's card has no API key yet (blind): no answer is fresh and a Marks page waits
+    // The first Like from a similar film's card has no API key yet (blind): a Marks page waits
     // for the save before it renders, so its row shows the Like and its Seen tap sends rating 1.
     Assert.Contains("const blind = () => [...saving.keys()].some((k) => k.startsWith('similar:') && !keyAlias.has(k));", library);
     var hold = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
@@ -288,6 +288,32 @@ public class LibraryMarksTabUiTests
 
     // An overlapped page asks again with minPage from 1: a page skipped as repeated may hold a title the save moved up.
     Assert.Contains("if (view.minAt !== ticks) view.minPage = 1;", load);
+  }
+
+  [Fact]
+  public void SimilarCardSaveAndAccountSwitch_KeepEveryControlOnTheLatestMark()
+  {
+    var library = Read("library.js");
+    var setMark = Between(library, "async function setMark(ctx, name, kind, key, next) {", "// Browse (#287)");
+    // Liked a Seen film on a similar card, then Seen on its loaded Marks row before the PUT ends: the row's tap waits for
+    // the similar save and starts from the mark its API key took, so it sends rating 1, not 0.
+    Assert.Contains("if (blind() && !key.startsWith('similar:')) return void blindQueue.add(() => setMark(ctx, name, kind, key, next));\n      next = next(marks.get(key));", setMark);
+    Assert.True(setMark.IndexOf("blindQueue.add(", StringComparison.Ordinal) < setMark.IndexOf("await ctx.setMark", StringComparison.Ordinal));
+    Assert.Contains("if (!blind()) [...blindQueue].forEach((fn) => blindQueue.delete(fn) && fn());", Between(setMark, "} finally {", "\n  }"));
+    // The similar save does not make every other title's fresh answer stale.
+    Assert.DoesNotContain("!blind() &&", library);
+    // Its API key takes the saved mark even with no row of it shown yet, and a Marks page whose older value is stale
+    // still gives a key with no mark the server's, so its row never paints from undefined.
+    Assert.Contains("function syncRows(ctx, key, mark) {\n    marks.set(key, mark);", library);
+    Assert.Contains(FreshPage, Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {"));
+    // A Search or Groups answer applied stamps its request clock: a Marks page asked before it no longer repaints it.
+    Assert.Contains(KeepRule + " seen: entry.seen === true, rating: entry.rating || 0, watchlist: entry.watchlist === true });\n      if (entry.asked) markAt.set(key, Math.max(markAt.get(key) || 0, entry.asked));\n    }",
+      Between(library, "function markControls(ctx, entry) {", "function paintMarks("));
+    // A save of the previous account, still on its way, leaves this account's marks, counts and queues alone.
+    Assert.Contains("const before = marks.get(key);\n    const epoch = markEpoch;", setMark);
+    Assert.Contains("await ctx.setMark({ name, kind, seen: next.seen, rating: next.rating, watchlist: next.watchlist });\n      if (epoch !== markEpoch) return;", setMark);
+    Assert.Contains("if (epoch !== markEpoch) return;\n      if (marks.get(key) !== next) return;", Between(setMark, "} catch (err) {", "} finally {"));
+    Assert.Contains("if (epoch !== markEpoch) return;\n      if (alias) unsave(alias);", Between(setMark, "} finally {", "\n  }"));
   }
 
   [Fact]
@@ -317,8 +343,10 @@ public class LibraryMarksTabUiTests
     Assert.True(load.IndexOf("paintKey(ctx, m.key);", StringComparison.Ordinal) < load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal));
     Assert.Contains("function paintKey(ctx, key) {\n    for (const el of ctx.root.querySelectorAll('.library-marks')) if (el.dataset.key === key) paintMarks(el);\n  }", library);
     // The Seen button of a Search row and its capsule read marks at tap time, which paintKey has just repainted from.
-    Assert.Contains("onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen(marks.get(key))),", library);
-    Assert.Contains("onclick: () => setMark(ctx, entry.name, kind, key, next(marks.get(key))),", library);
+    // setMark applies the control's change to the mark in marks when the save starts.
+    Assert.Contains("onclick: () => setMark(ctx, entry.name, MARK_KINDS[entry.contentType], key, toggleSeen),", library);
+    Assert.Contains("onclick: () => setMark(ctx, entry.name, kind, key, next),", library);
+    Assert.Contains("next = next(marks.get(key));", library);
     Assert.Contains("const m = marks.get(el.dataset.key);", Between(library, "function paintMarks(el) {", "function rowMarks("));
   }
 
