@@ -233,7 +233,10 @@ opens the film or series card (with TMDB on), never a link to an entry; any othe
 list loads or after a failed lookup, reads "Not in this list", opens nothing (`is-static`) and keeps
 its chevron's room hidden. A changed mark shows in place: the row stays where it is and its controls,
 like every other control of the title, show the new mark, also when it is now empty or no longer fits
-the view; the count changes when the view is loaded again. With no marks it says so
+the view; the count changes when the view is loaded again. After a change (#457) the count stays and
+scrolling still reaches every title of the view, whatever order the save and the pages answer in:
+a page a save overlapped is shown, and once no save is on its way the list asks its pages again
+from page 1 ("Loading more…" meanwhile). With no marks it says so
 and how to mark a title: the Watchlist "Nothing on your watchlist yet. Add a film or series with the
 bookmark in its card.", All how to mark a title, the other views "No marks of this kind.".
 
