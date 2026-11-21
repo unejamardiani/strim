@@ -44,6 +44,7 @@ public class ViewerBarrierTests(StrimAppFactory factory) : IClassFixture<StrimAp
     "GET /api/playlists/{id:guid}/library/titles",
     "POST /api/playlists/{id:guid}/library/titles/lookup",
     "POST /api/playlists/{id:guid}/library/posters",
+    "GET /api/playlists/{id:guid}/library/suggestions",
   ];
 
   /// <summary>Routes not bound to one playlist: the caller's own lists, the sample and the anonymous player link.</summary>
