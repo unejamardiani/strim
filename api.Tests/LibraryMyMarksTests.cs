@@ -50,7 +50,7 @@ public class LibraryMyMarksTests
   {
     // A mark set in the search or a group goes to the top and shifts every position by one, so the page computed
     // from the shown count can repeat only marks already shown; More must not ask for that page forever.
-    var load = Between(MyMarks(), "const loadPage = async () => {", "const row = (m) => {");
+    var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     Assert.Contains("added += 1;", load);
     Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        loadPage();\n        return;\n      }", load.ReplaceLineEndings("\n"));
     Assert.True(load.IndexOf("view.done = items.length", StringComparison.Ordinal) < load.IndexOf("if (!view.done && added === 0)", StringComparison.Ordinal));
@@ -58,12 +58,13 @@ public class LibraryMyMarksTests
   }
 
   [Fact]
-  public void ARow_ShowsTitleYearKindSeenAndRating_AsPlainText()
+  public void ARow_ShowsTitleYearKindSeenAndRating()
   {
-    var row = Between(MyMarks(), "const row = (m) => {", "return li;");
-    Assert.Contains("const meta = [m.year, m.kind === 'series' ? 'Series' : 'Film', m.seen ? 'Seen' : '',", row);
-    Assert.Contains("{ 1: 'Liked', '-1': 'Disliked' }[m.rating] || ''].filter(Boolean).join(' · ');", row);
-    Assert.Contains("h('span', { class: 'search-hit-name', text: m.title }),", row);
+    // #455: the row is a search row; title and year come from the mark, the type marker carries Film or Series.
+    var row = Between(MyMarks(), "const build = (key) => {", "return li;");
+    Assert.Contains("const words = [m.seen ? 'Seen' : '', { 1: 'Liked', '-1': 'Disliked' }[m.rating] || ''].filter(Boolean);", row);
+    Assert.Contains("const type = m.kind === 'series' ? 'Series' : 'Movies';", row);
+    Assert.Contains("title: m.title, year: m.year,", row);
     // Titles no longer in a playlist show the same way: no row links to an entry.
     Assert.DoesNotContain("h('a'", row);
     Assert.DoesNotContain("href", MyMarks());
@@ -94,7 +95,7 @@ public class LibraryMyMarksTests
 
     var undo = Between(section, "const undo = (m, li) => {", "const start = () => {");
     Assert.Contains("mark = await ctx.setMark({ name: m.year ? `${m.title} (${m.year})` : m.title, kind: m.kind, seen: m.seen, rating: m.rating, watchlist: m.watchlist });", undo);
-    Assert.Contains("li.replaceWith(row(mark));", undo);
+    Assert.Contains("li.replaceWith(build(mark.key));", undo);
     Assert.Contains("if (!li.hidden || li.dataset.restoring) return;", undo);
 
     // Both requests go through main.js's api(), which sends the CSRF token on every mutating call.
@@ -119,7 +120,8 @@ public class LibraryMyMarksTests
   {
     Assert.DoesNotContain("style", MyMarks());
     var css = Read("library.css");
-    Assert.Matches(@"\.library-mylist \.library-hit > \.btn\s*\{\s*flex-shrink:\s*0;\s*min-height:\s*var\(--control-h\);", css);
+    Assert.Contains(".library-mylist .lib-row > .btn { position: relative; z-index: 1; flex-shrink: 0; min-height: var(--control-h); }", css);
+    Assert.DoesNotContain(".library-hit", css);
 
     var design = Read("DESIGN.md").ReplaceLineEndings("\n");
     var section = Between(design, "### Library (", "\n### ").Replace("\n", " ");
