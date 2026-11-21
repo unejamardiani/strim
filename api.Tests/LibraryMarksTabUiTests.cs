@@ -125,7 +125,7 @@ public class LibraryMarksTabUiTests
     Assert.Contains("if (!ctx.list || !keys.length) return;", lookup);
     Assert.Contains("answer = await ctx.lookupTitles({ cacheKey: ctx.list.cacheKey, includeDisabled: includeOff, keys });", lookup);
     var library = Read("library.js");
-    Assert.Contains("ctx.list = result;\n    // Marks pages loaded before the list get their lookup now (#455).\n    ctx.lookupMarks?.();", Between(library, "async function load(", "const TYPES = ["));
+    Assert.Contains("ctx.list = result;\n    ctx.listState = 'ready';\n    // Marks pages loaded before the list get their lookup now (#455).\n    ctx.lookupMarks?.();", Between(library, "async function load(", "const TYPES = ["));
     Assert.Contains("run();\n      onToggle();\n      ctx.lookupMarks?.();", Between(library, "ctx.onIncludeOff = () => {", "};"));
     Assert.Contains("ctx.lookupMarks = () => {\n      view.asks += 1;\n      for (const keys of view.pages) lookup(keys, view.seq);\n    };", section);
     Assert.Contains("view.pages = [];\n      rows.clear();", Between(section, "const start = () => {", "keepMarksAddress(view.filter);\n    start();"));
