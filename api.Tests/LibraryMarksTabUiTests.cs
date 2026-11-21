@@ -278,7 +278,83 @@ public class LibraryMarksTabUiTests
     Assert.DoesNotContain("marks.get(key)))", core);
     // A page fetched during a save is rendered at once: nothing in loadPage waits for saving.
     Assert.DoesNotContain("saving", load);
-    Assert.Contains("if (seq !== view.seq || !ctx.isCurrent()) return;\n      view.loading = false;\n      view.loaded = true;", load);
+    Assert.Contains("if (seq !== view.seq || !ctx.isCurrent()) return;\n      // A save that started or ended during the request", load);
+    Assert.True(load.IndexOf("view.loaded = true;", StringComparison.Ordinal) < load.IndexOf("if (overlapped) {", StringComparison.Ordinal));
+  }
+
+  // The paging and the count after a saved mark (#457).
+  private static string LoadPage() => Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
+
+  [Fact]
+  public void EditedRow_KeepsTheCountAndThePaging()
+  {
+    var section = MyMarks();
+    var load = LoadPage();
+    // What fits each view, and the rows shown that no longer fit it.
+    Assert.Contains("watchlist: (m) => m.watchlist === true, all: (m) => m.seen || m.rating !== 0 || m.watchlist === true,", section);
+    Assert.Contains("seen: (m) => m.seen, liked: (m) => m.rating === 1, disliked: (m) => m.rating === -1,", section);
+    Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", load);
+
+    // 51 Liked, a Like on page one cleared, then scroll: page two is computed from the 49 rows that still count
+    // (title 51 now sits at position 50), and the view is complete only when those reach the total.
+    Assert.Contains("requested = view.walk || Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", load);
+    Assert.Contains("view.done = items.length < MARKS_PAGE || view.shown.size - left() >= page.total;", load);
+
+    // A save moves saveTicks at its start and its end; the queue of pages waiting for saves runs once none is left.
+    var set = SetMark();
+    Assert.Contains("markAt.set(key, ++clock);\n    saveTicks += 1;\n    marks.set(key, next);", set);
+    Assert.Contains("markAt.set(key, ++clock);\n        saveTicks += 1;\n        if (settled()) [...settleQueue].forEach((fn) => settleQueue.delete(fn) && fn());", set);
+    Assert.Contains("const settled = () => !saving.size;", Core());
+    Assert.Contains("const whenSettled = (fn) => (settled() ? fn() : settleQueue.add(fn));", Core());
+
+    // The save overlapping page two, in both orders (committed before page two is read, which then comes back empty;
+    // page one answered before the save while page two is asked after it), and a title marked Seen from Search moving
+    // to the top while page two loads: the ticks taken before the request differ at the answer, or a save is on its way.
+    Assert.True(load.IndexOf("const ticks = saveTicks, at = ++clock;", StringComparison.Ordinal) < load.IndexOf("await ctx.listMarks", StringComparison.Ordinal));
+    Assert.Contains("const overlapped = ticks !== saveTicks || !settled();", load);
+    // An overlapped page is shown but never ends the paging, even empty or short: it returns before done is used and
+    // asks again once saves end. The answer of a view or Library left since starts nothing.
+    var branch = Between(load, "if (overlapped) {", "if (!view.done && added === 0) {");
+    Assert.Contains("view.loading = true;\n        paint();\n        whenSettled(() => {\n          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;\n          view.loading = false;\n          loadPage();\n        });\n        return;", branch);
+    Assert.True(load.IndexOf("list.append(build(m.key));", StringComparison.Ordinal) < load.IndexOf("if (overlapped) {", StringComparison.Ordinal));
+
+    // 52 Liked, a Like cleared while page two loads, page two brings title 52; 102 Liked with 100 shown, a Like cleared
+    // while page three loads: the walk asks 1, 2, 3 in order (requested + 1 after each settled page), not from the
+    // rows the overlapped page appended and not 1 then 3, since the walk outranks minPage and the computed page.
+    Assert.Contains("view.walk = overlapped ? 1 : view.walk && requested + 1;", load);
+    Assert.True(load.IndexOf("view.walk = overlapped", StringComparison.Ordinal) < load.IndexOf("if (overlapped) {", StringComparison.Ordinal));
+
+    // 101 Liked, opened during an unrelated save; after the walk showed 100 rows a Like is cleared and its save ends
+    // before the next scroll: a walk under older ticks starts again at page 1.
+    Assert.Contains("if (view.walkAt !== ticks) [view.walk, view.walkAt] = [view.walk && 1, ticks];", load);
+
+    // minPage raised to 3 by a fully repeated page, then a mark cleared while page three loads moves title 100 onto
+    // page two: minPage holds only under the ticks it was set at, checked before every request, so "Try again" after
+    // a failed page three (which calls loadPage) asks page two.
+    Assert.Contains("if (view.minAt !== ticks) view.minPage = 1;", load);
+    Assert.Contains("view.minPage = requested + 1;\n        view.minAt = ticks;", load);
+    var check = load.IndexOf("if (view.minAt !== ticks) view.minPage = 1;", StringComparison.Ordinal);
+    Assert.True(check < load.IndexOf("try {", StringComparison.Ordinal));
+    Assert.Contains("h('button', { class: 'btn btn-sm', type: 'button', onclick: loadPage }, 'Try again')", load);
+
+    // A new view starts without a walk.
+    Assert.Contains("view.walk = 0;", Between(section, "const start = () => {", "keepMarksAddress(view.filter);\n    start();"));
+  }
+
+  [Fact]
+  public void Count_IsTheFirstSettledPages_UntilTheViewIsLoadedAgain()
+  {
+    var load = LoadPage();
+    // Liked opened while the first Like of a title is saved, the first page empty: the first page's count (0) shows
+    // only until the walk's settled page brings the title (1), and the overlapped empty page shows no empty message,
+    // because paint() returns before the foot while loading.
+    // Liked opened during another title's save with one row shown, that row's Like then cleared: an overlapped page
+    // after the first never sets the count (no 1 → 2 → 1 while the walk's page still counts the title); the settled
+    // page adds left(), so the count stays one, and after it no later page changes it.
+    Assert.Contains("if (!view.counted && (!overlapped || !view.loaded)) view.total = page.total + left();\n      view.counted = view.counted || !overlapped;\n      view.loaded = true;", load);
+    Assert.DoesNotContain("view.total = page.total;", load);
+    Assert.Contains("if (view.loading) return;\n      if (!view.done) {", Between(MyMarks(), "const paint = () => {", "    };"));
+    Assert.Contains("view.loaded = false;\n      view.counted = false;", Between(MyMarks(), "const start = () => {", "keepMarksAddress(view.filter);\n    start();"));
   }
 
   [Fact]

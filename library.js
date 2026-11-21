@@ -528,6 +528,11 @@
   const saving = new Map();
   const markAt = new Map();
   let clock = 0, markUser, markEpoch = 0;
+  // saveTicks moves only at the start and end of every save (#457); a Marks page waits in settleQueue for saves to end.
+  let saveTicks = 0;
+  const settleQueue = new Set();
+  const settled = () => !saving.size;
+  const whenSettled = (fn) => (settled() ? fn() : settleQueue.add(fn));
   const markOf = (m) => ({ seen: m.seen === true, rating: m.rating || 0, watchlist: m.watchlist === true });
   // An answer asked at `asked` is newer than marks holds for the key: no save on its way, nothing recorded after it.
   const freshFor = (key, asked) => !saving.has(key) && !(markAt.get(key) > (asked ?? Infinity));
@@ -559,6 +564,7 @@
     const repaint = () => paintKey(ctx, key);
     saving.set(key, (saving.get(key) || 0) + 1);
     markAt.set(key, ++clock);
+    saveTicks += 1;
     marks.set(key, next);
     repaint();
     try {
@@ -588,6 +594,8 @@
         if (saving.get(key) > 1) saving.set(key, saving.get(key) - 1);
         else saving.delete(key);
         markAt.set(key, ++clock);
+        saveTicks += 1;
+        if (settled()) [...settleQueue].forEach((fn) => settleQueue.delete(fn) && fn());
       }
     }
   }
@@ -990,6 +998,11 @@
     all: 'No marks yet. Mark a film or series as seen, or give it a thumb, in the search or a group.',
   };
   const MARKS_PAGE = 50;
+  // Whether a mark still belongs to a view (#457): a row changed out of it stays, but the server's pages no longer count it.
+  const MARK_FITS = {
+    watchlist: (m) => m.watchlist === true, all: (m) => m.seen || m.rating !== 0 || m.watchlist === true,
+    seen: (m) => m.seen, liked: (m) => m.rating === 1, disliked: (m) => m.rating === -1,
+  };
   // A view named in an address's query, or null when it names none or an unknown one.
   const markViewOf = (query) => {
     const name = new URLSearchParams(query || '').get('view');
@@ -1047,7 +1060,7 @@
 
     // The next page starts after the marks shown now; marks a page repeats are skipped. A mark set anywhere moves to
     // the top and shifts every position, so a page can add nothing new: the list then moves on to the next page at
-    // once instead of asking for the same page again.
+    // once instead of asking for the same page again. Rows changed out of the view (left) no longer count (#457).
     const loadPage = async () => {
       if (view.loading) return;
       observer.unobserve(sentinel);
@@ -1056,10 +1069,13 @@
       foot.replaceChildren(status(view.shown.size ? 'Loading more…' : 'Loading your marks…'));
       let page;
       let requested;
-      const at = ++clock;
+      const ticks = saveTicks, at = ++clock;
+      // minPage and a walk hold only while no save started or ended since they were set: a walk starts again at page 1.
+      if (view.minAt !== ticks) view.minPage = 1;
+      if (view.walkAt !== ticks) [view.walk, view.walkAt] = [view.walk && 1, ticks];
       try {
         const filter = MARK_VIEWS.find((f) => f.value === view.filter).params;
-        requested = Math.max(Math.floor(view.shown.size / MARKS_PAGE) + 1, view.minPage);
+        requested = view.walk || Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);
         page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);
       } catch (err) {
         if (seq !== view.seq || ctx.controller.signal.aborted) return;
@@ -1070,7 +1086,13 @@
         return;
       }
       if (seq !== view.seq || !ctx.isCurrent()) return;
+      // A save that started or ended during the request, or is on its way, may have moved titles across pages.
+      const overlapped = ticks !== saveTicks || !settled();
       view.loading = false;
+      // The count is the first page's until a page no save overlapped answers, rows changed out (left) included; then
+      // it stays until the view is loaded again.
+      if (!view.counted && (!overlapped || !view.loaded)) view.total = page.total + left();
+      view.counted = view.counted || !overlapped;
       view.loaded = true;
       const items = page.items || [];
       let added = 0;
@@ -1088,15 +1110,29 @@
       const keys = items.map((m) => m.key);
       view.pages.push(keys);
       lookup(keys, seq);
-      view.total = page.total;
-      view.done = items.length < MARKS_PAGE || view.shown.size >= page.total;
+      // After an overlapped answer the list walks every page from 1 again, once no save is on its way.
+      view.walk = overlapped ? 1 : view.walk && requested + 1;
+      view.done = items.length < MARKS_PAGE || view.shown.size - left() >= page.total;
+      if (overlapped) {
+        view.loading = true;
+        paint();
+        whenSettled(() => {
+          if (seq !== view.seq || !ctx.isCurrent() || ctx.controller.signal.aborted) return;
+          view.loading = false;
+          loadPage();
+        });
+        return;
+      }
       if (!view.done && added === 0) {
         view.minPage = requested + 1;
+        view.minAt = ticks;
         loadPage();
         return;
       }
       paint();
     };
+    // Rows shown whose mark no longer fits the view: the server's pages after them moved up by as many places.
+    const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;
 
     // A row: type marker, title and year, where the title is in this list (or "Not in this list"), the shared mark
     // controls (#456) and the chevron, hidden unless the row opens the title's card. A lookup builds it again inside
@@ -1157,6 +1193,8 @@
       view.minPage = 1;
       view.loading = false;
       view.loaded = false;
+      view.counted = false;
+      view.walk = 0;
       view.pages = [];
       rows.clear();
       list.replaceChildren();

@@ -33,7 +33,7 @@ public class LibraryMyMarksTests
 
     var section = MyMarks();
     Assert.Contains("const MARKS_PAGE = 50;", section);
-    Assert.Contains("requested = Math.max(Math.floor(view.shown.size / MARKS_PAGE) + 1, view.minPage);", section);
+    Assert.Contains("requested = view.walk || Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", section);
     Assert.Contains("page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);", section);
     Assert.Contains("if (view.shown.has(m.key)) continue;", section);
     // #446: no More button; the next page loads once the sentinel comes within 600px of the screen.
@@ -52,7 +52,7 @@ public class LibraryMyMarksTests
     // from the shown count can repeat only marks already shown; More must not ask for that page forever.
     var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     Assert.Contains("added += 1;", load);
-    Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        loadPage();\n        return;\n      }", load.ReplaceLineEndings("\n"));
+    Assert.Contains("if (!view.done && added === 0) {\n        view.minPage = requested + 1;\n        view.minAt = ticks;\n        loadPage();\n        return;\n      }", load.ReplaceLineEndings("\n"));
     Assert.True(load.IndexOf("view.done = items.length", StringComparison.Ordinal) < load.IndexOf("if (!view.done && added === 0)", StringComparison.Ordinal));
     Assert.Contains("view.minPage = 1;", Between(MyMarks(), "const start = () => {", "start();"));
   }
