@@ -20,7 +20,7 @@ public sealed class LibrarySuggestionsEndpointTests
     ("Filme | Drama", "Little Motel (1995)", "movie"), ("Filme | Drama", "Blue Harbour (2003) 4K", "movie"),
     ("Filme | Drama", "DE - Kleines Motel (1995)", "movie"), ("Filme Alt", "Old Mill (1980)", "movie"),
     ("XXX | Movies", "Night Shift (2020)", "movie"), ("Serien | Drama", "Harbour Lights S01 E01", "series"),
-    ("Serien | Drama", "Quiet Bay (2015) S01 E01", "series"),
+    ("Serien | Drama", "Quiet Bay (2015) S01 E01", "series"), ("Filme | Drama", "Paper Moon", "movie"),
     .. Words.Select(w => ("Filme | Neu", $"{w} (2001)", "movie")),
   ];
 
@@ -110,8 +110,8 @@ public sealed class LibrarySuggestionsEndpointTests
   public async Task Trending_FilmNeedsItsYear_SeriesMatchesWithoutOne()
   {
     await using var host = await StartAsync(Tmdb(
-      [M(30, "Little Motel", ""), M(31, "Blue Harbour", "2003-02-01")], [T(32, "Harbour Lights", "2010-01-01")]));
-    // Ranks interleave whether or not a film has a key: film 30, series 32, film 31.
+      [M(30, "Paper Moon", ""), M(31, "Blue Harbour", "2003-02-01")], [T(32, "Harbour Lights", "2010-01-01")]));
+    // "Paper Moon" has no year in TMDB nor in the list and is still left out. Ranks: film 30, series 32, film 31.
     Assert.Equal([32, 31], Ids(await SuggestAsync(host)));
   }
 
@@ -131,7 +131,9 @@ public sealed class LibrarySuggestionsEndpointTests
   [Fact]
   public async Task Trending_SkipsAListTitleMatchedToAnotherTmdbId()
   {
-    await using var host = await StartAsync(Tmdb([M(1, "Little Motel", "1995-04-01"), M(3, "Blue Harbour", "2003-02-01")], []));
+    // Film 20 finds "Little Motel (1995)" first; its stored id leaves film 20 out, not on to "DE - Kleines Motel (1995)".
+    await using var host = await StartAsync(Tmdb([M(1, "Little Motel", "1995-04-01"),
+      M(20, "Little Motel", "1995-04-01", original: "Kleines Motel"), M(3, "Blue Harbour", "2003-02-01")], []));
     await MarkAsync(host, "Little Motel (1995)", watchlist: true, filmDbId: "999");
     await MarkAsync(host, "Blue Harbour (2003)", watchlist: true, filmDbId: "3");
     Assert.Equal([3], Ids(await SuggestAsync(host)));
@@ -156,6 +158,15 @@ public sealed class LibrarySuggestionsEndpointTests
   }
 
   [Fact]
+  public async Task Trending_InterleavesByTmdbRank_BeforeSkippingAdultItems()
+  {
+    await using var host = await StartAsync(Tmdb(
+      [M(40, "Little Motel", "1995-04-01", adult: true), M(3, "Blue Harbour", "2003-02-01")], [T(10, "Harbour Lights", "2010-01-01")]));
+    // Film 1 is skipped, but series 1 keeps its rank ahead of film 2.
+    Assert.Equal([10, 3], Ids(await SuggestAsync(host)));
+  }
+
+  [Fact]
   public async Task Trending_StopsAtTwelve_AndAsksFurtherPagesOnlyWhileShort()
   {
     await using (var full = await StartAsync(Tmdb(WordFilms(Words.Take(14), 100), [], filmPages: 3, seriesPages: 3)))
@@ -174,7 +185,16 @@ public sealed class LibrarySuggestionsEndpointTests
     Assert.Equal(Enumerable.Range(100, 12), Ids(await SuggestAsync(shortHost)));
     Assert.Equal(["/3/trending/movie/week", "/3/trending/tv/week", "/3/trending/movie/week?page=2", "/3/trending/movie/week?page=3"],
       shortHost.TmdbRequests.Select(u => u.PathAndQuery));
-    Assert.True(shortHost.TmdbRequests.Count <= 6);
+
+    // Both kinds advertise four pages and only two titles match: pages 1 to 3 of each, six requests, never page 4.
+    var four = new Dictionary<string, string>();
+    foreach (var kind in new[] { "movie", "tv" })
+      foreach (var page in new[] { 2, 3, 4 })
+        four[$"/3/trending/{kind}/week?page={page}"] = Page(4, kind == "movie" ? WordFilms(Words.Skip(page).Take(1), 200 + page) : []);
+    await using var capped = await StartAsync(Tmdb([M(1, "Little Motel", "1995-04-01")], [], 4, 4, four));
+    Assert.Equal([1, 202, 203], Ids(await SuggestAsync(capped)));
+    Assert.Equal(["/3/trending/movie/week", "/3/trending/tv/week", "/3/trending/movie/week?page=2", "/3/trending/tv/week?page=2",
+      "/3/trending/movie/week?page=3", "/3/trending/tv/week?page=3"], capped.TmdbRequests.Select(u => u.PathAndQuery));
   }
 
   [Fact]
@@ -184,6 +204,9 @@ public sealed class LibrarySuggestionsEndpointTests
     await using (var host = await StartAsync(uri => uri.AbsolutePath == "/3/trending/tv/week"
       ? new HttpResponseMessage(HttpStatusCode.TooManyRequests) : films(uri)))
     {
+      // TmdbClient asks its cache before its back-off, so a further call would bring film 3 from the cache.
+      host.Factory.Services.GetRequiredService<TmdbCache>().Set("trending/movie/week?page=2",
+        System.Text.Encoding.UTF8.GetBytes(Page(3, [M(3, "Blue Harbour", "2003-02-01")])), TmdbClient.TrendingLifetime);
       Assert.Equal([1], Ids(await SuggestAsync(host)));
       Assert.Equal(2, host.TmdbRequests.Count);
     }

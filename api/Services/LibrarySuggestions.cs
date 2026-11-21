@@ -14,19 +14,21 @@ public static class LibrarySuggestions
 {
   public const int MaxResults = 12;
 
-  /// <summary>Films and series interleaved by rank, TMDB's order within each kind; adult, unknown and repeated items are skipped.</summary>
+  /// <summary>
+  /// Films and series interleaved by TMDB's rank (film 1, series 1, film 2, …); adult, unknown and repeated items are
+  /// skipped afterwards, so a skipped item does not move the later ones forward.
+  /// </summary>
   internal static List<SuggestionCandidate> Trending(
     IReadOnlyList<TmdbMovieSummary> films, IReadOnlyList<TmdbTvSummary> series, IReadOnlyList<LibraryEndpoints.FilmMark> marks)
   {
-    var filmCandidates = films.Where(f => f.Id > 0 && !f.Adult).DistinctBy(f => f.Id)
-      .Select(f => new SuggestionCandidate(f.Id, f.PosterPath, FilmKeys(f, marks))).ToList();
-    var seriesCandidates = series.Where(s => s.Id > 0 && !s.Adult).DistinctBy(s => s.Id)
-      .Select(s => new SuggestionCandidate(s.Id, s.PosterPath, SeriesKeys(s, marks))).ToList();
-    var all = new List<SuggestionCandidate>(filmCandidates.Count + seriesCandidates.Count);
-    for (var i = 0; i < Math.Max(filmCandidates.Count, seriesCandidates.Count); i++)
+    var (seenFilms, seenSeries) = (new HashSet<int>(), new HashSet<int>());
+    var all = new List<SuggestionCandidate>(films.Count + series.Count);
+    for (var i = 0; i < Math.Max(films.Count, series.Count); i++)
     {
-      if (i < filmCandidates.Count) all.Add(filmCandidates[i]);
-      if (i < seriesCandidates.Count) all.Add(seriesCandidates[i]);
+      if (i < films.Count && films[i] is { Id: > 0, Adult: false } film && seenFilms.Add(film.Id))
+        all.Add(new SuggestionCandidate(film.Id, film.PosterPath, FilmKeys(film, marks)));
+      if (i < series.Count && series[i] is { Id: > 0, Adult: false } show && seenSeries.Add(show.Id))
+        all.Add(new SuggestionCandidate(show.Id, show.PosterPath, SeriesKeys(show, marks)));
     }
     return all;
   }
@@ -59,9 +61,9 @@ public static class LibrarySuggestions
   }
 
   /// <summary>
-  /// The candidates the list holds, in candidate order, at most <see cref="MaxResults"/>. A list title whose mark stores
-  /// another TMDB id is not this candidate; a candidate takes the first other title its keys found and is left out when
-  /// that title is in an adult group, seen, thumbs down, or taken by an earlier candidate.
+  /// The candidates the list holds, in candidate order, at most <see cref="MaxResults"/>. A candidate takes the title of
+  /// the first of its keys the pass found and is left out when that title's mark stores another TMDB id (the user said
+  /// it is another film), or the title is taken by an earlier candidate, in an adult group, seen or thumbs down.
   /// </summary>
   internal static List<(SuggestionCandidate Candidate, PlaylistTitle Title)> Match(
     IReadOnlyList<SuggestionCandidate> candidates, IReadOnlyList<PlaylistTitle> found,
@@ -75,9 +77,9 @@ public static class LibrarySuggestions
     foreach (var candidate in candidates)
     {
       if (result.Count >= MaxResults) break;
-      var title = candidate.Keys.Select(k => byKey.GetValueOrDefault(k))
-        .FirstOrDefault(t => t is not null && !StoresAnotherId(marks.GetValueOrDefault(t.MarkKey!), candidate.TmdbId));
-      if (title is null || !taken.Add(title.MarkKey!) || AdultGroupRule.IsAdultGroupTitle(title.OutputGroup)) continue;
+      var title = candidate.Keys.Select(k => byKey.GetValueOrDefault(k)).FirstOrDefault(t => t is not null);
+      if (title is null || StoresAnotherId(marks.GetValueOrDefault(title.MarkKey!), candidate.TmdbId)) continue;
+      if (!taken.Add(title.MarkKey!) || AdultGroupRule.IsAdultGroupTitle(title.OutputGroup)) continue;
       if (marks.GetValueOrDefault(title.MarkKey!) is { } mark && (mark.Seen || mark.Rating == -1)) continue;
       result.Add((candidate, title));
     }
