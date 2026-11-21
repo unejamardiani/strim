@@ -170,8 +170,17 @@ public class LibraryHomeUiTests
       ".lib-empty { margin: 0 2px; font-size: 13.5px; color: var(--ink-3); }",
       ".lib-hero .lib-search { flex: 1; max-width: 520px; margin-left: auto; }",
       ".lib-types { grid-template-columns: repeat(3, 220px); }",
-      ".lib-panel[data-tab=\"home\"] { max-width: 1280px; margin: 0 auto; } .lib-home-lists { display: grid; grid-template-columns: 1fr 1fr;",
+      ".lib-panel[data-tab=\"home\"] { width: 100%; max-width: 1280px; margin: 0 auto; } .lib-home-lists { display: grid; grid-template-columns: 1fr 1fr;",
     })
       Assert.Contains(rule, css);
+  }
+
+  [Fact]
+  public void HomePanel_TakesThePageWidth_SoARailCannotWidenIt()
+  {
+    // A centred flex item takes its fit-content width, and a rail's min-content would widen it to 1280px (#482).
+    var css = Read("library.css");
+    Assert.Contains(".lib-panel[data-tab=\"home\"] { width: 100%; max-width: 1280px; margin: 0 auto; }", css);
+    Assert.DoesNotContain(".lib-panel[data-tab=\"home\"] { max-width: 1280px; margin: 0 auto; }", css);
   }
 }

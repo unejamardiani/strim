@@ -107,8 +107,17 @@ public class LibraryGroupGridUiTests
     Assert.Contains(".lib-groups-cols.has-open.is-grid { display: block; }", wide);
     Assert.Contains(".lib-groups-cols.has-open.is-grid .lib-groups-side { display: none; }", wide);
     Assert.Contains(".lib-groups-cols.has-open.is-grid .lib-ghead .lib-ib { display: grid; }", wide);
-    Assert.Contains(".lib-panel[data-tab=\"groups\"]:has(.is-grid) { max-width: 1280px; margin: 0 auto; }", wide);
+    Assert.Contains(".lib-panel[data-tab=\"groups\"]:has(.is-grid) { width: 100%; max-width: 1280px; margin: 0 auto; }", wide);
     // List view keeps the two columns, with its view button.
     Assert.Contains(".lib-groups-cols.has-open .lib-ghead .lib-ib.lib-view { display: grid; }", wide);
+  }
+
+  [Fact]
+  public void GridPanel_TakesThePageWidth()
+  {
+    // Without width: 100% the centred panel shrinks to the width of its content (#482).
+    var css = Css();
+    Assert.Contains(".lib-panel[data-tab=\"groups\"]:has(.is-grid) { width: 100%; max-width: 1280px; margin: 0 auto; }", css);
+    Assert.DoesNotContain(".lib-panel[data-tab=\"groups\"]:has(.is-grid) { max-width: 1280px; margin: 0 auto; }", css);
   }
 }
