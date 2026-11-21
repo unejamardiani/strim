@@ -277,11 +277,11 @@ public class LibraryGroupViewUiTests
     // Exactly Unseen, Liked, sort; both toggles set the shared filters and tell the Search tab.
     Assert.Contains("'aria-label': 'Filters' }, cur.seenChip, cur.likedChip, cur.sortChip)),", open);
     Assert.Contains("class: 'lib-chip is-toggle', type: 'button', 'aria-pressed': String(get()),", open);
-    Assert.Contains("onclick: () => { set(!get()); view.marksChanged?.(); loadGroup(cur); },", open);
+    Assert.Contains("onclick: () => { set(!get()); view.markFiltersChanged?.(); loadGroup(cur); },", open);
     Assert.Contains("cur.seenChip = markChip('Unseen', () => hideSeen, (v) => { hideSeen = v; });", open);
     Assert.Contains("cur.likedChip = markChip('Liked', () => likedOnly, (v) => { likedOnly = v; });", open);
     // The Search tab's chips follow and its search runs again; its own chips reload the open group (reload()).
-    var marks = Between(Library(), "view.marksChanged = () => {", "};");
+    var marks = Between(Library(), "view.markFiltersChanged = () => {", "};");
     InOrder(marks, "seenFilter.setAttribute('aria-pressed', String(hideSeen));", "likedFilter.setAttribute('aria-pressed', String(likedOnly));", "run();");
     var load = LoadGroup();
     InOrder(load, "cur.seenChip.setAttribute('aria-pressed', String(hideSeen));", "cur.likedChip.setAttribute('aria-pressed', String(likedOnly));",
@@ -320,7 +320,7 @@ public class LibraryGroupViewUiTests
       // for it applies, and so does a return to the original address after the filter replaced it.
       "const shown = state.open;",
       "if (shown?.group.key === key && shown.q === q && shown.sort === sort.value && unseen === hideSeen && liked === likedOnly) return;",
-      "hideSeen = unseen;", "likedOnly = liked;", "view.marksChanged?.();",
+      "hideSeen = unseen;", "likedOnly = liked;", "view.markFiltersChanged?.();",
       "open(g, shown?.group.key !== key, { q, sort: sort.value });");
     Assert.DoesNotContain("if (state.open?.group.key === key) return;", handler);
     // The field shows the address's text; the group starts with its filter and order.

@@ -113,7 +113,7 @@ public class LibraryMarksTabUiTests
     Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(section, @"\blookup\(").Count);
     Assert.Contains("const keys = items.map((m) => m.key);\n      view.pages.push(keys);\n      lookup(keys, seq);", load);
     var call = load.IndexOf("lookup(keys, seq);", StringComparison.Ordinal);
-    Assert.True(load.IndexOf("if (view.shown.has(m.key)) continue;", StringComparison.Ordinal) < call);
+    Assert.True(load.IndexOf("if (rows.has(m.key)) continue;", StringComparison.Ordinal) < call);
     Assert.True(call < load.IndexOf("if (!view.done && added === 0) {", StringComparison.Ordinal));
 
     var main = Read("main.js");
@@ -209,10 +209,10 @@ public class LibraryMarksTabUiTests
     Assert.Contains("if (!entry.keepMark) applyMark(ctx, key, entry, entry.asked);\n    else if (!marks.has(key)) marks.set(key, markOf(entry));", controls);
     Assert.DoesNotContain("marks.set(key, { seen: entry.seen", controls);
 
-    // Remove, Undo and their bookkeeping are gone; DELETE stays in the API, unused by the frontend.
+    // Remove and its bookkeeping are gone (a row's Undo returned with #448); DELETE stays in the API, unused by the frontend.
     var library = Read("library.js");
     var main = Read("main.js");
-    foreach (var gone in new[] { "'Remove'", "'Undo'", "undo(", "removeMark", "restore(", "view.edits", "view.pending", "view.waiting", "const edit = " })
+    foreach (var gone in new[] { "'Remove'", "undo(", "removeMark", "restore(", "view.edits", "view.pending", "view.waiting", "const edit = " })
       Assert.DoesNotContain(gone, library);
     Assert.DoesNotContain("removeMark", main);
     Assert.DoesNotContain("/marks/${encodeURIComponent(key)}", main);
@@ -265,7 +265,7 @@ public class LibraryMarksTabUiTests
   {
     var load = Between(MyMarks(), "const loadPage = async () => {", "const build = (key) => {");
     // Every item, repeated keys included, before the skip; applying repaints every mounted control of the key.
-    Assert.Contains("applyMark(ctx, m.key, m, at);\n        if (view.shown.has(m.key)) continue;", load);
+    Assert.Contains("applyMark(ctx, m.key, m, at);\n        if (rows.has(m.key)) continue;", load);
     var apply = Between(Core(), "function applyMark(ctx, key, m, asked) {", "\n  }\n");
     Assert.Contains("marks.set(key, markOf(m));", apply);
     Assert.Contains("paintKey(ctx, key);", apply);
@@ -293,7 +293,7 @@ public class LibraryMarksTabUiTests
     // What fits each view, and the rows shown that no longer fit it.
     Assert.Contains("watchlist: (m) => m.watchlist === true, all: (m) => m.seen || m.rating !== 0 || m.watchlist === true,", section);
     Assert.Contains("seen: (m) => m.seen, liked: (m) => m.rating === 1, disliked: (m) => m.rating === -1,", section);
-    Assert.Contains("const left = () => [...rows.keys()].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", load);
+    Assert.Contains("const left = () => [...view.shown].filter((key) => marks.has(key) && !MARK_FITS[view.filter](marks.get(key))).length;", load);
 
     // 51 Liked, a Like on page one cleared, then scroll: page two is computed from the 49 rows that still count
     // (title 51 now sits at position 50), and the view is complete only when those reach the total.
@@ -522,5 +522,126 @@ public class LibraryMarksTabUiTests
     Assert.Contains("watchlist: 'Nothing on your watchlist yet. Add a film or series with the bookmark in its card.',", section);
     Assert.Contains("all: 'No marks yet. Mark a film or series as seen, or give it a thumb, in the search or a group.',", section);
     Assert.Contains("else foot.replaceChildren(status(MARK_EMPTY[view.filter] || 'No marks of this kind.'));", section);
+  }
+
+  // #448: a Marks row leaves when its mark no longer fits the view.
+  private static string Changed() => Between(MyMarks(), "tab.marksChanged = (key, mark, how) => {", "tab.marksCleared =");
+
+  private static void InOrder(string source, params string[] parts)
+  {
+    var at = -1;
+    foreach (var part in parts)
+    {
+      var next = source.IndexOf(part, at + 1, StringComparison.Ordinal);
+      Assert.True(next > at, $"'{part}' not found after the previous part.");
+      at = next;
+    }
+  }
+
+  [Fact]
+  public void EmptyMarkOrWrongView_LeavesWithUndoToast()
+  {
+    // The fit rule of each view.
+    var fits = Between(MyMarks(), "const MARK_FITS = {", "};");
+    Assert.Contains("watchlist: (m) => m.watchlist === true, all: (m) => m.seen || m.rating !== 0 || m.watchlist === true,", fits);
+    Assert.Contains("seen: (m) => m.seen, liked: (m) => m.rating === 1, disliked: (m) => m.rating === -1,", fits);
+    var changed = Changed();
+    // Hidden in place, out of view.shown, the count lowered; back in view.shown when it fits again.
+    InOrder(changed, "const fits = MARK_FITS[view.filter](mark);", "if (fits === !r.li.hidden) return;", "r.li.hidden = !fits;",
+      "view.total += fits ? 1 : -1;", "if (fits) view.shown.add(key);", "else view.shown.delete(key);", "paint();",
+      // The hidden tab updates row and count silently; the check comes before the toast.
+      "if (fits || tab.panels.marks.hidden) return;", "ctx.toast(");
+    Assert.Contains("const text = view.filter === 'watchlist' ? `${m.title} is off your watchlist` : `Mark on ${m.title} removed`;", changed);
+    Assert.Contains("const name = m.year ? `${m.title} (${m.year})` : m.title;", changed);
+    Assert.Contains("const offer = () => ctx.toast(text, { action: { label: 'Undo', onClick: () => {", changed);
+    // Undo sets the previous (last fitting) mark again, only while the row is still out.
+    Assert.Contains("if (fits) r.fit = markOf(mark);", changed);
+    Assert.Contains("if (r.li.hidden) setMark(ctx, name, m.kind, key, markOf(r.fit || m));", changed);
+    // A page does not bring a row that left back.
+    Assert.Contains("if (rows.has(m.key)) continue;", LoadPage());
+    // One hook for every change: setMark and syncRows report to the tab; the Search chips use their own hook.
+    Assert.Contains("const report = (how) => [key, alias].forEach((k) => k && view?.marksChanged?.(k, marks.get(k), how));", SetMark());
+    InOrder(SetMark(), "marks.set(key, next);\n    repaint();\n    try {\n      report();\n      await ahead;");
+    Assert.Contains("view?.marksChanged?.(key, mark);", SyncRows());
+    Assert.Contains("const tab = library();", MyMarks());
+    Assert.Contains("view.markFiltersChanged = () => {", Read("library.js"));
+    // Empty state once every row is gone (paint counts the view).
+    Assert.Contains("else if (view.total > 0) foot.replaceChildren();", MyMarks());
+  }
+
+  [Fact]
+  public void Paging_CountsOnlyRowsInTheList_AcrossASave()
+  {
+    var load = LoadPage();
+    // view.shown holds only rows in the list, so the next page starts after them (100 marks, 50 loaded, one left:
+    // page 1 again, which now brings the mark that moved up).
+    Assert.Contains("requested = view.walk || Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", load);
+    Assert.Contains("view.done = items.length < MARKS_PAGE || view.shown.size - left() >= page.total;", load);
+    // A page answering before the removal is committed overlapped the save: it does not set a counted total and the
+    // list walks from page 1 once the save is done, so 101 marks less one show 100 rows with a count of 100.
+    InOrder(load, "const overlapped = ticks !== saveTicks || !settled();",
+      "if (!view.counted && (!overlapped || !view.loaded)) view.total = page.total + left();",
+      "if (rows.has(m.key)) continue;", "view.walk = overlapped ? 1 : view.walk && requested + 1;");
+    // The leaving row lowers the count itself; a returning one raises it.
+    Assert.Contains("view.total += fits ? 1 : -1;", Changed());
+    // A row that left is counted once: it leaves view.shown together with view.total, and left() counts only the rows
+    // in view.shown, so neither the total (page.total + left()) nor the page arithmetic (view.shown.size - left()) adds
+    // or subtracts it again. Seen with one mark: clear it, tap Seen while the PUT is on its way, the GET brings the old
+    // record (row visible, count 1), the PUT succeeds and the row leaves (count 0); the settled page then counts
+    // 0 + left() = 0, so the count stays 0 and the empty state shows.
+    Assert.Contains("const left = () => [...view.shown].filter(", load);
+    Assert.DoesNotContain("[...rows.keys()].filter(", load);
+    var changed = Changed();
+    InOrder(changed, "r.li.hidden = !fits;", "view.total += fits ? 1 : -1;", "if (fits) view.shown.add(key);\n      else view.shown.delete(key);");
+    InOrder(Between(SetMark(), "const saved = await ctx.setMark(", "} finally {"), "if (marks.get(key) === next) report('saved');");
+    Assert.Contains("if (!view.counted && (!overlapped || !view.loaded)) view.total = page.total + left();", load);
+  }
+
+  [Fact]
+  public void Saves_ForOneTitle_GoOutInOrder_AndTheTabReconciles()
+  {
+    var set = SetMark();
+    // The second PUT for a title waits for the first; the lane is released in finally.
+    InOrder(set, "const lane = alias || key, ahead = writes.get(lane);", "writes.set(lane, mine);", "await ahead;",
+      "const saved = await ctx.setMark(", "} finally {", "done();\n      if (writes.get(lane) === mine) writes.delete(lane);");
+    // After a successful save the row is checked against the saved mark; a failure reports the rolled-back mark.
+    InOrder(set, "if (marks.get(key) === next) report('saved');", "marks.set(key, before);\n      repaint();",
+      "{ error: true });\n      report('failed');");
+    var changed = Changed();
+    // A fitting mark without a row loads the view again, lazily while the panel is hidden.
+    Assert.Contains("const stale = () => (tab.panels.marks.hidden ? (view.stale = true) : start());", MyMarks());
+    Assert.Contains("if (!r) return fits ? stale() : undefined;", changed);
+    Assert.Contains("if (view.stale) start();", Between(MyMarks(), "ctx.marksView = (query) => {", "};"));
+    Assert.Contains("view.stale = false;", Between(MyMarks(), "const start = () => {", "};"));
+    // Outside the Watchlist a visible row that still fits moves to the top; a failed save puts it back after the row
+    // with the remembered key.
+    InOrder(changed, "if (fits && !r.li.hidden && how !== 'saved' && view.filter !== 'watchlist') {",
+      "if (how === 'failed') r.back?.();", "const above = r.li.previousElementSibling?.dataset.key;",
+      "r.back = () => { const p = rows.get(above)?.li; return p?.isConnected ? p.after(r.li) : list.prepend(r.li); };",
+      "list.prepend(r.li);");
+    // The 'saved' check comes after the move and before the fit decides the row: a saved mark that does not fit makes
+    // a row a page brought back leave.
+    InOrder(changed, "how !== 'saved'", "if (fits === !r.li.hidden) return;");
+  }
+
+  [Fact]
+  public void SimilarFilmClear_FindsItsRowByKindAndKey()
+  {
+    var set = SetMark();
+    Assert.Contains("} else if (!real && key.startsWith('similar:')) view?.marksCleared?.(name, kind, next);", set);
+    var cleared = Between(MyMarks(), "tab.marksCleared = (name, kind, mark) => {", "};");
+    Assert.Contains("const hit = [...rows].find(([, r]) => r.title?.name === name && r.mark.kind === kind && !r.li.hidden);", cleared);
+    // Through syncRows, so the row's key gets the mark and the row leaves with Undo.
+    Assert.Contains("if (hit) syncRows(ctx, hit[0], mark);", cleared);
+    // The local key itself never reaches a row, and a Library left since changes nothing.
+    Assert.Contains("if (key.startsWith('similar:') || !view.loaded || !ctx.isCurrent() || !list.isConnected) return;", Changed());
+  }
+
+  [Fact]
+  public void Undo_WaitsForAModalCardToClose()
+  {
+    var changed = Changed();
+    Assert.Contains("if (card.el?.matches(':modal')) card.el.addEventListener('close', () => { if (r.li.hidden) offer(); }, { once: true });", changed);
+    Assert.Contains("else offer();", changed);
   }
 }

@@ -35,7 +35,7 @@ public class LibraryMyMarksTests
     Assert.Contains("const MARKS_PAGE = 50;", section);
     Assert.Contains("requested = view.walk || Math.max(Math.floor((view.shown.size - left()) / MARKS_PAGE) + 1, view.minPage);", section);
     Assert.Contains("page = await ctx.listMarks({ ...filter, page: requested, pageSize: MARKS_PAGE }, ctx.controller.signal);", section);
-    Assert.Contains("if (view.shown.has(m.key)) continue;", section);
+    Assert.Contains("if (rows.has(m.key)) continue;", section);
     // #446: no More button; the next page loads once the sentinel comes within 600px of the screen.
     Assert.DoesNotContain("'More'", section);
     Assert.Contains("new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) loadPage(); }, { rootMargin: '600px' });", section);
