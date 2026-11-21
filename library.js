@@ -1953,10 +1953,19 @@
     const { button } = card;
     const film = card.stack[0]?.film || card.film;
     const again = card.tile ? sameTile(ctx, card.tile)
-      : [...ctx.root.querySelectorAll('.library-film-open')].find((b) => b.dataset.name === film.name && b.dataset.group === film.group);
+      : [...ctx.root.querySelectorAll('.library-film-open')].find((b) => b.dataset.name === film.name && b.dataset.group === film.group && shown(b));
     // A Home section whose last title left (its empty note replaced the rail) keeps its head and the All link.
-    const sec = card.sec?.isConnected && !card.sec.hidden ? card.sec.querySelector('.lib-sec-head a') : null;
-    (button?.isConnected ? button : again || sec || ctx.root.querySelector('.input-search'))?.focus({ preventScroll: true });
+    const sec = card.sec?.isConnected && shown(card.sec) ? card.sec.querySelector('.lib-sec-head a') : null;
+    // An opener that left or hides (a title taken off the Marks watchlist, a Home section that emptied) hands the focus
+    // to a control of the open tab: its selected filter, else the tab's own link. Never Home's search field (it opens Search).
+    const opener = button?.isConnected && shown(button) ? button : null;
+    (opener || again || sec || tabControl())?.focus({ preventScroll: true });
+  }
+
+  function tabControl() {
+    if (!view) return null;
+    const chip = [...(view.panels[view.tab]?.querySelectorAll('.lib-chip[aria-pressed="true"]') ?? [])].find(shown);
+    return chip || view.nav.querySelector('a[aria-current="page"]');
   }
 
   // The tile that replaced the opening one: first in the rail of the same name, then anywhere in the Library; a tile

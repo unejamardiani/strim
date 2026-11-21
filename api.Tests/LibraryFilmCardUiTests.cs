@@ -64,7 +64,10 @@ public class LibraryFilmCardUiTests
     // The pane's fixed placement is gone; the viewer keeps its larger poster.
     Assert.DoesNotContain("right: max(18px, calc((100vw - 1440px) / 2 + 18px))", css);
     Assert.Contains(".film-card.is-viewer { --film-poster-w: 244px; }", css);
+    // Review 4 of #430: the height cap holds for every centred dialog, from 600px (a 1000 × 700 card grew to 630px).
+    Assert.Contains("@media (min-width: 600px) { .film-card { max-height: min(88dvh, 860px); } }", css);
     Assert.Contains("from 1100px a centred 560px dialog", Read("DESIGN.md"));
+    Assert.Contains("from 600px it is at most `min(88dvh, 860px)` high", Read("DESIGN.md"));
     Assert.DoesNotContain("side pane", Read("DESIGN.md"));
   }
 
@@ -118,8 +121,20 @@ public class LibraryFilmCardUiTests
     // Review of #430: the only watchlist title marked seen leaves Home's rail for the empty note; the focus goes to the
     // section's All link, which survives, before Home's search field.
     Assert.Contains("card.sec = button.closest('.lib-sec');", card);
-    Assert.Contains("const sec = card.sec?.isConnected && !card.sec.hidden ? card.sec.querySelector('.lib-sec-head a') : null;", card);
-    Assert.Contains("again || sec || ctx.root.querySelector('.input-search')", card);
+    Assert.Contains("const sec = card.sec?.isConnected && shown(card.sec) ? card.sec.querySelector('.lib-sec-head a') : null;", card);
+    // Review 4 of #430: a title taken off Marks → Watchlist keeps its row or poster connected in a hidden list item; the
+    // opener must be shown, and rows found again must be shown too.
+    Assert.Contains("const opener = button?.isConnected && shown(button) ? button : null;", card);
+    Assert.Contains("b.dataset.name === film.name && b.dataset.group === film.group && shown(b));", card);
+    Assert.Contains("r.li.hidden = !fits;", Read("library.js"));
+    // Review 4 of #430: with no opener, tile or section left (the only followed series un-liked on Home, the last
+    // watchlist title in Marks), the focus goes to the open tab's selected filter, else its tab link; never to the
+    // search field, which opens Search and scrolls to the top.
+    Assert.Contains("(opener || again || sec || tabControl())?.focus({ preventScroll: true });", card);
+    Assert.Contains("const chip = [...(view.panels[view.tab]?.querySelectorAll('.lib-chip[aria-pressed=\"true\"]') ?? [])].find(shown);", card);
+    Assert.Contains("return chip || view.nav.querySelector('a[aria-current=\"page\"]');", card);
+    Assert.Contains("if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');", Read("library.js"));
+    Assert.DoesNotContain("ctx.root.querySelector('.input-search'))?.focus", card);
     Assert.Contains("h('div', { class: 'lib-sec-head' }, h('h2', { text: title }), n, href ? h('a', { href, text: label }) : null);", Read("library.js"));
   }
 

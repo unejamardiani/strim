@@ -184,6 +184,9 @@ body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom
 html:has(.film-card[open]) { overflow: hidden; }
 html.has-scrollbar:has(.film-card[open]) { scrollbar-gutter: stable; }
 
+/* Every centred dialog (from 600px) is at most min(88dvh, 860px) high and scrolls inside (#430). */
+@media (min-width: 600px) { .film-card { max-height: min(88dvh, 860px); } }
+
 /* From 1100px a centred 560px dialog (#430) over the Library, which keeps its full width. */
 @media (min-width: 1100px) {
   .film-card { --film-poster-w: 208px; width: 560px; max-width: none; height: auto; max-height: min(88dvh, 860px); margin: auto; }
