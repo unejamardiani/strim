@@ -107,6 +107,86 @@ public class PlaylistEndpointTests(StrimAppFactory factory) : IClassFixture<Stri
     Assert.True(fetched.GetProperty("watchlistGroup").GetBoolean());
   }
 
+  private async Task<bool> StoredWatchlistGroupAsync(Guid id)
+  {
+    using var scope = factory.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    return (await db.Playlists.AsNoTracking().SingleAsync(p => p.Id == id)).WatchlistGroup;
+  }
+
+  [Fact]
+  public async Task WatchlistGroup_SwitchesOnAndOff_AndIsReadBack()
+  {
+    var client = await SignedInAsync("wlgroup-switch");
+    var created = await (await client.PostAsync("/api/playlists", NewPlaylist())).Content.ReadFromJsonAsync<PlaylistDto>();
+    var path = $"/api/playlists/{created!.Id}";
+    var before = (await client.Http.GetFromJsonAsync<JsonElement>(path)).GetProperty("updatedAt").GetDateTimeOffset();
+
+    var on = await client.SendAsync(HttpMethod.Patch, $"{path}/watchlist-group", new { enabled = true });
+    Assert.Equal(HttpStatusCode.OK, on.StatusCode);
+    var onBody = await on.Content.ReadFromJsonAsync<JsonElement>();
+    Assert.Equal(created.Id, onBody.GetProperty("id").GetGuid());
+    Assert.True(onBody.GetProperty("watchlistGroup").GetBoolean());
+    var fetched = await client.Http.GetFromJsonAsync<JsonElement>(path);
+    Assert.True(fetched.GetProperty("watchlistGroup").GetBoolean());
+    var afterOn = fetched.GetProperty("updatedAt").GetDateTimeOffset();
+    Assert.True(afterOn > before);
+
+    var again = await client.SendAsync(HttpMethod.Patch, $"{path}/watchlist-group", new { enabled = true });
+    Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+    Assert.True((await again.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("watchlistGroup").GetBoolean());
+
+    var off = await client.SendAsync(HttpMethod.Patch, $"{path}/watchlist-group", new { enabled = false });
+    Assert.Equal(HttpStatusCode.OK, off.StatusCode);
+    Assert.False((await off.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("watchlistGroup").GetBoolean());
+    fetched = await client.Http.GetFromJsonAsync<JsonElement>(path);
+    Assert.False(fetched.GetProperty("watchlistGroup").GetBoolean());
+    Assert.True(fetched.GetProperty("updatedAt").GetDateTimeOffset() > afterOn);
+  }
+
+  [Fact]
+  public async Task WatchlistGroup_WithoutCsrfToken_IsRejected()
+  {
+    var client = await SignedInAsync("wlgroup-csrf");
+    var created = await (await client.PostAsync("/api/playlists", NewPlaylist())).Content.ReadFromJsonAsync<PlaylistDto>();
+
+    var response = await client.SendAsync(HttpMethod.Patch, $"/api/playlists/{created!.Id}/watchlist-group", new { enabled = true }, withCsrf: false);
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    Assert.False(await StoredWatchlistGroupAsync(created.Id));
+  }
+
+  [Fact]
+  public async Task WatchlistGroup_OfAnotherUsersPlaylist_Is404()
+  {
+    var owner = await SignedInAsync("wlgroup-owner");
+    var created = await (await owner.PostAsync("/api/playlists", NewPlaylist())).Content.ReadFromJsonAsync<PlaylistDto>();
+
+    var other = await SignedInAsync("wlgroup-intruder");
+    var response = await other.SendAsync(HttpMethod.Patch, $"/api/playlists/{created!.Id}/watchlist-group", new { enabled = true });
+    Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    Assert.False(await StoredWatchlistGroupAsync(created.Id));
+  }
+
+  [Fact]
+  public async Task WatchlistGroup_WithoutASession_Is401()
+  {
+    var anonymous = new ApiClient(factory.CreateClient());
+    var response = await anonymous.SendAsync(HttpMethod.Patch, $"/api/playlists/{Guid.NewGuid()}/watchlist-group", new { enabled = true });
+    Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+  }
+
+  [Fact]
+  public async Task WatchlistGroup_DoesNotContactTheProvider()
+  {
+    var client = await SignedInAsync("wlgroup-upstream");
+    var created = await (await client.PostAsync("/api/playlists", NewPlaylist())).Content.ReadFromJsonAsync<PlaylistDto>();
+    var before = factory.UpstreamRequests.ToArray();
+
+    var response = await client.SendAsync(HttpMethod.Patch, $"/api/playlists/{created!.Id}/watchlist-group", new { enabled = true });
+    response.EnsureSuccessStatusCode();
+    Assert.Equal(before, factory.UpstreamRequests.ToArray());
+  }
+
   [Fact]
   public async Task Mutations_WithoutCsrfToken_AreRejected()
   {
