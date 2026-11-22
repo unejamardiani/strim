@@ -380,7 +380,8 @@ public sealed class LibraryFilmCardTests
     public string UserName { get; } = "card-owner";
 
     public static async Task<TestHost> StartAsync(
-      string? token, Func<Uri, HttpResponseMessage> tmdb, string[]? disabledGroups = null, string? upstream = null)
+      string? token, Func<Uri, HttpResponseMessage> tmdb, string[]? disabledGroups = null, string? upstream = null,
+      TimeProvider? time = null)
     {
       var requests = new ConcurrentQueue<Uri>();
       var root = new StrimAppFactory();
@@ -389,8 +390,11 @@ public sealed class LibraryFilmCardTests
       {
         builder.ConfigureAppConfiguration((_, config) =>
           config.AddInMemoryCollection(new Dictionary<string, string?> { [TmdbClient.TokenVariable] = token }));
-        builder.ConfigureTestServices(services => services.AddHttpClient(TmdbClient.HttpClientName)
-          .ConfigurePrimaryHttpMessageHandler(() => new StubTmdb(tmdb, requests)));
+        builder.ConfigureTestServices(services =>
+        {
+          services.AddHttpClient(TmdbClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new StubTmdb(tmdb, requests));
+          if (time is not null) services.AddSingleton(time);
+        });
       });
       var host = new TestHost { Root = root, Factory = app, Client = new ApiClient(app.CreateClient()), TmdbRequests = requests };
       await host.Client.RegisterAsync(host.UserName);

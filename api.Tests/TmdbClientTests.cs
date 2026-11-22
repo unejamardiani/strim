@@ -503,6 +503,62 @@ public class TmdbClientTests
     Assert.Empty(handler.Requests);
   }
 
+  [Fact]
+  public async Task Recommendations_AskByIdAndPage()
+  {
+    var handler = new StubHandler(_ => Json("""{"page":1,"results":[{"id":5,"title":"Some Film"}],"total_pages":2}"""));
+    var client = CreateClient(handler);
+
+    Assert.Equal(5, Assert.Single((await client.GetMovieRecommendationsAsync(7, 1, default)).Value!.Results!).Id);
+    Assert.Equal(2, (await client.GetTvRecommendationsAsync(9, 2, default)).Value!.TotalPages);
+    Assert.Equal(TmdbStatus.Ok, (await client.GetMovieRecommendationsAsync(7, 2, default)).Status);
+    Assert.Equal(TmdbStatus.Ok, (await client.GetTvRecommendationsAsync(9, 1, default)).Status);
+    Assert.Equal(
+      ["/3/movie/7/recommendations", "/3/tv/9/recommendations?page=2", "/3/movie/7/recommendations?page=2", "/3/tv/9/recommendations"],
+      handler.Requests.Select(r => r.Uri.PathAndQuery));
+
+    // TMDB's reference shows an empty object: missing fields read as no results and no pages.
+    var empty = CreateClient(new StubHandler(_ => Json("{}")));
+    var page = await empty.GetTvRecommendationsAsync(9, 1, default);
+    Assert.Equal((TmdbStatus.Ok, null, 0), (page.Status, page.Value!.Results, page.Value.TotalPages));
+  }
+
+  [Fact]
+  public async Task Recommendations_AreCachedForSevenDays()
+  {
+    Assert.Equal(TimeSpan.FromDays(7), TmdbClient.RecommendationsLifetime);
+    var time = new ManualTime();
+    var cache = new TmdbCache(time);
+    var handler = new StubHandler(_ => Json("""{"page":1,"results":[{"id":7}],"total_pages":1}"""));
+    var client = CreateClient(handler, time: time, cache: cache);
+
+    await client.GetMovieRecommendationsAsync(7, 1, default);
+    await client.GetTvRecommendationsAsync(7, 2, default);
+    time.Advance(TimeSpan.FromDays(7) - TimeSpan.FromSeconds(1));
+    Assert.Equal(7, Assert.Single((await client.GetMovieRecommendationsAsync(7, 1, default)).Value!.Results!).Id);
+    await client.GetTvRecommendationsAsync(7, 2, default);
+    Assert.Equal(2, handler.Requests.Count);
+
+    time.Advance(TimeSpan.FromSeconds(1));
+    await client.GetMovieRecommendationsAsync(7, 1, default);
+    await client.GetTvRecommendationsAsync(7, 2, default);
+    Assert.Equal(4, handler.Requests.Count);
+  }
+
+  [Fact]
+  public async Task Recommendations_PageOrIdOutOfRange_Throws()
+  {
+    var handler = new StubHandler(_ => Json("{}"));
+    var client = CreateClient(handler);
+
+    foreach (var (id, page) in new[] { (0, 1), (-1, 1), (7, 0), (7, 3), (7, -1) })
+    {
+      await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.GetMovieRecommendationsAsync(id, page, default));
+      await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.GetTvRecommendationsAsync(id, page, default));
+    }
+    Assert.Empty(handler.Requests);
+  }
+
   private static TmdbClient CreateClient(
     StubHandler handler,
     string? token = Token,
