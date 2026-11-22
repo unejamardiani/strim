@@ -369,7 +369,11 @@ public static class ProcessingEndpoints
         try
         {
           var source = await pipeline.GetSourceAsync(playlist.SourceUrl, context.RequestAborted);
-          var output = await pipeline.GetOutputAsync(source, playlist.DisabledGroups ?? new List<string>(), context.RequestAborted);
+          // Read on every request, from the database only: the owner's and the accepted viewers' watchlists.
+          var watchlist = playlist.WatchlistGroup && !string.IsNullOrEmpty(playlist.OwnerId)
+            ? await WatchlistGroup.LoadAsync(db, playlist.Id, playlist.OwnerId, context.RequestAborted)
+            : null;
+          var output = await pipeline.GetOutputAsync(source, playlist.DisabledGroups ?? new List<string>(), context.RequestAborted, watchlist);
 
           // Lease the output before persisting anything, so an output that expired in between
           // falls back without having touched the playlist's metadata.
