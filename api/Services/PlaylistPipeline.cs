@@ -62,10 +62,14 @@ public sealed class PlaylistPipeline(PlaylistFileCache cache, PlaylistSourceFetc
   public async Task<PlaylistOutputFile> GetOutputAsync(
     PlaylistSourceFile source,
     IReadOnlyCollection<string> disabledGroups,
-    CancellationToken cancellationToken)
+    CancellationToken cancellationToken,
+    WatchlistGroup? watchlist = null)
   {
     var disabled = new HashSet<string>(disabledGroups, StringComparer.OrdinalIgnoreCase);
-    if (cache.TryGetOutput(source.ContentHash, disabled) is { } existing)
+    // An empty watchlist is the plain output: same cache key, same file.
+    if (watchlist is { IsEmpty: true }) watchlist = null;
+    var variant = watchlist?.Fingerprint;
+    if (cache.TryGetOutput(source.ContentHash, disabled, variant) is { } existing)
     {
       return existing;
     }
@@ -82,8 +86,9 @@ public sealed class PlaylistPipeline(PlaylistFileCache cache, PlaylistSourceFetc
         cancellationToken,
         cache.MaxLineLengthChars,
         cache.MaxGeneratedBytes,
-        analysis.SplitGroupTitles);
-      return cache.StoreOutput(source, disabled, temporaryOutputPath, result);
+        analysis.SplitGroupTitles,
+        watchlist);
+      return cache.StoreOutput(source, disabled, temporaryOutputPath, result, variant);
     }
     catch
     {

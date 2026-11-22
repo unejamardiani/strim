@@ -58,6 +58,67 @@ public class PlaylistFileCacheTests
     }
   }
 
+  private static async Task<PlaylistOutputFile> StoreOutputAsync(
+    PlaylistFileCache cache, PlaylistSourceFile source, HashSet<string> disabled, string? variant, bool passVariant = true)
+  {
+    var temporaryOutput = cache.CreateOutputTemporaryPath();
+    using var outputReservation = cache.ReserveOutputCapacity(source);
+    var result = await PlaylistProcessor.GenerateFilteredFileAsync(
+      source.FilePath, temporaryOutput, disabled, CancellationToken.None, cache.MaxLineLengthChars, cache.MaxGeneratedBytes);
+    return passVariant
+      ? cache.StoreOutput(source, disabled, temporaryOutput, result, variant)
+      : cache.StoreOutput(source, disabled, temporaryOutput, result);
+  }
+
+  private static async Task WithSourceAsync(Func<PlaylistFileCache, PlaylistSourceFile, Task> run)
+  {
+    var directory = Path.Combine(Path.GetTempPath(), $"strim-cache-test-{Guid.NewGuid():N}");
+    var cache = new PlaylistFileCache(
+      Options.Create(new PlaylistCacheOptions
+      {
+        Directory = directory, MaxSourceBytes = 1024 * 1024, MaxDiskBytes = 4 * 1024 * 1024, EntryTtlMinutes = 10, SourceTtlMinutes = 10,
+      }),
+      NullLogger<PlaylistFileCache>.Instance);
+    try
+    {
+      var downloaded = await cache.WriteRawTextAsync(
+        "#EXTM3U\n#EXTINF:-1 group-title=\"News\",News\nhttps://example.com/news.m3u8\n", CancellationToken.None);
+      await run(cache, cache.StoreDownloaded("https://example.com/playlist.m3u", downloaded));
+    }
+    finally
+    {
+      if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+    }
+  }
+
+  [Fact]
+  public Task Output_WithAVariant_IsKeptApartFromThePlainOutput() => WithSourceAsync(async (cache, source) =>
+  {
+    var disabled = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Sport" };
+    var plain = await StoreOutputAsync(cache, source, disabled, null, passVariant: false);
+    var withVariant = await StoreOutputAsync(cache, source, disabled, "abc123");
+
+    Assert.NotEqual(plain.OutputKey, withVariant.OutputKey);
+    Assert.Equal(plain.OutputKey, cache.TryGetOutput(source.ContentHash, disabled)!.OutputKey);
+    Assert.Equal(withVariant.OutputKey, cache.TryGetOutput(source.ContentHash, disabled, "abc123")!.OutputKey);
+    Assert.Null(cache.TryGetOutput(source.ContentHash, disabled, "def456"));
+    await using var plainLease = cache.TryLeaseOutput(plain.OutputKey);
+    await using var variantLease = cache.TryLeaseOutput(withVariant.OutputKey);
+    Assert.NotEqual(plainLease!.FilePath, variantLease!.FilePath);
+  });
+
+  [Fact]
+  public Task Output_WithoutAVariant_UsesTodaysKey() => WithSourceAsync(async (cache, source) =>
+  {
+    var disabled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var output = await StoreOutputAsync(cache, source, disabled, null, passVariant: false);
+
+    Assert.Equal(output.OutputKey, cache.TryGetOutput(source.ContentHash, disabled, null)!.OutputKey);
+    Assert.Equal(output.OutputKey, cache.TryGetOutput(source.ContentHash, disabled, "")!.OutputKey);
+    var stored = await StoreOutputAsync(cache, source, disabled, "");
+    Assert.Equal(stored.OutputKey, cache.TryGetOutput(source.ContentHash, disabled)!.OutputKey);
+  });
+
   [Fact]
   public void OutputFileName_IsSafeForContentDisposition()
   {
