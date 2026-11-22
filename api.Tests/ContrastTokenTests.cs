@@ -94,6 +94,24 @@ public class ContrastTokenTests
   }
 
   [Fact]
+  public void Edge_Has3To1OnEverySurface()
+  {
+    foreach (var (name, t) in Themes())
+    {
+      Assert.True(t.ContainsKey("--edge"), $"theme.css {name} block has no --edge token.");
+      foreach (var surface in Surfaces)
+        AssertAtLeast(3, name, t, "--edge", surface);
+    }
+  }
+
+  [Fact]
+  public void SwitchKnob_OnAccent()
+  {
+    foreach (var (name, t) in Themes())
+      AssertAtLeast(4.5, name, t, "--on-accent", "--accent");
+  }
+
+  [Fact]
   public void InkLevels_StayApart()
   {
     foreach (var (name, t) in Themes())

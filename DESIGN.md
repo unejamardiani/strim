@@ -20,13 +20,15 @@ Light follows the system by default; dark is a warm charcoal, never pure black.
 | `--accent` | `#ff5b1f` | `#ff6a2e` | Tangerine signal: primary buttons, switches on, live |
 | `--focus` | `#c2410c` | `#ff6a2e` | Keyboard focus ring; 3:1 or more on every surface incl. the dock |
 | `--on-accent` | `#1d0e05` | `#1d0e05` | Text on accent (dark ink, never white) |
+| `--edge` | `#857a6d` | `#857a6d` | Boundary of fields, switches, selected segments: 3:1 or more on every surface, one value for both themes |
 | `--dock-bg` | `#1d1a16` | `#2b251f` | Floating dock and toasts (inverted in light mode) |
 
 Contrast: the text tokens (`--ink`, `--ink-2`, `--ink-3`, `--accent-ink`) are at least 4.5:1 on `--bg`,
 `--surface`, `--surface-2` and `--surface-3` in both themes (WCAG 2.2 AA; light `--accent-ink` also on
 `--accent-soft`). `--ink-3` is the quietest text colour; nothing lighter may carry text. Text is never dimmed
 with `opacity`. Glyphs drawn into fields (search lens, select arrow) use `#857a6d`, at least 3:1 on the field
-colours of both themes. `ContrastTokenTests` computes these ratios from `theme.css`.
+colours of both themes. A control that is told apart only by its fill needs an `--edge`. `ContrastTokenTests`
+computes these ratios from `theme.css`.
 
 Content types have their own colour and shape, so colour is never the only cue:
 
@@ -66,8 +68,13 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
 
 ### Components
 
-- **Switch**: native checkbox (`role="switch"`) styled as a toggle; tangerine when on.
-- **Pills**: segmented filters on a `--surface-2` track; the active pill is raised (`--pill-on`).
+- **Fields**: `.input` on `--surface-2` with a 1.5px `--edge` border; the focus mark (`--focus`) replaces it. The
+  playlist name (`.input-name`) shows the edge only on hover.
+- **Switch**: native checkbox (`role="switch"`) styled as a toggle. Off: `--surface-3` track with a 1.5px inset
+  `--edge` ring and an `--edge` knob. On: tangerine track without ring, `--on-accent` knob. On and off differ by
+  position, fill and knob.
+- **Pills**: segmented filters on a `--surface-2` track; the active pill is raised (`--pill-on`) and outlined with
+  a 1.5px inset `--edge`.
 - **Dock**: floating inverted bar with the big channel count (Bricolage) and Download/Save. Save turns into a quiet "✓ Saved" when nothing changed.
 - **Link card**: tangerine-tinted corner glow, "Player link" label with signal dot, mono URL, primary Copy.
 - **Sheets**: native `<dialog>`; bottom sheet with grab handle below 600px, centred above.
