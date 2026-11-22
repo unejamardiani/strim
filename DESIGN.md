@@ -59,6 +59,7 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
 
 - Radius: 14px controls, 22px cards, 24px dock, 26–28px sheets, full pills for filters and tags.
 - Light mode: borderless cards with a soft warm shadow. Dark mode: no shadows, 1px warm borders.
+- Quiet buttons, icon buttons and chips carry a 1px inset `--edge`; primary and ghost buttons do not.
 - Touch: controls 46px on phones (42px from 768px), group rows 56px (50px), switches 46×28.
   Row and sheet actions use the compact controls (`.btn-xs`, `.icon-btn.is-sm`, `.btn-quiet`, `.btn-danger`,
   `.btn-danger-quiet`): 32–36px visible with a 44px touch target from `::after`, replacing the 46px rule for them.
