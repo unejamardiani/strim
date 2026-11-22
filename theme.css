@@ -155,6 +155,13 @@
   }
 }
 
+/* More contrast (#497): the quiet level goes, edges take the secondary ink, strokes get heavier. The tripled class
+   lifts the stroke over every holder rule without !important. */
+@media (prefers-contrast: more) {
+  :root { --ink-3: var(--ink-2); --edge: var(--ink-2); --card-border: var(--edge); --line: var(--line-strong); }
+  .icon.icon.icon { stroke-width: 2.6; }
+}
+
 @media (min-width: 768px) {
   :root {
     --row-h: 50px;
@@ -422,3 +429,13 @@ select {
   color: var(--ink);
 }
 
+
+/* Forced colours (#497): what is drawn only with backgrounds and shadows gets system colours and outlines. Switches
+   and markers live in app.css, site.css and library.css, after the rules they replace. */
+@media (forced-colors: active) {
+  .wm-dot { forced-color-adjust: none; background: Highlight; box-shadow: none; animation: none; }
+  /* The selection mark is a border, so the focus ring (an outline) can sit outside it without hiding it. */
+  .pills button[aria-pressed="true"], .lib-chip[aria-pressed="true"], .lib-tabs a[aria-current="page"] { border: 2px solid Highlight; outline-color: Highlight; }
+  :where(.btn, .icon-btn, .pills button, .lib-ib, .lib-chip, .lib-tabs) { outline: 1px solid ButtonBorder; outline-offset: -1px; }
+  [aria-current="page"] > .icon .sig, [aria-pressed="true"] > .icon .sig { fill: Highlight; stroke: none; }
+}

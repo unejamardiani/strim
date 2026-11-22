@@ -500,3 +500,9 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 .lib-row.has-thumb { min-height: 76px; padding-left: 10px; }
 .lib-row.is-seen .lib-thumb img.is-loaded { opacity: .45; }
 @media (prefers-reduced-motion: reduce) { .lib-thumb img { transition: none; } }
+
+/* Forced colours (#497): markers keep their shape in the system text colour. */
+@media (forced-colors: active) {
+  .lib-dot, .lib-dot[data-type] { forced-color-adjust: none; background: CanvasText; }
+  .lib-watch[aria-pressed="true"] .sig { fill: Highlight; stroke: none; }
+}

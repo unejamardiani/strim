@@ -2254,3 +2254,14 @@ select.input {
   .sharing-head .btn, .share-table { display: none; }
   .sheet.confirm { max-width: none; }
 }
+
+/* Forced colours (#497): switches, markers and the toast dot keep a system colour. */
+@media (forced-colors: active) {
+  .toggle, .switch { forced-color-adjust: none; background: Canvas; box-shadow: none; border: 1.5px solid ButtonText; }
+  .toggle::after, .switch::after { top: 1.5px; left: 1.5px; background: ButtonText; }
+  .toggle:checked, .switch.on { background: Highlight; border-color: Highlight; }
+  .toggle:checked::after, .switch.on::after { background: HighlightText; }
+  .toggle:focus-visible, .switch:focus-visible, .input:focus { outline: 2px solid Highlight; outline-offset: 2px; }
+  .dot, [data-type] > .dot, .dot[data-type] { forced-color-adjust: none; background: CanvasText; }
+  .toast::before, .toast.error::before { forced-color-adjust: none; background: Highlight; }
+}

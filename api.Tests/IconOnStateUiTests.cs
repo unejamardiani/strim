@@ -63,8 +63,10 @@ public class IconOnStateUiTests
   [Fact]
   public void OnDot_StaysTangerine()
   {
+    // Forced colours (#497) use the system palette only, so their block is the one place the dot is not tangerine.
+    var forced = new Regex(@"@media \(forced-colors: active\) \{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", RegexOptions.CultureInvariant);
     foreach (var file in new[] { "theme.css", "library.css" })
-      Assert.Empty(CurrentDotFillsOtherThanAccent(Read(file)));
+      Assert.Empty(CurrentDotFillsOtherThanAccent(forced.Replace(Read(file), "")));
   }
 
   [Fact]
