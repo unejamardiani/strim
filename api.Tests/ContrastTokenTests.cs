@@ -127,6 +127,12 @@ public class ContrastTokenTests
   {
     var app = Read("app.css");
     Assert.True(Regex.Matches(app, Regex.Escape("%23857a6d")).Count >= 2, "The field glyphs must use the shared edge grey.");
+    foreach (var selector in new[] { @"\.input-search", @"select\.input" })
+    {
+      var rule = Regex.Match(app, selector + @" \{[^}]*\}", RegexOptions.CultureInvariant);
+      Assert.True(rule.Success, $"app.css has no {selector} rule.");
+      Assert.Contains("stroke='%23857a6d'", rule.Value);
+    }
     Assert.DoesNotContain("%239a9084", app);
     foreach (var (name, t) in Themes())
       foreach (var bg in new[] { "--bg", "--surface", "--surface-2" })
