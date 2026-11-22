@@ -136,9 +136,11 @@ public class LibraryTabsUiTests
     Assert.Contains(".lib-tabs { position: fixed; z-index: 20; left: 12px; right: 12px; bottom: calc(14px + var(--safe-bottom)); height: 62px;", css);
     Assert.Contains("background: var(--dock-bg); border: 1px solid var(--dock-border); color: var(--dock-ink-2);", css);
     Assert.Contains("body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom)); }", css);
+    Assert.Contains("text-decoration: none; font: 700 12px var(--font-ui); }", css);
+    Assert.Contains(".lib-tabs a[aria-current=\"page\"] { background: color-mix(in srgb, var(--dock-ink) 16%, transparent); color: var(--dock-ink); font-weight: 800; }", css);
     var wide = Between(css, "@media (min-width: 768px) {\n  .lib-tabs {", "\n}");
     Assert.Contains(".lib-tabs { position: static; height: auto; display: inline-flex;", wide);
-    Assert.Contains(".lib-tabs a[aria-current=\"page\"] { background: var(--pill-on);", wide);
+    Assert.Contains(".lib-tabs a[aria-current=\"page\"] { background: var(--pill-on); color: var(--ink); font-weight: 700;", wide);
     Assert.Contains(".lib-tabs-row { display: flex; margin-top: 12px; }", wide);
     foreach (var cls in new[] { ".lib-head {", ".lib-head-text {", ".lib-kicker {", ".lib-ib {", ".lib-ib::after { content: \"\"; position: absolute; inset: -4px; }", ".lib-ib.is-quiet {", ".lib-menu-facts {", ".lib-menu-facts small {" })
       Assert.Contains(cls, css);
