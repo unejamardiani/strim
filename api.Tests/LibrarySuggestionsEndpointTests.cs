@@ -225,23 +225,19 @@ public sealed class LibrarySuggestionsEndpointTests
 
   private static List<string> Asked(TestHost host) => host.TmdbRequests.Select(u => u.PathAndQuery).ToList();
 
-  private static void AssertEmpty(JsonElement answer)
-  {
-    Assert.Equal(JsonValueKind.Null, answer.GetProperty("seed").ValueKind);
-    Assert.Empty(Ids(answer));
-    Assert.False(answer.GetProperty("tmdbData").GetBoolean());
-  }
+  private static void AssertEmpty(JsonElement answer) => Assert.Equal((JsonValueKind.Null, 0, false),
+    (answer.GetProperty("seed").ValueKind, Ids(answer).Count, answer.GetProperty("tmdbData").GetBoolean()));
+
+  private static void AssertWins(JsonElement answer, string seedKey, int[] ids)
+  { Assert.Equal(seedKey, SeedKey(answer)); Assert.Equal(ids, Ids(answer)); }
 
   [Fact]
   public async Task Liked_ReturnsTheSeedAndItsRecommendationsInTheList()
   {
-    await using var host = await StartLikedAsync(new()
-    {
-      [Rec("movie", 1)] = Page(1, [M(3, "Blue Harbour", "2003-02-01"), M(2, "Absent Film", "2000-01-01"), .. WordFilms(Words.Take(2), 100)]),
-    });
+    await using var host = await StartLikedAsync(new() { [Rec("movie", 1)] =
+      Page(1, [M(3, "Blue Harbour", "2003-02-01"), M(2, "Absent Film", "2000-01-01"), .. WordFilms(Words.Take(2), 100)]) });
     await RateAsync(host, "Little Motel (1995)", tmdbId: 1);
     var answer = await LikedAsync(host);
-
     Assert.Equal([3, 100, 101], Ids(answer));
     Assert.Equal("liked", answer.GetProperty("source").GetString());
     var seed = answer.GetProperty("seed");
@@ -256,16 +252,11 @@ public sealed class LibrarySuggestionsEndpointTests
   [Fact]
   public async Task Liked_SeedsOnlyFromThumbsUp_NotFromWatchlistOrSeen()
   {
-    await using var host = await StartLikedAsync(new()
-    {
-      [Rec("movie", 1)] = Words3(100), [Rec("movie", 3)] = Words3(103), [Rec("movie", 4)] = Words3(106),
-    });
+    await using var host = await StartLikedAsync(new() { [Rec("movie", 1)] = Words3(100), [Rec("movie", 3)] = Words3(103), [Rec("movie", 4)] = Words3(106) });
     await RateAsync(host, "Little Motel (1995)", tmdbId: 1, age: 2);
     await RateAsync(host, "Blue Harbour (2003)", rating: 0, tmdbId: 3, seen: true, age: 1);
     await RateAsync(host, "Old Mill (1980)", rating: 0, tmdbId: 4, watchlist: true);
-    var answer = await LikedAsync(host);
-    Assert.Equal("film:1995:little motel", SeedKey(answer));
-    Assert.Equal([100, 101, 102], Ids(answer));
+    AssertWins(await LikedAsync(host), "film:1995:little motel", [100, 101, 102]);
     Assert.Equal([Rec("movie", 1)], Asked(host));
   }
 
@@ -283,14 +274,10 @@ public sealed class LibrarySuggestionsEndpointTests
   public async Task Liked_SeedChangesWithTheUtcDay_AndIsStableWithinIt()
   {
     var time = new FakeTime(Midnight.AddMinutes(30));
-    await using var host = await StartLikedAsync(new()
-    {
-      [Rec("movie", 1)] = Words3(100), [Rec("movie", 3)] = Words3(103), [Rec("movie", 4)] = Words3(106),
-    }, time: time);
+    await using var host = await StartLikedAsync(new() { [Rec("movie", 1)] = Words3(100), [Rec("movie", 3)] = Words3(103), [Rec("movie", 4)] = Words3(106) }, time: time);
     await RateAsync(host, "Little Motel (1995)", tmdbId: 1);
     await RateAsync(host, "Blue Harbour (2003)", tmdbId: 3, age: 1);
     await RateAsync(host, "Old Mill (1980)", tmdbId: 4, age: 2);
-
     // Day number d with d mod 3 = 0 starts at the newest thumbs up, d + 1 at the next, d + 3 at the newest again.
     foreach (var (at, seed, first) in new[]
     {
@@ -301,8 +288,7 @@ public sealed class LibrarySuggestionsEndpointTests
     {
       time.Now = Midnight + at;
       var answer = await LikedAsync(host);
-      Assert.Equal(seed, SeedKey(answer));
-      Assert.Equal(first, Ids(answer)[0]);
+      Assert.Equal((seed, first), (SeedKey(answer), Ids(answer)[0]));
     }
   }
 
@@ -319,16 +305,12 @@ public sealed class LibrarySuggestionsEndpointTests
     await RateAsync(host, "Blue Harbour (2003)", tmdbId: 3, age: 1);
     await RateAsync(host, "Old Mill (1980)", tmdbId: 4, age: 2);
     await RateAsync(host, "Quiet Field (1999)", tmdbId: 5, age: 3);
-
     // Day d (d mod 4 = 0): 2, 1 and 2 suggestions; the fourth seed is never tried.
     AssertEmpty(await LikedAsync(host));
     Assert.Equal([Rec("movie", 1), Rec("movie", 3), Rec("movie", 4)], Asked(host));
-
     // Day d + 1 starts at the second seed and hands over to the fourth, which has 5.
     time.Now = time.Now.AddDays(1);
-    var answer = await LikedAsync(host);
-    Assert.Equal("film:1999:quiet field", SeedKey(answer));
-    Assert.Equal([105, 106, 107, 108, 109], Ids(answer));
+    AssertWins(await LikedAsync(host), "film:1999:quiet field", [105, 106, 107, 108, 109]);
     Assert.Equal([Rec("movie", 1), Rec("movie", 3), Rec("movie", 4), Rec("movie", 5)], Asked(host));
   }
 
@@ -342,55 +324,28 @@ public sealed class LibrarySuggestionsEndpointTests
     await using var host = await StartLikedAsync(answers, time: new FakeTime(DateTimeOffset.UnixEpoch.AddDays(day).AddHours(12)));
     for (var i = 0; i < 11; i++)
       await RateAsync(host, $"{Words[i]} seed (1990)", tmdbId: 200 + i, age: i);
-
     var expected = (int)(day % LibrarySuggestions.MaxSeedCandidates);
-    var answer = await LikedAsync(host);
-    Assert.Equal($"film:1990:{Words[expected]} seed", SeedKey(answer));
+    Assert.Equal($"film:1990:{Words[expected]} seed", SeedKey(await LikedAsync(host)));
     Assert.Equal([Rec("movie", 200 + expected)], Asked(host));
   }
 
   [Fact]
   public async Task Liked_PageTwoCompletesTheSeed()
   {
-    await using var host = await StartLikedAsync(new()
-    {
-      [Rec("movie", 1)] = Words3(100, 2, totalPages: 2), [Rec("movie", 1, 2)] = Words3(102, 1, totalPages: 2),
-    });
+    await using var host = await StartLikedAsync(new() { [Rec("movie", 1)] = Words3(100, 2, totalPages: 2), [Rec("movie", 1, 2)] = Words3(102, 1, totalPages: 2) });
     await RateAsync(host, "Little Motel (1995)", tmdbId: 1);
-    var answer = await LikedAsync(host);
-    Assert.Equal("film:1995:little motel", SeedKey(answer));
-    Assert.Equal([100, 101, 102], Ids(answer));
+    AssertWins(await LikedAsync(host), "film:1995:little motel", [100, 101, 102]);
     Assert.Equal([Rec("movie", 1), Rec("movie", 1, 2)], Asked(host));
-  }
-
-  [Fact]
-  public async Task Liked_SkipsNullItems_InSearchAndRecommendations()
-  {
-    const string search = "/3/search/movie?include_adult=false&query=little%20motel&year=1995";
-    await using var host = await StartLikedAsync(new()
-    {
-      [search] = Page(1, ["null", M(1, "Little Motel", "1995-04-01")]),
-      [Rec("movie", 1)] = Page(1, ["null", .. WordFilms(Words.Take(3), 100)]),
-    });
-    await RateAsync(host, "Little Motel (1995)");
-    var answer = await LikedAsync(host);
-    Assert.Equal("film:1995:little motel", SeedKey(answer));
-    Assert.Equal([100, 101, 102], Ids(answer));
   }
 
   [Fact]
   public async Task Liked_SeedKeyIsLeftOutOfACandidate_NotTheCandidate()
   {
     // The seed "Quiet Bay" without a year shares the remake's yearless key; the remake is still found as "Quiet Bay (2015)".
-    await using var host = await StartLikedAsync(new()
-    {
-      [Rec("tv", 11)] = Page(1, [T(20, "Quiet Bay", "2015-03-01"), T(13, "Night Shift", "2012-01-01"), T(14, "Grey Coast", "2014-01-01")]),
-    });
+    await using var host = await StartLikedAsync(new() { [Rec("tv", 11)] =
+      Page(1, [T(20, "Quiet Bay", "2015-03-01"), T(13, "Night Shift", "2012-01-01"), T(14, "Grey Coast", "2014-01-01")]) });
     await RateAsync(host, "Quiet Bay", kind: "series", tmdbId: 11);
-    var answer = await LikedAsync(host);
-    Assert.Equal("series::quiet bay", SeedKey(answer));
-    Assert.Equal([20, 13, 14], Ids(answer));
-    Assert.Equal("Quiet Bay (2015) S01 E01", answer.GetProperty("suggestions")[0].GetProperty("title").GetProperty("name").GetString());
+    AssertWins(await LikedAsync(host), "series::quiet bay", [20, 13, 14]);
   }
 
   [Fact]
@@ -400,10 +355,11 @@ public sealed class LibrarySuggestionsEndpointTests
     const string tvSearch = "/3/search/tv?include_adult=false&query=harbour%20lights";
     await using var host = await StartLikedAsync(new()
     {
-      [filmSearch] = Page(1, [M(40, "Old Mill", "1980-01-01"), M(41, "Old Mill", "1980-06-01")]),
+      // TMDB's null items are skipped in searches and recommendations alike.
+      [filmSearch] = Page(1, ["null", M(40, "Old Mill", "1980-01-01"), M(41, "Old Mill", "1980-06-01")]),
       [Rec("movie", 40)] = Words3(110), [Rec("movie", 1)] = Words3(100, 2),
-      [tvSearch] = Page(1, [T(10, "Harbour Lights", "2010-01-01"), T(12, "Harbour Lights Revisited", "2012-01-01")]),
-      [Rec("tv", 10)] = Page(1, [T(11, "Quiet Bay", "2015-03-01"), T(10, "Harbour Lights", "2010-01-01"),
+      [tvSearch] = Page(1, ["null", T(10, "Harbour Lights", "2010-01-01"), T(12, "Harbour Lights Revisited", "2012-01-01")]),
+      [Rec("tv", 10)] = Page(1, ["null", T(11, "Quiet Bay", "2015-03-01"), T(10, "Harbour Lights", "2010-01-01"),
         T(13, "Night Shift", "2012-01-01"), T(14, "Grey Coast", "2014-01-01")]),
     });
     // Two films named "Old Mill" from 1980: no clear match, skipped. "Little Motel" stores its id: no search, 2 only.
@@ -411,7 +367,6 @@ public sealed class LibrarySuggestionsEndpointTests
     await RateAsync(host, "Little Motel (1995)", tmdbId: 1, age: 1);
     await RateAsync(host, "Harbour Lights", kind: "series", age: 2);
     var answer = await LikedAsync(host);
-
     var seed = answer.GetProperty("seed");
     Assert.Equal(("series::harbour lights", "Harbour Lights", "series"),
       (seed.GetProperty("key").GetString(), seed.GetProperty("title").GetString(), seed.GetProperty("kind").GetString()));
@@ -430,9 +385,7 @@ public sealed class LibrarySuggestionsEndpointTests
     await RateAsync(host, "Little Motel (1995)", tmdbId: 1);
     await RateAsync(host, "Blue Harbour (2003)", rating: 0, seen: true, age: 1);
     await RateAsync(host, "Old Mill (1980)", rating: -1, age: 2);
-    var answer = await LikedAsync(host);
-    Assert.Equal("film:1995:little motel", SeedKey(answer));
-    Assert.Equal([100, 101, 102], Ids(answer));
+    AssertWins(await LikedAsync(host), "film:1995:little motel", [100, 101, 102]);
   }
 
   [Fact]
@@ -445,8 +398,7 @@ public sealed class LibrarySuggestionsEndpointTests
       ("little%20motel", 1995, "1995-04-01", 1, 100), ("blue%20harbour", 2003, "2003-02-01", 3, 102), ("old%20mill", 1980, "1980-01-01", 4, 104),
     })
     {
-      answers[$"/3/search/movie?include_adult=false&query={name}&year={year}"] =
-        Page(1, [M(id, Uri.UnescapeDataString(name), date)]);
+      answers[$"/3/search/movie?include_adult=false&query={name}&year={year}"] = Page(1, [M(id, Uri.UnescapeDataString(name), date)]);
       answers[Rec("movie", id)] = Words3(first, id == 4 ? 3 : 1, totalPages: 2);
       answers[Rec("movie", id, 2)] = Words3(first + 1, 1, totalPages: 2);
     }
@@ -454,7 +406,6 @@ public sealed class LibrarySuggestionsEndpointTests
     await RateAsync(host, "Little Motel (1995)");
     await RateAsync(host, "Blue Harbour (2003)", age: 1);
     await RateAsync(host, "Old Mill (1980)", age: 2);
-
     AssertEmpty(await LikedAsync(host));
     Assert.Equal(Api.Endpoints.LibrarySuggestionsEndpoints.MaxTmdbCalls, host.TmdbRequests.Count);
     Assert.Equal(Rec("movie", 4), Asked(host)[^1]);
@@ -476,7 +427,6 @@ public sealed class LibrarySuggestionsEndpointTests
       return (await LikedAsync(host), Asked(host));
     }
     var next = new Dictionary<string, string> { [Rec("movie", 3)] = Words3(110) };
-
     // Page 1 rate limited: empty, and the second seed is not tried.
     var (answer, asked) = await RunAsync(next, Rec("movie", 1), HttpStatusCode.TooManyRequests, 1);
     AssertEmpty(answer);

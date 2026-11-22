@@ -531,18 +531,14 @@ public class TmdbClientTests
     var cache = new TmdbCache(time);
     var handler = new StubHandler(_ => Json("""{"page":1,"results":[{"id":7}],"total_pages":1}"""));
     var client = CreateClient(handler, time: time, cache: cache);
+    async Task<int> AskBothAsync() => (await client.GetMovieRecommendationsAsync(7, 1, default)).Value!.Results!.Single().Id
+      + (await client.GetTvRecommendationsAsync(7, 2, default)).Value!.Results!.Single().Id;
 
-    await client.GetMovieRecommendationsAsync(7, 1, default);
-    await client.GetTvRecommendationsAsync(7, 2, default);
+    Assert.Equal(14, await AskBothAsync());
     time.Advance(TimeSpan.FromDays(7) - TimeSpan.FromSeconds(1));
-    Assert.Equal(7, Assert.Single((await client.GetMovieRecommendationsAsync(7, 1, default)).Value!.Results!).Id);
-    await client.GetTvRecommendationsAsync(7, 2, default);
-    Assert.Equal(2, handler.Requests.Count);
-
+    Assert.Equal((14, 2), (await AskBothAsync(), handler.Requests.Count));
     time.Advance(TimeSpan.FromSeconds(1));
-    await client.GetMovieRecommendationsAsync(7, 1, default);
-    await client.GetTvRecommendationsAsync(7, 2, default);
-    Assert.Equal(4, handler.Requests.Count);
+    Assert.Equal((14, 4), (await AskBothAsync(), handler.Requests.Count));
   }
 
   [Fact]

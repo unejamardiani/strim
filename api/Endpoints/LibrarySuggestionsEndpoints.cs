@@ -159,25 +159,12 @@ public static class LibrarySuggestionsEndpoints
       {
         var asked = page;
         int? totalPages = null;
-        if (isFilm)
-        {
-          if (await calls.AskAsync(() => tmdb.GetMovieRecommendationsAsync(seedId, asked, ct)) is { } filmPage)
-          {
-            filmResults.AddRange(filmPage.Results ?? []);
-            totalPages = filmPage.TotalPages;
-          }
-        }
-        else if (await calls.AskAsync(() => tmdb.GetTvRecommendationsAsync(seedId, asked, ct)) is { } seriesPage)
-        {
-          seriesResults.AddRange(seriesPage.Results ?? []);
-          totalPages = seriesPage.TotalPages;
-        }
+        if (isFilm && await calls.AskAsync(() => tmdb.GetMovieRecommendationsAsync(seedId, asked, ct)) is { } filmPage)
+          totalPages = Collect(filmResults, filmPage.Results, filmPage.TotalPages);
+        else if (!isFilm && await calls.AskAsync(() => tmdb.GetTvRecommendationsAsync(seedId, asked, ct)) is { } seriesPage)
+          totalPages = Collect(seriesResults, seriesPage.Results, seriesPage.TotalPages);
         // A page that did not come leaves the seed unfinished, so it is dropped whichever page it was.
-        if (totalPages is null)
-        {
-          matched = null;
-          break;
-        }
+        if (totalPages is null) { matched = null; break; }
         matched = match(LibrarySuggestions.Recommended(filmResults, seriesResults, seedId, key.Key, marks));
         if (matched.Count >= LibrarySuggestions.MaxResults || totalPages <= 1) break;
       }
@@ -185,5 +172,12 @@ public static class LibrarySuggestionsEndpoints
         return (new LibrarySuggestionSeed(key.Key, mark.DisplayTitle, isFilm ? "film" : "series"), matched);
     }
     return (null, []);
+  }
+
+  /// <summary>Adds a page's results and passes on its page count.</summary>
+  private static int Collect<T>(List<T?> results, IReadOnlyList<T>? page, int totalPages) where T : class
+  {
+    results.AddRange(page ?? []);
+    return totalPages;
   }
 }
