@@ -6,6 +6,14 @@ using Xunit;
 
 namespace Api.Tests;
 
+[CollectionDefinition(nameof(SearchTiming), DisableParallelization = true)]
+public class SearchTiming
+{
+}
+
+// Runs alone so the timed search in Search_LargeFixture_StaysFastAndBounded does not compete with the rest of
+// the suite for the processor.
+[Collection(nameof(SearchTiming))]
 public class PlaylistSearchIndexTests
 {
   private const string Source = """
