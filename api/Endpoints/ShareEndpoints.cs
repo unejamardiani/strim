@@ -189,7 +189,7 @@ public static class ShareEndpoints
         .Where(p => p.Id == id && (p.OwnerId == userId || db.PlaylistShares.Any(s => s.PlaylistId == p.Id && s.ViewerUserId == userId)))
         .Select(p => new
         {
-          p.Name, p.SourceUrl, p.DisabledGroups, IsOwner = p.OwnerId == userId,
+          p.Name, p.SourceUrl, p.DisabledGroups, p.WatchlistGroup, IsOwner = p.OwnerId == userId,
           OwnerName = db.Users.Where(u => u.Id == p.OwnerId).Select(u => u.UserName).FirstOrDefault(),
           Share = db.PlaylistShares.Where(s => s.PlaylistId == p.Id && s.ViewerUserId == userId)
             .Select(s => new { s.Id, s.LastOpenedUtc }).FirstOrDefault(),
@@ -229,7 +229,7 @@ public static class ShareEndpoints
           return Results.Ok(new
           {
             libraryKey, name = access.Name, role = access.IsOwner ? "owner" : "viewer",
-            ownerName = DisplayName(access.OwnerName), totalChannels, groups,
+            ownerName = DisplayName(access.OwnerName), totalChannels, groups, watchlistGroup = access.WatchlistGroup,
           });
         }
         catch (Exception ex) when (!access.IsOwner)

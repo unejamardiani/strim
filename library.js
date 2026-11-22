@@ -178,6 +178,7 @@
     ctx.listState = 'ready';
     // Marks pages loaded before the list get their lookup now (#455).
     ctx.lookupMarks?.();
+    ctx.paintShared?.();
     const browse = browseSection(ctx, result);
     view.panels.search.replaceChildren(searchSection(ctx, result, browse.refresh, browse.reload));
     view.panels.groups.replaceChildren(browse.el);
@@ -205,6 +206,13 @@
   // The viewer's Library (#383): the same view on someone else's list. Its copy says "this list", never "your list".
   const isViewer = (ctx) => ctx.role === 'viewer';
   const listWord = (ctx) => (isViewer(ctx) ? 'this list' : 'your list');
+  // While the playlist's Watchlist group is on (#526), a viewer's watchlist also feeds the owner's player link, without
+  // names: the viewer reads it where the watchlist is kept. The owner reads it on the Sharing page; group off, nothing.
+  const watchlistShared = (ctx) => {
+    if (!isViewer(ctx) || ctx.list?.watchlistGroup !== true) return null;
+    const owner = ctx.list.ownerName ? `${ctx.list.ownerName}'s` : "the owner's";
+    return ctx.h('p', { class: 'lib-status', text: `Titles here also show in ${owner} player. No names are shown.` });
+  };
 
   // Kept for this page session only: a reload starts again with the groups that are on.
   let includeOff = false;
@@ -1347,7 +1355,8 @@
         unnav(s.p);
         s.p.body.replaceChildren(kept.length && rails ? rail(s.p, 'Your watchlist', kept.slice(0, 12).map((m) => markTile(m, s.titles?.[m.key] || null, () => (m.year ? String(m.year) : ''))))
           : kept.length ? rows(s, kept)
-          : h('p', { class: 'lib-empty', text: 'Nothing on your watchlist yet. Add a film or series with the bookmark in its card.' }));
+          : h('p', { class: 'lib-empty', text: 'Nothing on your watchlist yet. Add a film or series with the bookmark in its card.' }),
+          watchlistShared(ctx) || '');
       });
     // Series you follow: the series with a thumbs up, newest change first, only those in this list; none: left out.
     const follow = marked(part('Series you follow', `${base}/marks?view=liked`, 'All'),
@@ -1569,6 +1578,8 @@
     const rows = new Map();
     const status = (text) => h('p', { class: 'search-status', role: 'status', text });
     const count = h('p');
+    // The Watchlist view's line for a viewer (#526), once above the list or grid.
+    const shared = h('div');
     const list = h('ol', { class: 'search-list' });
     const foot = h('div', { class: 'library-foot' });
     const sentinel = h('div', { 'aria-hidden': 'true' });
@@ -1595,7 +1606,10 @@
       if (view.stale) start();
     };
 
+    // Also when the list arrives (load), since the line reads the list's flag.
+    ctx.paintShared = () => shared.replaceChildren((view.filter === 'watchlist' && watchlistShared(ctx)) || '');
     const paint = () => {
+      ctx.paintShared();
       count.textContent = !view.loaded ? ''
         : view.filter === 'watchlist' ? `${plural(view.total, 'title')} · newest first` : `${plural(view.total, 'mark')} · newest change first`;
       for (const b of chips.children) {
@@ -1839,6 +1853,7 @@
       h('div', { class: 'lib-sticky' },
         h('div', { class: 'lib-ghead' }, h('div', { class: 'lib-ghead-text' }, h('h2', { text: 'My marks' }), count)),
         chips),
+      shared,
       h('div', { class: 'lib-list' }, list, foot));
     const body = section.lastElementChild;
     if (viewBtn) section.querySelector('.lib-ghead').append(viewBtn);

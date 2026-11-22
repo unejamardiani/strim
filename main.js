@@ -996,6 +996,9 @@ function sharingInvite() {
 function sharingGets() {
   const item = state.overview.get(sharing.playlist.id);
   const checks = ['Browse and search the groups you switched on', 'Open film and series cards', 'Keep their own seen and thumbs marks'];
+  // While the Watchlist group is on (#526), their watchlist feeds it; the same flag as the switch in the ⋯ sheet (#524).
+  const playlist = state.playlists.find((p) => p.id === sharing.playlist.id);
+  if (playlist?.watchlistGroup) checks.push("Their watchlist shows in your player's Watchlist group, without names");
   return h('section', { class: 'card sharing-card' },
     h('h2', { text: 'What they get' }),
     h('ul', { class: 'share-checks' }, checks.map((text) => h('li', null, icon('check'), text)),
@@ -1641,7 +1644,8 @@ function showSharedLibrary(id) {
         key: g.name, title: g.groupTitle || g.name, type: CONTENT_TYPES.includes(g.contentType) ? g.contentType : 'Live', count: g.count || 0, index,
       }));
       document.title = `${open.name || 'Playlist'} · Library · Strim`;
-      return { groups, disabled: new Set(), totalChannels: open.totalChannels, cacheKey: open.libraryKey, name: open.name, ownerName: open.ownerName };
+      return { groups, disabled: new Set(), totalChannels: open.totalChannels, cacheKey: open.libraryKey, name: open.name, ownerName: open.ownerName,
+        watchlistGroup: open.watchlistGroup === true };
     },
     search: (body, signal) => api(`${base}/search`, { method: 'POST', body: scoped(body), signal }),
     titles: (params, signal) => api(`${base}/titles?${new URLSearchParams(scoped(params))}`, { signal }),
