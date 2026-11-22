@@ -348,6 +348,17 @@ with TMDB off it is absent, with no notice. The answer is kept while the Library
 again when "Include switched-off groups" changes or the page reloads; a title marked seen keeps its
 tile, with the check, until then.
 
+Because you liked <title> (#479), with TMDB on: a second ordinary Home section directly under
+Trending this week and before "New in <group>", with the same head, rail and tiles. The server picks
+one thumbs-up title per UTC day as the seed and answers its recommendations that are in the list; the
+head reads "Because you liked " and the seed's title (text, also the h2's `title`), on one line with
+an ellipsis (`.lib-sec-one`) so the count and the arrows keep their place; the rail's label is the same
+text. The heading is only known with the answer, so the section stays hidden while asking (no
+"Loading…" line). Without a seed, with fewer than 3 titles, on any failure and with TMDB off it is
+absent, with no notice. A thumb set or cleared while the Library is open does not ask again: the
+heading keeps naming the seed of the answer shown until the next load of the Library. The two
+sections load independently.
+
 ```
 ┌──────────────────────────────┐
 │ Head                         │  ‹ · LIBRARY / playlist name · tabs (from 768px) · ⋯
