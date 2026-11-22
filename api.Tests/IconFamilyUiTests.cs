@@ -139,4 +139,24 @@ public class IconFamilyUiTests
     Assert.Contains(".lib-art-watch .sig { fill: var(--accent); }", library);
     Assert.Contains(".lib-watch[aria-pressed=\"true\"] .sig { fill: var(--surface); }", library);
   }
+
+  // The field glyphs are background images in app.css (#498): they repeat ICONS.search and the chevron turned down.
+  [Fact]
+  public void FieldGlyphs_FollowTheFamily()
+  {
+    var app = Read("app.css");
+    var lens = Regex.Match(app, @"\.input-search \{[^}]*\}", RegexOptions.CultureInvariant);
+    Assert.True(lens.Success, "app.css has no .input-search rule.");
+    Assert.Contains("cx='10' cy='10' r='6'", lens.Value);
+    Assert.Contains("d='M14.4 14.4l2.2 2.2'", lens.Value);
+    Assert.Contains("cx='19.5' cy='19.5' r='1.7' fill='%23857a6d' stroke='none'", lens.Value);
+
+    var arrow = Regex.Match(app, @"select\.input \{[^}]*\}", RegexOptions.CultureInvariant);
+    Assert.True(arrow.Success, "app.css has no select.input rule.");
+    Assert.Contains("d='M6 9.5l6 6 6-6'", arrow.Value);
+    Assert.Contains("stroke-linejoin='round'", arrow.Value);
+
+    Assert.DoesNotContain("r='7'", app);
+    Assert.DoesNotContain("M20 20l-3.5-3.5", app);
+  }
 }

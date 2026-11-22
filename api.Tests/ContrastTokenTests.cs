@@ -105,10 +105,40 @@ public class ContrastTokenTests
   }
 
   [Fact]
-  public void SwitchKnob_OnAccent()
+  public void Accent_CarriesItsLabel()
   {
     foreach (var (name, t) in Themes())
-      AssertAtLeast(4.5, name, t, "--on-accent", "--accent");
+      foreach (var fill in new[] { "--accent", "--accent-hover" })
+        AssertAtLeast(4.5, name, t, "--on-accent", fill);
+  }
+
+  [Fact]
+  public void Accent_ReadsAsLargeTextOnPaper()
+  {
+    foreach (var (name, t) in Themes())
+      foreach (var bg in new[] { "--bg", "--surface" })
+        AssertAtLeast(3, name, t, "--accent", bg);
+  }
+
+  [Fact]
+  public void LiveMarker_FollowsTheAccent()
+  {
+    var light = Light();
+    Assert.Equal(light["--accent"], light["--live"]);
+  }
+
+  [Fact]
+  public void TypeMarkers_Have3To1()
+  {
+    foreach (var (name, t) in Themes())
+    {
+      foreach (var marker in new[] { "--live", "--movies", "--series" })
+        AssertAtLeast(3, name, t, marker, "--surface");
+      foreach (var bg in new[] { "--bg", "--surface-2" })
+        AssertAtLeast(3, name, t, "--movies", bg);
+    }
+    // In dark, --movies-soft is an rgba tint and is skipped.
+    AssertAtLeast(3, "light", Light(), "--movies", "--movies-soft");
   }
 
   [Fact]
@@ -126,7 +156,13 @@ public class ContrastTokenTests
   public void FieldGlyphs_UseTheSharedEdgeGrey()
   {
     var app = Read("app.css");
-    Assert.Equal(2, Regex.Matches(app, Regex.Escape("stroke='%23857a6d'")).Count);
+    Assert.True(Regex.Matches(app, Regex.Escape("%23857a6d")).Count >= 2, "The field glyphs must use the shared edge grey.");
+    foreach (var selector in new[] { @"\.input-search", @"select\.input" })
+    {
+      var rule = Regex.Match(app, selector + @" \{[^}]*\}", RegexOptions.CultureInvariant);
+      Assert.True(rule.Success, $"app.css has no {selector} rule.");
+      Assert.Contains("stroke='%23857a6d'", rule.Value);
+    }
     Assert.DoesNotContain("%239a9084", app);
     foreach (var (name, t) in Themes())
       foreach (var bg in new[] { "--bg", "--surface", "--surface-2" })

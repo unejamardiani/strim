@@ -17,7 +17,7 @@ Light follows the system by default; dark is a warm charcoal, never pure black.
 | `--surface` | `#fffcf7` | `#1e1a16` | Cards, sheets |
 | `--surface-2/3` | `#efe8dc` / `#e7dfd1` | `#29231d` / `#352d26` | Inputs, pill tracks, secondary buttons |
 | `--ink` / `--ink-2` / `--ink-3` | `#1d1a16` / `#50483f` / `#6b6258` | `#f5eee4` / `#b5aa9c` / `#a09588` | Text levels |
-| `--accent` | `#ff5b1f` | `#ff6a2e` | Tangerine signal: primary buttons, switches on, live |
+| `--accent` | `#f4511a` | `#ff6a2e` | Tangerine signal: primary buttons, switches on, live |
 | `--focus` | `#c2410c` | `#ff6a2e` | Keyboard focus ring; 3:1 or more on every surface incl. the dock |
 | `--on-accent` | `#1d0e05` | `#1d0e05` | Text on accent (dark ink, never white) |
 | `--edge` | `#857a6d` | `#857a6d` | Boundary of fields, switches, selected segments: 3:1 or more on every surface, one value for both themes |
@@ -27,15 +27,17 @@ Contrast: the text tokens (`--ink`, `--ink-2`, `--ink-3`, `--accent-ink`) are at
 `--surface`, `--surface-2` and `--surface-3` in both themes (WCAG 2.2 AA; light `--accent-ink` also on
 `--accent-soft`). `--ink-3` is the quietest text colour; nothing lighter may carry text. Text is never dimmed
 with `opacity`. Glyphs drawn into fields (search lens, select arrow) use `#857a6d`, at least 3:1 on the field
-colours of both themes. A control that is told apart only by its fill needs an `--edge`. `ContrastTokenTests`
-computes these ratios from `theme.css`.
+colours of both themes. A control that is told apart only by its fill needs an `--edge`. Tangerine is a fill
+and a large-text colour (3:1 on paper and cards). Text below 24px in the tangerine family uses `--accent-ink`.
+The type markers (`--live`, `--movies`, `--series`) are at least 3:1 on `--surface`, `--movies` also on `--bg`,
+`--surface-2` and its own soft fill. `ContrastTokenTests` computes these ratios from `theme.css`.
 
 Content types have their own colour and shape, so colour is never the only cue:
 
 | Type | Marker | Colour | Tag |
 |------|--------|--------|-----|
 | Live | ● circle | tangerine (`--live`) | shown only when a title is split |
-| Movies | ◆ diamond | gold (`--movies`) | always |
+| Movies | ◆ diamond | gold (`--movies`: light `#b8770a`, dark `#f0b04a`) | always |
 | Series | ■ square | violet (`--series`) | always |
 
 Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample notice), `--danger` (delete, errors).

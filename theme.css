@@ -56,17 +56,17 @@
   /* Boundary of fields, switches and selected segments: 3:1 or more on every surface, same in both themes. */
   --edge: #857a6d;
 
-  --accent: #ff5b1f;
+  --accent: #f4511a;
   --accent-hover: #ff6f3a;
   --on-accent: #1d0e05;
   --accent-ink: #b23a08;
   --accent-soft: #ffe2d2;
   --focus: #c2410c;
 
-  --live: #ff5b1f;
+  --live: #f4511a;
   --live-soft: #ffe2d2;
   --live-ink: #b13a0b;
-  --movies: #e39a2d;
+  --movies: #b8770a;
   --movies-soft: #fbeacb;
   --movies-ink: #7a4e00;
   --series: #7a5af8;
