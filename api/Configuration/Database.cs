@@ -106,6 +106,7 @@ public static class Database
       TryAddSqliteColumn(db, "accountmaxconnections", "INTEGER NULL", logger);
       TryAddSqliteColumn(db, "accountactiveconnections", "INTEGER NULL", logger);
       TryAddSqliteColumn(db, "accountcheckedutc", "TEXT NULL", logger);
+      TryAddSqliteColumn(db, "watchlistgroup", "INTEGER NOT NULL DEFAULT 0", logger);
       TryBackfillSqliteShareCodes(db, logger);
     }
   }
@@ -447,7 +448,18 @@ public static class Database
   {
     try
     {
-      db.Database.ExecuteSqlRaw(@"
+      db.Database.ExecuteSqlRaw(PostgresPlaylistColumnsSql);
+      logger.LogDebug("PostgreSQL schema patched successfully");
+    }
+    catch (Exception ex)
+    {
+      // P1 fix: Log the error instead of silently swallowing
+      logger.LogWarning(ex, "Failed to patch PostgreSQL schema: {Message}", ex.Message);
+    }
+  }
+
+  /// <summary>Adds each playlist column that an older PostgreSQL database lacks; safe to run on every start.</summary>
+  public const string PostgresPlaylistColumnsSql = @"
         DO $$
         BEGIN
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'totalchannels') THEN
@@ -507,16 +519,11 @@ public static class Database
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'accountcheckedutc') THEN
             ALTER TABLE playlists ADD COLUMN accountcheckedutc timestamptz NULL;
           END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'watchlistgroup') THEN
+            ALTER TABLE playlists ADD COLUMN watchlistgroup boolean NOT NULL DEFAULT false;
+          END IF;
         END $$;
-      ");
-      logger.LogDebug("PostgreSQL schema patched successfully");
-    }
-    catch (Exception ex)
-    {
-      // P1 fix: Log the error instead of silently swallowing
-      logger.LogWarning(ex, "Failed to patch PostgreSQL schema: {Message}", ex.Message);
-    }
-  }
+      ";
 
   private static void TryBackfillPostgresShareCodes(AppDbContext db, ILogger logger)
   {
@@ -559,7 +566,8 @@ public static class Database
       ["accountstatus"] = "TEXT NULL",
       ["accountmaxconnections"] = "INTEGER NULL",
       ["accountactiveconnections"] = "INTEGER NULL",
-      ["accountcheckedutc"] = "TEXT NULL"
+      ["accountcheckedutc"] = "TEXT NULL",
+      ["watchlistgroup"] = "INTEGER NOT NULL DEFAULT 0"
     };
 
     if (!allowedColumns.TryGetValue(columnName, out var expectedDefinition))

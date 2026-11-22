@@ -55,6 +55,7 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
       entity.Property(p => p.AccountMaxConnections).HasColumnName("accountmaxconnections");
       entity.Property(p => p.AccountActiveConnections).HasColumnName("accountactiveconnections");
       entity.Property(p => p.AccountCheckedUtc).HasColumnName("accountcheckedutc");
+      entity.Property(p => p.WatchlistGroup).HasColumnName("watchlistgroup");
       entity.HasIndex(p => new { p.OwnerId, p.UpdatedAt });
       entity.HasIndex(p => p.ShareCode).HasFilter("\"sharecode\" IS NOT NULL");
     });

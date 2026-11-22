@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Api.Data;
 using Api.Models;
 using Microsoft.AspNetCore.Hosting;
@@ -70,6 +71,40 @@ public class PlaylistEndpointTests(StrimAppFactory factory) : IClassFixture<Stri
 
     Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(HttpMethod.Delete, $"/api/playlists/{created.Id}")).StatusCode);
     Assert.Equal(HttpStatusCode.NotFound, (await client.Http.GetAsync($"/api/playlists/{created.Id}")).StatusCode);
+  }
+
+  [Fact]
+  public async Task Playlist_CarriesWatchlistGroup_OffByDefault()
+  {
+    var client = await SignedInAsync("wlgroup-default");
+
+    var created = await (await client.PostAsync("/api/playlists", NewPlaylist())).Content.ReadFromJsonAsync<JsonElement>();
+    Assert.False(created.GetProperty("watchlistGroup").GetBoolean());
+
+    var fetched = await client.Http.GetFromJsonAsync<JsonElement>($"/api/playlists/{created.GetProperty("id").GetGuid()}");
+    Assert.False(fetched.GetProperty("watchlistGroup").GetBoolean());
+  }
+
+  [Fact]
+  public async Task Put_LeavesWatchlistGroupAsStored()
+  {
+    var client = await SignedInAsync("wlgroup-put");
+    var created = await (await client.PostAsync("/api/playlists", NewPlaylist())).Content.ReadFromJsonAsync<PlaylistDto>();
+    using (var scope = factory.Services.CreateScope())
+    {
+      var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+      var stored = await db.Playlists.SingleAsync(p => p.Id == created!.Id);
+      stored.WatchlistGroup = true;
+      await db.SaveChangesAsync();
+    }
+
+    var response = await client.SendAsync(HttpMethod.Put, $"/api/playlists/{created!.Id}", NewPlaylist("Kitchen"));
+    response.EnsureSuccessStatusCode();
+
+    var updated = await response.Content.ReadFromJsonAsync<JsonElement>();
+    Assert.True(updated.GetProperty("watchlistGroup").GetBoolean());
+    var fetched = await client.Http.GetFromJsonAsync<JsonElement>($"/api/playlists/{created.Id}");
+    Assert.True(fetched.GetProperty("watchlistGroup").GetBoolean());
   }
 
   [Fact]
