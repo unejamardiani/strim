@@ -59,11 +59,15 @@ public static class LibrarySuggestions
     return new MarkKey(mark.TitleKey, parts[2], year, mark.DisplayTitle, kind.Value);
   }
 
-  /// <summary>A seed's recommendations as candidates in TMDB's order, without the seed itself (by its id or its mark key).</summary>
-  internal static List<SuggestionCandidate> Recommended(IReadOnlyList<TmdbMovieSummary> films, IReadOnlyList<TmdbTvSummary> series,
+  /// <summary>
+  /// A seed's recommendations as candidates in TMDB's order, without the seed itself: its id is left out, and its mark
+  /// key is taken from every candidate's keys, so a candidate can still be found under its other keys. Null items are skipped.
+  /// </summary>
+  internal static List<SuggestionCandidate> Recommended(IReadOnlyList<TmdbMovieSummary?> films, IReadOnlyList<TmdbTvSummary?> series,
     int seedId, string seedKey, IReadOnlyList<LibraryEndpoints.FilmMark> marks) =>
-    Trending(films.Where(f => f.Id != seedId).ToList(), series.Where(s => s.Id != seedId).ToList(), marks)
-      .Where(c => !c.Keys.Contains(seedKey, StringComparer.Ordinal)).ToList();
+    Trending(films.OfType<TmdbMovieSummary>().Where(f => f.Id != seedId).ToList(),
+        series.OfType<TmdbTvSummary>().Where(s => s.Id != seedId).ToList(), marks)
+      .Select(c => c with { Keys = c.Keys.Where(k => !string.Equals(k, seedKey, StringComparison.Ordinal)).ToList() }).ToList();
 
   /// <summary>A film is found only with its release year, by its title and its original title.</summary>
   private static List<string> FilmKeys(TmdbMovieSummary film, IReadOnlyList<LibraryEndpoints.FilmMark> marks)

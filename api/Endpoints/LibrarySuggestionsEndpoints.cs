@@ -133,7 +133,7 @@ public static class LibrarySuggestionsEndpoints
   /// Up to 3 thumbs-up seeds (<see cref="LibrarySuggestions.Seeds"/>); the first whose recommendations put at least
   /// <see cref="MinLikedResults"/> titles of the list on the rail wins. A seed takes its stored TMDB id, else a clear
   /// search match, else it is skipped; page 2 is asked only while short. A search that is rate limited or unavailable
-  /// and any answer but Ok on recommendations end the calls; a seed that runs out of budget is dropped.
+  /// and any answer but Ok on recommendations end the calls; a seed whose pages do not all come is dropped.
   /// </summary>
   private static async Task<(LibrarySuggestionSeed?, List<(SuggestionCandidate Candidate, PlaylistTitle Title)>)> LikedAsync(TmdbClient tmdb,
     CallBudget calls, IReadOnlyList<LibraryEndpoints.FilmMark> marks, DateTimeOffset now,
@@ -148,12 +148,12 @@ public static class LibrarySuggestionsEndpoints
       int? tmdbId = int.TryParse(mark.FilmDbId, NumberStyles.None, CultureInfo.InvariantCulture, out var stored) && stored > 0
         ? stored : null;
       if (tmdbId is null && isFilm && await calls.AskAsync(() => tmdb.SearchMovieAsync(key.Title, key.Year, ct), SearchEnds) is { } films)
-        tmdbId = LibraryEndpoints.ClearMatchId(key, (films.Results ?? []).Select(r => (r.Id, r.Title, r.ReleaseDate)));
+        tmdbId = LibraryEndpoints.ClearMatchId(key, (films.Results ?? []).OfType<TmdbMovieSummary>().Select(r => (r.Id, r.Title, r.ReleaseDate)));
       else if (tmdbId is null && !isFilm && await calls.AskAsync(() => tmdb.SearchTvAsync(key.Title, key.Year, ct), SearchEnds) is { } shows)
-        tmdbId = LibraryEndpoints.ClearMatchId(key, (shows.Results ?? []).Select(r => (r.Id, r.Name, r.FirstAirDate)));
+        tmdbId = LibraryEndpoints.ClearMatchId(key, (shows.Results ?? []).OfType<TmdbTvSummary>().Select(r => (r.Id, r.Name, r.FirstAirDate)));
       if (tmdbId is not { } seedId) continue;
 
-      var (filmResults, seriesResults) = (new List<TmdbMovieSummary>(), new List<TmdbTvSummary>());
+      var (filmResults, seriesResults) = (new List<TmdbMovieSummary?>(), new List<TmdbTvSummary?>());
       List<(SuggestionCandidate, PlaylistTitle)>? matched = null;
       for (var page = 1; page <= 2; page++)
       {
@@ -172,10 +172,10 @@ public static class LibrarySuggestionsEndpoints
           seriesResults.AddRange(seriesPage.Results ?? []);
           totalPages = seriesPage.TotalPages;
         }
-        // A page that did not come is the end: page 1 drops the seed, page 2 keeps what page 1 gave only after a failure.
+        // A page that did not come leaves the seed unfinished, so it is dropped whichever page it was.
         if (totalPages is null)
         {
-          if (!calls.Stopped) matched = null;
+          matched = null;
           break;
         }
         matched = match(LibrarySuggestions.Recommended(filmResults, seriesResults, seedId, key.Key, marks));

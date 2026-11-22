@@ -333,6 +333,67 @@ public sealed class LibrarySuggestionsEndpointTests
   }
 
   [Fact]
+  public async Task Liked_SeedsFromTheTenNewestThumbsUpOnly()
+  {
+    // Eleven thumbs up, newest first by index. The day is one on which a rotation over all eleven starts at the oldest.
+    var day = Midnight.ToUnixTimeSeconds() / 86400;
+    day += (10 - day % 11 + 11) % 11;
+    var answers = Enumerable.Range(0, 11).ToDictionary(i => Rec("movie", 200 + i), _ => Words3(100));
+    await using var host = await StartLikedAsync(answers, time: new FakeTime(DateTimeOffset.UnixEpoch.AddDays(day).AddHours(12)));
+    for (var i = 0; i < 11; i++)
+      await RateAsync(host, $"{Words[i]} seed (1990)", tmdbId: 200 + i, age: i);
+
+    var expected = (int)(day % LibrarySuggestions.MaxSeedCandidates);
+    var answer = await LikedAsync(host);
+    Assert.Equal($"film:1990:{Words[expected]} seed", SeedKey(answer));
+    Assert.Equal([Rec("movie", 200 + expected)], Asked(host));
+  }
+
+  [Fact]
+  public async Task Liked_PageTwoCompletesTheSeed()
+  {
+    await using var host = await StartLikedAsync(new()
+    {
+      [Rec("movie", 1)] = Words3(100, 2, totalPages: 2), [Rec("movie", 1, 2)] = Words3(102, 1, totalPages: 2),
+    });
+    await RateAsync(host, "Little Motel (1995)", tmdbId: 1);
+    var answer = await LikedAsync(host);
+    Assert.Equal("film:1995:little motel", SeedKey(answer));
+    Assert.Equal([100, 101, 102], Ids(answer));
+    Assert.Equal([Rec("movie", 1), Rec("movie", 1, 2)], Asked(host));
+  }
+
+  [Fact]
+  public async Task Liked_SkipsNullItems_InSearchAndRecommendations()
+  {
+    const string search = "/3/search/movie?include_adult=false&query=little%20motel&year=1995";
+    await using var host = await StartLikedAsync(new()
+    {
+      [search] = Page(1, ["null", M(1, "Little Motel", "1995-04-01")]),
+      [Rec("movie", 1)] = Page(1, ["null", .. WordFilms(Words.Take(3), 100)]),
+    });
+    await RateAsync(host, "Little Motel (1995)");
+    var answer = await LikedAsync(host);
+    Assert.Equal("film:1995:little motel", SeedKey(answer));
+    Assert.Equal([100, 101, 102], Ids(answer));
+  }
+
+  [Fact]
+  public async Task Liked_SeedKeyIsLeftOutOfACandidate_NotTheCandidate()
+  {
+    // The seed "Quiet Bay" without a year shares the remake's yearless key; the remake is still found as "Quiet Bay (2015)".
+    await using var host = await StartLikedAsync(new()
+    {
+      [Rec("tv", 11)] = Page(1, [T(20, "Quiet Bay", "2015-03-01"), T(13, "Night Shift", "2012-01-01"), T(14, "Grey Coast", "2014-01-01")]),
+    });
+    await RateAsync(host, "Quiet Bay", kind: "series", tmdbId: 11);
+    var answer = await LikedAsync(host);
+    Assert.Equal("series::quiet bay", SeedKey(answer));
+    Assert.Equal([20, 13, 14], Ids(answer));
+    Assert.Equal("Quiet Bay (2015) S01 E01", answer.GetProperty("suggestions")[0].GetProperty("title").GetProperty("name").GetString());
+  }
+
+  [Fact]
   public async Task Liked_UsesTheStoredTmdbId_ElseAClearSearchMatch_ElseSkipsTheSeed()
   {
     const string filmSearch = "/3/search/movie?include_adult=false&query=old%20mill&year=1980";
@@ -407,6 +468,9 @@ public sealed class LibrarySuggestionsEndpointTests
       var ok = Tmdb([], [], more: answers);
       await using var host = await StartAsync(uri => uri.PathAndQuery == failing ? new HttpResponseMessage(status) : ok(uri),
         time: new FakeTime(Midnight.AddHours(12)));
+      // TmdbClient asks its cache before its back-off, so trying the second seed would bring its winning rail from the cache.
+      host.Factory.Services.GetRequiredService<TmdbCache>().Set("movie/3/recommendations",
+        System.Text.Encoding.UTF8.GetBytes(Words3(110)), TmdbClient.RecommendationsLifetime);
       await RateAsync(host, "Little Motel (1995)", tmdbId: firstId);
       await RateAsync(host, "Blue Harbour (2003)", tmdbId: 3, age: 1);
       return (await LikedAsync(host), Asked(host));
@@ -418,11 +482,10 @@ public sealed class LibrarySuggestionsEndpointTests
     AssertEmpty(answer);
     Assert.Equal([Rec("movie", 1)], asked);
 
-    // Page 2 rate limited: what page 1 gave.
+    // Page 2 rate limited while page 1 gave 3 of the 12: the seed is unfinished, so empty, and the second seed is not tried.
     (answer, asked) = await RunAsync(new(next) { [Rec("movie", 1)] = Words3(100, 3, totalPages: 2) },
       Rec("movie", 1, 2), HttpStatusCode.TooManyRequests, 1);
-    Assert.Equal("film:1995:little motel", SeedKey(answer));
-    Assert.Equal([100, 101, 102], Ids(answer));
+    AssertEmpty(answer);
     Assert.Equal([Rec("movie", 1), Rec("movie", 1, 2)], asked);
 
     // A search TMDB cannot answer: empty, nothing further.
