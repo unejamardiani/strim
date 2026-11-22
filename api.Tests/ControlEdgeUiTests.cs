@@ -29,8 +29,10 @@ public class ControlEdgeUiTests
     var app = Read("app.css");
     Assert.Contains("border: 1.5px solid var(--edge);", Rule(app, ".input"));
     Assert.Contains("border-color: transparent;", Rule(app, ".input-name"));
-    Assert.Contains("border-color: var(--edge);", Rule(app, ".input-name:hover"));
+    Assert.Contains("border-color: var(--edge);", Rule(app, ".input-name:hover:not(:focus)"));
     Assert.Contains("border-color: var(--focus);", Rule(app, ".input:focus"));
+    // Hovered and focused at once: no hover rule may outrank the focus border (same specificity, later in the file).
+    Assert.DoesNotMatch(new Regex(@"\.input-name:hover\s*[{,]", RegexOptions.CultureInvariant), app);
   }
 
   [Theory]
