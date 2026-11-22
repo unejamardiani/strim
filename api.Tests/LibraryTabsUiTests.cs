@@ -55,7 +55,11 @@ public class LibraryTabsUiTests
   {
     // Content fades into the page colour behind the floating bar (#496), under the bar and without taking taps.
     var css = Read("library.css");
-    Assert.Contains("body:has(.lib-tabs)::after { content: \"\"; position: fixed; z-index: 19; left: 0; right: 0; bottom: 0; height: calc(116px + var(--safe-bottom)); background: linear-gradient(transparent, var(--bg) 62%); pointer-events: none; }", css);
+    Assert.Contains("body:has(.lib-tabs)::after { content: \"\"; position: fixed; z-index: 19; left: 0; right: 0; bottom: 0; height: calc(120px + var(--safe-bottom)); background: linear-gradient(transparent, var(--bg) 44px); pointer-events: none; }", css);
+    // The fade is solid from the bar's top edge down: fade height minus the fade-in equals the bar's bottom offset plus its height.
+    var bar = Regex.Match(css, @"\.lib-tabs \{ position: fixed;[^}]*bottom: calc\((\d+)px \+ var\(--safe-bottom\)\); height: (\d+)px;");
+    Assert.True(bar.Success);
+    Assert.Equal(120 - 44, int.Parse(bar.Groups[1].Value) + int.Parse(bar.Groups[2].Value));
     // From 768px the tabs are a static pill row and the fade is gone.
     var wide = Between(css, "@media (min-width: 768px) {\n  .lib-tabs {", "\n}");
     Assert.Contains("body:has(.lib-tabs)::after { content: none; }", wide);

@@ -9,8 +9,9 @@
 .lib-tabs a[aria-current="page"] { background: color-mix(in srgb, var(--dock-ink) 16%, transparent); color: var(--dock-ink); font-weight: 800; }
 /* The footer (with the TMDB notice) must scroll clear of the bar. */
 body:has(.lib-tabs) .site-links { padding-bottom: calc(104px + var(--safe-bottom)); }
-/* Content fades into the page colour behind the bar (#496): nothing shows beside or under it. */
-body:has(.lib-tabs)::after { content: ""; position: fixed; z-index: 19; left: 0; right: 0; bottom: 0; height: calc(116px + var(--safe-bottom)); background: linear-gradient(transparent, var(--bg) 62%); pointer-events: none; }
+/* Content fades into the page colour behind the bar (#496): nothing shows beside or under it. The fade is solid
+   from 44px below its top, which is the bar's top edge (14px + 62px + the safe area) at any inset. */
+body:has(.lib-tabs)::after { content: ""; position: fixed; z-index: 19; left: 0; right: 0; bottom: 0; height: calc(120px + var(--safe-bottom)); background: linear-gradient(transparent, var(--bg) 44px); pointer-events: none; }
 
 @media (min-width: 768px) {
   .lib-tabs { position: static; height: auto; display: inline-flex; gap: 2px; padding: 4px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); box-shadow: none; }

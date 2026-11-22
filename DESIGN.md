@@ -458,7 +458,7 @@ shows no badge; nothing is sent to the server. From 1100px the open group's row 
 Phone layout (below 1100px): one 760px column. Below 768px the tabs are a floating bar at the
 bottom (62px, 24px radius, the dock's inverted colours, icon over label, 700 12px labels; the
 active tab on a 16% `--dock-ink` pill, label weight 800, its icon in the label's ink with the on state); the footer pads 104px to scroll clear of it, and an open film card's backdrop
-covers it. On phones content fades into `--bg` behind the floating bar (116px plus the safe area); nothing is readable beside or under it. From 768px they are a segmented control in the head (owner) or in a row under the cover
+covers it. On phones content fades into `--bg` behind the floating bar (120px plus the safe area, solid from the bar's top edge down, fading in over 44px above it); nothing is readable beside or under it. From 768px they are a segmented control in the head (owner) or in a row under the cover
 (viewer). An open group replaces the group list at its own address (CSS hides the list while
 `.has-open` is on Browse); its sticky head spans the page's full width. Back or All groups returns to
 the list with the focus on the group that was open, and a group that is gone shows the list with a
