@@ -196,6 +196,12 @@ and the player link card; a failed request shows the error toast and leaves the 
 every owned playlist, link on or off. While the group is on, the player link card's hint ends "…, with the watchlist
 as the first group: your titles and those of people you shared this playlist with." No text names a person.
 
+Sharing page, "What they get" (#526): while the playlist's `watchlistGroup` is true (read from `state.playlists`, so it
+follows the switch), the `.share-checks` list gains one row with the green `check` icon after "Keep their own seen and
+thumbs marks" and before "No player link, no source, no changes to the list": "Their watchlist shows in your
+player's Watchlist group, without names". It wraps to two lines on a phone and in the 1280px side column. With the
+group off the list is unchanged.
+
 ### Library (`#/p/<id>/library`: library.js + library.css)
 
 Purpose: find what a saved playlist holds, films, series and channels, without editing it. The
@@ -363,6 +369,13 @@ type with groups that are on: marker, name, "11 groups · 17,817", opening Group
 Each section shows its own "Loading…" line and its own error with Try again; the marks sections
 show also when the list failed. From 1100px the Home panel fills the page up to 1280px, never scrolls the page
 sideways, and the two lists sit side by side. Marks set anywhere repaint Home's rows; a title marked seen leaves the watchlist.
+
+Viewer's watchlist line (#526): in a viewer's Library, while `library/open` answers `watchlistGroup: true`, one
+`<p class="lib-status">` (13px, `--ink-3`) reads "Titles here also show in <owner>'s player. No names are shown."
+with the cover's owner name ("the owner's" without a name, never "Someone's"). It sits directly under the body of
+Home's "Your watchlist" (rows, rail or the empty line; on a laptop under the left column) and once above the list or
+grid of the Marks tab's Watchlist view; nowhere else (no card, search result or toast). The owner's Library has no
+line. It follows the answer of `library/open`, so it appears or goes when the Library is next opened.
 
 Poster tiles (#427), only with TMDB on: `.lib-tile` is a 2:3 art box (`.lib-art`, radius 12px, 112px
 wide, 148px from 768px), the title (13.5px, one line, ellipsis) and a meta line (12px). The art starts
