@@ -1362,15 +1362,20 @@
     // Suggestions (#478): a section per source, without a link, asked once the list is there and only with TMDB on.
     // An answer is kept per source and "Include switched-off groups" while this Library is mounted. Fewer than 3
     // titles, a failure or an answer for a Library left since: the section stays hidden, without a notice.
+    // Without a fixed title (#479) the heading names the answer's seed on one line, so it stays hidden while asking.
     const keptSuggestions = new Map();
     const suggested = (source, title) => {
-      const p = part(title);
+      const p = part(title || '');
+      const [heading] = p.head.children;
+      if (!title) heading.className = 'lib-sec-one';
       const s = { p, seq: 0 };
-      const paint = (titles) => {
-        p.el.hidden = titles.length < 3;
+      const paint = ({ titles, seed }) => {
+        const label = title || (seed?.title ? `Because you liked ${seed.title}` : '');
+        p.el.hidden = titles.length < 3 || !label;
         if (p.el.hidden) return;
+        if (!title) heading.textContent = heading.title = label;
         p.n.textContent = fmt(titles.length);
-        p.body.replaceChildren(rail(p, title, titles.map(({ title: t, posterUrl }) => posterTile(ctx, {
+        p.body.replaceChildren(rail(p, label, titles.map(({ title: t, posterUrl }) => posterTile(ctx, {
           key: t.markKey, entry: t, title: t.title || t.name, year: t.year, group: t.group, type: t.contentType,
           meta: t.contentType === 'Series' ? seasonsLine(ctx, t) : t.year ? String(t.year) : '', posterUrl: posterUrl || null }))));
       };
@@ -1379,7 +1384,8 @@
         if (fresh) keptSuggestions.clear();
         if (!ctx.list || ctx.listState !== 'ready') return void (p.el.hidden = true);
         if (keptSuggestions.has(kept)) return paint(keptSuggestions.get(kept));
-        busy(p);
+        if (title) busy(p);
+        else p.el.hidden = true;
         const at = ++clock;
         let answer;
         try {
@@ -1394,13 +1400,15 @@
           t.asked = at;
           if (t.markKey) applyMark(ctx, t.markKey, t, at);
         }
-        keptSuggestions.set(kept, titles);
-        paint(titles);
+        const shown = { titles, seed: answer?.seed || null };
+        keptSuggestions.set(kept, shown);
+        paint(shown);
       };
       return s;
     };
     const trending = rails ? suggested('trending', 'Trending this week') : null;
-    view.homeSuggest = (fresh) => trending?.load(fresh);
+    const liked = rails ? suggested('liked', null) : null;
+    view.homeSuggest = (fresh) => [trending, liked].forEach((s) => s?.load(fresh));
 
     // New in <group> (#427): with TMDB on, the group with the largest "+N new" gets a rail of its first 12 titles in
     // playlist order; the rows below keep the other groups. Without such a group the section is left out.
@@ -1501,7 +1509,7 @@
     watch.load();
     follow.load();
     return h('div', { class: 'library-home' }, cover,
-      h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), trending?.p.el, newIn.el, fresh.el, types.el);
+      h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), trending?.p.el, liked?.p.el, newIn.el, fresh.el, types.el);
   }
 
   // My marks (#299): every film and series the user marked, newest change first, including titles that are in no
