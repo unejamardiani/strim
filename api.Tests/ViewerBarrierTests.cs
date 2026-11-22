@@ -28,6 +28,7 @@ public class ViewerBarrierTests(StrimAppFactory factory) : IClassFixture<StrimAp
     ("PATCH", "/api/playlists/{id:guid}/toggle-active", "/api/playlists/{id}/toggle-active", null),
     ("POST", "/api/playlists/{id:guid}/regenerate-code", "/api/playlists/{id}/regenerate-code", null),
     ("PATCH", "/api/playlists/{id:guid}/auto-refresh", "/api/playlists/{id}/auto-refresh", new { enabled = true }),
+    ("PATCH", "/api/playlists/{id:guid}/watchlist-group", "/api/playlists/{id}/watchlist-group", new { enabled = true }),
     ("GET", "/api/playlists/{id:guid}/shares", "/api/playlists/{id}/shares", null),
     ("POST", "/api/playlists/{id:guid}/shares", "/api/playlists/{id}/shares", new { label = "Intruder" }),
     ("DELETE", "/api/playlists/{id:guid}/shares/{shareId:guid}", "/api/playlists/{id}/shares/{shareId}", null),

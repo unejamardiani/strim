@@ -23,6 +23,8 @@ public record PlaylistRequest(
 
 public record AutoRefreshRequest(bool Enabled);
 
+public record WatchlistGroupRequest(bool Enabled);
+
 /// <summary>A signed-in user's saved playlists and their share links.</summary>
 public static class PlaylistEndpoints
 {
@@ -213,6 +215,18 @@ public static class PlaylistEndpoints
       playlist.UpdatedAt = DateTimeOffset.UtcNow;
       await db.SaveChangesAsync();
       return Results.Ok(new { id = playlist.Id, autoRefreshEnabled = playlist.AutoRefreshEnabled, lastRefreshedUtc = playlist.LastRefreshedUtc });
+    }).RequireRateLimiting(Security.RateLimits.General);
+
+    // Only stores the switch; the player link reads it on its next request.
+    mutations.MapPatch("/{id:guid}/watchlist-group", async (Guid id, WatchlistGroupRequest input, ClaimsPrincipal user, AppDbContext db) =>
+    {
+      var playlist = await FindOwnedAsync(db, id, user);
+      if (playlist is null) return Results.NotFound();
+
+      playlist.WatchlistGroup = input.Enabled;
+      playlist.UpdatedAt = DateTimeOffset.UtcNow;
+      await db.SaveChangesAsync();
+      return Results.Ok(new { id = playlist.Id, watchlistGroup = playlist.WatchlistGroup });
     }).RequireRateLimiting(Security.RateLimits.General);
 
     return app;
