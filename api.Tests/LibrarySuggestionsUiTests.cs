@@ -41,7 +41,7 @@ public class LibrarySuggestionsUiTests
     Assert.Contains("const p = part(title);", Section());
     Assert.Contains("h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), trending?.p.el, newIn.el, fresh.el, types.el);", home);
     // Asked only through the section, so with TMDB off (trending null) the route is never asked.
-    Assert.Contains("view.homeSuggest = () => trending?.load();", home);
+    Assert.Contains("view.homeSuggest = (fresh) => trending?.load(fresh);", home);
     Assert.Single(home.Split("ctx.suggestions(")[1..]);
     Assert.Contains("ctx.suggestions(", Section());
     Assert.Contains("p.body.replaceChildren(rail(p, title,", Section());
@@ -66,8 +66,14 @@ public class LibrarySuggestionsUiTests
     Assert.Contains("if (keptSuggestions.has(kept)) return paint(keptSuggestions.get(kept));", section);
     Assert.Contains("keptSuggestions.set(kept, titles);", section);
     Assert.DoesNotContain("keptSuggestions", Between(library, "function show(sub, query)", "function inPanels("));
-    // "Include switched-off groups" asks again with the new key.
-    Assert.Contains("ctx.lookupMarks?.();\n      view.homeSuggest?.();\n    };", Between(library, "ctx.onIncludeOff = () => {", "const markFilter"));
+    // "Include switched-off groups" asks again in both directions: the toggle drops every kept answer before the
+    // lookup, so off → on → off does not restore the first answer. Home and list repaints call without `fresh`.
+    Assert.Contains("ctx.lookupMarks?.();\n      view.homeSuggest?.(true);\n    };", Between(library, "ctx.onIncludeOff = () => {", "const markFilter"));
+    var load = Between(section, "s.load = async (fresh) => {", "busy(p);");
+    var clear = load.IndexOf("if (fresh) keptSuggestions.clear();", StringComparison.Ordinal);
+    Assert.True(clear >= 0 && clear < load.IndexOf("if (keptSuggestions.has(kept))", StringComparison.Ordinal),
+      "The toggle must drop the kept answers before they are reused.");
+    Assert.DoesNotContain("view.homeSuggest(true)", home);
     // An answer for a Library left since or an older request changes nothing.
     Assert.Contains("if (seq !== s.seq || !live()) return;", section);
   }

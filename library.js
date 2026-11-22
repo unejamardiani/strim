@@ -265,7 +265,7 @@
       run();
       onToggle();
       ctx.lookupMarks?.();
-      view.homeSuggest?.();
+      view.homeSuggest?.(true);
     };
     const markFilter = (label, get, set) => {
       const b = h('button', {
@@ -1374,8 +1374,9 @@
           key: t.markKey, entry: t, title: t.title || t.name, year: t.year, group: t.group, type: t.contentType,
           meta: t.contentType === 'Series' ? seasonsLine(ctx, t) : t.year ? String(t.year) : '', posterUrl: posterUrl || null }))));
       };
-      s.load = async () => {
+      s.load = async (fresh) => {
         const seq = ++s.seq, kept = `${source}\n${includeOff}`;
+        if (fresh) keptSuggestions.clear();
         if (!ctx.list || ctx.listState !== 'ready') return void (p.el.hidden = true);
         if (keptSuggestions.has(kept)) return paint(keptSuggestions.get(kept));
         busy(p);
@@ -1399,7 +1400,7 @@
       return s;
     };
     const trending = rails ? suggested('trending', 'Trending this week') : null;
-    view.homeSuggest = () => trending?.load();
+    view.homeSuggest = (fresh) => trending?.load(fresh);
 
     // New in <group> (#427): with TMDB on, the group with the largest "+N new" gets a rail of its first 12 titles in
     // playlist order; the rows below keep the other groups. Without such a group the section is left out.
