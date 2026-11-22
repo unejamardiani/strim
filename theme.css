@@ -388,6 +388,8 @@ select {
 
 .icon { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .icon .sig { fill: currentColor; stroke: none; }
+[aria-current="page"] > .icon .b, [aria-pressed="true"] > .icon .b { fill: currentColor; fill-opacity: .14; }
+[aria-current="page"] > .icon .sig, [aria-pressed="true"] > .icon .sig { fill: var(--accent); transform-box: fill-box; transform-origin: center; transform: scale(1.25); }
 
 .btn svg,
 .icon-btn svg {

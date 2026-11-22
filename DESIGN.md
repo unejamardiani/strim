@@ -81,6 +81,10 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
 - **Sheets**: native `<dialog>`; bottom sheet with grab handle below 600px, centred above.
 - **Toasts**: inverted pills at the top, coloured status dot.
 - **Icons**: 24px grid line icons built by `icon()`, class `.icon`: `currentColor` stroke 2px with round caps and joins, no fill. A holder rule (`.btn svg`, `.lib-seen svg`, …) may set the size, the stroke width or a fill; only state marks are filled (watchlist badge, pressed bookmark, rating star, the dots of ⋯).
+  On state (#494): an icon that is the direct child of `[aria-current="page"]` or `[aria-pressed="true"]` fills its
+  body (`.b`) with a 14% tint of its own ink and turns its signal dot (`.sig`) `--accent`, grown by a quarter around
+  its centre. The dot lies clear of the body, so tangerine sits on the plain bar; it never gets a ring, a hole or an
+  ink fill. The pressed bookmark stays a solid fill with its dot as a hole.
   The icons are one family, Stem and dot, built like the wordmark's "ı": stems are 2px strokes with round ends,
   and the signal is a filled dot (class `sig`, filled with `currentColor` by `.icon .sig`). Every object glyph
   carries exactly one dot (⋯ is three), while direction and operator glyphs (chevron, close, plus, check, sort)
@@ -88,7 +92,7 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
   added to `ICONS`.
   The 30 names: back, folder, more, copy, download, list, refresh, trash, link, clock, plus, check, bookmark, close,
   sort, up, down, chevron, star, home, book, people, search, grid, and six object glyphs, each with one dot:
-  - `marks`: the Marks tab, a check whose stroke ends in the dot (`check` stays on a seen tile, Saved and sharing).
+  - `marks`: the Marks tab, a check whose stroke ends in the dot; the check is the body (`.b`, #494) and takes the tint when current (`check` stays on a seen tile, Saved and sharing).
   - `trend`: trending, a rising line with the dot ahead of it.
   - `spark`: because you liked, a four-point spark.
   - `signal`: live, on air, two broadcast arcs from the dot.
@@ -452,8 +456,8 @@ groups that no longer exist are dropped when it is written. Unavailable storage 
 shows no badge; nothing is sent to the server. From 1100px the open group's row carries `.is-open`.
 
 Phone layout (below 1100px): one 760px column. Below 768px the tabs are a floating bar at the
-bottom (62px, 24px radius, the dock's inverted colours, icon over label, the active tab tinted with
-an `--accent` icon); the footer pads 104px to scroll clear of it, and an open film card's backdrop
+bottom (62px, 24px radius, the dock's inverted colours, icon over label, 700 12px labels; the
+active tab on a 16% `--dock-ink` pill, label weight 800, its icon in the label's ink with the on state); the footer pads 104px to scroll clear of it, and an open film card's backdrop
 covers it. From 768px they are a segmented control in the head (owner) or in a row under the cover
 (viewer). An open group replaces the group list at its own address (CSS hides the list while
 `.has-open` is on Browse); its sticky head spans the page's full width. Back or All groups returns to
