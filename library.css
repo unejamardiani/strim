@@ -504,4 +504,5 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
 /* Forced colours (#497): markers keep their shape in the system text colour. */
 @media (forced-colors: active) {
   .lib-dot, .lib-dot[data-type] { forced-color-adjust: none; background: CanvasText; }
+  .lib-watch[aria-pressed="true"] .sig { fill: Highlight; stroke: none; }
 }

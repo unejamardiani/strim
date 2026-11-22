@@ -61,9 +61,12 @@ public class ContrastPreferenceUiTests
     Assert.Contains(".toggle::after, .switch::after { top: 1.5px; left: 1.5px; background: ButtonText; }", app);
     Assert.Contains(".toggle:checked, .switch.on { background: Highlight; border-color: Highlight; }", app);
     Assert.Contains(".toggle:checked::after, .switch.on::after { background: HighlightText; }", app);
+    // The switch opts out of adjustment, so its focus ring (and the field's, whose shadow forced colours drop) is set here.
+    Assert.Contains(".toggle:focus-visible, .switch:focus-visible, .input:focus { outline: 2px solid Highlight; outline-offset: 2px; }", app);
 
     var site = Forced("site.css");
     Assert.Contains(".switch { forced-color-adjust: none; background: Canvas; box-shadow: none; border: 1.5px solid ButtonText; }", site);
+    Assert.Contains(".switch::after { top: 1.5px; left: 1.5px; background: ButtonText; }", site);
     Assert.Contains(".switch.on { background: Highlight; border-color: Highlight; }", site);
     Assert.Contains(".switch.on::after { background: HighlightText; }", site);
   }
@@ -77,20 +80,25 @@ public class ContrastPreferenceUiTests
     Assert.Contains(".dot, .dot.movies, .dot.series { forced-color-adjust: none; background: CanvasText; }", Forced("site.css"));
 
     var theme = Forced("theme.css");
-    Assert.Contains(".wm-dot { forced-color-adjust: none; background: Highlight; }", theme);
+    // The wordmark dot opts out of adjustment, so its tangerine pulse has to go as well.
+    Assert.Contains(".wm-dot { forced-color-adjust: none; background: Highlight; box-shadow: none; animation: none; }", theme);
+    // The selection mark is a border, not an outline: a focused selected pill keeps it next to the focus ring.
     Assert.Contains(
-      ".pills button[aria-pressed=\"true\"]:not(:focus-visible), .lib-chip[aria-pressed=\"true\"]:not(:focus-visible), .lib-tabs a[aria-current=\"page\"]:not(:focus-visible) { outline: 2px solid Highlight; outline-offset: -2px; }",
+      ".pills button[aria-pressed=\"true\"], .lib-chip[aria-pressed=\"true\"], .lib-tabs a[aria-current=\"page\"] { border: 2px solid Highlight; outline-color: Highlight; }",
       theme);
+    Assert.DoesNotContain(":not(:focus-visible)", theme);
     Assert.Contains(
       "[aria-current=\"page\"] > .icon .sig, [aria-pressed=\"true\"] > .icon .sig { fill: Highlight; stroke: none; }",
       theme);
+    // The Watchlist bookmark's own .sig rule in library.css loads last and would otherwise win.
+    Assert.Contains(".lib-watch[aria-pressed=\"true\"] .sig { fill: Highlight; stroke: none; }", Forced("library.css"));
   }
 
   [Fact]
   public void ForcedColours_OutlineButtonsBelowFocus()
   {
     Assert.Contains(
-      ":where(.btn, .lib-ib, .lib-chip, .lib-tabs) { outline: 1px solid ButtonBorder; outline-offset: -1px; }",
+      ":where(.btn, .icon-btn, .pills button, .lib-ib, .lib-chip, .lib-tabs) { outline: 1px solid ButtonBorder; outline-offset: -1px; }",
       Forced("theme.css"));
   }
 
@@ -101,6 +109,7 @@ public class ContrastPreferenceUiTests
              {
                ("app.css", ".toast.error::before {"), ("app.css", ".switch.on::after {"),
                ("site.css", ".switch.on::after {"), ("library.css", ".lib-dot[data-type=\"Series\"] {"),
+               ("library.css", ".lib-watch[aria-pressed=\"true\"] .sig { fill: var(--surface); }"),
                ("theme.css", "[aria-current=\"page\"] > .icon .sig, [aria-pressed=\"true\"] > .icon .sig { fill: var(--accent);"),
              })
     {

@@ -111,9 +111,11 @@ pins the rules.
 - **Forced colours** (`forced-colors: active`; Windows high contrast): only the system palette (`Canvas`,
   `CanvasText`, `ButtonText`, `ButtonBorder`, `Highlight`, `HighlightText`); no brand colour is forced back in.
   Switches get a `ButtonText` border and knob, on is `Highlight` with a `HighlightText` knob. Content markers keep
-  their shapes in `CanvasText`; the wordmark and toast dots are `Highlight`. The selected pill and chip and the
-  current tab get a 2px `Highlight` outline, buttons, icon buttons, chips and the tab bar a 1px `ButtonBorder`
-  outline inside `:where()`, so the focus ring stays on top. Fields keep their 1.5px border.
+  their shapes in `CanvasText`; the wordmark and toast dots are `Highlight`, without the wordmark's pulse. The
+  selected pill and chip and the current tab get a 2px `Highlight` border, so a focus ring outside it keeps the
+  selection visible. Buttons, icon buttons, type pills, chips and the tab bar get a 1px `ButtonBorder` outline inside
+  `:where()`, so the focus ring stays on top. Fields keep their 1.5px border; focused fields and switches get a 2px
+  `Highlight` ring. Pressed icons, the Watchlist bookmark included, fill their dot with `Highlight`.
 - Rule: a control or marker drawn only with `background` or `box-shadow` needs a forced-colours rule, in the file
   that draws it and after the rule it replaces.
 

@@ -433,8 +433,9 @@ select {
 /* Forced colours (#497): what is drawn only with backgrounds and shadows gets system colours and outlines. Switches
    and markers live in app.css, site.css and library.css, after the rules they replace. */
 @media (forced-colors: active) {
-  .wm-dot { forced-color-adjust: none; background: Highlight; }
-  .pills button[aria-pressed="true"]:not(:focus-visible), .lib-chip[aria-pressed="true"]:not(:focus-visible), .lib-tabs a[aria-current="page"]:not(:focus-visible) { outline: 2px solid Highlight; outline-offset: -2px; }
-  :where(.btn, .lib-ib, .lib-chip, .lib-tabs) { outline: 1px solid ButtonBorder; outline-offset: -1px; }
+  .wm-dot { forced-color-adjust: none; background: Highlight; box-shadow: none; animation: none; }
+  /* The selection mark is a border, so the focus ring (an outline) can sit outside it without hiding it. */
+  .pills button[aria-pressed="true"], .lib-chip[aria-pressed="true"], .lib-tabs a[aria-current="page"] { border: 2px solid Highlight; outline-color: Highlight; }
+  :where(.btn, .icon-btn, .pills button, .lib-ib, .lib-chip, .lib-tabs) { outline: 1px solid ButtonBorder; outline-offset: -1px; }
   [aria-current="page"] > .icon .sig, [aria-pressed="true"] > .icon .sig { fill: Highlight; stroke: none; }
 }
