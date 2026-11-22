@@ -324,7 +324,7 @@ public sealed class LibrarySuggestionsEndpointTests
     await using var host = await StartLikedAsync(answers, time: new FakeTime(DateTimeOffset.UnixEpoch.AddDays(day).AddHours(12)));
     for (var i = 0; i < 11; i++)
       await RateAsync(host, $"{Words[i]} seed (1990)", tmdbId: 200 + i, age: i);
-    var expected = (int)(day % LibrarySuggestions.MaxSeedCandidates);
+    var expected = (int)(day % 10);
     Assert.Equal($"film:1990:{Words[expected]} seed", SeedKey(await LikedAsync(host)));
     Assert.Equal([Rec("movie", 200 + expected)], Asked(host));
   }
