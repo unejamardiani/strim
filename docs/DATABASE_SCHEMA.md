@@ -15,6 +15,13 @@ This project currently uses `EnsureCreated()` with manual schema patching instea
 - `api/Configuration/Database.cs`: `EnsureStrimSchema()`, `TryPatchPostgresSchema()`, `TryAddSqliteColumn()`, etc.
 - `api/Data/AppDbContext.cs`: Entity configuration and model definition
 
+### Watchlist group flag (`playlists.watchlistgroup`)
+
+`watchlistgroup` marks a playlist whose player link should start with a group of watchlisted films and series. It
+is off by default: SQLite `INTEGER NOT NULL DEFAULT 0`, PostgreSQL `boolean NOT NULL DEFAULT false`, so every
+existing playlist reads `false`. `TryAddSqliteColumn` and `TryPatchPostgresSchema` add it idempotently on every
+start. Nothing reads the value yet, and the playlist create and update requests do not set it.
+
 ### Film and series marks (`titlemarks`)
 
 The one extra table the owner approved (18 Nov 2026) holds a user's marks on films and series: `id`, `userid`,

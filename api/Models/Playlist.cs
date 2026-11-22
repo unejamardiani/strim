@@ -50,6 +50,10 @@ public class Playlist
   [Column("autorefreshenabled")]
   public bool AutoRefreshEnabled { get; set; }
 
+  /// <summary>The player link starts with a group of the owner's watchlisted films and series. Off by default.</summary>
+  [Column("watchlistgroup")]
+  public bool WatchlistGroup { get; set; }
+
   [Column("lastrefreshedutc")]
   public DateTimeOffset? LastRefreshedUtc { get; set; }
 
