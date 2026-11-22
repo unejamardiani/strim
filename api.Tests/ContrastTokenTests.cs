@@ -105,10 +105,40 @@ public class ContrastTokenTests
   }
 
   [Fact]
-  public void SwitchKnob_OnAccent()
+  public void Accent_CarriesItsLabel()
   {
     foreach (var (name, t) in Themes())
-      AssertAtLeast(4.5, name, t, "--on-accent", "--accent");
+      foreach (var fill in new[] { "--accent", "--accent-hover" })
+        AssertAtLeast(4.5, name, t, "--on-accent", fill);
+  }
+
+  [Fact]
+  public void Accent_ReadsAsLargeTextOnPaper()
+  {
+    foreach (var (name, t) in Themes())
+      foreach (var bg in new[] { "--bg", "--surface" })
+        AssertAtLeast(3, name, t, "--accent", bg);
+  }
+
+  [Fact]
+  public void LiveMarker_FollowsTheAccent()
+  {
+    var light = Light();
+    Assert.Equal(light["--accent"], light["--live"]);
+  }
+
+  [Fact]
+  public void TypeMarkers_Have3To1()
+  {
+    foreach (var (name, t) in Themes())
+    {
+      foreach (var marker in new[] { "--live", "--movies", "--series" })
+        AssertAtLeast(3, name, t, marker, "--surface");
+      foreach (var bg in new[] { "--bg", "--surface-2" })
+        AssertAtLeast(3, name, t, "--movies", bg);
+    }
+    // In dark, --movies-soft is an rgba tint and is skipped.
+    AssertAtLeast(3, "light", Light(), "--movies", "--movies-soft");
   }
 
   [Fact]
