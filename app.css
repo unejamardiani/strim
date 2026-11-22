@@ -39,7 +39,7 @@ body.scrolled .topbar {
   min-height: 40px;
   padding: 0 14px 0 6px;
   border-radius: 999px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   background: var(--surface);
   font-size: 14px;
   font-weight: 650;
@@ -52,7 +52,7 @@ body.scrolled .topbar {
 }
 
 .account:hover {
-  border-color: var(--line-strong);
+  border-color: var(--ink-2);
 }
 
 .account .name {
@@ -1617,6 +1617,7 @@ select.input {
 .dock .btn.is-saved {
   opacity: 1;
   background: transparent;
+  box-shadow: none;
   color: var(--dock-ink-2);
 }
 
