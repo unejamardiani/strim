@@ -748,6 +748,10 @@ function openPlaylistMenu(id) {
       sub: playlist.lastRefreshedUtc ? `Last refresh ${relativeTime(playlist.lastRefreshedUtc)}` : 'Keeps the provider list cached for players',
       trailing: h('span', { class: `switch${playlist.autoRefreshEnabled ? ' on' : ''}`, 'aria-hidden': 'true' }),
     }),
+    item('bookmark', 'Watchlist group', () => toggleWatchlistGroup(playlist), {
+      sub: playlist.watchlistGroup ? 'Players show changes when they reload the list' : 'Your watchlist and that of people you shared with, as the first group in your player',
+      trailing: h('span', { class: `switch${playlist.watchlistGroup ? ' on' : ''}`, 'aria-hidden': 'true' }),
+    }),
     item('link', active ? 'Turn link off' : 'Turn link on', () => toggleLink(playlist), {
       sub: active ? 'Players stop receiving the playlist' : 'Players can fetch the playlist again',
     }),
@@ -798,6 +802,17 @@ async function toggleAutoRefresh(playlist) {
   try {
     await api(`/playlists/${playlist.id}/auto-refresh`, { method: 'PATCH', body: { enabled } });
     const updated = replacePlaylist({ id: playlist.id, autoRefreshEnabled: enabled });
+    refreshViews(updated);
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+async function toggleWatchlistGroup(playlist) {
+  const enabled = !playlist.watchlistGroup;
+  try {
+    const result = await api(`/playlists/${playlist.id}/watchlist-group`, { method: 'PATCH', body: { enabled } });
+    const updated = replacePlaylist({ id: playlist.id, watchlistGroup: result.watchlistGroup });
     refreshViews(updated);
   } catch (err) {
     toast(err.message, { error: true });
@@ -1642,7 +1657,9 @@ function linkCard(playlist) {
   return h('section', { class: 'card link-card' },
     h('div', { class: 'field-label', text: 'Player link' }),
     linkBox(playlist),
-    h('p', { class: 'field-hint', text: 'Add this link to your IPTV player. It always serves the groups you saved here.' }));
+    h('p', { class: 'field-hint', text: playlist.watchlistGroup
+      ? 'Add this link to your IPTV player. It always serves the groups you saved here, with the watchlist as the first group: your titles and those of people you shared this playlist with.'
+      : 'Add this link to your IPTV player. It always serves the groups you saved here.' }));
 }
 
 function renderLinkCard() {

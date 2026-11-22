@@ -186,6 +186,16 @@ at the bottom. Cards keep DOM order, so reading and tab order run left to right,
 1024px the list is the single 760px column; the empty state keeps the 760px page. Only the editor changes: the site pages keep their 1080px main column and the guides their
 700px column.
 
+Playlist ⋯ sheet, link settings: directly after "Refresh every 6 hours" and before "Turn link off" (or "Turn link
+on") sits "Watchlist group", a `.menu-item` like its neighbour: the `bookmark` icon, the label, a `small` line below
+it and the 46×28 `.switch` on the right (`aria-hidden`; the whole item is the button), on when the playlist's
+`watchlistGroup` is true. The line reads "Your watchlist and that of people you shared with, as the first group in
+your player" while off and "Players show changes when they reload the list" while on. Choosing the item switches at
+once (`PATCH /api/playlists/{id}/watchlist-group`) with no confirmation and no success toast, and repaints the sheet
+and the player link card; a failed request shows the error toast and leaves the switch as it was. The item shows for
+every owned playlist, link on or off. While the group is on, the player link card's hint ends "…, with the watchlist
+as the first group: your titles and those of people you shared this playlist with." No text names a person.
+
 ### Library (`#/p/<id>/library`: library.js + library.css)
 
 Purpose: find what a saved playlist holds, films, series and channels, without editing it. The
