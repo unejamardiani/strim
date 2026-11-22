@@ -338,6 +338,16 @@ new" in playlist order, "+38 since your last visit" and "Open group"; New in you
 other groups below it. Rails scroll sideways, snap to tiles and, from 1100px, carry the similar
 rail's Previous and Next (`.film-rail-nav`) in the section head. With TMDB off Home keeps its rows.
 
+Trending this week (#478), with TMDB on: an ordinary Home section between the two lists and "New in
+<group>", head "Trending this week" with the number of tiles, no link, and up to 12 tiles in a
+`.lib-rail` like Your watchlist. Only titles that are in the list appear (the server matches them),
+without seen and thumbs-down titles; meta and card as in "New in <group>". The poster comes with the
+answer, so these tiles never ask the posters route; a title without one keeps the fallback. Asked once
+the list is there, the section shows the "Loading…" line; with fewer than 3 titles, on any failure and
+with TMDB off it is absent, with no notice. The answer is kept while the Library is open and asked
+again when "Include switched-off groups" changes or the page reloads; a title marked seen keeps its
+tile, with the check, until then.
+
 ```
 ┌──────────────────────────────┐
 │ Head                         │  ‹ · LIBRARY / playlist name · tabs (from 768px) · ⋯

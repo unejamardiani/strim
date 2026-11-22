@@ -265,6 +265,7 @@
       run();
       onToggle();
       ctx.lookupMarks?.();
+      view.homeSuggest?.();
     };
     const markFilter = (label, get, set) => {
       const b = h('button', {
@@ -1192,8 +1193,9 @@
 
   // A poster tile (#427): a 2:3 art box that starts as the fallback (the type's soft colour and marker), the title and a
   // meta line. A title that opens its card is a button; any other a div. The badges follow the shared marks. With
-  // poster false (a Marks tile whose lookup has not answered, #429) no poster is asked yet.
-  function posterTile(ctx, { key, entry, title, year, group, type, meta, bar, poster = true }) {
+  // poster false (a Marks tile whose lookup has not answered, #429) no poster is asked yet. A posterUrl given (a
+  // suggestion, #478; null for none) is shown as it is, and the posters route is not asked.
+  function posterTile(ctx, { key, entry, title, year, group, type, meta, bar, poster = true, posterUrl }) {
     const { h, icon } = ctx;
     const art = h('span', { class: 'lib-art', dataset: { type } },
       h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type } }),
@@ -1208,7 +1210,8 @@
       ? h('button', { class: 'lib-tile', type: 'button', 'aria-haspopup': 'dialog', dataset: { key, label }, onclick: () => openFilm(ctx, film, tile) }, art, text)
       : h('div', { class: 'lib-tile', dataset: { key: key || '' } }, art, text);
     paintTile(tile);
-    if (poster) view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });
+    if (posterUrl !== undefined) showPoster(ctx, tile, posterUrl);
+    else if (poster) view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });
     return tile;
   }
 
@@ -1356,6 +1359,48 @@
           (t) => (t.episodes ? `${plural(t.episodes, 'episode')} in list` : null)))) : rows(s, kept));
       });
 
+    // Suggestions (#478): a section per source, without a link, asked once the list is there and only with TMDB on.
+    // An answer is kept per source and "Include switched-off groups" while this Library is mounted. Fewer than 3
+    // titles, a failure or an answer for a Library left since: the section stays hidden, without a notice.
+    const keptSuggestions = new Map();
+    const suggested = (source, title) => {
+      const p = part(title);
+      const s = { p, seq: 0 };
+      const paint = (titles) => {
+        p.el.hidden = titles.length < 3;
+        if (p.el.hidden) return;
+        p.n.textContent = fmt(titles.length);
+        p.body.replaceChildren(rail(p, title, titles.map(({ title: t, posterUrl }) => posterTile(ctx, {
+          key: t.markKey, entry: t, title: t.title || t.name, year: t.year, group: t.group, type: t.contentType,
+          meta: t.contentType === 'Series' ? seasonsLine(ctx, t) : t.year ? String(t.year) : '', posterUrl: posterUrl || null }))));
+      };
+      s.load = async () => {
+        const seq = ++s.seq, kept = `${source}\n${includeOff}`;
+        if (!ctx.list || ctx.listState !== 'ready') return void (p.el.hidden = true);
+        if (keptSuggestions.has(kept)) return paint(keptSuggestions.get(kept));
+        busy(p);
+        const at = ++clock;
+        let answer;
+        try {
+          answer = await ctx.suggestions({ source, cacheKey: ctx.list.cacheKey, includeDisabled: includeOff }, ctx.controller.signal);
+        } catch (err) {
+          if (seq === s.seq && live() && !accessGone(ctx, err)) p.el.hidden = true;
+          return;
+        }
+        if (seq !== s.seq || !live()) return;
+        const titles = (answer?.suggestions || []).filter((x) => x?.title).slice(0, 12);
+        for (const { title: t } of titles) {
+          t.asked = at;
+          if (t.markKey) applyMark(ctx, t.markKey, t, at);
+        }
+        keptSuggestions.set(kept, titles);
+        paint(titles);
+      };
+      return s;
+    };
+    const trending = rails ? suggested('trending', 'Trending this week') : null;
+    view.homeSuggest = () => trending?.load();
+
     // New in <group> (#427): with TMDB on, the group with the largest "+N new" gets a rail of its first 12 titles in
     // playlist order; the rows below keep the other groups. Without such a group the section is left out.
     const newIn = part('', `${base}/groups`, 'Open group');
@@ -1426,6 +1471,7 @@
       const list = ctx.list;
       facts.textContent = { none: 'This playlist has no source URL', failed: 'The list could not be loaded' }[ctx.listState] || 'Loading the list';
       view.homeFresh();
+      view.homeSuggest();
       if (ctx.listState === 'loading') return busy(types);
       for (const s of [watch, follow]) s.lookup();
       if (ctx.listState === 'none') return void (types.el.hidden = true);
@@ -1454,7 +1500,7 @@
     watch.load();
     follow.load();
     return h('div', { class: 'library-home' }, cover,
-      h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), newIn.el, fresh.el, types.el);
+      h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), trending?.p.el, newIn.el, fresh.el, types.el);
   }
 
   // My marks (#299): every film and series the user marked, newest change first, including titles that are in no

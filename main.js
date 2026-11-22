@@ -1595,6 +1595,8 @@ function showLibrary(playlist) {
     setSeriesMatch: (body) => api('/marks/series-match', { method: 'PUT', body }),
     // Poster addresses for a batch of tiles (#427); read-only, only asked with TMDB on.
     posters: (body, signal) => api(`/playlists/${playlist.id}/library/posters`, { method: 'POST', body, signal }),
+    // Home's suggestion rails (#478): titles in the list that TMDB suggests; read-only, only asked with TMDB on.
+    suggestions: (params, signal) => api(`/playlists/${playlist.id}/library/suggestions?${new URLSearchParams(params)}`, { signal }),
     // The viewer's Library (#383) replaces the loaders with its playlist-scoped ones.
     ...playlist.scope,
   });
@@ -1632,6 +1634,7 @@ function showSharedLibrary(id) {
     filmCard: (params, signal) => api(`${base}/film-card?${new URLSearchParams(scoped(params))}`, { signal }),
     seriesCard: (params, signal) => api(`${base}/series-card?${new URLSearchParams(scoped(params))}`, { signal }),
     posters: (body, signal) => api(`${base}/posters`, { method: 'POST', body: scoped(body), signal }),
+    suggestions: (params, signal) => api(`${base}/suggestions?${new URLSearchParams(scoped(params))}`, { signal }),
   } });
 }
 
