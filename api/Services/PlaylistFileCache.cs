@@ -1289,7 +1289,11 @@ public sealed record DownloadedPlaylistFile(
   public void Dispose() => DiskReservation?.Dispose();
 }
 
-public sealed record PlaylistGenerationResult(int TotalChannels, int KeptChannels, long OutputBytes);
+public sealed record PlaylistGenerationResult(int TotalChannels, int KeptChannels, long OutputBytes)
+{
+  /// <summary>The number of watchlist copies written at the top; not counted in the channel totals.</summary>
+  public int WatchlistEntries { get; init; }
+}
 
 public sealed class PlaylistFileLease : IDisposable, IAsyncDisposable
 {

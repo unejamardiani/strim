@@ -141,11 +141,17 @@ public static class PlaylistProcessor
     CancellationToken cancellationToken,
     int maxLineLengthChars = DefaultMaxLineLengthChars,
     long maxOutputBytes = 0,
-    IReadOnlySet<string>? splitGroupTitles = null)
+    IReadOnlySet<string>? splitGroupTitles = null,
+    WatchlistGroup? watchlist = null)
   {
     var total = 0;
     var kept = 0;
+    var watchlistEntries = 0;
     var outputBytes = new OutputByteCounter(maxOutputBytes);
+    var copies = watchlist is null || watchlist.IsEmpty
+      ? null
+      : await CollectWatchlistAsync(
+        inputPath, watchlist, disabledGroups, splitGroupTitles, maxLineLengthChars, cancellationToken);
 
     await using var input = new FileStream(
       inputPath,
@@ -179,6 +185,15 @@ public static class PlaylistProcessor
     await WriteLineAsync(writer, header, cancellationToken, outputBytes);
     await WriteLineAsync(writer, "# Created with Strim (https://strim.plis.dev)", cancellationToken, outputBytes);
 
+    foreach (var copy in copies?.Ordered() ?? [])
+    {
+      watchlistEntries++;
+      foreach (var copyLine in copy)
+      {
+        await WriteLineAsync(writer, copyLine, cancellationToken, outputBytes);
+      }
+    }
+
     // Each GroupKey is built at most once per (title, content type), whatever the casing.
     var decisions = new GroupDecisions(disabledGroups, splitGroupTitles);
 
@@ -206,7 +221,64 @@ public static class PlaylistProcessor
     }
 
     await writer.FlushAsync(cancellationToken);
-    return new PlaylistGenerationResult(total, kept, outputBytes.WrittenBytes);
+    return new PlaylistGenerationResult(total, kept, outputBytes.WrittenBytes) { WatchlistEntries = watchlistEntries };
+  }
+
+  /// <summary>
+  /// Pass 1 of a generation with a watchlist: reads the source once with the generation's line reader and entry
+  /// rules and buffers a copy of every kept, non-adult film and episode whose mark key is on the watchlist.
+  /// Only the collected entries are held, within <see cref="WatchlistGroup.Buffer"/>'s limits.
+  /// </summary>
+  private static async Task<WatchlistGroup.Buffer> CollectWatchlistAsync(
+    string inputPath,
+    WatchlistGroup watchlist,
+    ISet<string> disabledGroups,
+    IReadOnlySet<string>? splitGroupTitles,
+    int maxLineLengthChars,
+    CancellationToken cancellationToken)
+  {
+    var buffer = new WatchlistGroup.Buffer(watchlist);
+    var input = new FileStream(
+      inputPath, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+    using var reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 128 * 1024, leaveOpen: false);
+    using var lines = new BoundedLineReader(reader, maxLineLengthChars);
+    var decisions = new GroupDecisions(disabledGroups, splitGroupTitles);
+    var optionLines = new List<string>();
+    string? pending = null;
+    while ((pending ?? await lines.ReadNextContentLineAsync(cancellationToken)) is { } line)
+    {
+      pending = null;
+      if (!IsExtinf(line)) continue;
+
+      (var address, pending, var extGrp) = await ReadEntryTailAsync(lines, optionLines, cancellationToken);
+      var contentType = DetectContentType(address);
+      if (address is null || contentType == PlaylistContentType.Live) continue;
+
+      var groupTitle = ExtractGroupTitle(line, extGrp);
+      if (decisions.Decide(groupTitle, contentType).Disabled || AdultGroupRule.IsAdultGroupTitle(groupTitle)) continue;
+
+      var series = contentType == PlaylistContentType.Series;
+      var key = MarkKey.From(PlaylistSearchText.DisplayNameSpan(line).ToString(), series ? MarkKind.Series : MarkKind.Film)?.Key;
+      if (key is null || !watchlist.TryGetRank(key, out var rank)) continue;
+
+      var title = series ? WatchlistGroup.SeriesTitle : WatchlistGroup.FilmsTitle;
+      // A group-title attribute without a quoted value cannot take the new title, so the entry is not copied.
+      var extinf = TryFindGroupTitleValue(line, out var start, out var end)
+        ? string.Concat(line.AsSpan(0, start), title, line.AsSpan(end))
+        : HasGroupTitleAttribute(line) ? null : EnsureGroupInExtinf(line, title);
+      if (extinf is null) continue;
+
+      string[] copy =
+      [
+        extinf,
+        .. optionLines.Select(option =>
+          option.StartsWith(ExtGrpPrefix, StringComparison.OrdinalIgnoreCase) ? ExtGrpPrefix + title : option),
+        address,
+      ];
+      buffer.Add(rank, series, address, copy);
+    }
+
+    return buffer;
   }
 
   /// <summary>#EXTM3U followed by the end of the line or whitespace; "#EXTM3U8foo" is not a header.</summary>
