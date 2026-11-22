@@ -23,10 +23,10 @@ public class IconFamilyUiTests
     "refresh", "list", "up", "down", "back", "marks", "trend", "signal", "spark", "tv", "eye",
   ];
 
-  // The six of #495, as drawn in the approved mockup.
+  // The six of #495, as drawn in the approved mockup; marks gained a box body for the on state (#494).
   private static readonly Dictionary<string, string> NewGlyphs = new()
   {
-    ["marks"] = "<path d=\"M3.8 13.2 8.6 18l7.2-8.6\"/><circle class=\"sig\" cx=\"19.3\" cy=\"5.6\" r=\"1.7\"/>",
+    ["marks"] = "<rect class=\"b\" x=\"3.5\" y=\"7.5\" width=\"12.5\" height=\"12.5\" rx=\"2.6\"/><path d=\"M6.6 13.9l2.4 2.4 4.2-4.8\"/><circle class=\"sig\" cx=\"19.3\" cy=\"5.6\" r=\"1.7\"/>",
     ["trend"] = "<path d=\"M3.5 17.2 9 11.7l3.5 3.5 4.6-5.7\"/><circle class=\"sig\" cx=\"19.6\" cy=\"6.3\" r=\"1.7\"/>",
     ["signal"] = "<path d=\"M6 11.5a6.5 6.5 0 0 1 6.5 6.5M6 5a13 13 0 0 1 13 13\"/><circle class=\"sig\" cx=\"6.2\" cy=\"17.8\" r=\"1.9\"/>",
     ["spark"] = "<path class=\"b\" d=\"M10.5 4c.7 4.3 2.2 5.8 6.5 6.5-4.3.7-5.8 2.2-6.5 6.5-.7-4.3-2.2-5.8-6.5-6.5 4.3-.7 5.8-2.2 6.5-6.5z\"/><circle class=\"sig\" cx=\"18.6\" cy=\"18\" r=\"1.7\"/>",

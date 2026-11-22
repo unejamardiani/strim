@@ -28,6 +28,18 @@ public class IconOnStateUiTests
   }
 
   [Fact]
+  public void TabGlyphs_HaveABodyToFill()
+  {
+    var js = Read("main.js");
+    foreach (var name in new[] { "home", "search", "grid", "marks" })
+    {
+      var glyph = Regex.Match(js, $@"^  {name}: '([^']*)',$", RegexOptions.Multiline | RegexOptions.CultureInvariant);
+      Assert.True(glyph.Success, $"The '{name}' glyph is missing from ICONS.");
+      Assert.Contains("class=\"b\"", glyph.Groups[1].Value);
+    }
+  }
+
+  [Fact]
   public void CurrentTab_IsHeavierOnA16PercentPill()
   {
     var css = Read("library.css");
@@ -51,18 +63,65 @@ public class IconOnStateUiTests
   [Fact]
   public void OnDot_StaysTangerine()
   {
-    var rule = new Regex(@"([^{}]+)\{([^}]*)\}", RegexOptions.CultureInvariant);
-    var fill = new Regex(@"(?<![\w-])fill\s*:\s*([^;}]+)", RegexOptions.CultureInvariant);
     foreach (var file in new[] { "theme.css", "library.css" })
+      Assert.Empty(CurrentDotFillsOtherThanAccent(Read(file)));
+  }
+
+  [Fact]
+  public void OnDot_CheckFindsOverridesInsideMediaQueries()
+  {
+    const string nested = "@media (min-width: 768px) {\n  .lib-tabs a[aria-current=\"page\"] .icon .sig { fill: var(--ink); }\n}\n";
+    const string first = "@media (min-width: 768px) { .x { color: red; } .lib-tabs a[aria-current=\"page\"] .sig { fill: none; } }";
+    const string plain = "/* a { } */ .a { color: red; }\n[aria-current=\"page\"] > .icon .sig { fill: currentColor; }";
+    const string fine = "@media (min-width: 768px) { [aria-current=\"page\"] > .icon .sig { fill: var(--accent); } }";
+    Assert.Equal(["var(--ink)"], CurrentDotFillsOtherThanAccent(nested));
+    Assert.Equal(["none"], CurrentDotFillsOtherThanAccent(first));
+    Assert.Equal(["currentColor"], CurrentDotFillsOtherThanAccent(plain));
+    Assert.Empty(CurrentDotFillsOtherThanAccent(fine));
+  }
+
+  // Every fill other than var(--accent) set by a rule whose selector holds [aria-current="page"] and .sig, including
+  // rules nested in @media or other at-rule blocks.
+  private static List<string> CurrentDotFillsOtherThanAccent(string css)
+  {
+    var fill = new Regex(@"(?<![\w-])fill\s*:\s*([^;}]+)", RegexOptions.CultureInvariant);
+    var found = new List<string>();
+    foreach (var (selector, body) in Rules(css))
     {
-      foreach (Match m in rule.Matches(Read(file)))
+      if (!selector.Contains("[aria-current=\"page\"]", StringComparison.Ordinal) || !selector.Contains(".sig", StringComparison.Ordinal))
+        continue;
+      foreach (Match f in fill.Matches(body))
+        if (f.Groups[1].Value.Trim() != "var(--accent)")
+          found.Add(f.Groups[1].Value.Trim());
+    }
+    return found;
+  }
+
+  // Style rules as (selector, declarations); an at-rule block ("@media … {") is entered, not taken as a rule.
+  private static IEnumerable<(string Selector, string Body)> Rules(string css)
+  {
+    css = Regex.Replace(css, @"/\*.*?\*/", "", RegexOptions.Singleline);
+    var start = 0;
+    for (var i = 0; i < css.Length; i++)
+    {
+      if (css[i] == '}')
       {
-        var selector = m.Groups[1].Value;
-        if (!selector.Contains("[aria-current=\"page\"]", StringComparison.Ordinal) || !selector.Contains(".sig", StringComparison.Ordinal))
-          continue;
-        foreach (Match f in fill.Matches(m.Groups[2].Value))
-          Assert.Equal("var(--accent)", f.Groups[1].Value.Trim());
+        start = i + 1;
+        continue;
       }
+      if (css[i] != '{')
+        continue;
+      var prelude = css[start..i].Trim();
+      if (prelude.StartsWith('@'))
+      {
+        start = i + 1;
+        continue;
+      }
+      var close = css.IndexOf('}', i + 1);
+      Assert.True(close > i, $"Unclosed rule '{prelude}'.");
+      yield return (prelude, css[(i + 1)..close]);
+      i = close;
+      start = close + 1;
     }
   }
 
