@@ -266,7 +266,7 @@ body.has-dock .site-links > a {
   min-height: var(--control-h);
   padding: 0 14px;
   border-radius: var(--radius);
-  border: 1.5px solid transparent;
+  border: 1.5px solid var(--edge);
   background-color: var(--surface-2);
   /* 16px stops iOS Safari from zooming into focused inputs. */
   font-size: 16px;
@@ -319,6 +319,7 @@ select.input {
   min-height: 50px;
   padding: 0 10px;
   margin-left: -10px;
+  border-color: transparent;
   background-color: transparent;
   font-family: var(--font-display);
   font-size: 32px;
@@ -327,6 +328,7 @@ select.input {
 }
 
 .input-name:hover {
+  border-color: var(--edge);
   background-color: var(--surface-2);
 }
 
@@ -384,7 +386,7 @@ select.input {
 .pills button[aria-pressed="true"] {
   background: var(--pill-on);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(29, 26, 22, 0.12), 0 4px 12px -6px rgba(29, 26, 22, 0.25);
+  box-shadow: inset 0 0 0 1.5px var(--edge), 0 1px 2px rgba(29, 26, 22, 0.12), 0 4px 12px -6px rgba(29, 26, 22, 0.25);
 }
 
 .pills button:not([aria-pressed="true"]):hover {
@@ -1100,6 +1102,7 @@ select.input {
   flex-shrink: 0;
   border-radius: 999px;
   background: var(--surface-3);
+  box-shadow: inset 0 0 0 1.5px var(--edge);
   transition: background-color 0.18s;
 }
 
@@ -1118,20 +1121,21 @@ select.input {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(29, 26, 22, 0.3);
+  background: var(--edge);
+  box-shadow: none;
   transition: transform 0.2s cubic-bezier(0.3, 1.4, 0.5, 1);
 }
 
 .toggle:checked,
 .switch.on {
   background: var(--accent);
+  box-shadow: none;
 }
 
 .toggle:checked::after,
 .switch.on::after {
   transform: translateX(18px);
-  background: #fffcf7;
+  background: var(--on-accent);
 }
 
 /* The row an Everything search result jumped to; a static tint, so it also shows with reduced motion. */

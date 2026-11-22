@@ -529,6 +529,7 @@ kbd {
   flex-shrink: 0;
   border-radius: 999px;
   background: var(--surface-3);
+  box-shadow: inset 0 0 0 1.5px var(--edge);
 }
 
 .switch::after {
@@ -539,17 +540,18 @@ kbd {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(29, 26, 22, 0.3);
+  background: var(--edge);
+  box-shadow: none;
 }
 
 .switch.on {
   background: var(--accent);
+  box-shadow: none;
 }
 
 .switch.on::after {
   transform: translateX(18px);
-  background: #fffcf7;
+  background: var(--on-accent);
 }
 
 /* ---------- Content types ---------- */
