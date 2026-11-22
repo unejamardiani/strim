@@ -135,7 +135,7 @@ public class LibraryHomeUiTests
     Assert.Contains("h('span', { class: 'lib-dot', 'aria-hidden': 'true', dataset: { type: t.type } }),", home);
     Assert.Contains("`${plural(t.on.length, 'group')} · ${fmt(t.on.reduce((sum, g) => sum + g.count, 0))}`", home);
     // Sections in their order; from 1100px the two lists sit side by side.
-    Assert.Contains("h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), newIn.el, fresh.el, types.el);", home);
+    Assert.Contains("h('div', { class: 'lib-home-lists' }, watch.p.el, follow.p.el), trending?.p.el, newIn.el, fresh.el, types.el);", home);
   }
 
   [Fact]

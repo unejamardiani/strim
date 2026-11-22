@@ -85,7 +85,7 @@ public class LibraryMarksGridUiTests
     Assert.Contains("const film = entry && opens(ctx, entry) ?", posterTile);
     Assert.Contains(": h('div', { class: 'lib-tile', dataset: { key: key || '' } }, art, text);", posterTile);
     Assert.Contains("if (poster) view.posters?.request(tile, { name: entry?.name || (year ? `${title} (${year})` : title), group: group || '', type });", posterTile);
-    Assert.Contains("function posterTile(ctx, { key, entry, title, year, group, type, meta, bar, poster = true }) {", Library());
+    Assert.Contains("function posterTile(ctx, { key, entry, title, year, group, type, meta, bar, poster = true, posterUrl }) {", Library());
   }
 
   [Fact]
