@@ -1,3 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
+using Api.Data;
+using Microsoft.EntityFrameworkCore;
+
 namespace Api.Services;
 
 /// <summary>
@@ -17,17 +22,60 @@ public sealed class WatchlistGroup
   public const int MaxEntries = 2_000;
   public const int MaxBufferBytes = 4 * 1024 * 1024;
 
+  /// <summary>The most titles <see cref="LoadAsync"/> returns.</summary>
+  public const int MaxTitles = 200;
+
   private readonly Dictionary<string, int> _ranks = new(StringComparer.Ordinal);
 
   public WatchlistGroup(IReadOnlyList<string> markKeys)
   {
+    var ordered = new List<string>();
     foreach (var key in markKeys)
     {
-      if (!string.IsNullOrEmpty(key)) _ranks.TryAdd(key, _ranks.Count);
+      if (!string.IsNullOrEmpty(key) && _ranks.TryAdd(key, _ranks.Count)) ordered.Add(key);
     }
+    Fingerprint = ordered.Count == 0
+      ? ""
+      : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', ordered)))).ToLowerInvariant();
   }
 
   public bool IsEmpty => _ranks.Count == 0;
+
+  /// <summary>
+  /// Lowercase SHA-256 hex of the keys joined by "\n" in their order; "" when empty. The output cache keeps outputs
+  /// apart by it, and it reveals no title.
+  /// </summary>
+  public string Fingerprint { get; }
+
+  /// <summary>
+  /// The merged watchlist of a playlist's owner and of every user with an accepted invitation to it, newest
+  /// watchlisted first (ties by key), one key per title at its newest time, at most <see cref="MaxTitles"/>.
+  /// Null when nobody has anything on the watchlist. Holds keys only, never who put a title there.
+  /// </summary>
+  public static async Task<WatchlistGroup?> LoadAsync(AppDbContext db, Guid playlistId, string ownerId, CancellationToken cancellationToken)
+  {
+    var viewers = db.PlaylistShares
+      .Where(s => s.PlaylistId == playlistId && s.ViewerUserId != null)
+      .Select(s => s.ViewerUserId!);
+    // At most 1 + ShareEndpoints.MaxSharesPerPlaylist users with MarkEndpoints.MaxMarksPerUser marks each.
+    var rows = await db.TitleMarks
+      .AsNoTracking()
+      .Where(m => m.Watchlist && (m.UserId == ownerId || viewers.Contains(m.UserId)))
+      .Select(m => new { m.TitleKey, m.WatchlistedUtc })
+      .ToListAsync(cancellationToken);
+    if (rows.Count == 0) return null;
+
+    // SQLite cannot ORDER BY DateTimeOffset, so the merge and the order happen in memory.
+    var keys = rows
+      .GroupBy(r => r.TitleKey, StringComparer.Ordinal)
+      .Select(g => (Key: g.Key, Time: g.Max(r => r.WatchlistedUtc)))
+      .OrderByDescending(x => x.Time)
+      .ThenBy(x => x.Key, StringComparer.Ordinal)
+      .Take(MaxTitles)
+      .Select(x => x.Key)
+      .ToList();
+    return new WatchlistGroup(keys);
+  }
 
   /// <summary>The key's place in the watchlist order (0 is the newest), or false when it is not on the list.</summary>
   internal bool TryGetRank(string key, out int rank) => _ranks.TryGetValue(key, out rank);

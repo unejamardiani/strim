@@ -401,9 +401,10 @@ public sealed class PlaylistFileCache
     }
   }
 
-  public PlaylistOutputFile? TryGetOutput(string sourceHash, IReadOnlyCollection<string> disabledGroups)
+  /// <param name="variant">Keeps outputs apart that differ beyond the groups (a watchlist fingerprint); null or empty is the plain output.</param>
+  public PlaylistOutputFile? TryGetOutput(string sourceHash, IReadOnlyCollection<string> disabledGroups, string? variant = null)
   {
-    var variantKey = OutputVariantKey(sourceHash, disabledGroups);
+    var variantKey = OutputVariantKey(sourceHash, disabledGroups, variant);
     lock (_sync)
     {
       if (!_outputVariantKeys.TryGetValue(variantKey, out var outputKey) ||
@@ -426,11 +427,12 @@ public sealed class PlaylistFileCache
     PlaylistSourceFile source,
     IReadOnlyCollection<string> disabledGroups,
     string temporaryPath,
-    PlaylistGenerationResult result)
+    PlaylistGenerationResult result,
+    string? variant = null)
   {
     var now = _time.GetUtcNow();
     var outputKey = $"out-{Guid.NewGuid():N}";
-    var variantKey = OutputVariantKey(source.ContentHash, disabledGroups);
+    var variantKey = OutputVariantKey(source.ContentHash, disabledGroups, variant);
     var finalPath = Path.Combine(_directory, $"output-{outputKey[4..]}.m3u");
 
     lock (_sync)
@@ -1125,7 +1127,7 @@ public sealed class PlaylistFileCache
     }
   }
 
-  private static string OutputVariantKey(string sourceHash, IReadOnlyCollection<string> disabledGroups)
+  private static string OutputVariantKey(string sourceHash, IReadOnlyCollection<string> disabledGroups, string? variant)
   {
     var normalizedGroups = disabledGroups
       .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -1134,7 +1136,7 @@ public sealed class PlaylistFileCache
       .OrderBy(x => x, StringComparer.Ordinal);
     var canonical = string.Join('\n', normalizedGroups);
     var groupsHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
-    return $"{sourceHash}:{groupsHash}";
+    return string.IsNullOrEmpty(variant) ? $"{sourceHash}:{groupsHash}" : $"{sourceHash}:{groupsHash}:wl-{variant}";
   }
 
   public static string SanitizeFileName(string? fileName)
