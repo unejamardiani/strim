@@ -1220,4 +1220,6 @@ kbd {
   .switch.on { background: Highlight; border-color: Highlight; }
   .switch.on::after { background: HighlightText; }
   .dot, .dot.movies, .dot.series { forced-color-adjust: none; background: CanvasText; }
+  /* The television's own pulse rule outranks theme.css's; stop it so no tangerine ring is painted. */
+  .tv-card .wm-dot { animation: none; }
 }

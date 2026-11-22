@@ -82,6 +82,13 @@ public class ContrastPreferenceUiTests
     var theme = Forced("theme.css");
     // The wordmark dot opts out of adjustment, so its tangerine pulse has to go as well.
     Assert.Contains(".wm-dot { forced-color-adjust: none; background: Highlight; box-shadow: none; animation: none; }", theme);
+    // site.css's .tv-card .wm-dot pulse outranks the theme rule, so the 50x page stops it in its own block.
+    var siteCss = Read("site.css");
+    var tvPulse = siteCss.IndexOf(".tv-card .wm-dot {", StringComparison.Ordinal);
+    Assert.True(tvPulse >= 0, "site.css lost the television's pulse rule.");
+    Assert.Contains(".tv-card .wm-dot { animation: none; }", Forced("site.css"));
+    Assert.True(siteCss.LastIndexOf("@media (forced-colors: active)", StringComparison.Ordinal) > tvPulse,
+      "The forced-colors block in site.css must come after the television's pulse rule.");
     // The selection mark is a border, not an outline: a focused selected pill keeps it next to the focus ring.
     Assert.Contains(
       ".pills button[aria-pressed=\"true\"], .lib-chip[aria-pressed=\"true\"], .lib-tabs a[aria-current=\"page\"] { border: 2px solid Highlight; outline-color: Highlight; }",
