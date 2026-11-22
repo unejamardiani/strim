@@ -99,6 +99,24 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
   - `tv`: channels, a screen with its antenna.
   - `eye`: the seen filter, an eye with the dot as its pupil.
 
+### Contrast preferences
+
+Strim answers the two system contrast settings (#497); without them nothing changes. `ContrastPreferenceUiTests`
+pins the rules.
+
+- **More contrast** (`prefers-contrast: more`; iOS "Increase Contrast", macOS, Windows): one block in `theme.css`
+  after the dark tokens. The quiet level goes: `--ink-3` takes `--ink-2`, edges and card borders take `--ink-2`,
+  lines take `--line-strong`, icon strokes are 2.6px (`.icon.icon.icon`, above every holder rule without
+  `!important`). The look stays Signal Paper.
+- **Forced colours** (`forced-colors: active`; Windows high contrast): only the system palette (`Canvas`,
+  `CanvasText`, `ButtonText`, `ButtonBorder`, `Highlight`, `HighlightText`); no brand colour is forced back in.
+  Switches get a `ButtonText` border and knob, on is `Highlight` with a `HighlightText` knob. Content markers keep
+  their shapes in `CanvasText`; the wordmark and toast dots are `Highlight`. The selected pill and chip and the
+  current tab get a 2px `Highlight` outline, buttons, icon buttons, chips and the tab bar a 1px `ButtonBorder`
+  outline inside `:where()`, so the focus ring stays on top. Fields keep their 1.5px border.
+- Rule: a control or marker drawn only with `background` or `box-shadow` needs a forced-colours rule, in the file
+  that draws it and after the rule it replaces.
+
 ### Voice
 
 Short, plain, second person. "Switch off the groups you never watch", "All on / All off",

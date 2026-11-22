@@ -1212,3 +1212,12 @@ kbd {
     transition: none;
   }
 }
+
+/* Forced colours (#497): the demo switches and markers follow the app's. */
+@media (forced-colors: active) {
+  .switch { forced-color-adjust: none; background: Canvas; box-shadow: none; border: 1.5px solid ButtonText; }
+  .switch::after { top: 1.5px; left: 1.5px; background: ButtonText; }
+  .switch.on { background: Highlight; border-color: Highlight; }
+  .switch.on::after { background: HighlightText; }
+  .dot, .dot.movies, .dot.series { forced-color-adjust: none; background: CanvasText; }
+}
