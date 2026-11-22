@@ -33,6 +33,42 @@ public static class LibrarySuggestions
     return all;
   }
 
+  public const int MaxSeedCandidates = 10;
+  public const int MaxSeedsTried = 3;
+
+  /// <summary>
+  /// The seeds "Because you liked" tries, in order: of the 10 newest thumbs up, up to 3 starting at the whole UTC days
+  /// since the epoch modulo their count, wrapping around, so the first seed holds through a day and moves the next.
+  /// </summary>
+  internal static List<LibraryEndpoints.FilmMark> Seeds(IReadOnlyList<LibraryEndpoints.FilmMark> marks, DateTimeOffset now)
+  {
+    var liked = marks.Where(m => m.Rating == 1).OrderByDescending(m => m.UpdatedUtc)
+      .ThenBy(m => m.TitleKey, StringComparer.Ordinal).Take(MaxSeedCandidates).ToList();
+    if (liked.Count == 0) return [];
+    var start = (int)(Math.Max(0, now.ToUnixTimeSeconds()) / 86400 % liked.Count);
+    return Enumerable.Range(0, Math.Min(MaxSeedsTried, liked.Count)).Select(i => liked[(start + i) % liked.Count]).ToList();
+  }
+
+  /// <summary>A mark's key read back into kind, year and normalised title, as <see cref="MarkKey.From"/> wrote it.</summary>
+  internal static MarkKey? KeyOf(LibraryEndpoints.FilmMark mark)
+  {
+    var parts = mark.TitleKey.Split(':', 3);
+    MarkKind? kind = parts[0] switch { "film" => MarkKind.Film, "series" => MarkKind.Series, _ => null };
+    if (parts.Length != 3 || kind is null || parts[2].Length == 0) return null;
+    int? year = int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var y) ? y : null;
+    return new MarkKey(mark.TitleKey, parts[2], year, mark.DisplayTitle, kind.Value);
+  }
+
+  /// <summary>
+  /// A seed's recommendations as candidates in TMDB's order, without the seed itself: its id is left out, and its mark
+  /// key is taken from every candidate's keys, so a candidate can still be found under its other keys. Null items are skipped.
+  /// </summary>
+  internal static List<SuggestionCandidate> Recommended(IReadOnlyList<TmdbMovieSummary?> films, IReadOnlyList<TmdbTvSummary?> series,
+    int seedId, string seedKey, IReadOnlyList<LibraryEndpoints.FilmMark> marks) =>
+    Trending(films.OfType<TmdbMovieSummary>().Where(f => f.Id != seedId).ToList(),
+        series.OfType<TmdbTvSummary>().Where(s => s.Id != seedId).ToList(), marks)
+      .Select(c => c with { Keys = c.Keys.Where(k => !string.Equals(k, seedKey, StringComparison.Ordinal)).ToList() }).ToList();
+
   /// <summary>A film is found only with its release year, by its title and its original title.</summary>
   private static List<string> FilmKeys(TmdbMovieSummary film, IReadOnlyList<LibraryEndpoints.FilmMark> marks)
   {

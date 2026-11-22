@@ -227,7 +227,8 @@ public static class LibraryEndpoints
 
   internal static Task<List<FilmMark>> MarksAsync(AppDbContext db, string userId, CancellationToken ct) =>
     db.TitleMarks.AsNoTracking().Where(m => m.UserId == userId)
-      .Select(m => new FilmMark(m.TitleKey, m.Seen, m.Rating, m.Watchlist, m.FilmDbId)).ToListAsync(ct);
+      .Select(m => new FilmMark(m.TitleKey, m.Seen, m.Rating, m.Watchlist, m.FilmDbId)
+        { DisplayTitle = m.DisplayTitle, UpdatedUtc = m.UpdatedUtc }).ToListAsync(ct);
 
   /// <summary>TMDB's seasons joined with the list's; season 0 (specials) appears only when the list has it.</summary>
   private static LibrarySeriesInList InList(PlaylistSeriesResult found, IReadOnlyList<TmdbTvSeason>? tmdbSeasons)
@@ -311,7 +312,8 @@ public static class LibraryEndpoints
     return source is null ? null : pipeline.Cache.TryGetAnalysis(source)?.SearchIndex;
   }
 
-  internal sealed record FilmMark(string TitleKey, bool Seen, int Rating, bool Watchlist, string? FilmDbId);
+  internal sealed record FilmMark(string TitleKey, bool Seen, int Rating, bool Watchlist, string? FilmDbId)
+  { public string DisplayTitle { get; init; } = ""; public DateTimeOffset UpdatedUtc { get; init; } }
 
   private static PlaylistSearchIndex? IndexOf(PlaylistPipeline pipeline, string? cacheKey)
   {

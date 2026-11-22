@@ -116,6 +116,26 @@ public sealed class TmdbClient
     return page == 1 ? path : path + "?page=" + page.ToString(CultureInfo.InvariantCulture);
   }
 
+  /// <summary>How long a recommendations answer is kept: TMDB's recommendations for a title change slowly.</summary>
+  public static readonly TimeSpan RecommendationsLifetime = TimeSpan.FromDays(7);
+
+  /// <summary>Films TMDB recommends for one film; <paramref name="page"/> 1 or 2, page 1 without a query string.</summary>
+  public Task<TmdbResult<TmdbMoviePage>> GetMovieRecommendationsAsync(int movieId, int page, CancellationToken cancellationToken) =>
+    SendAsync<TmdbMoviePage>(RecommendationsPath("movie/", movieId, page), cancellationToken, RecommendationsLifetime);
+
+  /// <summary>Series TMDB recommends for one series; <paramref name="page"/> 1 or 2, page 1 without a query string.</summary>
+  public Task<TmdbResult<TmdbTvPage>> GetTvRecommendationsAsync(int tvId, int page, CancellationToken cancellationToken) =>
+    SendAsync<TmdbTvPage>(RecommendationsPath("tv/", tvId, page), cancellationToken, RecommendationsLifetime);
+
+  private static string RecommendationsPath(string kind, int id, int page)
+  {
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(id);
+    ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+    ArgumentOutOfRangeException.ThrowIfGreaterThan(page, 2);
+    var path = kind + id.ToString(CultureInfo.InvariantCulture) + "/recommendations";
+    return page == 1 ? path : path + "?page=2";
+  }
+
   public Task<TmdbResult<TmdbMoviePage>> SearchMovieAsync(string title, int? year, CancellationToken cancellationToken)
   {
     ArgumentException.ThrowIfNullOrWhiteSpace(title);
