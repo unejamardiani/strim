@@ -1,0 +1,33 @@
+# Owner paths and rule paths of this project (Vatra S3). A pull request that changes one of these files needs the
+# owner's review as code owner; the ruleset on main enforces it and a GitHub App cannot bypass it.
+# Sources: owner_paths in plis-toolkit factory/registry.json, policy.protected in .factory/config.json, the
+# project rule paths in plis-toolkit factory/rule_paths.json, and PROTECTED_ALWAYS in factory.py.
+# Patterns follow gitignore rules: a leading / anchors at the root, a trailing / covers the whole directory,
+# ** covers any depth. Where the factory's fnmatch `*` also crosses `/`, the pattern here is widened to match.
+# When the registry's owner_paths or policy.protected change, this file changes in the same pull request.
+
+# Rule paths: this file, workflows, agent instructions and the factory's project data
+/.github/                              @unejamardiani
+/.factory/                             @unejamardiani
+/docs/factory/                         @unejamardiani
+/AGENTS.md                             @unejamardiani
+/CLAUDE.md                             @unejamardiani
+/.claude/                              @unejamardiani
+/.codex/                               @unejamardiani
+/.gitignore                            @unejamardiani
+.gitattributes                         @unejamardiani
+.gitmodules                            @unejamardiani
+
+# Owner paths (registry owner_paths)
+/api/Configuration/Authentication.cs   @unejamardiani
+/api/Endpoints/AuthEndpoints.cs        @unejamardiani
+/api/Configuration/Security.cs         @unejamardiani
+/api/Endpoints/EndpointSupport.cs      @unejamardiani
+/api/Services/SecurityHelpers.cs       @unejamardiani
+/api/Endpoints/ShareEndpoints.cs       @unejamardiani
+/api/Configuration/Database.cs         @unejamardiani
+/api/Data/                             @unejamardiani
+/api/Program.cs                        @unejamardiani
+/api/appsettings*                      @unejamardiani
+/api/appsettings*/**                   @unejamardiani
+/.env.example                          @unejamardiani
