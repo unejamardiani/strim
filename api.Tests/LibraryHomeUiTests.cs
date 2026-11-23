@@ -183,4 +183,28 @@ public class LibraryHomeUiTests
     Assert.Contains(".lib-panel[data-tab=\"home\"] { width: 100%; max-width: 1280px; margin: 0 auto; }", css);
     Assert.DoesNotContain(".lib-panel[data-tab=\"home\"] { max-width: 1280px; margin: 0 auto; }", css);
   }
+
+  // The desktop block that lays out Home's lists; the rules below must live in it and nowhere else (#536).
+  private static string HomeDesktopBlock(string css) =>
+    Between(css, "@media (min-width: 1100px) {\n  .lib-panel[data-tab=\"home\"]", "\n}\n");
+
+  [Fact]
+  public void HomeLists_StackFullWidth_WhenTheyHoldRails()
+  {
+    var css = Read("library.css");
+    const string rule = ".lib-home-lists:has(.lib-rail) { grid-template-columns: 1fr; }";
+    Assert.Contains(rule, HomeDesktopBlock(css));
+    Assert.Single(css.Split(".lib-home-lists:has(.lib-rail)").Skip(1));
+  }
+
+  [Fact]
+  public void HomeWatchlist_SpansBothColumns_WhenFollowIsHidden()
+  {
+    var css = Read("library.css");
+    const string rule = ".lib-home-lists:has(> [hidden]) > :not([hidden]) { grid-column: 1 / -1; }";
+    Assert.Contains(rule, HomeDesktopBlock(css));
+    Assert.Single(css.Split(".lib-home-lists:has(> [hidden])").Skip(1));
+    // The follow section hides itself without liked series, which is what the rule keys off.
+    Assert.Contains("s.p.el.hidden = !kept.length;", Home());
+  }
 }

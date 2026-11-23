@@ -439,7 +439,13 @@ button.film-tile:hover .film-tile-poster { transform: translateY(-3px); }
   .lib-hero .lib-search { flex: 1; max-width: 520px; margin-left: auto; }
   .lib-types { grid-template-columns: repeat(3, 220px); }
 }
-@media (min-width: 1100px) { .lib-panel[data-tab="home"] { width: 100%; max-width: 1280px; margin: 0 auto; } .lib-home-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; align-items: start; } }
+/* Poster rails gain nothing from sharing a row, so with rails the lists stack at full width (#536); a list whose partner
+   is hidden takes the whole row. */
+@media (min-width: 1100px) {
+  .lib-panel[data-tab="home"] { width: 100%; max-width: 1280px; margin: 0 auto; } .lib-home-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; align-items: start; }
+  .lib-home-lists:has(.lib-rail) { grid-template-columns: 1fr; }
+  .lib-home-lists:has(> [hidden]) > :not([hidden]) { grid-column: 1 / -1; }
+}
 
 /* Poster tiles and Home's rails (#427), only with TMDB on. #fff on the bar is text on a dark gradient over an image. */
 .lib-rail { display: flex; gap: 12px; margin: 0 -18px; padding: 2px 18px 6px; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-left: 18px; scrollbar-width: none; }
