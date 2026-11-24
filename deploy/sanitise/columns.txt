@@ -71,6 +71,7 @@ playlists.isactive keep
 playlists.lastrefreshedutc keep
 playlists.lastviewedutc keep
 playlists.ownerid keep
+playlists.refreshfailurecount keep
 playlists.sharecode sanitised
 playlists.sourcecheckedutc keep
 playlists.sourceetag keep
