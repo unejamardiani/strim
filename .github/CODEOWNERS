@@ -262,6 +262,9 @@
 /.ENV.EXAMPLE                         @unejamardiani
 /.dockerignore                        @unejamardiani
 /.DOCKERIGNORE                        @unejamardiani
+/deploy/sanitise/**                   @unejamardiani
+/Deploy/Sanitise/**                   @unejamardiani
+/DEPLOY/SANITISE/**                   @unejamardiani
 
 # Dependency paths (policy.dependencies)
 **/*.csproj                           @unejamardiani
