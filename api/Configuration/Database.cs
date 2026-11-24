@@ -107,6 +107,7 @@ public static class Database
       TryAddSqliteColumn(db, "accountactiveconnections", "INTEGER NULL", logger);
       TryAddSqliteColumn(db, "accountcheckedutc", "TEXT NULL", logger);
       TryAddSqliteColumn(db, "watchlistgroup", "INTEGER NOT NULL DEFAULT 0", logger);
+      TryAddSqliteColumn(db, "refreshfailurecount", "INTEGER NOT NULL DEFAULT 0", logger);
       TryBackfillSqliteShareCodes(db, logger);
     }
   }
@@ -522,6 +523,9 @@ public static class Database
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'watchlistgroup') THEN
             ALTER TABLE playlists ADD COLUMN watchlistgroup boolean NOT NULL DEFAULT false;
           END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'playlists' AND column_name = 'refreshfailurecount') THEN
+            ALTER TABLE playlists ADD COLUMN refreshfailurecount integer NOT NULL DEFAULT 0;
+          END IF;
         END $$;
       ";
 
@@ -567,7 +571,8 @@ public static class Database
       ["accountmaxconnections"] = "INTEGER NULL",
       ["accountactiveconnections"] = "INTEGER NULL",
       ["accountcheckedutc"] = "TEXT NULL",
-      ["watchlistgroup"] = "INTEGER NOT NULL DEFAULT 0"
+      ["watchlistgroup"] = "INTEGER NOT NULL DEFAULT 0",
+      ["refreshfailurecount"] = "INTEGER NOT NULL DEFAULT 0"
     };
 
     if (!allowedColumns.TryGetValue(columnName, out var expectedDefinition))

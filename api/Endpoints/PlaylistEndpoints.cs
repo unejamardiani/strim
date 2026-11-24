@@ -62,6 +62,7 @@ public static class PlaylistEndpoints
           updatedAt = p.UpdatedAt,
           lastViewedUtc = p.LastViewedUtc,
           lastRefreshedUtc = p.LastRefreshedUtc,
+          refreshFailureCount = p.RefreshFailureCount,
           sourceHost = SourceHost.FromAddress(p.SourceUrl),
         }));
     });
@@ -211,7 +212,7 @@ public static class PlaylistEndpoints
       playlist.AutoRefreshEnabled = input.Enabled;
       playlist.UpdatedAt = DateTimeOffset.UtcNow;
       await db.SaveChangesAsync();
-      return Results.Ok(new { id = playlist.Id, autoRefreshEnabled = playlist.AutoRefreshEnabled, lastRefreshedUtc = playlist.LastRefreshedUtc });
+      return Results.Ok(new { id = playlist.Id, autoRefreshEnabled = playlist.AutoRefreshEnabled, lastRefreshedUtc = playlist.LastRefreshedUtc, refreshFailureCount = playlist.RefreshFailureCount });
     }).RequireRateLimiting(Security.RateLimits.General);
 
     // Stores the switch; the player link reads it on its next request and must not serve a copy made with the old value.
