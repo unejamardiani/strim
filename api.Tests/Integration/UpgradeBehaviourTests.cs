@@ -8,7 +8,7 @@ namespace Api.Tests.Integration;
 
 /// <summary>
 /// Pins HTTP behaviour that a framework upgrade could change silently: cookie auth answering API
-/// calls with 401 instead of a login redirect, forwarded headers without TRUSTED_PROXIES, the
+/// calls with 401 instead of a login redirect, forwarded headers from a trusted proxy, the
 /// Swagger document and the routing order between static files and endpoints.
 /// </summary>
 public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<StrimAppFactory>
@@ -28,13 +28,14 @@ public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<Stri
   public async Task ForwardedProto_Https_IsAppliedToRequestScheme()
   {
     // In Development the CSRF cookie is Secure only when the request scheme is HTTPS. Fresh
-    // clients, so each request gets a new cookie.
-    using var plain = await factory.CreateClient().GetAsync("/api/auth/csrf-token");
+    // clients, so each request gets a new cookie. The header counts only from a trusted proxy.
+    using var host = BehindTrustedProxy();
+    using var plain = await host.CreateClient().GetAsync("/api/auth/csrf-token");
     Assert.DoesNotContain("secure", CsrfCookie(plain), StringComparison.OrdinalIgnoreCase);
 
     using var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/csrf-token");
     request.Headers.Add("X-Forwarded-Proto", "https");
-    using var forwarded = await factory.CreateClient().SendAsync(request);
+    using var forwarded = await host.CreateClient().SendAsync(request);
     Assert.Contains("secure", CsrfCookie(forwarded), StringComparison.OrdinalIgnoreCase);
   }
 
@@ -43,7 +44,7 @@ public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<Stri
   {
     // A dedicated host, so the rate-limit partitions start empty. The share route is limited per
     // client IP (30 per minute, queue 1); a wrong link is a cheap 404.
-    using var host = new StrimAppFactory();
+    using var host = BehindTrustedProxy();
     var client = host.CreateClient();
     var path = $"/api/playlists/{Guid.NewGuid()}/share/nope";
 
@@ -98,6 +99,9 @@ public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<Stri
     Assert.Equal(HttpStatusCode.NotFound, unknownApi.StatusCode);
     Assert.Equal("application/json", unknownApi.Content.Headers.ContentType?.MediaType);
   }
+
+  private static StrimAppFactory BehindTrustedProxy() =>
+    new() { TrustedProxies = "10.0.0.5", PeerAddress = IPAddress.Parse("10.0.0.5") };
 
   private static string CsrfCookie(HttpResponseMessage response)
   {

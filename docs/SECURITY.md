@@ -32,8 +32,13 @@ What Strim protects, and where in the code each control lives.
 
 ## Deployment notes
 
-- Behind a reverse proxy, `X-Forwarded-*` is trusted from any hop unless `TRUSTED_PROXIES` lists
-  the proxy addresses. Do not expose the container port directly to the internet.
+- Set `TRUSTED_PROXIES` (comma-separated IPs or CIDRs) to the reverse proxy that talks to Strim.
+  Only from these peers does Strim apply `X-Forwarded-For`, `X-Forwarded-Proto` (one hop) and
+  `X-ARR-SSL`. Without it Strim ignores the forwarded headers, logs a warning at start-up in
+  Production, and rate limits use the peer address, so all users behind the proxy share one
+  partition. Do not expose the container port directly to the internet.
+- Behind Cloudflare, a valid `CF-Connecting-IP` from a trusted proxy or loopback is the client
+  address for rate limits. From any other peer the header is ignored.
 - On the public instance, `/app` and `/api` sit behind Cloudflare Access except the share route,
   which players must reach without a login.
 - Set `PUBLIC_SHARE_BASE_URL` when player links must use a different host than the app.
