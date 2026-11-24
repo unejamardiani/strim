@@ -54,9 +54,9 @@ public sealed class CloudflareAccess(IConfiguration configuration, IHttpClientFa
       var email = result.Claims.TryGetValue("email", out var mail) ? mail as string : null;
       return string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email) ? null : new(subject, email);
     }
-    catch (Exception ex) when (ex is not OperationCanceledException)
+    catch (Exception ex) when (!request.HttpContext.RequestAborted.IsCancellationRequested)
     {
-      // A malformed token or unreachable certs only mean no automatic sign-in.
+      // A malformed token, unreachable certs or a certs timeout only mean no automatic sign-in.
       logger.LogWarning(ex, "Cloudflare Access token could not be verified");
       return null;
     }

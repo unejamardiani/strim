@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Api.Configuration;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -103,6 +104,46 @@ public class CloudflareAccessSignInTests : IClassFixture<StrimAppFactory>
 
     var me = await Client(_app, Token("sub-new")).Http.GetFromJsonAsync<UserResponse>("/api/auth/me");
     Assert.Equal("to-link", me!.UserName);
+  }
+
+  [Fact]
+  public async Task UnlinkedSubject_IsLinkedByRegistration()
+  {
+    await Client(_app, Token("sub-register")).RegisterAsync("registered-linked");
+
+    var me = await Client(_app, Token("sub-register")).Http.GetFromJsonAsync<UserResponse>("/api/auth/me");
+    Assert.Equal("registered-linked", me!.UserName);
+  }
+
+  [Fact]
+  public async Task UnlinkedSubject_IsLinkedByAnExternalSignIn()
+  {
+    var app = _app.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+      services.AddSingleton<IStartupFilter, ExternalSignInTests.ExternalSignInStartupFilter>()));
+    var client = Client(app, Token("sub-external"));
+    (await client.Http.GetAsync($"{ExternalSignInTests.SignInPath}?key=key-access&email=external@example.test")).EnsureSuccessStatusCode();
+    Assert.Equal(HttpStatusCode.Redirect, (await client.Http.GetAsync("/api/auth/external-callback?returnUrl=/app")).StatusCode);
+
+    var me = await Client(app, Token("sub-external")).Http.GetFromJsonAsync<UserResponse>("/api/auth/me");
+    Assert.Equal("external@example.test", me!.Email);
+  }
+
+  public static TheoryData<string> CertsFailures => new() { "timeout", "unreachable" };
+
+  [Theory]
+  [MemberData(nameof(CertsFailures))]
+  public async Task CertsFailure_SignsNobodyIn_WithoutAnError(string failure)
+  {
+    Exception error = failure == "timeout" ? new TaskCanceledException() : new HttpRequestException("unreachable");
+    var app = _factory.WithWebHostBuilder(builder =>
+    {
+      builder.UseSetting("CF_ACCESS_TEAM_DOMAIN", TeamDomain);
+      builder.UseSetting("CF_ACCESS_AUD", Audience);
+      builder.ConfigureTestServices(services => services.AddHttpClient(CloudflareAccess.HttpClientName)
+        .ConfigurePrimaryHttpMessageHandler(() => new FailingCerts(error)));
+    });
+
+    Assert.Equal(HttpStatusCode.Unauthorized, (await Client(app, Token("sub-certs")).Http.GetAsync("/api/auth/me")).StatusCode);
   }
 
   [Fact]
@@ -224,6 +265,13 @@ public class CloudflareAccessSignInTests : IClassFixture<StrimAppFactory>
       Task.FromResult(request.RequestUri!.ToString() == CertsUrl
         ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(CertsJson()) }
         : new HttpResponseMessage(HttpStatusCode.NotFound));
+  }
+
+  /// <summary>Fails every certs request with the given error, as a timeout or an unreachable host would.</summary>
+  private sealed class FailingCerts(Exception error) : HttpMessageHandler
+  {
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+      Task.FromException<HttpResponseMessage>(error);
   }
 
   private sealed record UserResponse(string UserName, string? Email);
