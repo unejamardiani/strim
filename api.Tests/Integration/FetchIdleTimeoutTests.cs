@@ -84,7 +84,7 @@ public sealed class FetchIdleTimeoutTests : IDisposable
   {
     _upstream.UpstreamResponses[StalledUrl] = () => Body(Encoding.UTF8.GetBytes(TestPlaylists.Mixed), Timeout.InfiniteTimeSpan);
     var app = StartApp();
-    await WaitForStartupPassAsync();
+    await WaitForStartupPassAsync(app);
     await SeedAsync(app, StalledUrl, autoRefresh: true);
     var shared = await SeedAsync(app, StrimAppFactory.UpstreamUrl, autoRefresh: false);
 
@@ -125,7 +125,7 @@ public sealed class FetchIdleTimeoutTests : IDisposable
     _upstream.UpstreamPlaylists[AccountPlaylistUrl] = TestPlaylists.Mixed;
     _upstream.UpstreamResponses[AccountUrl] = EndlessTrickle;
     var app = StartApp(smallTextTimeoutSeconds: 8);
-    await WaitForStartupPassAsync();
+    await WaitForStartupPassAsync(app);
     await SeedAsync(app, AccountPlaylistUrl, autoRefresh: true);
 
     var pass = ActivatorUtilities.CreateInstance<PlaylistRefreshService>(app.Services).RefreshPlaylistsAsync(CancellationToken.None);
@@ -165,14 +165,20 @@ public sealed class FetchIdleTimeoutTests : IDisposable
     },
   };
 
-  /// <summary>The host's own first refresh pass would race the pass under test; wait until it has run.</summary>
-  private async Task WaitForStartupPassAsync()
+  /// <summary>
+  /// Starting the host runs the refresh service's first pass, which would race the pass under test;
+  /// start the host and wait until that pass has run.
+  /// </summary>
+  private async Task WaitForStartupPassAsync(WebApplicationFactory<Program> app)
   {
+    _ = app.Services;
     var deadline = DateTime.UtcNow.AddSeconds(10);
     while (!_upstream.LogEntries.Any(e => e.StartsWith("Refreshing ")) && DateTime.UtcNow < deadline)
     {
       await Task.Delay(20);
     }
+
+    Assert.Contains(_upstream.LogEntries, e => e.StartsWith("Refreshing "));
   }
 
   private async Task WaitForRequestAsync(string url)
