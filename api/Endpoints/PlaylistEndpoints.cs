@@ -133,16 +133,20 @@ public static class PlaylistEndpoints
       return Results.Created($"/api/playlists/{playlist.Id}", playlist);
     });
 
-    mutations.MapPut("/{id:guid}", async (Guid id, PlaylistRequest input, ClaimsPrincipal user, AppDbContext db) =>
+    mutations.MapPut("/{id:guid}", async (Guid id, PlaylistRequest input, ClaimsPrincipal user, AppDbContext db, PlaylistFileCache cache) =>
     {
       var playlist = await FindOwnedAsync(db, id, user);
       if (playlist is null) return Results.NotFound();
       if (Validate(input) is { } invalid) return invalid;
 
+      var disabledGroups = input.DisabledGroups ?? new List<string>();
+      var servedChanges = !string.Equals(playlist.SourceUrl, input.SourceUrl, StringComparison.Ordinal)
+        || !new HashSet<string>(playlist.DisabledGroups ?? new List<string>(), StringComparer.Ordinal).SetEquals(disabledGroups);
+
       playlist.Name = input.Name.Trim();
       playlist.SourceUrl = input.SourceUrl;
       playlist.SourceName = input.SourceName;
-      playlist.DisabledGroups = input.DisabledGroups ?? new List<string>();
+      playlist.DisabledGroups = disabledGroups;
       playlist.TotalChannels = input.TotalChannels ?? playlist.TotalChannels;
       playlist.GroupCount = input.GroupCount ?? playlist.GroupCount;
       playlist.ExpirationUtc = input.ExpirationUtc ?? playlist.ExpirationUtc;
@@ -160,6 +164,8 @@ public static class PlaylistEndpoints
       }
 
       await db.SaveChangesAsync();
+      // A copy made with the old source or groups must never reach the player link.
+      if (servedChanges) cache.ForgetLastGood(id);
       return Results.Ok(playlist);
     });
 
@@ -217,15 +223,17 @@ public static class PlaylistEndpoints
       return Results.Ok(new { id = playlist.Id, autoRefreshEnabled = playlist.AutoRefreshEnabled, lastRefreshedUtc = playlist.LastRefreshedUtc });
     }).RequireRateLimiting(Security.RateLimits.General);
 
-    // Only stores the switch; the player link reads it on its next request.
-    mutations.MapPatch("/{id:guid}/watchlist-group", async (Guid id, WatchlistGroupRequest input, ClaimsPrincipal user, AppDbContext db) =>
+    // Stores the switch; the player link reads it on its next request and must not serve a copy made with the old value.
+    mutations.MapPatch("/{id:guid}/watchlist-group", async (Guid id, WatchlistGroupRequest input, ClaimsPrincipal user, AppDbContext db, PlaylistFileCache cache) =>
     {
       var playlist = await FindOwnedAsync(db, id, user);
       if (playlist is null) return Results.NotFound();
 
+      var changed = playlist.WatchlistGroup != input.Enabled;
       playlist.WatchlistGroup = input.Enabled;
       playlist.UpdatedAt = DateTimeOffset.UtcNow;
       await db.SaveChangesAsync();
+      if (changed) cache.ForgetLastGood(id);
       return Results.Ok(new { id = playlist.Id, watchlistGroup = playlist.WatchlistGroup });
     }).RequireRateLimiting(Security.RateLimits.General);
 
