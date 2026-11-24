@@ -77,6 +77,7 @@ development only, override with `?api=http://localhost:5000/api` on the page URL
 | `GOOGLE_CLIENT_ID` / `_SECRET` | | Enables Google sign-in |
 | `MICROSOFT_CLIENT_ID` / `_SECRET` / `MICROSOFT_TENANT_ID` | tenant `common` | Enables Microsoft sign-in |
 | `GITHUB_CLIENT_ID` / `_SECRET` | | Enables GitHub sign-in |
+| `DATA_PROTECTION_KEYS_PATH` | ASP.NET Core default (`~/.aspnet/DataProtection-Keys`); image: `/home/app/.aspnet/DataProtection-Keys` | Directory of the keys that sign session and antiforgery cookies |
 | `PlaylistCache__*` | see `api/appsettings.json` | Cache directory, size limits, TTLs, timeouts, concurrency |
 
 The schema is created with `EnsureCreated()` and extended in `api/Configuration/Database.cs`;
@@ -86,8 +87,20 @@ there are no EF migrations. See [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.m
 
 `.github/workflows/publish-image.yml` runs the tests, then builds the Docker image and pushes it to
 Docker Hub tagged `main`, `sha-<commit>` and release tags. The image serves the frontend and API on
-port 8080, with `/health/live` and `/health/ready` probes. Mount a volume at the SQLite path to keep
-data.
+port 8080, with `/health/live` and `/health/ready` probes (`curl` is in the image).
+
+The container runs as the non-root user `app`, UID and GID 1654. The files under `/app` belong to
+root and are read-only for it. The app writes only to:
+
+| Path | Content | Keep in a volume |
+|------|---------|------------------|
+| `/app/data` | SQLite database (`SQLITE_PATH`) | yes |
+| `/home/app/.aspnet/DataProtection-Keys` | cookie keys (`DATA_PROTECTION_KEYS_PATH`); without them users sign in again after a restart | yes |
+| `/tmp/strim-playlists`, `/tmp` | playlist cache and temporary files | no |
+
+A volume created by an earlier image belongs to root. Give it to the app user before you start the
+new image, for example `chown -R 1654:1654 <volume path>`. Keys that an earlier image kept in
+`/root/.aspnet/DataProtection-Keys` stay valid: mount the same volume at the new keys path.
 
 The public instance runs on Coolify behind Cloudflare: the landing page and guides are public,
 `/app` and `/api` are behind Cloudflare Access, and player links stay reachable for IPTV apps.

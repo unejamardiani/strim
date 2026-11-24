@@ -39,7 +39,15 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
-ENV ASPNETCORE_URLS=http://+:8080
+# The app runs as the image's non-root user "app" (UID $APP_UID, 1654). The files under /app stay
+# root's and read-only; the user writes only the SQLite directory, the data-protection keys and /tmp.
+RUN mkdir -p /app/data /home/app/.aspnet/DataProtection-Keys && \
+    chown -R $APP_UID:$APP_UID /app/data /home/app/.aspnet
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DATA_PROTECTION_KEYS_PATH=/home/app/.aspnet/DataProtection-Keys \
+    PlaylistCache__Directory=/tmp/strim-playlists \
+    TMPDIR=/tmp
+USER $APP_UID
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl --fail --silent --show-error http://127.0.0.1:8080/health/live || exit 1
