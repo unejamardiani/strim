@@ -445,7 +445,7 @@ public static class ProcessingEndpoints
     result.Total, result.SeenHiddenCount);
 
   private static string ShareFileName(Playlist playlist) =>
-    $"{playlist.SourceName ?? playlist.Name ?? "playlist"}-filtered.m3u";
+    $"{playlist.Name}-filtered.m3u";
 
   /// <summary>Pins a served share output as the link's last good copy; a failure here never fails the answer.</summary>
   private static void RememberLastGood(PlaylistFileCache cache, Guid playlistId, PlaylistOutputFile output, ILogger logger)

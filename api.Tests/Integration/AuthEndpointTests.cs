@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Api.Tests.Integration;
@@ -44,6 +46,38 @@ public class AuthEndpointTests(StrimAppFactory factory) : IClassFixture<StrimApp
   }
 
   [Fact]
+  public async Task Logout_WithoutCsrfToken_IsRejected_AndSessionStays()
+  {
+    var client = NewClient();
+    await client.RegisterAsync("logout-nocsrf");
+
+    var response = await client.PostAsync("/api/auth/logout", withCsrf: false);
+
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    Assert.Equal(HttpStatusCode.OK, (await client.Http.GetAsync("/api/auth/me")).StatusCode);
+  }
+
+  [Fact]
+  public async Task Login_ForLockedOutAccount_Answers401_AndLockoutStays()
+  {
+    var client = NewClient();
+    await client.RegisterAsync("lockout");
+    (await client.PostAsync("/api/auth/logout")).EnsureSuccessStatusCode();
+    for (var i = 0; i < 5; i++)
+    {
+      await client.PostAsync("/api/auth/login", new { userName = "lockout", password = "Wrong-Horse-1" });
+    }
+
+    var locked = await client.PostAsync("/api/auth/login", new { userName = "lockout", password = "Correct-Horse-1" });
+
+    Assert.Equal(HttpStatusCode.Unauthorized, locked.StatusCode);
+    Assert.Equal(HttpStatusCode.Unauthorized, (await client.Http.GetAsync("/api/auth/me")).StatusCode);
+    using var scope = factory.Services.CreateScope();
+    var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+    Assert.True(await users.IsLockedOutAsync((await users.FindByNameAsync("lockout"))!));
+  }
+
+  [Fact]
   public async Task Providers_AreEmptyWithoutConfiguration()
   {
     var providers = await NewClient().Http.GetFromJsonAsync<List<object>>("/api/auth/providers");
@@ -65,6 +99,8 @@ public class AuthEndpointTests(StrimAppFactory factory) : IClassFixture<StrimApp
   [InlineData("/\\evil.example", "/app")]
   [InlineData("https://evil.example/", "/app")]
   [InlineData("app", "/app")]
+  [InlineData("/\t/x", "/app")]
+  [InlineData("/app\r\nX-Injected: 1", "/app")]
   public void ReturnUrl_OnlyAllowsLocalPaths(string? returnUrl, string expected)
   {
     Assert.Equal(expected, Api.Endpoints.AuthEndpoints.SafeReturnUrl(returnUrl));
