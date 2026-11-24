@@ -1,0 +1,110 @@
+# Every column of every table in the Strim PostgreSQL schema, one per line: <table>.<column> keep|sanitised
+# A table outside the public schema is written <schema>.<table>.<column>. Identifiers keep their exact case.
+# check-coverage.sql fails when the connected database has a column that is not listed here, so a change that
+# adds a column must add it here (and to sanitise.sql when it can hold personal data) in the same pull request.
+
+# ASP.NET Core Identity: roles are app configuration.
+AspNetRoleClaims.ClaimType keep
+AspNetRoleClaims.ClaimValue keep
+AspNetRoleClaims.Id keep
+AspNetRoleClaims.RoleId keep
+AspNetRoles.ConcurrencyStamp keep
+AspNetRoles.Id keep
+AspNetRoles.Name keep
+AspNetRoles.NormalizedName keep
+
+# User claims can hold names or e-mail addresses.
+AspNetUserClaims.ClaimType keep
+AspNetUserClaims.ClaimValue sanitised
+AspNetUserClaims.Id keep
+AspNetUserClaims.UserId keep
+
+# External (OAuth) logins: the provider key identifies the person at Google, Microsoft or GitHub.
+AspNetUserLogins.LoginProvider keep
+AspNetUserLogins.ProviderDisplayName sanitised
+AspNetUserLogins.ProviderKey sanitised
+AspNetUserLogins.UserId keep
+
+AspNetUserRoles.RoleId keep
+AspNetUserRoles.UserId keep
+
+# Stored tokens (authenticator keys, recovery codes, provider tokens).
+AspNetUserTokens.LoginProvider keep
+AspNetUserTokens.Name keep
+AspNetUserTokens.UserId keep
+AspNetUserTokens.Value sanitised
+
+AspNetUsers.AccessFailedCount keep
+AspNetUsers.ConcurrencyStamp keep
+AspNetUsers.Email sanitised
+AspNetUsers.EmailConfirmed keep
+AspNetUsers.Id keep
+AspNetUsers.LockoutEnabled keep
+AspNetUsers.LockoutEnd keep
+AspNetUsers.NormalizedEmail sanitised
+AspNetUsers.NormalizedUserName sanitised
+AspNetUsers.PasswordHash sanitised
+AspNetUsers.PhoneNumber sanitised
+AspNetUsers.PhoneNumberConfirmed sanitised
+AspNetUsers.SecurityStamp sanitised
+AspNetUsers.TwoFactorEnabled sanitised
+AspNetUsers.UserName sanitised
+
+# Playlists: the source URL carries the provider's account credentials; the name and source name are the
+# owner's free text. DisabledGroups holds the provider's group names (no personal data). The hash, ETag and
+# account facts are derived from the provider's response and identify no person.
+playlists.CreatedAt keep
+playlists.DisabledGroups keep
+playlists.Id keep
+playlists.Name sanitised
+playlists.SourceName sanitised
+playlists.SourceUrl sanitised
+playlists.UpdatedAt keep
+playlists.accountactiveconnections keep
+playlists.accountcheckedutc keep
+playlists.accountmaxconnections keep
+playlists.accountstatus keep
+playlists.autorefreshenabled sanitised
+playlists.expirationutc keep
+playlists.groupcount keep
+playlists.isactive keep
+playlists.lastrefreshedutc keep
+playlists.lastviewedutc keep
+playlists.ownerid keep
+playlists.sharecode sanitised
+playlists.sourcecheckedutc keep
+playlists.sourceetag keep
+playlists.sourcehash keep
+playlists.sourcelastmodifiedutc keep
+playlists.sourcelengthbytes keep
+playlists.totalchannels keep
+playlists.viewcount keep
+playlists.watchlistgroup keep
+
+# Shares: the label is the owner's name for a person; the token hash opens an invitation.
+playlistshares.acceptedutc keep
+playlistshares.createdutc keep
+playlistshares.id keep
+playlistshares.label sanitised
+playlistshares.lastopenedutc keep
+playlistshares.playlistid keep
+playlistshares.role keep
+playlistshares.tokenexpiresutc keep
+playlistshares.tokenhash sanitised
+playlistshares.vieweruserid keep
+
+# Film and series marks: titles come from the provider's channel names or TMDB, not from the user; the rows
+# point at a sanitised account only.
+titlemarks.createdutc keep
+titlemarks.displaytitle keep
+titlemarks.filmdbid keep
+titlemarks.id keep
+titlemarks.kind keep
+titlemarks.rating keep
+titlemarks.seen keep
+titlemarks.titlekey keep
+titlemarks.updatedutc keep
+titlemarks.userid keep
+titlemarks.watchlist keep
+titlemarks.watchlistedutc keep
+titlemarks.year keep
