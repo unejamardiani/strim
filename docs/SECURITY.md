@@ -42,6 +42,12 @@ What Strim protects, and where in the code each control lives.
   address for rate limits. From any other peer the header is ignored.
 - On the public instance, `/app` and `/api` sit behind Cloudflare Access except the share route,
   which players must reach without a login.
+- The image runs as the non-root user `app` (UID and GID 1654, `USER $APP_UID`). The files under
+  `/app` belong to root and are read-only for it, so a fault in the app cannot change them. It
+  writes only to `/app/data` (SQLite), `/home/app/.aspnet/DataProtection-Keys` (cookie keys,
+  `DATA_PROTECTION_KEYS_PATH`) and `/tmp` (playlist cache in `/tmp/strim-playlists`). Volumes
+  for the first two must belong to UID 1654: `chown -R 1654:1654 <volume path>`. Pinned by
+  `api.Tests/Integration/NonRootContainerTests.cs`.
 - Set `PUBLIC_SHARE_BASE_URL` when player links must use a different host than the app.
 
 ## Reporting
