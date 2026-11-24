@@ -60,8 +60,9 @@ python3 -m http.server 8000           # frontend: http://localhost:8000/app.html
 dotnet test                           # all tests
 ```
 
-A frontend on another localhost port talks to `http://localhost:5000/api` automatically. Override
-with `?api=https://host/api` on the page URL (remembered in `localStorage`).
+A frontend on another localhost port talks to `http://localhost:5000/api` automatically. For local
+development only, override with `?api=http://localhost:5000/api` on the page URL (remembered in
+`localStorage`); on any other host name the app ignores the override and uses its own `/api`.
 
 ## Configuration
 

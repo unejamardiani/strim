@@ -7,6 +7,7 @@ on:
     paths:
       - 'Dockerfile'
       - '.dockerignore'
+      - 'global.json'
       - 'api/**'
       - 'api.Tests/**'
       - 'fonts/**'
@@ -33,10 +34,27 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       - name: Test
         run: dotnet test strim.sln
+
+  # Builds the image on pull requests without pushing it, so a Dockerfile or base-image change is
+  # proven before it merges. Uses no secrets.
+  build:
+    needs: test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: false
 
   build-and-push:
     needs: test
