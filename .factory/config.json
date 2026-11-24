@@ -28,9 +28,9 @@
   "policy": {
     "protected": [".factory/*", "docs/factory/*", "AGENTS.md", "CLAUDE.md", ".claude/*", ".codex/*", ".github/*",
                   ".gitignore"],
-    "forbidden": ["Dockerfile", ".dockerignore", "docker-compose*.yml", "LICENSE", "fonts/*", "tools/*"],
-    "dependencies": ["*.csproj", "*.sln", "global.json", "Directory.Build.*", "Directory.Packages.props",
-                     "*[Nn]u[Gg]et.[Cc]onfig"],
+    "forbidden": ["LICENSE", "fonts/*", "tools/*"],
+    "dependencies": ["*.csproj", "*.sln", "global.json", "*/global.json", "Directory.Build.*", "*/Directory.Build.*",
+                     "Directory.Packages.props", "*/Directory.Packages.props", "*[Nn]u[Gg]et.[Cc]onfig"],
     "forbidden_patterns": ["'unsafe-(inline|eval)'", "-----BEGIN [A-Z ]*PRIVATE KEY-----"],
     "tests": ["api.Tests/*"],
     "tests_exempt": ["main.js", "app.html", "app.css", "theme.css"],
