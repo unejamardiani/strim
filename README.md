@@ -25,7 +25,7 @@ Strim never hosts streams; it only edits the playlist.
 ```
 Browser ──▶ /           landing page, guides                (static, site.css)
         ──▶ /app        editor: app.html + main.js          (static, app.css, no framework)
-        ──▶ /api/*      .NET 8 Minimal API                   api/
+        ──▶ /api/*      .NET 10 Minimal API                  api/
 IPTV player ──▶ /api/playlists/{id}/share/{code}            filtered M3U, anonymous
 ```
 
@@ -52,7 +52,7 @@ docker compose -f docker-compose.sqlite.yml up --build   # http://localhost:8080
 
 **Docker with PostgreSQL:** `POSTGRES_PASSWORD=… docker compose up --build`
 
-**From source** (.NET 8 SDK):
+**From source** (.NET 10 SDK):
 
 ```bash
 dotnet run --project api              # API on http://localhost:5000

@@ -1,7 +1,7 @@
 # Strim — Agent instructions
 
 ## Project
-IPTV (M3U) playlist editor. Public landing page at `/`, the editor at `/app`, a .NET 8 Minimal API
+IPTV (M3U) playlist editor. Public landing page at `/`, the editor at `/app`, a .NET 10 Minimal API
 under `/api` with EF Core (SQLite or PostgreSQL). Ships as one Docker image; the public instance
 runs on Coolify behind Cloudflare.
 
