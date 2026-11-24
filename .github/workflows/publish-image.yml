@@ -18,6 +18,8 @@ on:
       - '*.svg'
       - 'robots.txt'
       - 'sitemap.xml'
+      # Vatra reads the sanitise files from the commit it releases (staging), so a change to them needs an image.
+      - 'deploy/sanitise/**'
   pull_request:
   workflow_dispatch:
 
