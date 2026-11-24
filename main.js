@@ -4,12 +4,20 @@
 
 // ---------- Configuration ----------
 
+// The ?api= override and the stored strim.apiBase exist for the split local setup only. On any other host the
+// editor talks to its own origin, so a crafted link cannot point it at another API.
 const API_BASE = (() => {
-  const fromQuery = new URLSearchParams(window.location.search).get('api') || '';
+  const localHost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+  let fromQuery = '';
   let fromStorage = '';
   try {
-    if (fromQuery) localStorage.setItem('strim.apiBase', fromQuery);
-    fromStorage = localStorage.getItem('strim.apiBase') || '';
+    if (localHost) {
+      fromQuery = new URLSearchParams(window.location.search).get('api') || '';
+      if (fromQuery) localStorage.setItem('strim.apiBase', fromQuery);
+      fromStorage = localStorage.getItem('strim.apiBase') || '';
+    } else {
+      localStorage.removeItem('strim.apiBase');
+    }
   } catch {
     // Storage can be unavailable (private mode); the default still works.
   }
