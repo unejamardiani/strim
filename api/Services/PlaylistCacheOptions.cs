@@ -42,6 +42,15 @@ public sealed class PlaylistCacheOptions
   /// <summary>End-to-end timeout for a streamed upstream body.</summary>
   public int DownloadTimeoutSeconds { get; set; } = 10 * 60;
 
+  /// <summary>
+  /// A body read fails when the upstream sends no byte for this long, so a stalled source releases the job gate
+  /// long before DownloadTimeoutSeconds.
+  /// </summary>
+  public int IdleReadTimeoutSeconds { get; set; } = 30;
+
+  /// <summary>End-to-end timeout for short answers such as the provider's account and language probes.</summary>
+  public int SmallTextTimeoutSeconds { get; set; } = 20;
+
   /// <summary>Connection and response-header timeout; body reads use DownloadTimeoutSeconds.</summary>
   public int HeaderTimeoutSeconds { get; set; } = 15;
 

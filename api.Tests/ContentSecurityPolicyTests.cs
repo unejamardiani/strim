@@ -80,13 +80,15 @@ public sealed class ContentSecurityPolicyTests : IDisposable
   [Theory]
   [InlineData("/app.html", AppPolicy)]
   [InlineData("/", PagePolicy)]
-  public async Task ResponseHeader_WhenSet_MatchesThePagePolicy(string path, string expected)
+  public async Task ResponseHeader_OnlyForbidsFraming_AndTheMetaTagCarriesThePagePolicy(string path, string expected)
   {
     var response = await _factory.CreateClient().GetAsync(path);
     response.EnsureSuccessStatusCode();
 
     Assert.Equal(expected, MetaPolicy(await response.Content.ReadAsStringAsync()));
-    if (response.Headers.TryGetValues("Content-Security-Policy", out var header))
-      Assert.Equal(expected, Assert.Single(header));
+    // Browsers enforce every policy they receive, so a header with more than frame-ancestors would
+    // narrow the page policy behind the meta tag's back (#543).
+    Assert.True(response.Headers.TryGetValues("Content-Security-Policy", out var header));
+    Assert.Equal("frame-ancestors 'none'", Assert.Single(header));
   }
 }

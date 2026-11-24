@@ -8,7 +8,7 @@ namespace Api.Tests.Integration;
 
 /// <summary>
 /// Pins HTTP behaviour that a framework upgrade could change silently: cookie auth answering API
-/// calls with 401 instead of a login redirect, forwarded headers without TRUSTED_PROXIES, the
+/// calls with 401 instead of a login redirect, forwarded headers from a trusted proxy, the
 /// Swagger document and the routing order between static files and endpoints.
 /// </summary>
 public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<StrimAppFactory>
@@ -28,13 +28,14 @@ public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<Stri
   public async Task ForwardedProto_Https_IsAppliedToRequestScheme()
   {
     // In Development the CSRF cookie is Secure only when the request scheme is HTTPS. Fresh
-    // clients, so each request gets a new cookie.
-    using var plain = await factory.CreateClient().GetAsync("/api/auth/csrf-token");
+    // clients, so each request gets a new cookie. The header counts only from a trusted proxy.
+    using var host = BehindTrustedProxy();
+    using var plain = await host.CreateClient().GetAsync("/api/auth/csrf-token");
     Assert.DoesNotContain("secure", CsrfCookie(plain), StringComparison.OrdinalIgnoreCase);
 
     using var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/csrf-token");
     request.Headers.Add("X-Forwarded-Proto", "https");
-    using var forwarded = await factory.CreateClient().SendAsync(request);
+    using var forwarded = await host.CreateClient().SendAsync(request);
     Assert.Contains("secure", CsrfCookie(forwarded), StringComparison.OrdinalIgnoreCase);
   }
 
@@ -43,7 +44,7 @@ public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<Stri
   {
     // A dedicated host, so the rate-limit partitions start empty. The share route is limited per
     // client IP (30 per minute, queue 1); a wrong link is a cheap 404.
-    using var host = new StrimAppFactory();
+    using var host = BehindTrustedProxy();
     var client = host.CreateClient();
     var path = $"/api/playlists/{Guid.NewGuid()}/share/nope";
 
@@ -64,11 +65,52 @@ public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<Stri
   [Fact]
   public async Task SwaggerDocument_IsServed()
   {
-    var response = await factory.CreateClient().GetAsync("/swagger/v1/swagger.json");
+    // The factory hosts the app in Development, the only environment that serves the document.
+    var response = await factory.WithWebHostBuilder(builder => builder.UseEnvironment("Development"))
+      .CreateClient().GetAsync("/swagger/v1/swagger.json");
 
     Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
     Assert.Equal("Strim API", document.RootElement.GetProperty("info").GetProperty("title").GetString());
+  }
+
+  [Fact]
+  public async Task SwaggerDocument_IsNotServedInProduction()
+  {
+    var response = await factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"))
+      .CreateClient().GetAsync("/swagger/v1/swagger.json");
+
+    Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+  }
+
+  [Theory]
+  [InlineData("abc-DEF_123")]
+  [InlineData("0123456789012345678901234567890123456789012345678901234567890123")]
+  public async Task CorrelationId_FromClient_IsKeptWhenShortAndPlain(string id)
+  {
+    using var request = new HttpRequestMessage(HttpMethod.Get, "/health/live");
+    request.Headers.Add("X-Correlation-ID", id);
+
+    var response = await factory.CreateClient().SendAsync(request);
+
+    Assert.Equal(id, response.Headers.GetValues("X-Correlation-ID").Single());
+  }
+
+  [Theory]
+  [InlineData("01234567890123456789012345678901234567890123456789012345678901234")]
+  [InlineData("bad id")]
+  [InlineData("bad.id")]
+  [InlineData("<script>")]
+  public async Task CorrelationId_FromClient_IsReplacedWhenOverlongOrInvalid(string id)
+  {
+    using var request = new HttpRequestMessage(HttpMethod.Get, "/health/live");
+    request.Headers.TryAddWithoutValidation("X-Correlation-ID", id);
+
+    var response = await factory.CreateClient().SendAsync(request);
+
+    var answered = response.Headers.GetValues("X-Correlation-ID").Single();
+    Assert.NotEqual(id, answered);
+    Assert.Matches("^[0-9a-f]{32}$", answered);
   }
 
   [Fact]
@@ -98,6 +140,9 @@ public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<Stri
     Assert.Equal(HttpStatusCode.NotFound, unknownApi.StatusCode);
     Assert.Equal("application/json", unknownApi.Content.Headers.ContentType?.MediaType);
   }
+
+  private static StrimAppFactory BehindTrustedProxy() =>
+    new() { TrustedProxies = "10.0.0.5", PeerAddress = IPAddress.Parse("10.0.0.5") };
 
   private static string CsrfCookie(HttpResponseMessage response)
   {

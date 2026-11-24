@@ -73,7 +73,7 @@ development only, override with `?api=http://localhost:5000/api` on the page URL
 | `POSTGRES_CONNECTION` | | PostgreSQL connection string |
 | `PUBLIC_SHARE_BASE_URL` | request host | Base URL used in player links |
 | `ALLOWED_ORIGINS` | none | Comma-separated origins allowed for credentialed CORS |
-| `TRUSTED_PROXIES` | trust all | IPs/CIDRs whose `X-Forwarded-*` headers are accepted |
+| `TRUSTED_PROXIES` | none (forwarded headers ignored) | IPs/CIDRs whose `X-Forwarded-*`, `X-ARR-SSL` and `CF-Connecting-IP` headers are accepted |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | | Enables Google sign-in |
 | `MICROSOFT_CLIENT_ID` / `_SECRET` / `MICROSOFT_TENANT_ID` | tenant `common` | Enables Microsoft sign-in |
 | `GITHUB_CLIENT_ID` / `_SECRET` | | Enables GitHub sign-in |

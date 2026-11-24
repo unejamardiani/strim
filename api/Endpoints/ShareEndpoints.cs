@@ -64,7 +64,13 @@ public static class ShareEndpoints
 
     mutations.MapPost("", async (Guid id, ShareRequest input, ClaimsPrincipal user, AppDbContext db) =>
     {
-      if (!await IsOwnerAsync(db, id, user)) return Results.NotFound();
+      // Count and insert in one transaction that first writes the playlist row: SQLite's write lock or
+      // PostgreSQL's row lock makes concurrent creations for one playlist wait, so the limit holds.
+      await using var transaction = await db.Database.BeginTransactionAsync();
+      var userId = user.UserId();
+      var owned = await db.Playlists.Where(p => p.Id == id && p.OwnerId == userId)
+        .ExecuteUpdateAsync(set => set.SetProperty(p => p.UpdatedAt, p => p.UpdatedAt));
+      if (owned == 0) return Results.NotFound();
       var label = input.Label?.Trim();
       if (string.IsNullOrEmpty(label) || label.Length > MaxLabelLength)
       {
@@ -86,8 +92,9 @@ public static class ShareEndpoints
       };
       db.PlaylistShares.Add(share);
       await db.SaveChangesAsync();
+      await transaction.CommitAsync();
 
-      logger.LogInformation("User {UserId} created invitation {ShareId} for playlist {PlaylistId}", user.UserId(), share.Id, id);
+      logger.LogInformation("User {UserId} created invitation {ShareId} for playlist {PlaylistId}", userId, share.Id, id);
       return Results.Json(new { share = ToDto(share, null, now), inviteToken = token }, statusCode: StatusCodes.Status201Created);
     });
 

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -49,6 +50,12 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
   /// <summary>Web root for the app; null keeps the default. Set it to <see cref="RepositoryRoot"/> to serve the real pages.</summary>
   public string? WebRoot { get; init; }
 
+  /// <summary>TRUSTED_PROXIES for the app; null leaves it unset.</summary>
+  public string? TrustedProxies { get; init; }
+
+  /// <summary>The immediate peer address of every request; null keeps the test server's (none).</summary>
+  public IPAddress? PeerAddress { get; init; }
+
   /// <summary>The repository root (where strim.sln, 404.html and 50x.html live), found from the test binaries.</summary>
   public static string RepositoryRoot()
   {
@@ -65,12 +72,28 @@ public sealed class StrimAppFactory : WebApplicationFactory<Program>
     if (WebRoot is not null) builder.UseWebRoot(WebRoot);
     builder.UseSetting("SQLITE_PATH", Path.Combine(_root, "strim.db"));
     builder.UseSetting("PlaylistCache:Directory", Path.Combine(_root, "cache"));
+    if (TrustedProxies is not null) builder.UseSetting("TRUSTED_PROXIES", TrustedProxies);
     builder.ConfigureLogging(logging => logging.AddProvider(new CapturingLoggerProvider(LogEntries, LogRecords)));
     builder.ConfigureTestServices(services =>
     {
+      if (PeerAddress is not null) services.AddSingleton<IStartupFilter>(new PeerAddressFilter(PeerAddress));
       services.AddHttpClient("fetcher").ConfigurePrimaryHttpMessageHandler(
         () => new StubUpstream(UpstreamPlaylists, UpstreamResponses, UpstreamRequests, UpstreamValidators, () => Fault));
     });
+  }
+
+  /// <summary>Sets the peer address ahead of the app's own pipeline, as a socket connection would.</summary>
+  private sealed class PeerAddressFilter(IPAddress peer) : IStartupFilter
+  {
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+      app.Use((context, nextMiddleware) =>
+      {
+        context.Connection.RemoteIpAddress = peer;
+        return nextMiddleware();
+      });
+      next(app);
+    };
   }
 
   private sealed class CapturingLoggerProvider(

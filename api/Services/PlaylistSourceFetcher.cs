@@ -35,7 +35,7 @@ public sealed class PlaylistSourceFetcher
     PlaylistSourceFile? cachedSource,
     CancellationToken cancellationToken)
   {
-    var initialUri = ValidateSourceUri(sourceUrl);
+    var initialUri = await ValidateSourceUriAsync(sourceUrl, cancellationToken);
     var client = _httpClientFactory.CreateClient(Configuration.PlaylistServices.FetcherClient);
     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _options.DownloadTimeoutSeconds)));
@@ -61,7 +61,7 @@ public sealed class PlaylistSourceFetcher
             throw new InvalidOperationException("Too many redirects");
           }
 
-          currentUri = ValidateRedirectUri(currentUri, response.Headers.Location);
+          currentUri = await ValidateRedirectUriAsync(currentUri, response.Headers.Location, timeout.Token);
           continue;
         }
 
@@ -115,7 +115,8 @@ public sealed class PlaylistSourceFetcher
 
   /// <summary>
   /// Reads a short text answer (for example a provider's account JSON) into memory with the same
-  /// address checks, redirect validation, HTTP client and timeout as <see cref="FetchAsync"/>.
+  /// address checks, redirect validation, HTTP client and idle read timeout as <see cref="FetchAsync"/>, bounded
+  /// by its own shorter overall timeout.
   /// Bodies above <see cref="SmallTextMaxBytes"/> are refused. Every failure is returned as a result;
   /// messages and log entries name only the host, never the path or query string.
   /// <paramref name="maxBytes"/> changes the body limit; <paramref name="noRedirects"/> makes exactly one
@@ -130,7 +131,7 @@ public sealed class PlaylistSourceFetcher
     Uri currentUri;
     try
     {
-      currentUri = ValidateSourceUri(sourceUrl);
+      currentUri = await ValidateSourceUriAsync(sourceUrl, cancellationToken);
     }
     catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
     {
@@ -139,7 +140,7 @@ public sealed class PlaylistSourceFetcher
 
     var client = _httpClientFactory.CreateClient(Configuration.PlaylistServices.FetcherClient);
     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-    timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _options.DownloadTimeoutSeconds)));
+    timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _options.SmallTextTimeoutSeconds)));
 
     try
     {
@@ -157,7 +158,7 @@ public sealed class PlaylistSourceFetcher
 
           try
           {
-            currentUri = ValidateRedirectUri(currentUri, response.Headers.Location);
+            currentUri = await ValidateRedirectUriAsync(currentUri, response.Headers.Location, timeout.Token);
           }
           catch (InvalidOperationException ex)
           {
@@ -206,14 +207,19 @@ public sealed class PlaylistSourceFetcher
     return SmallTextFetchResult.Failed(error, statusCode);
   }
 
-  private static async Task<string?> ReadSmallTextAsync(HttpResponseMessage response, int maxBytes, CancellationToken cancellationToken)
+  private TimeSpan IdleReadTimeout => TimeSpan.FromSeconds(Math.Max(1, _options.IdleReadTimeoutSeconds));
+
+  private async Task<string?> ReadSmallTextAsync(HttpResponseMessage response, int maxBytes, CancellationToken cancellationToken)
   {
     await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
+    using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     using var buffer = new MemoryStream();
     var chunk = new byte[8 * 1024];
     while (true)
     {
-      var read = await source.ReadAsync(chunk, cancellationToken);
+      // Restarts the idle timer before every read; a stalled upstream cancels the read like the overall timeout.
+      idle.CancelAfter(IdleReadTimeout);
+      var read = await source.ReadAsync(chunk, idle.Token);
       if (read == 0) break;
       if (buffer.Length + read > maxBytes) return null;
       buffer.Write(chunk, 0, read);
@@ -236,7 +242,7 @@ public sealed class PlaylistSourceFetcher
     return encoding.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
   }
 
-  public static Uri ValidateSourceUri(string sourceUrl)
+  public static async Task<Uri> ValidateSourceUriAsync(string sourceUrl, CancellationToken cancellationToken)
   {
     if (string.IsNullOrWhiteSpace(sourceUrl))
     {
@@ -249,7 +255,7 @@ public sealed class PlaylistSourceFetcher
       throw new InvalidOperationException("Only http/https URLs are allowed");
     }
 
-    if (SecurityHelpers.IsBlockedUrl(uri))
+    if (await SecurityHelpers.IsBlockedUrlAsync(uri, cancellationToken))
     {
       throw new InvalidOperationException("Access to internal or private network addresses is not allowed");
     }
@@ -257,7 +263,7 @@ public sealed class PlaylistSourceFetcher
     return uri;
   }
 
-  private static Uri ValidateRedirectUri(Uri currentUri, Uri location)
+  private static async Task<Uri> ValidateRedirectUriAsync(Uri currentUri, Uri location, CancellationToken cancellationToken)
   {
     var redirectUri = location.IsAbsoluteUri ? location : new Uri(currentUri, location);
     if (redirectUri.Scheme != Uri.UriSchemeHttp && redirectUri.Scheme != Uri.UriSchemeHttps)
@@ -265,7 +271,7 @@ public sealed class PlaylistSourceFetcher
       throw new InvalidOperationException("Redirect to non-HTTP(S) URL is not allowed");
     }
 
-    if (SecurityHelpers.IsBlockedUrl(redirectUri))
+    if (await SecurityHelpers.IsBlockedUrlAsync(redirectUri, cancellationToken))
     {
       throw new InvalidOperationException("Redirect to internal or private network addresses is not allowed");
     }
@@ -317,11 +323,14 @@ public sealed class PlaylistSourceFetcher
         128 * 1024,
         FileOptions.Asynchronous | FileOptions.SequentialScan);
       PlaylistFileCache.TrySetPrivateFile(temporaryPath);
+      using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
       long totalBytes = 0;
       while (true)
       {
-        var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+        // Restarts the idle timer before every read; a stalled upstream cancels the read like the overall timeout.
+        idle.CancelAfter(IdleReadTimeout);
+        var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), idle.Token);
         if (read == 0) break;
 
         totalBytes += read;

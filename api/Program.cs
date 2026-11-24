@@ -39,30 +39,42 @@ builder.Services.AddResponseCompression(options =>
 var app = builder.Build();
 app.Services.EnsureStrimSchema();
 
+if (app.Environment.IsProduction() && string.IsNullOrWhiteSpace(configuration["TRUSTED_PROXIES"]))
+{
+  app.Logger.LogWarning("TRUSTED_PROXIES is not set: forwarded headers are ignored and rate limits use the peer address.");
+}
+
+app.UseStrimPeerAddress();
 app.UseForwardedHeaders();
 // Some proxies (Azure App Service) mark HTTPS only with X-ARR-SSL, not X-Forwarded-Proto.
 app.Use((context, next) =>
 {
-  if (!string.IsNullOrEmpty(context.Request.Headers["X-ARR-SSL"].FirstOrDefault()))
+  if (Security.IsFromTrustedProxy(context) &&
+      !string.IsNullOrEmpty(context.Request.Headers["X-ARR-SSL"].FirstOrDefault()))
   {
     context.Request.Scheme = "https";
   }
   return next();
 });
+app.UseStrimSecurityHeaders(app.Environment);
 app.UseAnalyzeBodyGate();
 app.UseExceptionHandler();
 app.UseResponseCompression();
 
-app.UseSwagger();
 if (app.Environment.IsDevelopment())
 {
+  app.UseSwagger();
   app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v1/swagger.json", "Strim API v1"));
 }
 
 app.Use(async (context, next) =>
 {
   const string header = "X-Correlation-ID";
-  var correlationId = context.Request.Headers[header].FirstOrDefault() ?? Guid.NewGuid().ToString("N");
+  // The client's id reaches the logs and the response, so only a short, plain one is kept.
+  var clientId = context.Request.Headers[header].FirstOrDefault();
+  var correlationId = clientId is { Length: > 0 and <= 64 } && clientId.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_')
+    ? clientId
+    : Guid.NewGuid().ToString("N");
   context.Response.Headers[header] = correlationId;
   using (app.Logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
   {

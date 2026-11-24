@@ -426,7 +426,7 @@ async function submitAuth(mode, userInput, passInput, button) {
     toast(mode === 'register' ? 'Account created' : 'Signed in');
     afterAuthChange();
   } catch (err) {
-    const messages = { 401: 'Wrong username or password.', 423: 'Account locked. Try again later.' };
+    const messages = { 401: 'Wrong username or password.' };
     toast(messages[err.status] || err.message, { error: true });
   } finally {
     button.disabled = false;
