@@ -137,6 +137,43 @@ public class ShareManagementTests(StrimAppFactory factory) : IClassFixture<Strim
   }
 
   [Fact]
+  public async Task ParallelCreations_KeepTheShareLimit()
+  {
+    var owner = await SignedInAsync("share-race");
+    var playlistId = await CreatePlaylistAsync(owner);
+    // Five directly, so the ten requests the per-user rate limit lets through race for the last five places.
+    WithDb(db =>
+    {
+      var now = DateTimeOffset.UtcNow;
+      for (var i = 0; i < ShareEndpoints.MaxSharesPerPlaylist - 5; i++)
+      {
+        db.PlaylistShares.Add(new PlaylistShare
+        {
+          Id = Guid.NewGuid(), PlaylistId = playlistId, Label = "Guest " + i, CreatedUtc = now,
+          TokenHash = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"), TokenExpiresUtc = now.AddDays(7),
+        });
+      }
+      return db.SaveChanges();
+    });
+    var token = await owner.CsrfTokenAsync();
+
+    var responses = await Task.WhenAll(Enumerable.Range(0, 11).Select(async i =>
+    {
+      using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/playlists/{playlistId}/shares")
+      {
+        Content = JsonContent.Create(new { label = "Racer " + i }),
+      };
+      request.Headers.Add("X-CSRF-TOKEN", token);
+      return await owner.Http.SendAsync(request);
+    }));
+
+    Assert.Equal(5, responses.Count(r => r.StatusCode == HttpStatusCode.Created));
+    Assert.All(responses.Where(r => r.StatusCode != HttpStatusCode.Created),
+      r => Assert.Contains(r.StatusCode, new[] { HttpStatusCode.Conflict, HttpStatusCode.TooManyRequests }));
+    Assert.Equal(ShareEndpoints.MaxSharesPerPlaylist, WithDb(db => db.PlaylistShares.Count(s => s.PlaylistId == playlistId)));
+  }
+
+  [Fact]
   public async Task EleventhShare_409()
   {
     var owner = await SignedInAsync("share-limit");

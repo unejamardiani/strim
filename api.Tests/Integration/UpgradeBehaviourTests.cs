@@ -64,11 +64,52 @@ public class UpgradeBehaviourTests(StrimAppFactory factory) : IClassFixture<Stri
   [Fact]
   public async Task SwaggerDocument_IsServed()
   {
-    var response = await factory.CreateClient().GetAsync("/swagger/v1/swagger.json");
+    // The factory hosts the app in Development, the only environment that serves the document.
+    var response = await factory.WithWebHostBuilder(builder => builder.UseEnvironment("Development"))
+      .CreateClient().GetAsync("/swagger/v1/swagger.json");
 
     Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
     Assert.Equal("Strim API", document.RootElement.GetProperty("info").GetProperty("title").GetString());
+  }
+
+  [Fact]
+  public async Task SwaggerDocument_IsNotServedInProduction()
+  {
+    var response = await factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"))
+      .CreateClient().GetAsync("/swagger/v1/swagger.json");
+
+    Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+  }
+
+  [Theory]
+  [InlineData("abc-DEF_123")]
+  [InlineData("0123456789012345678901234567890123456789012345678901234567890123")]
+  public async Task CorrelationId_FromClient_IsKeptWhenShortAndPlain(string id)
+  {
+    using var request = new HttpRequestMessage(HttpMethod.Get, "/health/live");
+    request.Headers.Add("X-Correlation-ID", id);
+
+    var response = await factory.CreateClient().SendAsync(request);
+
+    Assert.Equal(id, response.Headers.GetValues("X-Correlation-ID").Single());
+  }
+
+  [Theory]
+  [InlineData("01234567890123456789012345678901234567890123456789012345678901234")]
+  [InlineData("bad id")]
+  [InlineData("bad.id")]
+  [InlineData("<script>")]
+  public async Task CorrelationId_FromClient_IsReplacedWhenOverlongOrInvalid(string id)
+  {
+    using var request = new HttpRequestMessage(HttpMethod.Get, "/health/live");
+    request.Headers.TryAddWithoutValidation("X-Correlation-ID", id);
+
+    var response = await factory.CreateClient().SendAsync(request);
+
+    var answered = response.Headers.GetValues("X-Correlation-ID").Single();
+    Assert.NotEqual(id, answered);
+    Assert.Matches("^[0-9a-f]{32}$", answered);
   }
 
   [Fact]

@@ -72,7 +72,7 @@ public static class AuthEndpoints
         if (user is null) return Results.Unauthorized();
 
         var result = await signInManager.PasswordSignInAsync(user, request.Password, isPersistent: false, lockoutOnFailure: true);
-        if (result.IsLockedOut) return Results.StatusCode(StatusCodes.Status423Locked);
+        // A locked-out account answers like a wrong password, so the answer does not reveal the lockout.
         if (!result.Succeeded) return Results.Unauthorized();
 
         return Results.Ok(new { userName = user.UserName, email = user.Email });
@@ -88,7 +88,7 @@ public static class AuthEndpoints
     {
       await signInManager.SignOutAsync();
       return Results.Ok();
-    }).RequireAuthorization();
+    }).RequireAuthorization().RequireCsrfToken();
 
     auth.MapGet("/providers", (ExternalLoginProviders providers) =>
       Results.Ok(providers.All.Select(p => new { name = p.Name, displayName = p.DisplayName })));
@@ -136,9 +136,13 @@ public static class AuthEndpoints
     return app;
   }
 
-  /// <summary>Only same-site paths; "//host" and absolute URLs would make this an open redirect.</summary>
+  /// <summary>
+  /// Only same-site paths; "//host" and absolute URLs would make this an open redirect. Control characters are
+  /// refused because browsers strip some of them, which turns "/\t/host" into "//host".
+  /// </summary>
   public static string SafeReturnUrl(string? returnUrl) =>
     !string.IsNullOrWhiteSpace(returnUrl) &&
+    !returnUrl.Any(char.IsControl) &&
     returnUrl.StartsWith('/') &&
     !returnUrl.StartsWith("//") &&
     !returnUrl.StartsWith("/\\") &&

@@ -46,6 +46,23 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
   }
 
   [Fact]
+  public async Task Share_DownloadFileName_IsThePlaylistName()
+  {
+    var owner = new ApiClient(factory.CreateClient());
+    await owner.RegisterAsync("file-name-sharer");
+    var created = await owner.PostAsync("/api/playlists", new
+    {
+      name = "Sofa list", sourceUrl = StrimAppFactory.UpstreamUrl, sourceName = "Provider name", disabledGroups = Array.Empty<string>(),
+    });
+    var playlist = (await created.Content.ReadFromJsonAsync<PlaylistDto>())!;
+
+    var response = await factory.CreateClient().GetAsync($"/api/playlists/{playlist.Id}/share/{playlist.ShareCode}");
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    Assert.Equal("Sofa list-filtered.m3u", response.Content.Headers.ContentDisposition?.FileNameStar);
+  }
+
+  [Fact]
   public async Task Share_KeepsSourceHeaderLine()
   {
     var (_, playlist) = await CreateSharedFromAsync("guide-sharer", StrimAppFactory.GuideHeaderUpstreamUrl, "Kids");
