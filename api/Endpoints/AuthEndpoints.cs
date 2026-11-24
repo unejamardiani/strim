@@ -110,18 +110,23 @@ public static class AuthEndpoints
       if (info is null) return Results.Redirect(failed);
 
       var signIn = await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false);
+      if (signIn.IsLockedOut || signIn.IsNotAllowed) return Results.Redirect(failed);
       if (!signIn.Succeeded)
       {
-        // First sign-in with this provider: link to the account with the same e-mail, or create one.
-        var email = info.Principal.FindFirstValue(ClaimTypes.Email);
-        var user = string.IsNullOrWhiteSpace(email) ? null : await userManager.FindByEmailAsync(email);
+        // First sign-in with this provider: link it to the signed-in account, or create a new one.
+        // Never join an account by e-mail: the provider's e-mail claim does not prove ownership here.
+        var user = await userManager.GetUserAsync(context.User);
         if (user is null)
         {
-          user = new IdentityUser { UserName = email ?? $"{info.LoginProvider}-{info.ProviderKey}", Email = email };
+          var email = info.Principal.FindFirstValue(ClaimTypes.Email);
+          var userName = !string.IsNullOrWhiteSpace(email) && await userManager.FindByNameAsync(email) is null
+            ? email
+            : $"{info.LoginProvider}-{info.ProviderKey}";
+          user = new IdentityUser { UserName = userName, Email = email };
           if (!(await userManager.CreateAsync(user)).Succeeded) return Results.Redirect(failed);
         }
 
-        await userManager.AddLoginAsync(user, info);
+        if (!(await userManager.AddLoginAsync(user, info)).Succeeded) return Results.Redirect(failed);
         await signInManager.SignInAsync(user, isPersistent: false);
       }
 
