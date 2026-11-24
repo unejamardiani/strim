@@ -10,7 +10,8 @@ namespace Api.Tests.Integration;
 /// </summary>
 public class ClientAddressTests
 {
-  private const string AuthRoute = "/api/auth/csrf-token";
+  private const string AuthRoute = "/api/auth/providers";
+  private const string CsrfRoute = "/api/auth/csrf-token";
   private static readonly IPAddress Proxy = IPAddress.Parse("10.0.0.5");
   private static readonly IPAddress Stranger = IPAddress.Parse("192.0.2.50");
 
@@ -70,7 +71,7 @@ public class ClientAddressTests
     using var host = new StrimAppFactory { TrustedProxies = "10.0.0.5", PeerAddress = Stranger };
 
     // In Development the CSRF cookie is Secure only when the request scheme is HTTPS.
-    using var response = await Send(host.CreateClient(), AuthRoute, ("X-ARR-SSL", "on"));
+    using var response = await Send(host.CreateClient(), CsrfRoute, ("X-ARR-SSL", "on"));
 
     Assert.DoesNotContain("secure", CsrfCookie(response), StringComparison.OrdinalIgnoreCase);
   }
@@ -80,7 +81,7 @@ public class ClientAddressTests
   {
     using var host = new StrimAppFactory { TrustedProxies = "10.0.0.5", PeerAddress = Proxy };
 
-    using var response = await Send(host.CreateClient(), AuthRoute, ("X-ARR-SSL", "on"));
+    using var response = await Send(host.CreateClient(), CsrfRoute, ("X-ARR-SSL", "on"));
 
     Assert.Contains("secure", CsrfCookie(response), StringComparison.OrdinalIgnoreCase);
   }
