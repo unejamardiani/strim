@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Options;
 
 namespace Api.Configuration;
 
@@ -10,24 +11,25 @@ public static class Security
 {
   public const string CorsPolicy = "default";
 
+  private const string PeerAddressKey = "Strim.PeerAddress";
+
   /// <summary>
-  /// The app runs behind a reverse proxy, so X-Forwarded-* is trusted from any hop unless
-  /// TRUSTED_PROXIES (comma-separated IPs/CIDRs) narrows it down.
+  /// X-Forwarded-For and X-Forwarded-Proto count only from the proxies in TRUSTED_PROXIES
+  /// (comma-separated IPs/CIDRs). Without it they are ignored, so a client cannot choose its own
+  /// rate-limit partition.
   /// </summary>
   public static IServiceCollection AddStrimForwardedHeaders(this IServiceCollection services, IConfiguration configuration)
   {
     var trustedProxies = configuration["TRUSTED_PROXIES"];
     return services.Configure<ForwardedHeadersOptions>(options =>
     {
-      options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-
       if (string.IsNullOrWhiteSpace(trustedProxies))
       {
-        options.KnownProxies.Clear();
-        options.KnownIPNetworks.Clear();
-        options.ForwardLimit = null;
+        options.ForwardedHeaders = ForwardedHeaders.None;
         return;
       }
+
+      options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
 
       var parsed = ParseTrustedProxies(trustedProxies);
       foreach (var proxy in parsed.Proxies)
@@ -179,7 +181,42 @@ public static class Security
   private static RateLimitPartition<string> PerIp(HttpContext context, int permits, int queue) =>
     RateLimitPartition.GetFixedWindowLimiter(ClientIp(context), _ => Window(permits, queue));
 
-  private static string ClientIp(HttpContext context) => context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+  /// <summary>
+  /// Behind Cloudflare the trusted proxy's own peer is a Cloudflare edge, so CF-Connecting-IP names
+  /// the client. It counts only when the immediate peer is a trusted proxy; anyone else can forge it.
+  /// </summary>
+  private static string ClientIp(HttpContext context)
+  {
+    if (IsFromTrustedProxy(context) &&
+        IPAddress.TryParse(context.Request.Headers["CF-Connecting-IP"].ToString(), out var cloudflareClient))
+    {
+      return cloudflareClient.ToString();
+    }
+    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+  }
+
+  /// <summary>
+  /// Remembers the immediate peer before UseForwardedHeaders replaces RemoteIpAddress with the
+  /// forwarded client, so <see cref="IsFromTrustedProxy"/> still checks the hop that sent the request.
+  /// </summary>
+  public static IApplicationBuilder UseStrimPeerAddress(this IApplicationBuilder app) =>
+    app.Use((context, next) =>
+    {
+      context.Items[PeerAddressKey] = context.Connection.RemoteIpAddress;
+      return next();
+    });
+
+  /// <summary>
+  /// True when the immediate peer is in TRUSTED_PROXIES or is loopback (the forwarded-headers
+  /// options keep their loopback defaults next to the configured proxies).
+  /// </summary>
+  public static bool IsFromTrustedProxy(HttpContext context)
+  {
+    if (context.Items[PeerAddressKey] is not IPAddress peer) return false;
+    if (peer.IsIPv4MappedToIPv6) peer = peer.MapToIPv4();
+    var options = context.RequestServices.GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
+    return options.KnownProxies.Contains(peer) || options.KnownIPNetworks.Any(network => network.Contains(peer));
+  }
 
   private static FixedWindowRateLimiterOptions Window(int permits, int queue) => new()
   {

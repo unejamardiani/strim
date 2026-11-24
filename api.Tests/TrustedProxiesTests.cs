@@ -87,14 +87,12 @@ public class TrustedProxiesTests
   }
 
   [Fact]
-  public void ForwardedHeadersOptions_WithoutTrustedProxies_ClearsListsAndHasNoForwardLimit()
+  public void ForwardedHeadersOptions_WithoutTrustedProxies_ProcessesNoForwardedHeaders()
   {
     var options = ResolveOptions(trustedProxies: null);
 
-    Assert.Equal(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, options.ForwardedHeaders);
-    Assert.Empty(options.KnownProxies);
-    Assert.Empty(options.KnownIPNetworks);
-    Assert.Null(options.ForwardLimit);
+    Assert.Equal(ForwardedHeaders.None, options.ForwardedHeaders);
+    Assert.Equal(new[] { IPAddress.IPv6Loopback }, options.KnownProxies);
   }
 
   [Fact]

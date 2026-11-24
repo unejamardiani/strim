@@ -39,11 +39,18 @@ builder.Services.AddResponseCompression(options =>
 var app = builder.Build();
 app.Services.EnsureStrimSchema();
 
+if (app.Environment.IsProduction() && string.IsNullOrWhiteSpace(configuration["TRUSTED_PROXIES"]))
+{
+  app.Logger.LogWarning("TRUSTED_PROXIES is not set: forwarded headers are ignored and rate limits use the peer address.");
+}
+
+app.UseStrimPeerAddress();
 app.UseForwardedHeaders();
 // Some proxies (Azure App Service) mark HTTPS only with X-ARR-SSL, not X-Forwarded-Proto.
 app.Use((context, next) =>
 {
-  if (!string.IsNullOrEmpty(context.Request.Headers["X-ARR-SSL"].FirstOrDefault()))
+  if (Security.IsFromTrustedProxy(context) &&
+      !string.IsNullOrEmpty(context.Request.Headers["X-ARR-SSL"].FirstOrDefault()))
   {
     context.Request.Scheme = "https";
   }
