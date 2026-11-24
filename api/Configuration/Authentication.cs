@@ -1,4 +1,5 @@
 using Api.Data;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 
 namespace Api.Configuration;
@@ -21,6 +22,14 @@ public static class Authentication
   public static IServiceCollection AddStrimAuthentication(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
   {
     var development = environment.IsDevelopment();
+
+    // The keys sign the session and antiforgery cookies. The image runs as a non-root user without
+    // access to /root/.aspnet, so it names a directory that user owns and a volume can keep.
+    var keysPath = configuration["DATA_PROTECTION_KEYS_PATH"];
+    if (!string.IsNullOrWhiteSpace(keysPath))
+    {
+      services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+    }
 
     services.AddIdentityCore<IdentityUser>(options =>
       {
