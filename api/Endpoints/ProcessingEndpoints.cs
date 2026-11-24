@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Api.Configuration;
 using Api.Data;
 using Api.Models;
@@ -350,7 +352,9 @@ public static class ProcessingEndpoints
     app.MapGet("/api/playlists/{id:guid}/share/{code}", async (Guid id, string code, HttpContext context, AppDbContext db, PlaylistPipeline pipeline, PlaylistJobGate jobGate) =>
     {
       var playlist = await db.Playlists.FindAsync(id);
-      if (playlist is null || !playlist.IsActive || !string.Equals(playlist.ShareCode, code, StringComparison.Ordinal))
+      // A constant-time comparison keeps the response time from revealing how much of a guessed code matched.
+      if (playlist is null || !playlist.IsActive || playlist.ShareCode is null
+        || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(playlist.ShareCode), Encoding.UTF8.GetBytes(code)))
       {
         return Results.NotFound();
       }

@@ -15,7 +15,6 @@ public record PlaylistRequest(
   int? TotalChannels,
   int? GroupCount,
   DateTimeOffset? ExpirationUtc,
-  string? ShareCode,
   string? AccountStatus = null,
   int? AccountMaxConnections = null,
   int? AccountActiveConnections = null,
@@ -124,7 +123,7 @@ public static class PlaylistEndpoints
         AccountMaxConnections = input.AccountMaxConnections,
         AccountActiveConnections = input.AccountActiveConnections,
         AccountCheckedUtc = input.AccountCheckedUtc,
-        ShareCode = string.IsNullOrWhiteSpace(input.ShareCode) ? SecurityHelpers.GenerateSecureShareCode() : input.ShareCode.Trim(),
+        ShareCode = SecurityHelpers.GenerateSecureShareCode(),
         OwnerId = user.UserId(),
       };
 
@@ -154,14 +153,6 @@ public static class PlaylistEndpoints
       playlist.AccountMaxConnections = input.AccountMaxConnections ?? playlist.AccountMaxConnections;
       playlist.AccountActiveConnections = input.AccountActiveConnections ?? playlist.AccountActiveConnections;
       playlist.AccountCheckedUtc = input.AccountCheckedUtc ?? playlist.AccountCheckedUtc;
-      if (!string.IsNullOrWhiteSpace(input.ShareCode))
-      {
-        playlist.ShareCode = input.ShareCode.Trim();
-      }
-      if (string.IsNullOrWhiteSpace(playlist.ShareCode))
-      {
-        playlist.ShareCode = SecurityHelpers.GenerateSecureShareCode();
-      }
 
       await db.SaveChangesAsync();
       // A copy made with the old source or groups must never reach the player link.

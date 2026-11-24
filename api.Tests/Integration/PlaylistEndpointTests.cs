@@ -74,6 +74,54 @@ public class PlaylistEndpointTests(StrimAppFactory factory) : IClassFixture<Stri
   }
 
   [Fact]
+  public async Task Create_IgnoresClientShareCode()
+  {
+    var client = await SignedInAsync("sharecode-create");
+
+    var response = await client.PostAsync("/api/playlists", new
+    {
+      name = "Living room",
+      sourceUrl = StrimAppFactory.UpstreamUrl,
+      disabledGroups = Array.Empty<string>(),
+      shareCode = "a",
+    });
+    Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    var created = await response.Content.ReadFromJsonAsync<PlaylistDto>();
+
+    Assert.NotEqual("a", created!.ShareCode);
+    Assert.Equal(43, created.ShareCode!.Length);
+  }
+
+  [Fact]
+  public async Task Update_IgnoresClientShareCode_AndRegeneratedCodeRetiresTheOldOne()
+  {
+    var client = await SignedInAsync("sharecode-update");
+    var anonymous = factory.CreateClient();
+    var created = await (await client.PostAsync("/api/playlists", NewPlaylist())).Content.ReadFromJsonAsync<PlaylistDto>();
+    var oldCode = created!.ShareCode;
+    Assert.Equal(HttpStatusCode.OK, (await anonymous.GetAsync($"/api/playlists/{created.Id}/share/{oldCode}")).StatusCode);
+
+    var regenerated = await (await client.PostAsync($"/api/playlists/{created.Id}/regenerate-code")).Content.ReadFromJsonAsync<PlaylistDto>();
+    var currentCode = regenerated!.ShareCode;
+    Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/playlists/{created.Id}/share/{oldCode}")).StatusCode);
+
+    var put = await client.SendAsync(HttpMethod.Put, $"/api/playlists/{created.Id}", new
+    {
+      name = "Living room",
+      sourceUrl = StrimAppFactory.UpstreamUrl,
+      disabledGroups = new[] { "Germany · Series" },
+      shareCode = oldCode,
+    });
+    Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+    Assert.Equal(currentCode, (await put.Content.ReadFromJsonAsync<PlaylistDto>())!.ShareCode);
+
+    var fetched = await client.Http.GetFromJsonAsync<PlaylistDto>($"/api/playlists/{created.Id}");
+    Assert.Equal(currentCode, fetched!.ShareCode);
+    Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/playlists/{created.Id}/share/{oldCode}")).StatusCode);
+    Assert.Equal(HttpStatusCode.OK, (await anonymous.GetAsync($"/api/playlists/{created.Id}/share/{currentCode}")).StatusCode);
+  }
+
+  [Fact]
   public async Task Playlist_CarriesWatchlistGroup_OffByDefault()
   {
     var client = await SignedInAsync("wlgroup-default");
