@@ -44,6 +44,8 @@ const state = {
   ready: false,
   user: null,
   providers: [],
+  // Cloudflare Access sign-in: whether it is on, and the verified e-mail of an identity still to connect.
+  access: { active: false, accessLinkPending: false, accessEmail: '' },
   playlists: [],
   overview: new Map(),
   shareBase: '',
@@ -297,16 +299,18 @@ function restoreFilters(entries, groups) {
 // ---------- Auth ----------
 
 async function loadSession() {
-  const [config, providers, me] = await Promise.allSettled([
+  const [config, providers, me, access] = await Promise.allSettled([
     api('/config'),
     api('/auth/providers'),
     api('/auth/me'),
+    api('/auth/access'),
   ]);
 
   const configured = config.status === 'fulfilled' ? config.value?.publicShareBaseUrl : '';
   state.shareBase = String(configured || new URL(API_BASE, window.location.origin).toString()).replace(/\/+$/, '');
   state.providers = providers.status === 'fulfilled' && Array.isArray(providers.value) ? providers.value : [];
   state.user = me.status === 'fulfilled' ? me.value : null;
+  if (access.status === 'fulfilled' && access.value) state.access = access.value;
   state.tmdbEnabled = config.status === 'fulfilled' && config.value?.tmdbEnabled === true;
   state.shareAccessNote = config.status === 'fulfilled' ? String(config.value?.shareAccessNote || '').trim() : '';
   showTmdbAttribution(state.tmdbEnabled);
@@ -369,7 +373,8 @@ function openAccount(hint) {
     const form = h('form', { class: 'stack', novalidate: true });
     const user = h('input', { class: 'input', name: 'username', type: 'text', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false', required: true });
     const pass = h('input', { class: 'input', name: 'password', type: 'password', autocomplete: 'current-password', required: true });
-    const signIn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Sign in');
+    const connecting = state.access.accessLinkPending;
+    const signIn = h('button', { class: 'btn btn-primary', type: 'submit' }, connecting ? 'Sign in and connect' : 'Sign in');
     const register = h('button', { class: 'btn', type: 'button' }, 'Create account');
 
     form.addEventListener('submit', (e) => {
@@ -381,6 +386,13 @@ function openAccount(hint) {
       submitAuth('register', user, pass, register);
     });
 
+    if (connecting) {
+      accountBody.append(h('div', { class: 'connect-card' },
+        h('p', { class: 'connect-card-title', text: 'One last sign-in' }),
+        h('p', { class: 'connect-card-body' },
+          'Cloudflare knows you as ', h('strong', { text: state.access.accessEmail }),
+          '. Sign in to Strim once and it opens straight away next time.')));
+    }
     if (hint) accountBody.append(h('p', { class: 'secondary', text: hint }));
     const enabled = state.providers.map((p) => p.name).filter(Boolean);
     if (enabled.length) {
@@ -423,7 +435,12 @@ async function submitAuth(mode, userInput, passInput, button) {
     state.user = await api('/auth/me');
     await loadPlaylists();
     accountDialog.close();
-    toast(mode === 'register' ? 'Account created' : 'Signed in');
+    if (state.access.accessLinkPending) {
+      state.access = { ...state.access, accessLinkPending: false, accessEmail: '' };
+      toast('Connected. Next time Strim opens straight away');
+    } else {
+      toast(mode === 'register' ? 'Account created' : 'Signed in');
+    }
     afterAuthChange();
   } catch (err) {
     const messages = { 401: 'Wrong username or password.' };
@@ -443,6 +460,11 @@ async function signOut() {
     await api('/auth/logout', { method: 'POST' });
   } catch (err) {
     console.warn('Logout failed', err);
+  }
+  // Without ending the Access session too, the next request would sign the same account straight back in.
+  if (state.access.active) {
+    window.location.assign('/cdn-cgi/access/logout');
+    return;
   }
   csrfToken = null;
   state.user = null;

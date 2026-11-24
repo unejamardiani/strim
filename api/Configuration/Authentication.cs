@@ -16,7 +16,7 @@ public sealed class ExternalLoginProviders(IReadOnlyList<ExternalLoginProvider> 
     All.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 }
 
-/// <summary>ASP.NET Core Identity with cookie sessions plus optional Google, Microsoft and GitHub sign-in.</summary>
+/// <summary>ASP.NET Core Identity with cookie sessions plus optional Google, Microsoft, GitHub and Cloudflare Access sign-in.</summary>
 public static class Authentication
 {
   public static IServiceCollection AddStrimAuthentication(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
@@ -132,6 +132,8 @@ public static class Authentication
     }
 
     services.AddSingleton(new ExternalLoginProviders(providers));
+    services.AddSingleton<CloudflareAccess>();
+    services.AddHttpClient(CloudflareAccess.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
     services.AddAuthorization();
     return services;
   }

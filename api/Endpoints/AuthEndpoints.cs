@@ -27,7 +27,7 @@ public static class AuthEndpoints
       return user is null ? Results.Unauthorized() : Results.Ok(new { userName = user.UserName, email = user.Email });
     });
 
-    auth.MapPost("/register", async (RegisterRequest request, UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager) =>
+    auth.MapPost("/register", async (RegisterRequest request, UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager, HttpContext context) =>
     {
       if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
       {
@@ -50,6 +50,7 @@ public static class AuthEndpoints
         }
 
         await signInManager.SignInAsync(user, isPersistent: false);
+        await CloudflareAccessSignIn.LinkAsync(context, userManager, user);
         return Results.Ok(new { userName = user.UserName, email = user.Email });
       }
       catch (Exception ex)
@@ -59,7 +60,7 @@ public static class AuthEndpoints
       }
     }).RequireCsrfToken();
 
-    auth.MapPost("/login", async (LoginRequest request, SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager) =>
+    auth.MapPost("/login", async (LoginRequest request, SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager, HttpContext context) =>
     {
       if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
       {
@@ -75,6 +76,7 @@ public static class AuthEndpoints
         // A locked-out account answers like a wrong password, so the answer does not reveal the lockout.
         if (!result.Succeeded) return Results.Unauthorized();
 
+        await CloudflareAccessSignIn.LinkAsync(context, userManager, user);
         return Results.Ok(new { userName = user.UserName, email = user.Email });
       }
       catch (Exception ex)
@@ -92,6 +94,15 @@ public static class AuthEndpoints
 
     auth.MapGet("/providers", (ExternalLoginProviders providers) =>
       Results.Ok(providers.All.Select(p => new { name = p.Name, displayName = p.DisplayName })));
+
+    // Whether Cloudflare Access sign-in is on, and the verified e-mail of an Access identity not linked to an account yet.
+    auth.MapGet("/access", async (CloudflareAccess access, UserManager<IdentityUser> userManager, HttpContext context) =>
+    {
+      var identity = context.Features.Get<CloudflareAccessIdentity>();
+      var pending = identity is not null &&
+        await userManager.FindByLoginAsync(CloudflareAccess.LoginProvider, identity.Subject) is null;
+      return Results.Ok(new { active = access.Active, accessLinkPending = pending, accessEmail = pending ? identity!.Email : null });
+    });
 
     auth.MapGet("/external/{provider}", (string provider, string? returnUrl, ExternalLoginProviders providers, SignInManager<IdentityUser> signInManager) =>
     {
@@ -130,6 +141,9 @@ public static class AuthEndpoints
         await signInManager.SignInAsync(user, isPersistent: false);
       }
 
+      // Otherwise the next request would end this session again because the Access identity is not linked.
+      var account = await userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
+      if (account is not null) await CloudflareAccessSignIn.LinkAsync(context, userManager, account);
       await context.SignOutAsync(IdentityConstants.ExternalScheme);
       return Results.Redirect(SafeReturnUrl(returnUrl));
     });

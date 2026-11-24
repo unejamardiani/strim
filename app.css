@@ -2246,6 +2246,13 @@ select.input {
 .sheet.confirm p { color: var(--ink-2); font-size: 14.5px; }
 .sheet.confirm .row-actions { justify-content: flex-end; margin-top: 4px; }
 .confirm-who { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+/* Connect card (#573): Cloudflare Access identity not yet linked to a Strim account. */
+.connect-card { position: relative; padding: 14px 16px 14px 40px; border-radius: var(--radius); background: var(--accent-soft); color: var(--ink); font-size: 14px; line-height: 1.5; }
+.connect-card::before { content: ""; position: absolute; left: 17px; top: 21px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+.connect-card p { margin: 0; }
+.connect-card-title { font-weight: 750; }
+.connect-card-body { color: var(--ink-2); }
+.connect-card-body strong { color: var(--ink); font-weight: 650; }
 @media (min-width: 600px) { .share-list { display: none; } }
 @media (max-width: 599px) {
   .sharing-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
@@ -2264,4 +2271,6 @@ select.input {
   .toggle:focus-visible, .switch:focus-visible, .input:focus { outline: 2px solid Highlight; outline-offset: 2px; }
   .dot, [data-type] > .dot, .dot[data-type] { forced-color-adjust: none; background: CanvasText; }
   .toast::before, .toast.error::before { forced-color-adjust: none; background: Highlight; }
+  .connect-card { border: 1px solid CanvasText; }
+  .connect-card::before { forced-color-adjust: none; background: Highlight; box-shadow: none; }
 }
