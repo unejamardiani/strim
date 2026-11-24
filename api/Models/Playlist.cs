@@ -57,6 +57,10 @@ public class Playlist
   [Column("lastrefreshedutc")]
   public DateTimeOffset? LastRefreshedUtc { get; set; }
 
+  /// <summary>Automatic refreshes that failed in a row; a refresh that works sets it back to 0.</summary>
+  [Column("refreshfailurecount")]
+  public int RefreshFailureCount { get; set; }
+
   [MaxLength(64)]
   [Column("sourcehash")]
   public string? SourceHash { get; set; }

@@ -79,6 +79,7 @@ public class PlaylistRefreshService(
           playlist.LastRefreshedUtc = DateTimeOffset.UtcNow;
           playlist.TotalChannels = analysis.TotalChannels;
           playlist.GroupCount = analysis.Groups.Count;
+          playlist.RefreshFailureCount = 0;
           PlaylistPipeline.CopySourceMetadata(playlist, source);
           await db.SaveChangesAsync(cancellationToken);
 
@@ -99,11 +100,34 @@ public class PlaylistRefreshService(
         catch (Exception ex)
         {
           logger.LogWarning(ex, "Failed to refresh playlist {PlaylistId} ({Name})", playlist.Id, playlist.Name);
+          await CountFailureAsync(db, playlist, cancellationToken);
         }
       }
 
       // The account lookup does not touch the playlist files, so it runs after the gate is released.
       await RefreshAccountAsync(db, playlist, cancellationToken);
+    }
+  }
+
+  /// <summary>
+  /// Adds one to the failed refreshes in a row. The reload drops values a failed save left on the
+  /// tracked playlist, so only the count is written.
+  /// </summary>
+  private async Task CountFailureAsync(AppDbContext db, Models.Playlist playlist, CancellationToken cancellationToken)
+  {
+    try
+    {
+      await db.Entry(playlist).ReloadAsync(cancellationToken);
+      playlist.RefreshFailureCount++;
+      await db.SaveChangesAsync(cancellationToken);
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+      throw;
+    }
+    catch (Exception ex)
+    {
+      logger.LogWarning(ex, "Failed to count the failed refresh of playlist {PlaylistId}", playlist.Id);
     }
   }
 
