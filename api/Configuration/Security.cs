@@ -24,7 +24,7 @@ public static class Security
       if (string.IsNullOrWhiteSpace(trustedProxies))
       {
         options.KnownProxies.Clear();
-        options.KnownNetworks.Clear();
+        options.KnownIPNetworks.Clear();
         options.ForwardLimit = null;
         return;
       }
@@ -36,7 +36,7 @@ public static class Security
       }
       foreach (var network in parsed.Networks)
       {
-        options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(network.BaseAddress, network.PrefixLength));
+        options.KnownIPNetworks.Add(network);
       }
       foreach (var rejected in parsed.Rejected)
       {

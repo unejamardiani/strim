@@ -93,7 +93,7 @@ public class TrustedProxiesTests
 
     Assert.Equal(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, options.ForwardedHeaders);
     Assert.Empty(options.KnownProxies);
-    Assert.Empty(options.KnownNetworks);
+    Assert.Empty(options.KnownIPNetworks);
     Assert.Null(options.ForwardLimit);
   }
 
@@ -105,8 +105,8 @@ public class TrustedProxiesTests
     Assert.Equal(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, options.ForwardedHeaders);
     Assert.Equal(1, options.ForwardLimit);
     Assert.Contains(IPAddress.Parse("10.0.0.1"), options.KnownProxies);
-    Assert.Contains(options.KnownNetworks, network =>
-      network.Prefix.Equals(IPAddress.Parse("192.168.0.0")) && network.PrefixLength == 16);
+    Assert.Contains(options.KnownIPNetworks, network =>
+      network.BaseAddress.Equals(IPAddress.Parse("192.168.0.0")) && network.PrefixLength == 16);
   }
 
   private static ForwardedHeadersOptions ResolveOptions(string? trustedProxies)
