@@ -49,6 +49,7 @@ app.Use((context, next) =>
   }
   return next();
 });
+app.UseStrimSecurityHeaders(app.Environment);
 app.UseAnalyzeBodyGate();
 app.UseExceptionHandler();
 app.UseResponseCompression();
