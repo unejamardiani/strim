@@ -316,6 +316,80 @@ public class ShareAndSiteTests(StrimAppFactory factory) : IClassFixture<StrimApp
     Assert.Null(cache.TryLeaseLastGood(playlist.Id));
   }
 
+  // ---- Changing what the link serves drops the last good copy (#545) ----
+
+  private static Task<HttpResponseMessage> PutAsync(ApiClient owner, PlaylistDto playlist, string name, string sourceUrl, params string[] disabled) =>
+    owner.SendAsync(HttpMethod.Put, $"/api/playlists/{playlist.Id}", new { name, sourceUrl, disabledGroups = disabled });
+
+  private static async Task<HttpResponseMessage> GetWithGateHeldAsync(FallbackApp fallback, PlaylistDto playlist)
+  {
+    await using (await HoldGateAsync(fallback))
+    {
+      return await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist));
+    }
+  }
+
+  [Fact]
+  public async Task Put_SwitchingOffAGroup_DropsLastGood_SoABusyGateAnswers429()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await CreateWithLastGoodAsync(fallback, "forget-groups");
+
+    (await PutAsync(owner, playlist, "Shared", StrimAppFactory.UpstreamUrl, "Kids", "Germany")).EnsureSuccessStatusCode();
+    var response = await GetWithGateHeldAsync(fallback, playlist);
+
+    Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+    Assert.False(response.Headers.Contains("X-Strim-Stale"));
+    Assert.DoesNotContain("ARD", await response.Content.ReadAsStringAsync());
+  }
+
+  [Fact]
+  public async Task Put_ChangingTheSource_DropsLastGood_SoAFailingUpstreamAnswers502()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await CreateWithLastGoodAsync(fallback, "forget-source");
+    const string newSource = "http://93.184.215.14/get.php?username=n&password=p";
+    fallback.Upstream.UpstreamResponses[newSource] = () => new HttpResponseMessage(HttpStatusCode.BadGateway);
+
+    (await PutAsync(owner, playlist, "Shared", newSource, "Kids")).EnsureSuccessStatusCode();
+    var response = await fallback.App.CreateClient().GetAsync(FallbackApp.SharePath(playlist));
+
+    Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+    Assert.False(response.Headers.Contains("X-Strim-Stale"));
+    Assert.DoesNotContain("#EXTM3U", await response.Content.ReadAsStringAsync());
+  }
+
+  [Fact]
+  public async Task WatchlistGroupSwitchedOff_DropsLastGood_SoABusyGateDoesNotServeTheWatchlist()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await fallback.CreateSharedAsync("forget-watchlist");
+    (await owner.SendAsync(HttpMethod.Patch, $"/api/playlists/{playlist.Id}/watchlist-group", new { enabled = true })).EnsureSuccessStatusCode();
+    (await owner.SendAsync(HttpMethod.Put, "/api/marks", new { name = "Tatort S01E01", kind = "series", watchlist = true })).EnsureSuccessStatusCode();
+    Assert.Contains(WatchlistGroup.SeriesTitle, await fallback.App.CreateClient().GetStringAsync(FallbackApp.SharePath(playlist)));
+    AssertHasLastGood(fallback, playlist);
+
+    (await owner.SendAsync(HttpMethod.Patch, $"/api/playlists/{playlist.Id}/watchlist-group", new { enabled = false })).EnsureSuccessStatusCode();
+    var response = await GetWithGateHeldAsync(fallback, playlist);
+
+    Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+    Assert.DoesNotContain(WatchlistGroup.SeriesTitle, await response.Content.ReadAsStringAsync());
+  }
+
+  [Fact]
+  public async Task Put_ChangingOnlyTheName_KeepsLastGood()
+  {
+    using var fallback = new FallbackApp();
+    var (owner, playlist) = await CreateWithLastGoodAsync(fallback, "keep-name");
+
+    (await PutAsync(owner, playlist, "Renamed", StrimAppFactory.UpstreamUrl, "Kids")).EnsureSuccessStatusCode();
+
+    AssertHasLastGood(fallback, playlist);
+    var response = await GetWithGateHeldAsync(fallback, playlist);
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    Assert.Equal("1", Assert.Single(response.Headers.GetValues("X-Strim-Stale")));
+  }
+
   [Fact]
   public async Task Analyze_UpstreamError_StillReturnsError()
   {
