@@ -90,6 +90,8 @@ public static class ProcessingEndpoints
       var job = await jobGate.TryEnterAsync(context.RequestAborted);
       if (job is null) return EndpointHelpers.Busy();
 
+      PlaylistAnalysisResult analysis;
+      string cacheKey;
       await using (job)
       {
         try
@@ -106,37 +108,38 @@ public static class ProcessingEndpoints
             source = cache.StoreRawText(Guid.NewGuid().ToString("N"), raw);
           }
 
-          var analysis = await pipeline.GetAnalysisAsync(source, context.RequestAborted);
-          var cacheKey = cache.CreateSession(source);
-
-          var expiration = Uri.TryCreate(input.SourceUrl, UriKind.Absolute, out var sourceUri)
-            ? PlaylistProcessor.TryExtractExpiration(sourceUri)
-            : null;
-          var account = string.IsNullOrWhiteSpace(input.RawText)
-            ? await ProviderAccountLookup.LookUpAsync(fetcher, input.SourceUrl, context.RequestAborted)
-            : null;
-          var friendlyName = string.IsNullOrWhiteSpace(input.SourceName)
-            ? PlaylistProcessor.DeriveNameFromUrl(input.SourceUrl)
-            : input.SourceName.Trim();
-
-          return Results.Ok(new AnalyzePlaylistResponse(
-            cacheKey,
-            input.SourceUrl,
-            friendlyName,
-            analysis.TotalChannels,
-            analysis.Groups.Count,
-            account is { NeverExpires: true } ? null : account?.ExpiresAt ?? expiration,
-            PlaylistProcessor.ToGroupResults(analysis.Groups),
-            account?.Status,
-            account?.MaxConnections,
-            account?.ActiveConnections,
-            account is null ? null : DateTimeOffset.UtcNow));
+          analysis = await pipeline.GetAnalysisAsync(source, context.RequestAborted);
+          cacheKey = cache.CreateSession(source);
         }
         catch (Exception ex)
         {
           return EndpointHelpers.PlaylistFailure(ex, logger, "analyze");
         }
       }
+
+      // The account lookup does not touch the playlist files, so it runs after the gate is released.
+      var expiration = Uri.TryCreate(input.SourceUrl, UriKind.Absolute, out var sourceUri)
+        ? PlaylistProcessor.TryExtractExpiration(sourceUri)
+        : null;
+      var account = string.IsNullOrWhiteSpace(input.RawText)
+        ? await ProviderAccountLookup.LookUpAsync(fetcher, input.SourceUrl, context.RequestAborted)
+        : null;
+      var friendlyName = string.IsNullOrWhiteSpace(input.SourceName)
+        ? PlaylistProcessor.DeriveNameFromUrl(input.SourceUrl)
+        : input.SourceName.Trim();
+
+      return Results.Ok(new AnalyzePlaylistResponse(
+        cacheKey,
+        input.SourceUrl,
+        friendlyName,
+        analysis.TotalChannels,
+        analysis.Groups.Count,
+        account is { NeverExpires: true } ? null : account?.ExpiresAt ?? expiration,
+        PlaylistProcessor.ToGroupResults(analysis.Groups),
+        account?.Status,
+        account?.MaxConnections,
+        account?.ActiveConnections,
+        account is null ? null : DateTimeOffset.UtcNow));
     }).RequireRateLimiting(Security.RateLimits.Fetch);
 
     app.MapPost("/api/playlist/generate", async (GeneratePlaylistRequest input, HttpContext context, PlaylistPipeline pipeline, PlaylistJobGate jobGate) =>

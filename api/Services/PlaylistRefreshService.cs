@@ -100,9 +100,10 @@ public class PlaylistRefreshService(
         {
           logger.LogWarning(ex, "Failed to refresh playlist {PlaylistId} ({Name})", playlist.Id, playlist.Name);
         }
-
-        await RefreshAccountAsync(db, playlist, cancellationToken);
       }
+
+      // The account lookup does not touch the playlist files, so it runs after the gate is released.
+      await RefreshAccountAsync(db, playlist, cancellationToken);
     }
   }
 
