@@ -74,6 +74,21 @@ public class CloudflareAccessSignInTests : IClassFixture<StrimAppFactory>
     Assert.Equal("access", next.GetProperty("signIn").GetProperty("method").GetString());
   }
 
+  [Fact]
+  public async Task ValidToken_AfterTheSecurityStampRefresh_StillNamesAccessAsTheSignInMethod()
+  {
+    await LinkedUserAsync("linked-refresh", "sub-refresh");
+    // A zero interval makes Identity rebuild the session's principal on every request, as it does after 30 minutes.
+    var app = _app.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+      services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = TimeSpan.Zero)));
+    var client = Client(app, Token("sub-refresh"));
+
+    await client.Http.GetAsync("/api/auth/me");
+    var next = await client.Http.GetFromJsonAsync<JsonElement>("/api/auth/me");
+
+    Assert.Equal("access", next.GetProperty("signIn").GetProperty("method").GetString());
+  }
+
   public static TheoryData<string> InvalidTokens => new() { "signature", "audience", "issuer", "expired", "no-email" };
 
   [Theory]

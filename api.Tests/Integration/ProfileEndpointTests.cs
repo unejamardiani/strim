@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Api.Endpoints;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -155,15 +156,38 @@ public class ProfileEndpointTests(StrimAppFactory factory) : IClassFixture<Strim
   {
     var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
       services.AddSingleton<IStartupFilter, ExternalSignInTests.ExternalSignInStartupFilter>()));
-    var client = new ApiClient(app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false }));
-    (await client.Http.GetAsync($"{ExternalSignInTests.SignInPath}?key=key-profile&email=profile.external@example.test")).EnsureSuccessStatusCode();
-    Assert.Equal(HttpStatusCode.Redirect, (await client.Http.GetAsync("/api/auth/external-callback?returnUrl=/app")).StatusCode);
+    var client = await ExternalSignInAsync(app, "key-profile", "profile.external@example.test");
 
     var me = await MeAsync(client);
 
     Assert.Equal("profile.external", me.GetProperty("name").GetString());
     Assert.Equal("testprovider", me.GetProperty("signIn").GetProperty("method").GetString());
     Assert.Equal("profile.external@example.test", me.GetProperty("signIn").GetProperty("identity").GetString());
+  }
+
+  [Fact]
+  public async Task Me_AfterTheSecurityStampRefresh_StillNamesTheProvider()
+  {
+    // A zero interval makes Identity rebuild the session's principal on every request, as it does after 30 minutes.
+    var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+    {
+      services.AddSingleton<IStartupFilter, ExternalSignInTests.ExternalSignInStartupFilter>();
+      services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = TimeSpan.Zero);
+    }));
+    var client = await ExternalSignInAsync(app, "key-refresh", "profile.refresh@example.test");
+
+    await MeAsync(client);
+    var me = await MeAsync(client);
+
+    Assert.Equal("testprovider", me.GetProperty("signIn").GetProperty("method").GetString());
+  }
+
+  private static async Task<ApiClient> ExternalSignInAsync(WebApplicationFactory<Program> app, string key, string email)
+  {
+    var client = new ApiClient(app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false }));
+    (await client.Http.GetAsync($"{ExternalSignInTests.SignInPath}?key={key}&email={email}")).EnsureSuccessStatusCode();
+    Assert.Equal(HttpStatusCode.Redirect, (await client.Http.GetAsync("/api/auth/external-callback?returnUrl=/app")).StatusCode);
+    return client;
   }
 
   [Theory]
