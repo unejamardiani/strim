@@ -62,30 +62,18 @@ public class CloudflareAccessSignInTests : IClassFixture<StrimAppFactory>
   }
 
   [Fact]
-  public async Task ValidToken_OfALinkedSubject_NamesAccessAsTheSignInMethod()
+  public async Task ValidToken_OfALinkedSubject_NamesAccessAsTheSignInMethod_AlsoAfterTheSecurityStampRefresh()
   {
     await LinkedUserAsync("linked-method", "sub-method");
-    var client = Client(_app, Token("sub-method"));
-
-    var first = await client.Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/auth/me");
-    var next = await client.Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/auth/me");
-
-    Assert.Equal("access", first.GetProperty("signIn").GetProperty("method").GetString());
-    Assert.Equal("access", next.GetProperty("signIn").GetProperty("method").GetString());
-  }
-
-  [Fact]
-  public async Task ValidToken_AfterTheSecurityStampRefresh_StillNamesAccessAsTheSignInMethod()
-  {
-    await LinkedUserAsync("linked-refresh", "sub-refresh");
     // A zero interval makes Identity rebuild the session's principal on every request, as it does after 30 minutes.
     var app = _app.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
       services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = TimeSpan.Zero)));
-    var client = Client(app, Token("sub-refresh"));
+    var client = Client(app, Token("sub-method"));
 
-    await client.Http.GetAsync("/api/auth/me");
+    var first = await client.Http.GetFromJsonAsync<JsonElement>("/api/auth/me");
     var next = await client.Http.GetFromJsonAsync<JsonElement>("/api/auth/me");
 
+    Assert.Equal("access", first.GetProperty("signIn").GetProperty("method").GetString());
     Assert.Equal("access", next.GetProperty("signIn").GetProperty("method").GetString());
   }
 

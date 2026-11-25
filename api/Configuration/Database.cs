@@ -289,11 +289,7 @@ public static class Database
   /// properties in <see cref="AppDbContext"/>. Added to an older table on every start.
   /// </summary>
   private static readonly (string Name, string Definition)[] SqliteUserProfilePatches =
-  [
-    ("display_name", "TEXT NULL"),
-    ("avatar", "TEXT NULL"),
-    ("theme", "TEXT NULL"),
-  ];
+    [("display_name", "TEXT NULL"), ("avatar", "TEXT NULL"), ("theme", "TEXT NULL")];
 
   /// <summary>The same columns on PostgreSQL, with the lengths <see cref="AppDbContext"/> gives them.</summary>
   public const string PostgresUserProfileColumnsSql = @"

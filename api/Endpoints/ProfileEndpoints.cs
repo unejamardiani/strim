@@ -27,26 +27,17 @@ public static class ProfileEndpoints
       var account = db.Entry(user);
       if (body.TryGetProperty("displayName", out var displayName))
       {
-        if (!TryReadDisplayName(displayName, out var value))
-        {
-          return FieldError("displayName", $"Give a display name of 1 to {MaxDisplayNameLength} characters without control characters, or none.");
-        }
+        if (!TryReadDisplayName(displayName, out var value)) return FieldError("displayName", $"Give a display name of 1 to {MaxDisplayNameLength} characters without control characters, or none.");
         account.Property<string?>(AppDbContext.DisplayNameProperty).CurrentValue = value;
       }
       if (body.TryGetProperty("avatar", out var avatar))
       {
-        if (!TryReadAvatar(avatar, out var value))
-        {
-          return FieldError("avatar", "Give an avatar as tone:symbol from the fixed lists, or none.");
-        }
+        if (!TryReadAvatar(avatar, out var value)) return FieldError("avatar", "Give an avatar as tone:symbol from the fixed lists, or none.");
         account.Property<string?>(AppDbContext.AvatarProperty).CurrentValue = value;
       }
       if (body.TryGetProperty("theme", out var theme))
       {
-        if (theme.ValueKind != JsonValueKind.String || !Themes.Contains(theme.GetString()))
-        {
-          return FieldError("theme", "Theme must be \"system\", \"light\" or \"dark\".");
-        }
+        if (theme.ValueKind != JsonValueKind.String || !Themes.Contains(theme.GetString())) return FieldError("theme", "Theme must be \"system\", \"light\" or \"dark\".");
         account.Property<string?>(AppDbContext.ThemeProperty).CurrentValue = theme.GetString();
       }
 

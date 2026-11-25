@@ -85,8 +85,7 @@ public static class Authentication
       });
     });
 
-    // The security-stamp check rebuilds the session's principal every 30 minutes from the user alone;
-    // keep the sign-in method that the profile reports (#579).
+    // The security-stamp check rebuilds the principal from the user alone; keep the sign-in method the profile reports.
     services.Configure<SecurityStampValidatorOptions>(options => options.OnRefreshingPrincipal = context =>
     {
       var method = context.CurrentPrincipal?.FindFirst(ClaimTypes.AuthenticationMethod);
