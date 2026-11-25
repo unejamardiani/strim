@@ -20,7 +20,7 @@ namespace Api.Tests.Integration;
 public class ExternalSignInTests : IClassFixture<StrimAppFactory>
 {
   private const string Provider = "TestProvider";
-  private const string SignInPath = "/test/external-sign-in";
+  internal const string SignInPath = "/test/external-sign-in";
 
   private readonly WebApplicationFactory<Program> _app;
 
@@ -157,7 +157,7 @@ public class ExternalSignInTests : IClassFixture<StrimAppFactory>
   private sealed record UserResponse(string UserName, string? Email);
 
   /// <summary>Answers <see cref="SignInPath"/> by writing the external cookie for the given key and e-mail.</summary>
-  private sealed class ExternalSignInStartupFilter : IStartupFilter
+  internal sealed class ExternalSignInStartupFilter : IStartupFilter
   {
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
     {

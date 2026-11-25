@@ -82,6 +82,10 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
 - **Link card**: tangerine-tinted corner glow, "Player link" label with signal dot, mono URL, primary Copy.
 - **Sheets**: native `<dialog>`; bottom sheet with grab handle below 600px, centred above.
 - **Toasts**: inverted pills at the top, coloured status dot.
+- **Connect card** (`.connect-card`): first element of the Sign in sheet, only while a verified Cloudflare Access
+  identity waits to be linked. `--accent-soft` fill, `--radius` corners, no border or shadow; a 9px `--accent`
+  signal dot with a soft 4px ring; heading at weight 750 in `--ink`, body in `--ink-2` with the e-mail in `--ink`.
+  Forced colours: 1px `CanvasText` border, `Highlight` dot.
 - **Icons**: 24px grid line icons built by `icon()`, class `.icon`: `currentColor` stroke 2px with round caps and joins, no fill. A holder rule (`.btn svg`, `.lib-seen svg`, …) may set the size, the stroke width or a fill; only state marks are filled (watchlist badge, pressed bookmark, rating star, the dots of ⋯).
   On state (#494): an icon that is the direct child of `[aria-current="page"]` or `[aria-pressed="true"]` fills its
   body (`.b`) with a 14% tint of its own ink and turns its signal dot (`.sig`) `--accent`, grown by a quarter around

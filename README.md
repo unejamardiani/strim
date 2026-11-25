@@ -77,6 +77,8 @@ development only, override with `?api=http://localhost:5000/api` on the page URL
 | `GOOGLE_CLIENT_ID` / `_SECRET` | | Enables Google sign-in |
 | `MICROSOFT_CLIENT_ID` / `_SECRET` / `MICROSOFT_TENANT_ID` | tenant `common` | Enables Microsoft sign-in |
 | `GITHUB_CLIENT_ID` / `_SECRET` | | Enables GitHub sign-in |
+| `CF_ACCESS_TEAM_DOMAIN` | none | Cloudflare Access team domain (for example `team.cloudflareaccess.com`); with `CF_ACCESS_AUD` enables sign-in through Access |
+| `CF_ACCESS_AUD` | none | AUD tag of the Access application that protects Strim |
 | `DATA_PROTECTION_KEYS_PATH` | ASP.NET Core default (`~/.aspnet/DataProtection-Keys`); image: `/home/app/.aspnet/DataProtection-Keys` | Directory of the keys that sign session and antiforgery cookies |
 | `PlaylistCache__*` | see `api/appsettings.json` | Cache directory, size limits, TTLs, timeouts, concurrency |
 

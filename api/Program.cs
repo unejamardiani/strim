@@ -102,6 +102,7 @@ app.UseWhen(
 app.UseRouting();
 
 app.UseAuthentication();
+app.UseCloudflareAccessSignIn();
 app.UseAuthorization();
 app.UseRateLimiter();
 
