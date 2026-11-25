@@ -240,7 +240,7 @@ public sealed class TitleMarksSchemaTests : IDisposable
     return connection;
   }
 
-  private sealed class WarningCollector : ILoggerProvider, ILogger
+  internal sealed class WarningCollector : ILoggerProvider, ILogger
   {
     public List<string> Messages { get; } = new();
     public ILogger CreateLogger(string categoryName) => this;

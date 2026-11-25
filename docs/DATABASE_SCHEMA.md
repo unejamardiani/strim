@@ -22,6 +22,16 @@ is off by default: SQLite `INTEGER NOT NULL DEFAULT 0`, PostgreSQL `boolean NOT 
 existing playlist reads `false`. `TryAddSqliteColumn` and `TryPatchPostgresSchema` add it idempotently on every
 start. Nothing reads the value yet, and the playlist create and update requests do not set it.
 
+### Profile columns (`AspNetUsers.display_name`, `avatar`, `theme`)
+
+Three nullable columns on the Identity users table hold what a person sets in their profile (#579):
+`display_name` (1 to 40 characters, the name Strim shows instead of the user name), `avatar` (`<tone>:<symbol>`
+from fixed lists; null is the default initial) and `theme` (`system`, `light` or `dark`; null reads as `system`).
+SQLite stores them as `TEXT NULL`, PostgreSQL as `varchar(40)`, `varchar(32)` and `varchar(16)`. `AppDbContext`
+maps them as shadow properties of `IdentityUser`, so a new database gets them from `EnsureCreated`;
+`Database.EnsureIdentitySchema` adds them to an older table on every start (`ADD COLUMN IF NOT EXISTS` on
+PostgreSQL, a `pragma_table_info` check on SQLite). Existing accounts read null in all three.
+
 ### Film and series marks (`titlemarks`)
 
 The one extra table the owner approved (18 Nov 2026) holds a user's marks on films and series: `id`, `userid`,

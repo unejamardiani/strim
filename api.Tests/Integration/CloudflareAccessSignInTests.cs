@@ -61,6 +61,19 @@ public class CloudflareAccessSignInTests : IClassFixture<StrimAppFactory>
     Assert.Contains(me.Headers.GetValues("Set-Cookie"), c => c.StartsWith("strim.auth="));
   }
 
+  [Fact]
+  public async Task ValidToken_OfALinkedSubject_NamesAccessAsTheSignInMethod()
+  {
+    await LinkedUserAsync("linked-method", "sub-method");
+    var client = Client(_app, Token("sub-method"));
+
+    var first = await client.Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/auth/me");
+    var next = await client.Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/auth/me");
+
+    Assert.Equal("access", first.GetProperty("signIn").GetProperty("method").GetString());
+    Assert.Equal("access", next.GetProperty("signIn").GetProperty("method").GetString());
+  }
+
   public static TheoryData<string> InvalidTokens => new() { "signature", "audience", "issuer", "expired", "no-email" };
 
   [Theory]

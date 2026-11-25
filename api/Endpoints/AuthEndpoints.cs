@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Api.Configuration;
+using Api.Data;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
@@ -21,10 +22,10 @@ public static class AuthEndpoints
     var logger = app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Strim.Auth");
     var auth = app.MapGroup("/api/auth").RequireRateLimiting(Security.RateLimits.Auth);
 
-    auth.MapGet("/me", async (UserManager<IdentityUser> userManager, ClaimsPrincipal principal) =>
+    auth.MapGet("/me", async (UserManager<IdentityUser> userManager, AppDbContext db, ClaimsPrincipal principal) =>
     {
       var user = await userManager.GetUserAsync(principal);
-      return user is null ? Results.Unauthorized() : Results.Ok(new { userName = user.UserName, email = user.Email });
+      return user is null ? Results.Unauthorized() : Results.Ok(ProfileEndpoints.Describe(user, db, principal));
     });
 
     auth.MapPost("/register", async (RegisterRequest request, UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager, HttpContext context) =>
@@ -138,7 +139,7 @@ public static class AuthEndpoints
         }
 
         if (!(await userManager.AddLoginAsync(user, info)).Succeeded) return Results.Redirect(failed);
-        await signInManager.SignInAsync(user, isPersistent: false);
+        await signInManager.SignInAsync(user, isPersistent: false, authenticationMethod: info.LoginProvider);
       }
 
       // Otherwise the next request would end this session again because the Access identity is not linked.

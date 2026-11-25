@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -134,6 +135,11 @@ public static class CloudflareAccessSignIn
     if (linked is null) return;
 
     var result = await signInManager.ExternalLoginSignInAsync(CloudflareAccess.LoginProvider, identity.Subject, isPersistent: false);
-    if (result.Succeeded) context.User = await signInManager.CreateUserPrincipalAsync(linked);
+    if (!result.Succeeded) return;
+
+    // The cookie carries the sign-in method; this request's principal needs it as well.
+    var principal = await signInManager.CreateUserPrincipalAsync(linked);
+    principal.Identities.First().AddClaim(new Claim(ClaimTypes.AuthenticationMethod, CloudflareAccess.LoginProvider));
+    context.User = principal;
   }
 }
