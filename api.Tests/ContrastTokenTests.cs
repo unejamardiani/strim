@@ -40,8 +40,52 @@ public class ContrastTokenTests
     return Tokens(theme[start..theme.IndexOf('}', start)]);
   }
 
-  private static IEnumerable<(string Name, Dictionary<string, string> Tokens)> Themes() =>
-    [("light", Light()), ("dark", Dark())];
+  /// <summary>Every declaration (token or <c>color-scheme</c>) of the block that opens with <paramref name="head"/>.</summary>
+  private static Dictionary<string, string> Declarations(string css, int head)
+  {
+    var start = css.IndexOf('{', head) + 1;
+    var declarations = new Dictionary<string, string>(StringComparer.Ordinal);
+    var block = Regex.Replace(css[start..css.IndexOf('}', start)], @"/\*.*?\*/", "", RegexOptions.Singleline);
+    foreach (Match m in Regex.Matches(block, @"([\w-]+)\s*:\s*([^;]+);", RegexOptions.CultureInvariant))
+      declarations[m.Groups[1].Value] = m.Groups[2].Value.Trim();
+    return declarations;
+  }
+
+  /// <summary>The forced set (#580) that theme-boot.js switches on with <c>data-theme</c>.</summary>
+  private static Dictionary<string, string> ForcedDeclarations(string theme)
+  {
+    var css = Read("theme.css");
+    var head = css.IndexOf($":root[data-theme=\"{theme}\"] {{", StringComparison.Ordinal);
+    Assert.True(head >= 0, $"theme.css has no forced {theme} block.");
+    return Declarations(css, head);
+  }
+
+  private static Dictionary<string, string> ForcedTokens(string theme) =>
+    ForcedDeclarations(theme).Where(d => Regex.IsMatch(d.Value, "^#[0-9a-fA-F]{6}$")).ToDictionary(d => d.Key, d => d.Value);
+
+  private static IEnumerable<(string Name, Dictionary<string, string> Tokens)> LightThemes() =>
+    [("light", Light()), ("forced light", ForcedTokens("light"))];
+
+  private static IEnumerable<(string Name, Dictionary<string, string> Tokens)> DarkThemes() =>
+    [("dark", Dark()), ("forced dark", ForcedTokens("dark"))];
+
+  private static IEnumerable<(string Name, Dictionary<string, string> Tokens)> Themes() => LightThemes().Concat(DarkThemes());
+
+  [Fact]
+  public void ForcedSets_EqualTheSystemSets()
+  {
+    var css = Read("theme.css");
+    var dark = Declarations(css, css.IndexOf(":root {", css.IndexOf("@media (prefers-color-scheme: dark)", StringComparison.Ordinal), StringComparison.Ordinal));
+    Assert.Equal(dark, ForcedDeclarations("dark"));
+    Assert.Equal("dark", dark["color-scheme"]);
+
+    // The forced light set holds exactly what the dark media query replaces, with the base light values.
+    var light = ForcedDeclarations("light");
+    Assert.Equal(dark.Keys.Order(), light.Keys.Order());
+    var baseLight = Declarations(css, css.IndexOf(":root {", StringComparison.Ordinal));
+    foreach (var (name, value) in light)
+      Assert.True(baseLight.TryGetValue(name, out var expected) && expected == value, $"forced light {name} is {value}, the light set has {expected}.");
+  }
 
   private static double Luminance(string hex)
   {
@@ -77,12 +121,12 @@ public class ContrastTokenTests
   [Fact]
   public void AccentInk_ReachesAaOnPaperAndOnItsSoftFill()
   {
-    var light = Light();
-    foreach (var bg in new[] { "--bg", "--surface", "--surface-2", "--accent-soft" })
-      AssertAtLeast(4.5, "light", light, "--accent-ink", bg);
-    var dark = Dark();
-    foreach (var bg in new[] { "--bg", "--surface", "--surface-2" })
-      AssertAtLeast(4.5, "dark", dark, "--accent-ink", bg);
+    foreach (var (name, t) in LightThemes())
+      foreach (var bg in new[] { "--bg", "--surface", "--surface-2", "--accent-soft" })
+        AssertAtLeast(4.5, name, t, "--accent-ink", bg);
+    foreach (var (name, t) in DarkThemes())
+      foreach (var bg in new[] { "--bg", "--surface", "--surface-2" })
+        AssertAtLeast(4.5, name, t, "--accent-ink", bg);
   }
 
   [Fact]
@@ -123,8 +167,8 @@ public class ContrastTokenTests
   [Fact]
   public void LiveMarker_FollowsTheAccent()
   {
-    var light = Light();
-    Assert.Equal(light["--accent"], light["--live"]);
+    foreach (var (_, light) in LightThemes())
+      Assert.Equal(light["--accent"], light["--live"]);
   }
 
   [Fact]
@@ -138,7 +182,8 @@ public class ContrastTokenTests
         AssertAtLeast(3, name, t, "--movies", bg);
     }
     // In dark, --movies-soft is an rgba tint and is skipped.
-    AssertAtLeast(3, "light", Light(), "--movies", "--movies-soft");
+    foreach (var (name, light) in LightThemes())
+      AssertAtLeast(3, name, light, "--movies", "--movies-soft");
   }
 
   [Fact]
