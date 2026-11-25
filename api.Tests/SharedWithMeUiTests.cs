@@ -112,7 +112,8 @@ public class SharedWithMeUiTests
     for (var n = 1; n <= 6; n++) Assert.Contains($".cover-{n} {{ --cover: radial-gradient(", css);
     Assert.Contains(".btn-xs::after, .icon-btn.is-sm::after { content: \"\"; position: absolute; inset: -6px -2px; }", css);
     Assert.Contains(".btn-danger { background: var(--danger); color: var(--on-danger); }", css);
-    Assert.Equal(2, Count(Read("theme.css"), "--on-danger:"));
+    // Light, dark and the forced light and dark sets (#580).
+    Assert.Equal(4, Count(Read("theme.css"), "--on-danger:"));
     Assert.Contains("32–36px", Read("DESIGN.md"));
   }
 

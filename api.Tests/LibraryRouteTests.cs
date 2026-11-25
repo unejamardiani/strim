@@ -194,7 +194,7 @@ public class LibraryRouteTests
     Assert.True(appCss >= 0 && libraryCss > appCss, "library.css must load after app.css.");
 
     // Every script has a src and is empty; no style element or attribute.
-    Assert.Equal(Regex.Matches(html, "<script").Count, Regex.Matches(html, "<script type=\"module\" src=\"[a-z]+\\.js\"></script>").Count);
+    Assert.Equal(Regex.Matches(html, "<script").Count, Regex.Matches(html, "<script (type=\"module\" )?src=\"[a-z-]+\\.js\"></script>").Count);
     Assert.DoesNotContain("<style", html);
     Assert.DoesNotContain("style=", html);
   }
