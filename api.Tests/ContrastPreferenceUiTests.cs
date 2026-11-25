@@ -10,7 +10,7 @@ public class ContrastPreferenceUiTests
 {
   private const string MoreContrastBlock =
     "@media (prefers-contrast: more) {\n" +
-    "  :root { --ink-3: var(--ink-2); --edge: var(--ink-2); --card-border: var(--edge); --line: var(--line-strong); }\n" +
+    "  :root, :root[data-theme] { --ink-3: var(--ink-2); --edge: var(--ink-2); --card-border: var(--edge); --line: var(--line-strong); }\n" +
     "  .icon.icon.icon { stroke-width: 2.6; }\n" +
     "}";
 

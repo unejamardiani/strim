@@ -155,10 +155,112 @@
   }
 }
 
+/* Forced themes (#580): theme-boot.js sets data-theme on <html> from the stored choice; without it the system decides.
+   Each set repeats the values above; ContrastTokenTests fails when a forced set and its system set differ. */
+:root[data-theme="light"] {
+  --bg: #f4efe6;
+  --surface: #fffcf7;
+  --surface-2: #efe8dc;
+  --surface-3: #e7dfd1;
+  --ink: #1d1a16;
+  --ink-2: #50483f;
+  --ink-3: #6b6258;
+  --line: #e6ddcf;
+  --line-strong: #d3c8b6;
+  --edge: #857a6d;
+
+  --accent: #f4511a;
+  --accent-hover: #ff6f3a;
+  --on-accent: #1d0e05;
+  --accent-ink: #b23a08;
+  --accent-soft: #ffe2d2;
+  --focus: #c2410c;
+
+  --live: #f4511a;
+  --live-soft: #ffe2d2;
+  --live-ink: #b13a0b;
+  --movies: #b8770a;
+  --movies-soft: #fbeacb;
+  --movies-ink: #7a4e00;
+  --series: #7a5af8;
+  --series-soft: #e9e3ff;
+  --series-ink: #4e35c2;
+
+  --danger: #d6372f;
+  --danger-soft: #fde1de;
+  --on-danger: #ffffff;
+  --warn-ink: #8a5a00;
+  --warn-soft: #fbeacb;
+  --ok: #2f9e62;
+
+  --dock-bg: #1d1a16;
+  --dock-ink: #f5eee4;
+  --dock-ink-2: #b5aa9c;
+  --dock-border: transparent;
+  --pill-on: var(--surface);
+
+  --shadow-card: 0 1px 0 rgba(29, 26, 22, 0.04), 0 10px 30px -18px rgba(29, 26, 22, 0.28);
+  --shadow-pop: 0 18px 50px -20px rgba(29, 26, 22, 0.45);
+  --card-border: transparent;
+  --glow-a: rgba(255, 91, 31, 0.16);
+  --glow-b: rgba(122, 90, 248, 0.1);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #14110e;
+  --surface: #1e1a16;
+  --surface-2: #29231d;
+  --surface-3: #352d26;
+  --ink: #f5eee4;
+  --ink-2: #b5aa9c;
+  --ink-3: #a09588;
+  --line: #2e2721;
+  --line-strong: #40372e;
+  --edge: #857a6d;
+
+  --accent: #ff6a2e;
+  --accent-hover: #ff8250;
+  --on-accent: #1d0e05;
+  --accent-ink: #ff9466;
+  --accent-soft: rgba(255, 106, 46, 0.16);
+  --focus: #ff6a2e;
+
+  --live: #ff6a2e;
+  --live-soft: rgba(255, 106, 46, 0.16);
+  --live-ink: #ff9a6e;
+  --movies: #f0b04a;
+  --movies-soft: rgba(240, 176, 74, 0.15);
+  --movies-ink: #f4c97f;
+  --series: #9a80ff;
+  --series-soft: rgba(154, 128, 255, 0.17);
+  --series-ink: #bfb0ff;
+
+  --danger: #ff7a70;
+  --danger-soft: rgba(255, 122, 112, 0.14);
+  --on-danger: #1d0e05;
+  --warn-ink: #f4c97f;
+  --warn-soft: rgba(240, 176, 74, 0.14);
+  --ok: #5fd193;
+
+  --dock-bg: #2b251f;
+  --dock-ink: #f5eee4;
+  --dock-ink-2: #b5aa9c;
+  --dock-border: #3d342c;
+  --pill-on: #453b32;
+
+  --shadow-card: none;
+  --shadow-pop: 0 20px 60px -20px rgba(0, 0, 0, 0.8);
+  --card-border: #2e2721;
+  --glow-a: rgba(255, 106, 46, 0.12);
+  --glow-b: rgba(154, 128, 255, 0.08);
+  color-scheme: dark;
+}
+
 /* More contrast (#497): the quiet level goes, edges take the secondary ink, strokes get heavier. The tripled class
-   lifts the stroke over every holder rule without !important. */
+   lifts the stroke over every holder rule without !important. :root[data-theme] outranks the forced sets above. */
 @media (prefers-contrast: more) {
-  :root { --ink-3: var(--ink-2); --edge: var(--ink-2); --card-border: var(--edge); --line: var(--line-strong); }
+  :root, :root[data-theme] { --ink-3: var(--ink-2); --edge: var(--ink-2); --card-border: var(--edge); --line: var(--line-strong); }
   .icon.icon.icon { stroke-width: 2.6; }
 }
 
