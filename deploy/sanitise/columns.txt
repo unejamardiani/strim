@@ -49,6 +49,11 @@ AspNetUsers.PhoneNumberConfirmed sanitised
 AspNetUsers.SecurityStamp sanitised
 AspNetUsers.TwoFactorEnabled sanitised
 AspNetUsers.UserName sanitised
+# Profile (#579): the display name is free text the person chose and can be a real name. The avatar is a
+# <tone>:<symbol> value from two fixed lists and the theme is system, light or dark; neither identifies a person.
+AspNetUsers.avatar keep
+AspNetUsers.display_name sanitised
+AspNetUsers.theme keep
 
 # Playlists: the source URL carries the provider's account credentials; the name and source name are the
 # owner's free text. DisabledGroups holds the provider's group names (no personal data). The hash, ETag and

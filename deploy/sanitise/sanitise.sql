@@ -28,6 +28,17 @@ UPDATE "AspNetUsers" SET
   "PhoneNumberConfirmed" = false,
   "TwoFactorEnabled" = false;
 
+-- A display name becomes a neutral 'Person <id prefix>'; accounts without one keep none.
+-- The copy of production may predate the column (the candidate adds it later), so only touch it when it exists.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'AspNetUsers' AND column_name = 'display_name') THEN
+    UPDATE "AspNetUsers" SET "display_name" = 'Person ' || left("Id", 8)
+      WHERE "display_name" IS NOT NULL;
+  END IF;
+END $$;
+
 UPDATE "AspNetUserClaims" SET "ClaimValue" = 'sanitised-' || "Id"
   WHERE "ClaimValue" IS NOT NULL;
 
