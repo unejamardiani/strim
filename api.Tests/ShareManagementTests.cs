@@ -88,7 +88,7 @@ public class ShareManagementTests(StrimAppFactory factory) : IClassFixture<Strim
 
     var item = Assert.Single(list.EnumerateArray());
     var fields = item.EnumerateObject().Select(p => p.Name).Order().ToArray();
-    Assert.Equal(new[] { "acceptedUtc", "createdUtc", "expiresUtc", "id", "label", "lastOpenedUtc", "role", "status", "viewerName" }, fields);
+    Assert.Equal(new[] { "acceptedUtc", "avatar", "createdUtc", "expiresUtc", "id", "label", "lastOpenedUtc", "role", "status", "viewerName" }, fields);
     Assert.Equal("Robin", item.GetProperty("label").GetString());
     Assert.Equal("invited", item.GetProperty("status").GetString());
     var raw = list.GetRawText();

@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Api.Endpoints;
 using Api.Tests.Integration;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -115,11 +114,83 @@ public class ShareNamesTests(StrimAppFactory factory) : IClassFixture<StrimAppFa
     Assert.True(body.TryGetProperty("tmdbEnabled", out _));
   }
 
-  [Theory]
-  [InlineData("someone@example.org", "someone")]
-  [InlineData("plain", "plain")]
-  [InlineData("@leading", "@leading")]
-  [InlineData(null, null)]
-  public void DisplayName_TrimsTheDomain(string? userName, string? expected) =>
-    Assert.Equal(expected, ShareEndpoints.DisplayName(userName));
+  private static async Task SetProfileAsync(ApiClient client, object profile) =>
+    Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(HttpMethod.Put, "/api/profile", profile)).StatusCode);
+
+  [Fact]
+  public async Task Viewer_SeesOwnersDisplayNameAndAvatar()
+  {
+    var owner = await SignedInAsync("profiled.owner@example.org");
+    await SetProfileAsync(owner, new { displayName = "Sofa Captain", avatar = "tangerine:tv" });
+    var playlistId = await CreatePlaylistAsync(owner, "Den");
+    var viewer = await SignedInAsync("profiled-viewer");
+    await ShareAsync(owner, playlistId, viewer);
+
+    var row = Assert.Single((await viewer.Http.GetFromJsonAsync<JsonElement>("/api/shares/mine")).EnumerateArray());
+    var opened = await OpenLibraryAsync(viewer, playlistId);
+
+    foreach (var body in new[] { row, opened })
+    {
+      Assert.Equal("Sofa Captain", body.GetProperty("ownerName").GetString());
+      Assert.Equal("tangerine:tv", body.GetProperty("ownerAvatar").GetString());
+    }
+  }
+
+  [Fact]
+  public async Task Viewer_OfOwnerWithoutProfile_SeesLocalPartAndNoAvatar()
+  {
+    var owner = await SignedInAsync("bare.owner@example.org");
+    var playlistId = await CreatePlaylistAsync(owner, "Attic");
+    var viewer = await SignedInAsync("bare-viewer");
+    await ShareAsync(owner, playlistId, viewer);
+
+    var row = Assert.Single((await viewer.Http.GetFromJsonAsync<JsonElement>("/api/shares/mine")).EnumerateArray());
+
+    Assert.Equal("bare.owner", row.GetProperty("ownerName").GetString());
+    Assert.Equal(JsonValueKind.Null, row.GetProperty("ownerAvatar").ValueKind);
+  }
+
+  [Fact]
+  public async Task OwnerList_AcceptedShareHasViewersAvatar_OpenInvitationNone()
+  {
+    var owner = await SignedInAsync("avatar-list-owner");
+    var playlistId = await CreatePlaylistAsync(owner, "Garden");
+    var viewer = await SignedInAsync("avatar-list-viewer");
+    await SetProfileAsync(viewer, new { displayName = "Couch Guest", avatar = "violet:star" });
+    await ShareAsync(owner, playlistId, viewer);
+    Assert.Equal(HttpStatusCode.Created, (await owner.PostAsync($"/api/playlists/{playlistId}/shares", new { label = "Later" })).StatusCode);
+
+    var shares = (await owner.Http.GetFromJsonAsync<JsonElement>($"/api/playlists/{playlistId}/shares")).EnumerateArray().ToList();
+
+    var accepted = Assert.Single(shares, s => s.GetProperty("status").GetString() == "accepted");
+    Assert.Equal("violet:star", accepted.GetProperty("avatar").GetString());
+    Assert.Equal("Couch Guest", accepted.GetProperty("viewerName").GetString());
+    Assert.Equal("Guest", accepted.GetProperty("label").GetString());
+    var open = Assert.Single(shares, s => s.GetProperty("status").GetString() == "invited");
+    Assert.Equal(JsonValueKind.Null, open.GetProperty("avatar").ValueKind);
+  }
+
+  [Fact]
+  public async Task ShareResponses_NeverContainAnotherUsersEmail()
+  {
+    const string ownerEmail = "mail.owner@example.org", viewerEmail = "mail.viewer@example.org";
+    var owner = await SignedInAsync(ownerEmail);
+    var playlistId = await CreatePlaylistAsync(owner, "Porch");
+    var viewer = await SignedInAsync(viewerEmail);
+    await ShareAsync(owner, playlistId, viewer);
+
+    var ownerSees = new[]
+    {
+      await owner.Http.GetStringAsync($"/api/playlists/{playlistId}/shares"),
+      await (await owner.PostAsync($"/api/playlists/{playlistId}/shares", new { label = "Another" })).Content.ReadAsStringAsync(),
+    };
+    var viewerSees = new[]
+    {
+      await viewer.Http.GetStringAsync("/api/shares/mine"),
+      (await OpenLibraryAsync(viewer, playlistId)).GetRawText(),
+    };
+
+    Assert.All(ownerSees, body => Assert.DoesNotContain(viewerEmail, body));
+    Assert.All(viewerSees, body => Assert.DoesNotContain(ownerEmail, body));
+  }
 }

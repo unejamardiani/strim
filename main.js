@@ -1033,7 +1033,9 @@ function lastOpened(value) {
   return hours < 48 ? `${hours} h ago` : `${Math.floor(hours / 24)} d ago`;
 }
 
+// The viewer's own avatar once they accepted, with the owner's label as the initial; else the hash-picked initial.
 function shareAvatar(s, size = '') {
+  if (s.status === 'accepted' && s.avatar) return avatar({ name: s.label, avatar: s.avatar }, undefined, size ? 24 : 36);
   const tone = ['', ' t-live', ' t-movies'][pick(`${s.id}:tone`, 3)];
   return h('span', { class: `share-avatar${tone}${s.status === 'accepted' ? '' : ' is-open'}${size}`, 'aria-hidden': 'true', text: (s.label || '?').charAt(0) });
 }
@@ -1365,7 +1367,8 @@ function sharedCard(item) {
       h('div', { class: 'cover-top' }, h('span', { class: 'cover-chip' }, icon('book'), 'Read-only')),
       h('h3', { class: 'cover-name', text: name })),
     h('div', { class: 'shared-card-foot' },
-      h('span', { class: `share-avatar${['', ' t-live', ' t-movies'][pick(`${item.playlistId}:tone`, 3)]}`, 'aria-hidden': 'true', text: owner.charAt(0) }),
+      item.ownerAvatar ? avatar({ name: owner, avatar: item.ownerAvatar }, undefined, 36)
+        : h('span', { class: `share-avatar${['', ' t-live', ' t-movies'][pick(`${item.playlistId}:tone`, 3)]}`, 'aria-hidden': 'true', text: owner.charAt(0) }),
       h('p', { class: 'shared-by secondary', text: `Shared by ${owner}${since}` }),
       h('a', { class: 'btn btn-primary btn-xs', href: `#/shared/${item.playlistId}` }, 'Open'),
       h('button', { class: 'icon-btn is-sm', type: 'button', 'aria-label': `Actions for ${name}`, onclick: () => openSharedMenu(item) }, icon('more'))));

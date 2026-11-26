@@ -162,7 +162,7 @@ public class ShareAcceptTests(StrimAppFactory factory) : IClassFixture<StrimAppF
 
     var item = Assert.Single(mine.EnumerateArray());
     var fields = item.EnumerateObject().Select(p => p.Name).Order().ToArray();
-    Assert.Equal(new[] { "name", "ownerName", "playlistId", "sharedSinceUtc", "totalChannels" }, fields);
+    Assert.Equal(new[] { "name", "ownerAvatar", "ownerName", "playlistId", "sharedSinceUtc", "totalChannels" }, fields);
     Assert.Equal(playlistId, item.GetProperty("playlistId").GetGuid());
     Assert.Equal("Kitchen", item.GetProperty("name").GetString());
     Assert.Equal("mine-owner", item.GetProperty("ownerName").GetString());
