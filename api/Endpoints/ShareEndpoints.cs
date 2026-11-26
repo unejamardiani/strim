@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -5,12 +6,19 @@ using Api.Configuration;
 using Api.Data;
 using Api.Models;
 using Api.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Api.Endpoints;
 
 /// <summary>Who reads a playlist's Library; for a viewer, <paramref name="DisabledGroups"/> are the groups hidden from them.</summary>
 internal sealed record LibraryAccess(Guid PlaylistId, string UserId, bool IsViewer, List<string>? DisabledGroups);
+
+/// <summary>A person as sharing shows them: name fields and avatar of the account, never its e-mail address.</summary>
+internal sealed record SharePerson(string? UserName, string? DisplayName, string? Avatar)
+{
+  public string Name => ProfileEndpoints.ShownName(DisplayName, UserName);
+}
 
 /// <summary>Creates an invitation; the label is the owner's name for the person.</summary>
 public record ShareRequest(string? Label);
@@ -55,11 +63,11 @@ public static class ShareEndpoints
     {
       if (!await IsOwnerAsync(db, id, user)) return Results.NotFound();
       var rows = await db.PlaylistShares.Where(s => s.PlaylistId == id)
-        .Select(s => new { Share = s, ViewerName = db.Users.Where(u => u.Id == s.ViewerUserId).Select(u => u.UserName).FirstOrDefault() })
+        .Select(s => new { Share = s, Viewer = db.Users.Where(u => u.Id == s.ViewerUserId).Select(PersonOf).FirstOrDefault() })
         .ToListAsync();
       // SQLite cannot ORDER BY DateTimeOffset; at most MaxSharesPerPlaylist rows, so sort in memory.
       var now = DateTimeOffset.UtcNow;
-      return Results.Ok(rows.OrderBy(r => r.Share.CreatedUtc).Select(r => ToDto(r.Share, r.ViewerName, now)));
+      return Results.Ok(rows.OrderBy(r => r.Share.CreatedUtc).Select(r => ToDto(r.Share, r.Viewer, now)));
     });
 
     mutations.MapPost("", async (Guid id, ShareRequest input, ClaimsPrincipal user, AppDbContext db) =>
@@ -168,13 +176,13 @@ public static class ShareEndpoints
         {
           playlistId = p.Id,
           name = p.Name,
-          ownerName = db.Users.Where(u => u.Id == p.OwnerId).Select(u => u.UserName).FirstOrDefault(),
+          owner = db.Users.Where(u => u.Id == p.OwnerId).Select(PersonOf).FirstOrDefault(),
           totalChannels = p.TotalChannels,
           sharedSinceUtc = s.AcceptedUtc,
         }).AsNoTracking().ToListAsync();
       // A handful of rows; sorted in memory like the owner's list.
       return Results.Ok(rows.OrderBy(r => r.name, StringComparer.OrdinalIgnoreCase)
-        .Select(r => new { r.playlistId, r.name, ownerName = DisplayName(r.ownerName), r.totalChannels, r.sharedSinceUtc }));
+        .Select(r => new { r.playlistId, r.name, ownerName = r.owner?.Name, ownerAvatar = r.owner?.Avatar, r.totalChannels, r.sharedSinceUtc }));
     });
 
     viewerMutations.MapDelete("/mine/{playlistId:guid}", async (Guid playlistId, ClaimsPrincipal user, AppDbContext db) =>
@@ -197,7 +205,7 @@ public static class ShareEndpoints
         .Select(p => new
         {
           p.Name, p.SourceUrl, p.DisabledGroups, p.WatchlistGroup, IsOwner = p.OwnerId == userId,
-          OwnerName = db.Users.Where(u => u.Id == p.OwnerId).Select(u => u.UserName).FirstOrDefault(),
+          Owner = db.Users.Where(u => u.Id == p.OwnerId).Select(PersonOf).FirstOrDefault(),
           Share = db.PlaylistShares.Where(s => s.PlaylistId == p.Id && s.ViewerUserId == userId)
             .Select(s => new { s.Id, s.LastOpenedUtc }).FirstOrDefault(),
         }).FirstOrDefaultAsync(context.RequestAborted);
@@ -236,7 +244,7 @@ public static class ShareEndpoints
           return Results.Ok(new
           {
             libraryKey, name = access.Name, role = access.IsOwner ? "owner" : "viewer",
-            ownerName = DisplayName(access.OwnerName), totalChannels, groups, watchlistGroup = access.WatchlistGroup,
+            ownerName = access.Owner?.Name, ownerAvatar = access.Owner?.Avatar, totalChannels, groups, watchlistGroup = access.WatchlistGroup,
           });
         }
         catch (Exception ex) when (!access.IsOwner)
@@ -265,15 +273,9 @@ public static class ShareEndpoints
       .Select(p => new LibraryAccess(p.Id, userId, p.OwnerId != userId, p.DisabledGroups))
       .FirstOrDefaultAsync(ct);
 
-  /// <summary>
-  /// The name shown to other people: a user name that is an e-mail address shows only the part before "@",
-  /// so no response names a whole address. Other names, and null, pass through unchanged.
-  /// </summary>
-  public static string? DisplayName(string? userName)
-  {
-    var at = userName?.IndexOf('@') ?? -1;
-    return at > 0 ? userName![..at] : userName;
-  }
+  /// <summary>The fields of an account that sharing shows, as a projection EF translates into the query.</summary>
+  private static readonly Expression<Func<IdentityUser, SharePerson>> PersonOf = u => new SharePerson(
+    u.UserName, EF.Property<string?>(u, AppDbContext.DisplayNameProperty), EF.Property<string?>(u, AppDbContext.AvatarProperty));
 
   /// <summary>SHA-256 of the token as lowercase hex, the only form of it that is stored.</summary>
   public static string HashToken(string token) =>
@@ -285,7 +287,7 @@ public static class ShareEndpoints
     return db.Playlists.AnyAsync(p => p.Id == id && p.OwnerId == userId);
   }
 
-  private static object ToDto(PlaylistShare share, string? viewerName, DateTimeOffset now) => new
+  private static object ToDto(PlaylistShare share, SharePerson? viewer, DateTimeOffset now) => new
   {
     id = share.Id,
     label = share.Label,
@@ -294,7 +296,8 @@ public static class ShareEndpoints
     createdUtc = share.CreatedUtc,
     expiresUtc = share.ViewerUserId is null ? share.TokenExpiresUtc : null,
     acceptedUtc = share.AcceptedUtc,
-    viewerName = DisplayName(viewerName),
+    viewerName = viewer?.Name,
+    avatar = viewer?.Avatar,
     lastOpenedUtc = share.LastOpenedUtc,
   };
 }

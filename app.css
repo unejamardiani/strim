@@ -68,6 +68,7 @@ body.scrolled .topbar {
 .av { --s: 28px; width: var(--s); height: var(--s); border-radius: 50%; display: inline-grid; place-items: center; flex-shrink: 0;
   font: 800 calc(var(--s) * .43)/1 var(--font-display); text-transform: uppercase; letter-spacing: -.02em; }
 .av svg { width: 54%; height: 54%; }
+.av-24 { --s: 24px; }
 .av-36 { --s: 36px; }
 .av-52 { --s: 52px; }
 .av-68 { --s: 68px; }
@@ -2229,8 +2230,8 @@ select.input {
 .share-avatar.is-open { background: none; color: var(--ink-2); border: 1.5px dashed var(--line-strong); }
 .share-avatar.is-sm { width: 24px; height: 24px; font-size: 11px; }
 .share-stack { display: inline-flex; }
-.share-stack .share-avatar { box-shadow: 0 0 0 2px var(--surface); }
-.share-stack .share-avatar + .share-avatar { margin-left: -7px; }
+.share-stack > * { box-shadow: 0 0 0 2px var(--surface); }
+.share-stack > * + * { margin-left: -7px; }
 .share-tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 750; line-height: 18px; white-space: nowrap; background: var(--surface-2); color: var(--ink-2); flex-shrink: 0; }
 .share-tag.is-active::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .share-tag.is-active { background: color-mix(in srgb, var(--ok) 13%, transparent); color: var(--ink); }
