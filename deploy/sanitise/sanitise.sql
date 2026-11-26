@@ -16,7 +16,6 @@ BEGIN
 END $$;
 
 -- Accounts: addresses on the reserved .invalid domain, no password, no phone, no two-factor secret.
--- A display name becomes a neutral 'Person <id prefix>'; accounts without one keep none.
 -- Production passwords and sessions stop working; a fresh security stamp invalidates any copied cookie.
 UPDATE "AspNetUsers" SET
   "UserName" = left("Id", 200) || '@example.invalid',
@@ -27,8 +26,18 @@ UPDATE "AspNetUsers" SET
   "SecurityStamp" = upper(replace(gen_random_uuid()::text, '-', '')),
   "PhoneNumber" = NULL,
   "PhoneNumberConfirmed" = false,
-  "TwoFactorEnabled" = false,
-  "display_name" = CASE WHEN "display_name" IS NULL THEN NULL ELSE 'Person ' || left("Id", 8) END;
+  "TwoFactorEnabled" = false;
+
+-- A display name becomes a neutral 'Person <id prefix>'; accounts without one keep none.
+-- The copy of production may predate the column (the candidate adds it later), so only touch it when it exists.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'AspNetUsers' AND column_name = 'display_name') THEN
+    UPDATE "AspNetUsers" SET "display_name" = 'Person ' || left("Id", 8)
+      WHERE "display_name" IS NOT NULL;
+  END IF;
+END $$;
 
 UPDATE "AspNetUserClaims" SET "ClaimValue" = 'sanitised-' || "Id"
   WHERE "ClaimValue" IS NOT NULL;
