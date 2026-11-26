@@ -6,7 +6,7 @@ using Xunit;
 namespace Api.Tests;
 
 /// <summary>Pins the Stem and dot icon family (#493) at its source in main.js, theme.css and library.css (api.Tests
-/// has no JS engine): the 30 names stay (24 of #493, six of #495), every object glyph carries one filled signal dot, and no glyph brings its
+/// has no JS engine): the 31 names stay (24 of #493, six of #495, edit of #581), every object glyph carries one filled signal dot, and no glyph brings its
 /// own colour.</summary>
 public class IconFamilyUiTests
 {
@@ -14,13 +14,13 @@ public class IconFamilyUiTests
   [
     "back", "folder", "more", "copy", "download", "list", "refresh", "trash", "link", "clock", "plus", "check",
     "bookmark", "close", "sort", "up", "down", "chevron", "star", "home", "book", "people", "search", "grid",
-    "marks", "trend", "signal", "spark", "tv", "eye",
+    "marks", "trend", "signal", "spark", "tv", "eye", "edit",
   ];
 
   private static readonly string[] ObjectGlyphs =
   [
     "home", "search", "grid", "book", "bookmark", "folder", "people", "clock", "link", "copy", "trash", "download",
-    "refresh", "list", "up", "down", "back", "marks", "trend", "signal", "spark", "tv", "eye",
+    "refresh", "list", "up", "down", "back", "marks", "trend", "signal", "spark", "tv", "eye", "edit",
   ];
 
   // The six of #495, as drawn in the approved mockup; the marks check is its body (.b) for the on state (#494).
@@ -69,7 +69,7 @@ public class IconFamilyUiTests
   private static int Count(string text, string part) => Regex.Matches(text, Regex.Escape(part)).Count;
 
   [Fact]
-  public void Family_HasThe30Names()
+  public void Family_HasThe31Names()
   {
     Assert.Equal(Names.Order(), Map().Keys.Order());
   }

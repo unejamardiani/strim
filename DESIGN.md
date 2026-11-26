@@ -86,6 +86,31 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
   identity waits to be linked. `--accent-soft` fill, `--radius` corners, no border or shadow; a 9px `--accent`
   signal dot with a soft 4px ring; heading at weight 750 in `--ink`, body in `--ink-2` with the e-mail in `--ink`.
   Forced colours: 1px `CanvasText` border, `Highlight` dot.
+- **Avatar** (`.av`, #581): one helper, `avatar()`, draws it everywhere. A circle (28px in the account button, 36,
+  52 and 68px in the popover via `.av-36`, `.av-52`, `.av-68`) with either the uppercase initial (Bricolage 800 at
+  0.43 × the diameter) or a symbol at 54% of it. Six tones: violet (`--series-soft`/`--series-ink`), tangerine
+  (`--live-soft`/`--live-ink`), gold (`--movies-soft`/`--movies-ink`), signal (`--accent`/`--on-accent`), ink
+  (`--ink`/`--bg`), paper (`--surface-3`/`--ink-2`, inset 1px `--edge`). Ten symbols: the initial, then tv, signal,
+  spark, eye, bookmark, star, home, trend, marks. Saved as `tone:symbol`; without one, the initial in violet,
+  tangerine or gold picked by a hash of the user name.
+- **Account popover** (`.pf-pop`, #581): from 768px the account button opens it 8px below, right edges aligned;
+  348px wide, 22px radius, `--surface`, 1px `--card-border`, `--shadow-pop`, no backdrop, so a theme change shows
+  behind it. `role="dialog"`, `aria-label="Account"`; the button gets `aria-expanded="true"`, an `--ink` border and
+  `--surface-2`. Esc, a click outside or the button closes it; focus goes to the first control and back to the
+  button. Main pane: the 52px avatar button with a 24px `edit` badge ("Change avatar"), the display name as an
+  in-place heading field (Bricolage 800 23px; `--edge` and `--surface-2` on hover, `--focus` border with a 4px
+  `--accent-soft` ring on focus; Enter or leaving saves with a 2 s "Saved" mark, Esc restores, an error shows under
+  it in `--danger`), Appearance, and a `--surface-2` footer with the sign-in line ("Signed in with Microsoft as",
+  "Signed in with Google as", "Signed in through Cloudflare Access as" + e-mail; "Signed in as" + user name for a
+  password) and `Sign out`. The e-mail shows nowhere else. The avatar pane replaces the main pane: Back, "Avatar",
+  primary `Done`; a 68px preview with the name; "Colour", six 36px swatches showing the chosen symbol; "Symbol", a
+  5-column grid of 40px round buttons, the chosen one `--ink` with a 2px `--surface` + 4px `--ink` ring. Done saves,
+  Back drops the choice. Below 768px the same panes sit in the Account sheet.
+- **Appearance tiles** (`.pf-theme`): System, Light and Dark in a 3-column grid. Each is a 16:10 preview (11px
+  radius) of a heading bar and a card with an accent dot in that theme's fixed colours, System showing both halves;
+  under it a 14px radio and the name. The chosen tile (`aria-pressed`) has a 2px `--surface` + 4px `--ink` ring and
+  an `--accent` radio. A click applies the theme at once and saves it on the account; the account's theme wins when
+  `/api/auth/me` answers, and signed out the page follows the system.
 - **Icons**: 24px grid line icons built by `icon()`, class `.icon`: `currentColor` stroke 2px with round caps and joins, no fill. A holder rule (`.btn svg`, `.lib-seen svg`, …) may set the size, the stroke width or a fill; only state marks are filled (watchlist badge, pressed bookmark, rating star, the dots of ⋯).
   On state (#494): an icon that is the direct child of `[aria-current="page"]` or `[aria-pressed="true"]` fills its
   body (`.b`) with a 14% tint of its own ink and turns its signal dot (`.sig`) `--accent`, grown by a quarter around
@@ -96,8 +121,9 @@ Status: green `--ok` ("In use" dot, success toast), `--warn-*` (expiry, sample n
   carries exactly one dot (⋯ is three), while direction and operator glyphs (chevron, close, plus, check, sort)
   and the star carry none. The dot's radius is 1.5 to 2.2 on the 24 grid, and a new icon follows the rule and is
   added to `ICONS`.
-  The 30 names: back, folder, more, copy, download, list, refresh, trash, link, clock, plus, check, bookmark, close,
-  sort, up, down, chevron, star, home, book, people, search, grid, and six object glyphs, each with one dot:
+  The 31 names: back, folder, more, copy, download, list, refresh, trash, link, clock, plus, check, bookmark, close,
+  sort, up, down, chevron, star, home, book, people, search, grid, and seven object glyphs, each with one dot:
+  - `edit` (#581): a pencil whose body is the shaft, the dot below its tip; the avatar's edit badge.
   - `marks`: the Marks tab, a check whose stroke ends in the dot; the check is the body (`.b`, #494) and takes the tint when current (`check` stays on a seen tile, Saved and sharing).
   - `trend`: trending, a rising line with the dot ahead of it.
   - `spark`: because you liked, a four-point spark.
