@@ -115,6 +115,7 @@ const ICONS = {
   spark: '<path class="b" d="M10.5 4c.7 4.3 2.2 5.8 6.5 6.5-4.3.7-5.8 2.2-6.5 6.5-.7-4.3-2.2-5.8-6.5-6.5 4.3-.7 5.8-2.2 6.5-6.5z"/><circle class="sig" cx="18.6" cy="18" r="1.7"/>',
   tv: '<rect class="b" x="3.5" y="7.5" width="17" height="12.5" rx="2.6"/><path d="M8.5 3.5 12 7.5l3.5-4"/><circle class="sig" cx="16.3" cy="15.8" r="1.7"/>',
   eye: '<path class="b" d="M2.8 12c2.2-3.9 5.3-5.8 9.2-5.8s7 1.9 9.2 5.8c-2.2 3.9-5.3 5.8-9.2 5.8S5 15.9 2.8 12z"/><circle class="sig" cx="12" cy="12" r="2.1"/>',
+  edit: '<path class="b" d="M14.8 5.2l4 4L9 19H5v-4z"/><circle class="sig" cx="18.3" cy="18.3" r="1.7"/>',
 };
 
 function icon(name) {
@@ -310,6 +311,8 @@ async function loadSession() {
   state.shareBase = String(configured || new URL(API_BASE, window.location.origin).toString()).replace(/\/+$/, '');
   state.providers = providers.status === 'fulfilled' && Array.isArray(providers.value) ? providers.value : [];
   state.user = me.status === 'fulfilled' ? me.value : null;
+  // The account's theme wins over the one stored in the browser (#581); signed out, the system decides.
+  if (state.user || me.reason?.status === 401) window.strimTheme.apply(state.user?.theme || 'system');
   if (access.status === 'fulfilled' && access.value) state.access = access.value;
   state.tmdbEnabled = config.status === 'fulfilled' && config.value?.tmdbEnabled === true;
   state.shareAccessNote = config.status === 'fulfilled' ? String(config.value?.shareAccessNote || '').trim() : '';
@@ -351,23 +354,172 @@ function updateAccountButton() {
   accountButton.hidden = false;
   accountButton.classList.toggle('guest', !state.user);
   if (state.user) {
-    const name = state.user.userName || state.user.email || 'Account';
-    accountButton.replaceChildren(h('span', { class: 'avatar', text: name.trim().charAt(0) || '?' }), h('span', { class: 'name', text: name }));
-    accountButton.setAttribute('aria-label', `Account: ${name}`);
+    accountButton.replaceChildren(avatar(state.user), h('span', { class: 'name', text: state.user.name }));
+    accountButton.setAttribute('aria-label', `Account: ${state.user.name}`);
+    accountButton.setAttribute('aria-expanded', String(!accountPop.hidden));
   } else {
     accountButton.replaceChildren('Sign in');
     accountButton.removeAttribute('aria-label');
+    accountButton.removeAttribute('aria-expanded');
   }
+}
+
+// ---------- Account popover (#581) ----------
+
+const AVATAR_TONES = ['violet', 'tangerine', 'gold', 'signal', 'ink', 'paper'];
+const AVATAR_SYMBOLS = ['initial', 'tv', 'signal', 'spark', 'eye', 'bookmark', 'star', 'home', 'trend', 'marks'];
+const THEMES = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
+const SIGN_IN_LINES = {
+  microsoft: 'Signed in with Microsoft as',
+  google: 'Signed in with Google as',
+  password: 'Signed in as',
+  access: 'Signed in through Cloudflare Access as',
+};
+
+// The saved "tone:symbol", else the initial in a tone picked from the user name, as before #581.
+function avatarParts(user) {
+  const [tone, symbol] = String(user.avatar || '').split(':');
+  if (AVATAR_TONES.includes(tone) && AVATAR_SYMBOLS.includes(symbol)) return { tone, symbol };
+  return { tone: AVATAR_TONES[pick(`${user.userName}:tone`, 3)], symbol: 'initial' };
+}
+
+// The one avatar of the app: the initial or a symbol in a circle of one of the six tones.
+function avatar(user, parts = avatarParts(user), size = 28) {
+  const content = parts.symbol === 'initial' ? initial(user) : icon(parts.symbol);
+  return h('span', { class: `av av-${size} t-${parts.tone}`, 'aria-hidden': 'true' }, content);
+}
+
+const initial = (user) => (user.name || '').trim().charAt(0) || '?';
+
+// The footer's two lines: how this session signed in, and as whom.
+function signInLines(user) {
+  const method = user.signIn?.method;
+  return [SIGN_IN_LINES[method] || 'Signed in as', method === 'password' ? user.userName : user.signIn?.identity];
+}
+
+const wideAccount = window.matchMedia('(min-width: 768px)');
+const accountPop = h('div', { class: 'pf-pop', role: 'dialog', 'aria-label': 'Account', hidden: true });
+accountButton.after(accountPop);
+
+async function saveProfile(body) {
+  state.user = { ...state.user, ...(await api('/profile', { method: 'PUT', body })) };
+  updateAccountButton();
+}
+
+function toggleAccountPop() {
+  if (!accountPop.hidden) return closeAccountPop();
+  accountPop.hidden = false;
+  accountButton.setAttribute('aria-expanded', 'true');
+  document.addEventListener('pointerdown', closeOnOutside);
+  document.addEventListener('keydown', closeOnEscape);
+  showAccountMain(accountPop).focus();
+}
+
+function closeAccountPop() {
+  if (accountPop.hidden) return;
+  accountPop.hidden = true;
+  accountButton.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('pointerdown', closeOnOutside);
+  document.removeEventListener('keydown', closeOnEscape);
+  accountButton.focus();
+}
+
+const closeOnOutside = (e) => { if (!accountPop.contains(e.target) && !accountButton.contains(e.target)) closeAccountPop(); };
+const closeOnEscape = (e) => { if (e.key === 'Escape') closeAccountPop(); };
+
+// The main pane: name, avatar button, appearance and the sign-in footer. Returns the first control.
+function showAccountMain(root) {
+  const user = state.user;
+  const tap = window.matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click';
+  const name = h('input', { class: 'pf-name', type: 'text', value: user.name, maxlength: '40', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Display name' });
+  const saved = h('span', { class: 'pf-saved', hidden: true }, icon('check'), 'Saved');
+  const error = h('p', { class: 'pf-error', hidden: true });
+  const saveName = async () => {
+    const value = name.value.trim();
+    if (value === state.user.name) return;
+    try {
+      await saveProfile({ displayName: value || null });
+      name.value = state.user.name;
+      error.hidden = true;
+      saved.hidden = false;
+      setTimeout(() => { saved.hidden = true; }, 2000);
+    } catch (err) {
+      error.textContent = err.message;
+      error.hidden = false;
+      name.focus();
+    }
+  };
+  name.addEventListener('blur', saveName);
+  name.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveName();
+    if (e.key !== 'Escape') return;
+    // Esc in the field only undoes the typing; the popover or sheet stays open.
+    e.preventDefault();
+    e.stopPropagation();
+    name.value = state.user.name;
+    error.hidden = true;
+  });
+
+  const tiles = THEMES.map(([value, label]) => h('button', {
+    class: 'pf-theme', type: 'button', 'aria-pressed': String(user.theme === value), onclick: () => chooseTheme(value),
+  }, h('span', { class: 'pf-thumb' }, value !== 'dark' && h('span', { class: 'pf-half l' }), value !== 'light' && h('span', { class: 'pf-half d' })),
+  h('span', { class: 'pf-theme-name' }, h('span', { class: 'pf-radio' }), label)));
+  const chooseTheme = (value) => {
+    window.strimTheme.apply(value);
+    tiles.forEach((tile, i) => tile.setAttribute('aria-pressed', String(THEMES[i][0] === value)));
+    saveProfile({ theme: value }).catch((err) => toast(err.message, { error: true }));
+  };
+
+  const [line, who] = signInLines(user);
+  const avatarButton = h('button', { class: 'pf-avbtn', type: 'button', 'aria-label': 'Change avatar', onclick: () => showAvatarPane(root) },
+    avatar(user, undefined, 52), h('span', { class: 'pf-badge' }, icon('edit')));
+  root.replaceChildren(
+    h('div', { class: 'pf-body' },
+      h('div', { class: 'pf-id' }, avatarButton,
+        h('div', { class: 'grow' }, name, h('p', { class: 'pf-sub' }, `Your name in Strim. ${tap} to change. `, saved), error)),
+      h('div', { class: 'pf-pick' }, h('span', { class: 'pf-label', text: 'Appearance' }), h('div', { class: 'pf-themes' }, tiles))),
+    h('div', { class: 'pf-foot' },
+      h('p', { class: 'who' }, line, h('b', { text: who })),
+      h('button', { class: 'btn btn-xs', type: 'button', onclick: signOut }, 'Sign out')));
+  return avatarButton;
+}
+
+// Replaces the main pane in the same popover or sheet; Done saves the choice, Back drops it.
+function showAvatarPane(root) {
+  const user = state.user;
+  let draft = avatarParts(user);
+  const preview = h('div', { class: 'pf-prev' });
+  const swatches = AVATAR_TONES.map((tone) => h('button', { class: 'pf-sw', type: 'button', 'aria-label': tone, onclick: () => pickAvatar({ tone }) }));
+  const symbols = AVATAR_SYMBOLS.map((symbol) => h('button', { class: 'pf-sym', type: 'button', 'aria-label': symbol, onclick: () => pickAvatar({ symbol }) },
+    symbol === 'initial' ? initial(user) : icon(symbol)));
+  const pickAvatar = (change) => {
+    draft = { ...draft, ...change };
+    preview.replaceChildren(avatar(user, draft, 68), h('span', { class: 'n', text: user.name }));
+    swatches.forEach((sw, i) => {
+      sw.setAttribute('aria-pressed', String(AVATAR_TONES[i] === draft.tone));
+      sw.replaceChildren(avatar(user, { ...draft, tone: AVATAR_TONES[i] }, 36));
+    });
+    symbols.forEach((sym, i) => sym.setAttribute('aria-pressed', String(AVATAR_SYMBOLS[i] === draft.symbol)));
+  };
+  pickAvatar({});
+  const backToMain = () => showAccountMain(root).focus();
+  const done = () => saveProfile({ avatar: `${draft.tone}:${draft.symbol}` }).then(backToMain, (err) => toast(err.message, { error: true }));
+  const back = h('button', { class: 'icon-btn is-sm', type: 'button', 'aria-label': 'Back', onclick: backToMain }, icon('back'));
+  root.replaceChildren(
+    h('div', { class: 'pf-head' }, back, h('h3', { text: 'Avatar' }), h('button', { class: 'btn btn-primary btn-xs', type: 'button', onclick: done }, 'Done')),
+    h('div', { class: 'pf-body' }, preview,
+      h('div', { class: 'pf-pick' }, h('span', { class: 'pf-label', text: 'Colour' }), h('div', { class: 'pf-swatches' }, swatches)),
+      h('div', { class: 'pf-pick' }, h('span', { class: 'pf-label', text: 'Symbol' }), h('div', { class: 'pf-syms' }, symbols))));
+  back.focus();
 }
 
 function openAccount(hint) {
   accountBody.replaceChildren();
+  accountDialog.classList.toggle('pf-sheet', Boolean(state.user));
   if (state.user) {
     accountTitle.textContent = 'Account';
-    accountBody.append(
-      h('p', { class: 'secondary' }, 'Signed in as ', h('strong', { text: state.user.userName || state.user.email })),
-      h('button', { class: 'btn btn-block', type: 'button', onclick: signOut }, 'Sign out')
-    );
+    const first = showAccountMain(accountBody);
+    setTimeout(() => first.focus(), 50);
   } else {
     accountTitle.textContent = 'Sign in';
     const form = h('form', { class: 'stack', novalidate: true });
@@ -472,11 +624,13 @@ async function signOut() {
   state.overview = new Map();
   if (state.editor?.id) closeEditor();
   accountDialog.close();
+  closeAccountPop();
   toast('Signed out');
   afterAuthChange();
 }
 
 function afterAuthChange() {
+  window.strimTheme.apply(state.user?.theme || 'system');
   updateAccountButton();
   // A guest who loaded groups keeps them after signing in, so they can save right away.
   const ed = state.editor;
@@ -3013,7 +3167,7 @@ async function saveEditor(ed) {
 
 // ---------- Start ----------
 
-accountButton.addEventListener('click', () => openAccount());
+accountButton.addEventListener('click', () => (state.user && wideAccount.matches ? toggleAccountPop() : openAccount()));
 
 async function init() {
   watchTmdbLogo();
