@@ -190,7 +190,7 @@ public static class Database
     try
     {
       db.Database.ExecuteSqlRaw(isNpgsql ? PostgresTitleMarksSql : SqliteTitleMarksSql);
-      if (!isNpgsql) PatchSqliteTitleMarks(db);
+      if (!isNpgsql) PatchSqliteColumns(db, "titlemarks", SqliteTitleMarksPatches);
       logger.LogDebug("Title marks schema ensured");
     }
     catch (Exception ex)
@@ -199,18 +199,19 @@ public static class Database
     }
   }
 
-  private static void PatchSqliteTitleMarks(AppDbContext db)
+  /// <summary>Adds each missing column; <paramref name="table"/> and the patches are constants of this class.</summary>
+  private static void PatchSqliteColumns(AppDbContext db, string table, (string Name, string Definition)[] patches)
   {
     var connection = db.Database.GetDbConnection();
     db.Database.OpenConnection();
     try
     {
-      foreach (var (name, definition) in SqliteTitleMarksPatches)
+      foreach (var (name, definition) in patches)
       {
         using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('titlemarks') WHERE name = '{name}';";
+        command.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = '{name}';";
         if (Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture) > 0) continue;
-        command.CommandText = $"ALTER TABLE titlemarks ADD COLUMN {name} {definition};";
+        command.CommandText = $"ALTER TABLE {table} ADD COLUMN {name} {definition};";
         command.ExecuteNonQuery();
       }
     }
@@ -282,6 +283,20 @@ public static class Database
       logger.LogWarning(ex, "Failed to ensure the playlist shares schema: {Message}", ex.Message);
     }
   }
+
+  /// <summary>
+  /// A person's display name, avatar and theme (#579): nullable columns on <c>AspNetUsers</c>, mapped as shadow
+  /// properties in <see cref="AppDbContext"/>. Added to an older table on every start.
+  /// </summary>
+  private static readonly (string Name, string Definition)[] SqliteUserProfilePatches =
+    [("display_name", "TEXT NULL"), ("avatar", "TEXT NULL"), ("theme", "TEXT NULL")];
+
+  /// <summary>The same columns on PostgreSQL, with the lengths <see cref="AppDbContext"/> gives them.</summary>
+  public const string PostgresUserProfileColumnsSql = @"
+        ALTER TABLE ""AspNetUsers"" ADD COLUMN IF NOT EXISTS ""display_name"" varchar(40) NULL;
+        ALTER TABLE ""AspNetUsers"" ADD COLUMN IF NOT EXISTS ""avatar"" varchar(32) NULL;
+        ALTER TABLE ""AspNetUsers"" ADD COLUMN IF NOT EXISTS ""theme"" varchar(16) NULL;
+      ";
 
   private static void TryEnsureSqliteIdentity(AppDbContext db, ILogger logger)
   {
@@ -355,6 +370,7 @@ public static class Database
         CREATE INDEX IF NOT EXISTS IX_AspNetUsers_NormalizedEmail ON AspNetUsers (NormalizedEmail);
         CREATE UNIQUE INDEX IF NOT EXISTS IX_AspNetUsers_NormalizedUserName ON AspNetUsers (NormalizedUserName);
       ");
+      PatchSqliteColumns(db, "AspNetUsers", SqliteUserProfilePatches);
       logger.LogDebug("SQLite Identity schema ensured");
     }
     catch (Exception ex)
@@ -436,6 +452,7 @@ public static class Database
         CREATE INDEX IF NOT EXISTS ""IX_AspNetUsers_NormalizedEmail"" ON ""AspNetUsers"" (""NormalizedEmail"");
         CREATE UNIQUE INDEX IF NOT EXISTS ""IX_AspNetUsers_NormalizedUserName"" ON ""AspNetUsers"" (""NormalizedUserName"");
       ");
+      db.Database.ExecuteSqlRaw(PostgresUserProfileColumnsSql);
       logger.LogDebug("PostgreSQL Identity schema ensured");
     }
     catch (Exception ex)

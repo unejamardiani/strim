@@ -61,6 +61,22 @@ public class CloudflareAccessSignInTests : IClassFixture<StrimAppFactory>
     Assert.Contains(me.Headers.GetValues("Set-Cookie"), c => c.StartsWith("strim.auth="));
   }
 
+  [Fact]
+  public async Task ValidToken_OfALinkedSubject_NamesAccessAsTheSignInMethod_AlsoAfterTheSecurityStampRefresh()
+  {
+    await LinkedUserAsync("linked-method", "sub-method");
+    // A zero interval makes Identity rebuild the session's principal on every request, as it does after 30 minutes.
+    var app = _app.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+      services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = TimeSpan.Zero)));
+    var client = Client(app, Token("sub-method"));
+
+    var first = await client.Http.GetFromJsonAsync<JsonElement>("/api/auth/me");
+    var next = await client.Http.GetFromJsonAsync<JsonElement>("/api/auth/me");
+
+    Assert.Equal("access", first.GetProperty("signIn").GetProperty("method").GetString());
+    Assert.Equal("access", next.GetProperty("signIn").GetProperty("method").GetString());
+  }
+
   public static TheoryData<string> InvalidTokens => new() { "signature", "audience", "issuer", "expired", "no-email" };
 
   [Theory]

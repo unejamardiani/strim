@@ -107,6 +107,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapAuthEndpoints();
+app.MapProfileEndpoints();
 app.MapPlaylistEndpoints();
 app.MapProcessingEndpoints();
 app.MapLibraryEndpoints();

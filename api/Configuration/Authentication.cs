@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Api.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -82,6 +83,14 @@ public static class Authentication
         o.Cookie.SecurePolicy = development ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
         o.Cookie.HttpOnly = true;
       });
+    });
+
+    // The security-stamp check rebuilds the principal from the user alone; keep the sign-in method the profile reports.
+    services.Configure<SecurityStampValidatorOptions>(options => options.OnRefreshingPrincipal = context =>
+    {
+      var method = context.CurrentPrincipal?.FindFirst(ClaimTypes.AuthenticationMethod);
+      if (method is not null) context.NewPrincipal?.Identities.First().AddClaim(new Claim(method.Type, method.Value));
+      return Task.CompletedTask;
     });
 
     var providers = new List<ExternalLoginProvider>();

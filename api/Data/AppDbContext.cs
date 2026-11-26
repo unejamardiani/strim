@@ -18,9 +18,22 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
 
   public DbSet<PlaylistShare> PlaylistShares => Set<PlaylistShare>();
 
+  /// <summary>Shadow properties of the profile columns on <c>AspNetUsers</c>; the app keeps the plain IdentityUser.</summary>
+  public const string DisplayNameProperty = "DisplayName";
+  public const string AvatarProperty = "Avatar";
+  public const string ThemeProperty = "Theme";
+
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
     base.OnModelCreating(modelBuilder);
+
+    // Matches the columns Database patches onto older AspNetUsers tables.
+    modelBuilder.Entity<IdentityUser>(entity =>
+    {
+      entity.Property<string?>(DisplayNameProperty).HasMaxLength(40).HasColumnName("display_name");
+      entity.Property<string?>(AvatarProperty).HasMaxLength(32).HasColumnName("avatar");
+      entity.Property<string?>(ThemeProperty).HasMaxLength(16).HasColumnName("theme");
+    });
 
     var disabledGroupsConverter = new ValueConverter<List<string>, string>(
       v => SerializeDisabledGroups(v),
