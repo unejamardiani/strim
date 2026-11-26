@@ -1299,7 +1299,7 @@ function showInvite(outcome = null) {
       const accept = btn('btn-primary', 'Accept invitation', () => acceptInvite(accept));
       copy.append(
         h('div', { class: 'invite-as' },
-          h('span', null, h('small', { text: 'You are signed in as' }), h('b', { text: state.user.userName || state.user.email })),
+          h('span', null, h('small', { text: 'You are signed in as' }), h('b', { text: state.user.name })),
           h('a', { href: '#/invite', onclick: (e) => { e.preventDefault(); signOut(); } }, 'Not you? Switch')),
         h('div', { class: 'invite-actions' }, accept, btn('btn-quiet', 'Not now', notNow)),
         h('p', { class: 'invite-fine', text: 'The link works once. After you accept, it belongs to this account.' }));

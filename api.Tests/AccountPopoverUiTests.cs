@@ -86,6 +86,10 @@ public class AccountPopoverUiTests
     Assert.Contains("accountButton.replaceChildren(avatar(state.user), h('span', { class: 'name', text: state.user.name }));", button);
     Assert.DoesNotContain("email", button);
     Assert.DoesNotContain("email", Function("showAccountMain"));
+    // The invitation page names the account by its shown name; for external sign-ins the user name is the email.
+    var invite = Function("showInvite");
+    Assert.Contains("h('small', { text: 'You are signed in as' }), h('b', { text: state.user.name })", invite);
+    Assert.DoesNotContain("email", invite);
   }
 
   [Fact]
