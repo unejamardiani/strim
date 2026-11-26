@@ -16,6 +16,7 @@ BEGIN
 END $$;
 
 -- Accounts: addresses on the reserved .invalid domain, no password, no phone, no two-factor secret.
+-- A display name becomes a neutral 'Person <id prefix>'; accounts without one keep none.
 -- Production passwords and sessions stop working; a fresh security stamp invalidates any copied cookie.
 UPDATE "AspNetUsers" SET
   "UserName" = left("Id", 200) || '@example.invalid',
@@ -26,7 +27,8 @@ UPDATE "AspNetUsers" SET
   "SecurityStamp" = upper(replace(gen_random_uuid()::text, '-', '')),
   "PhoneNumber" = NULL,
   "PhoneNumberConfirmed" = false,
-  "TwoFactorEnabled" = false;
+  "TwoFactorEnabled" = false,
+  "display_name" = CASE WHEN "display_name" IS NULL THEN NULL ELSE 'Person ' || left("Id", 8) END;
 
 UPDATE "AspNetUserClaims" SET "ClaimValue" = 'sanitised-' || "Id"
   WHERE "ClaimValue" IS NOT NULL;
