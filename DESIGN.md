@@ -1,8 +1,9 @@
 # Strim Design System: Signal Paper
 
-Every page uses this system: the editor (`app.html`, `app.css`, `main.js`) and the site (landing
-`index.html`, guides, comparison and error pages, styled by `site.css`). Shared fonts, tokens,
-buttons and cards live in `theme.css`.
+Every page uses this system: the editor (`app.html`, `app.css`, `main.js`), the Library
+(`library.js`, `library.css`, inside the editor's page) and the site (landing `index.html`, guides,
+comparison and error pages, styled by `site.css`). Shared fonts, tokens, buttons and cards live in
+`theme.css`; `theme-boot.js` sets a forced light or dark theme before the first paint.
 
 Idea: a calm, warm reading surface (paper) with one loud signal colour. Strim is used on the sofa
 and on the phone, so it should feel like a friendly consumer app, not a developer tool.
@@ -617,16 +618,22 @@ Below 720px the nav moves to a horizontally scrollable row under the bar.
 ## File structure
 
 ```
-index.html          Landing page (public)
+index.html          Landing page
 app.html            Editor shell, served at /app
 theme.css           Fonts, tokens, base, wordmark, buttons, cards (shared)
+theme-boot.js       Sets a forced light or dark theme before the first paint
 app.css             Editor components
+library.css         Library components
 site.css            Landing, guides and error pages
 main.js             Editor logic (router, playlists, group picker, sheets)
-features.html, how-to-use.html, comparison.html
-404.html, 500.html, 50x.html
+library.js          Library logic (tabs, rows, search, film and series cards, marks)
+features.html, how-to-use.html, comparison.html    Guide and comparison pages
+404.html, 500.html, 50x.html    Error pages
 fonts/              Self-hosted Bricolage Grotesque and Figtree (woff2, OFL)
-logo-icon.svg, logo-wordmark.svg
+logo-icon.svg, logo-wordmark.svg    Logo mark and wordmark
+tmdb-logo.svg       TMDB attribution logo
+robots.txt          Crawler rules
+sitemap.xml         Landing and guide pages for search engines
 ```
 
 ## Dev notes
@@ -635,3 +642,5 @@ logo-icon.svg, logo-wordmark.svg
   `style=""` attributes; set dynamic styles through the CSSOM (`el.style.x = …`).
 - Reference CSS/JS with plain relative paths (`theme.css`, `../site.css`). The Dockerfile appends
   a content hash (`?v=…`) at build time, which makes them cacheable for a year.
+- The Dockerfile ships every `.css` and `.js` file of the repository root; a new page or another
+  kind of file needs the copy step, which is the owner's.
