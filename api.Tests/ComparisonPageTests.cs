@@ -78,6 +78,21 @@ public class ComparisonPageTests
   }
 
   [Fact]
+  public void NoMarkdownFile_InTheRootOrDocs_LinksTheOldRepository()
+  {
+    var root = StrimAppFactory.RepositoryRoot();
+    var factoryDocs = Path.Combine(root, "docs", "factory") + Path.DirectorySeparatorChar;
+    var files = Directory.GetFiles(root, "*.md")
+      .Concat(Directory.GetFiles(Path.Combine(root, "docs"), "*.md", SearchOption.AllDirectories)
+        .Where(file => !file.StartsWith(factoryDocs, StringComparison.Ordinal)))
+      .ToList();
+    Assert.Contains(files, file => Path.GetFileName(file) == "SECURITY.md");
+
+    foreach (var file in files)
+      Assert.False(File.ReadAllText(file).Contains("github.com/unejamardiani"), $"{Path.GetRelativePath(root, file)} still links github.com/unejamardiani");
+  }
+
+  [Fact]
   public void Sitemap_ListsTheFourSitePages_WithCurrentDates()
   {
     var xml = Read("sitemap.xml");

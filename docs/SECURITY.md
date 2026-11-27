@@ -54,4 +54,4 @@ What Strim protects, and where in the code each control lives.
 ## Reporting
 
 Please report vulnerabilities privately through a GitHub security advisory on
-[unejamardiani/strim](https://github.com/unejamardiani/strim/security/advisories/new).
+[plis-labs/strim](https://github.com/plis-labs/strim/security/advisories/new).
