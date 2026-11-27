@@ -2,25 +2,63 @@
 
 ## Current Approach
 
-This project currently uses `EnsureCreated()` with manual schema patching instead of EF Core migrations.
+This project uses `EnsureCreated()` with idempotent schema patching on every start, not EF Core migrations.
 
 ### How It Works
 
 1. **Initial Schema**: `db.Database.EnsureCreated()` creates the database and tables if they don't exist
-2. **Schema Patching**: Custom code adds columns and indexes that may be missing from older databases
+2. **Schema Patching**: Custom code adds columns, tables and indexes that may be missing from older databases
 3. **Provider-Specific Logic**: Separate patching logic for PostgreSQL and SQLite
 
 ### Files Involved
 
-- `api/Configuration/Database.cs`: `EnsureStrimSchema()`, `TryPatchPostgresSchema()`, `TryAddSqliteColumn()`, etc.
+- `api/Configuration/Database.cs`: `EnsureStrimSchema()` runs at start-up and calls `TryPatchPostgresSchema()` or
+  `TryAddSqliteColumn()` for the playlist columns, `EnsureIdentitySchema()` for the Identity tables and profile
+  columns, `EnsureTitleMarksSchema()` for `titlemarks` and `EnsurePlaylistSharesSchema()` for `playlistshares`.
 - `api/Data/AppDbContext.cs`: Entity configuration and model definition
+
+### Playlists (`playlists`)
+
+One row per saved playlist (`api/Models/Playlist.cs`).
+
+| Column | What it holds |
+|--------|---------------|
+| `Id` | The playlist's id. |
+| `Name` | The owner's name for the playlist (at most 200 characters). |
+| `SourceUrl` | The provider's playlist address; it usually carries the provider account's credentials. |
+| `SourceName` | The owner's name for the source. |
+| `DisabledGroups` | The provider group names the owner switched off (JSON list). |
+| `totalchannels` | Number of entries in the source at the last analysis. |
+| `groupcount` | Number of groups in the source at the last analysis. |
+| `expirationutc` | When the provider subscription expires, as the provider reported it. |
+| `ownerid` | The owning user's id. |
+| `sharecode` | The random code of the player (share) link. |
+| `isactive` | Whether the player link answers. |
+| `viewcount` | How often the player link was fetched. |
+| `lastviewedutc` | When the player link was last fetched. |
+| `autorefreshenabled` | Whether Strim refreshes the source automatically. |
+| `watchlistgroup` | The player link starts with a group of the owner's watchlisted films and series. Off by default. |
+| `lastrefreshedutc` | When the source was last refreshed. |
+| `refreshfailurecount` | Automatic refreshes that failed in a row; a refresh that works sets it back to 0. |
+| `sourcehash` | Hash of the last fetched source. |
+| `sourceetag` | The provider's `ETag` of the last fetched source. |
+| `sourcelastmodifiedutc` | The provider's `Last-Modified` of the last fetched source. |
+| `sourcelengthbytes` | Size of the last fetched source in bytes. |
+| `sourcecheckedutc` | When the source was last checked. |
+| `accountstatus` | Provider account status (for example "Active") as the provider last reported it. |
+| `accountmaxconnections` | The provider account's maximum connections. |
+| `accountactiveconnections` | The provider account's active connections. |
+| `accountcheckedutc` | When the account facts were last read from the provider. |
+| `CreatedAt` | When the playlist was created. |
+| `UpdatedAt` | When the playlist was last changed. |
 
 ### Watchlist group flag (`playlists.watchlistgroup`)
 
 `watchlistgroup` marks a playlist whose player link should start with a group of watchlisted films and series. It
 is off by default: SQLite `INTEGER NOT NULL DEFAULT 0`, PostgreSQL `boolean NOT NULL DEFAULT false`, so every
 existing playlist reads `false`. `TryAddSqliteColumn` and `TryPatchPostgresSchema` add it idempotently on every
-start. Nothing reads the value yet, and the playlist create and update requests do not set it.
+start. The owner switches the flag with `PATCH /api/playlists/{id}/watchlist-group`, and the player-link route
+reads it on every request (see `docs/SECURITY.md`, "Watchlist group").
 
 ### Profile columns (`AspNetUsers.display_name`, `avatar`, `theme`)
 
@@ -61,89 +99,22 @@ Indexes: `IX_playlistshares_playlistid`, `IX_playlistshares_vieweruserid`, uniqu
 `(playlistid, vieweruserid) WHERE vieweruserid IS NOT NULL`. `Database.EnsurePlaylistSharesSchema` creates the
 table and indexes with `IF NOT EXISTS` on every start, for SQLite and PostgreSQL.
 
-## Limitations of Current Approach
+## Rules
 
-### 1. No Migration History
-- Cannot track what schema changes have been applied
-- No rollback capability
-- Difficult to sync schema across environments
-
-### 2. Manual Column Management
-- Each new column requires manual SQL for both PostgreSQL and SQLite
-- Easy to miss a column or have inconsistent types across providers
-- Index creation must be handled separately
-
-### 3. EnsureCreated() Constraints
-- Does not update existing tables when model changes
-- Only creates tables from scratch on empty databases
-- Incompatible with EF Core migrations (cannot use both)
-
-### 4. Production Concerns
-- No atomic migrations with rollback
-- Schema changes require careful manual coordination
-- No built-in tools for diff/compare
-
-## Recommended: EF Core Migrations
-
-For production deployments, consider switching to EF Core migrations:
-
-### Benefits
-- **Version Control**: Each migration is a code file in source control
-- **Rollback**: Can revert to previous schema versions
-- **Tooling**: `dotnet ef` CLI for generating and applying migrations
-- **Multi-Provider**: Migrations work across database providers
-- **Atomic**: Changes are applied transactionally
-
-### Migration Steps
-
-1. **Remove EnsureCreated()**: Delete or comment out `db.Database.EnsureCreated()` and manual patching
-2. **Generate Initial Migration**:
-   ```bash
-   cd api
-   dotnet ef migrations add InitialCreate
-   ```
-3. **Apply Migrations**:
-   ```bash
-   dotnet ef database update
-   ```
-4. **Future Changes**: Generate new migrations when model changes:
-   ```bash
-   dotnet ef migrations add AddNewFeature
-   ```
-
-### Startup Code Change
-
-Replace:
-```csharp
-void EnsureSchema(AppDbContext db, ILogger logger)
-{
-  db.Database.EnsureCreated();
-  // ... manual patching
-}
-```
-
-With:
-```csharp
-void EnsureSchema(AppDbContext db, ILogger logger)
-{
-  db.Database.Migrate();  // Applies pending migrations
-}
-```
-
-## When to Keep Current Approach
-
-The current approach is acceptable for:
-- Development/prototyping
-- Simple deployments with infrequent schema changes
-- Projects where migration infrastructure is overkill
+- No EF migrations (`AGENTS.md`, `docs/factory/GOAL.md`).
+- Only additive columns, added idempotently in `api/Configuration/Database.cs` for SQLite and PostgreSQL.
+- A new column or table also goes into `deploy/sanitise/columns.txt` in the same change, and into `sanitise.sql`
+  when it can hold personal data. There it sits inside a guarded block (`IF EXISTS` on
+  `information_schema.columns`), because the script runs before the candidate adds its columns.
 
 ## Index Configuration
 
-Indexes are defined in `AppDbContext.OnModelCreating()`:
+Indexes are defined in `AppDbContext.OnModelCreating()`, for example:
 
 ```csharp
 entity.HasIndex(p => new { p.OwnerId, p.UpdatedAt });
-entity.HasIndex(p => p.ShareCode).HasFilter("\"ShareCode\" IS NOT NULL");
+entity.HasIndex(p => p.ShareCode).HasFilter("\"sharecode\" IS NOT NULL");
 ```
 
-With migrations, these would be automatically included. With the current approach, indexes may need manual `CREATE INDEX IF NOT EXISTS` statements in the patching code.
+Indexes that an older database may lack are created with `CREATE INDEX IF NOT EXISTS` in the patching code of
+`api/Configuration/Database.cs`.

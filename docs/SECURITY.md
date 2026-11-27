@@ -15,7 +15,11 @@ What Strim protects, and where in the code each control lives.
 | Area | Control | Code |
 |------|---------|------|
 | SSRF | Only http/https; private, loopback, link-local and reserved addresses are refused before the request and again at connect time (DNS-rebinding safe); every redirect target is re-validated. | `api/Services/SecurityHelpers.cs`, `api/Configuration/PlaylistServices.cs`, `api/Services/PlaylistSourceFetcher.cs` |
-| CSRF | Sign-in, sign-out, registration and every playlist mutation require the `X-CSRF-TOKEN` header from `GET /api/auth/csrf-token`. | `api/Endpoints/EndpointSupport.cs` (`RequireCsrfToken`) |
+| CSRF | Every state-changing endpoint of sign-in, sign-out, registration, playlists, processing, marks, shares and profile requires the `X-CSRF-TOKEN` header from `GET /api/auth/csrf-token`. | `api/Endpoints/EndpointSupport.cs` (`RequireCsrfToken`) |
+| Response headers | Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'` (the pages keep their own CSP in a meta tag, which cannot set `frame-ancestors`). Over HTTPS in Production it adds `Strict-Transport-Security: max-age=31536000`. Every `/api` answer that sets no cache policy of its own gets `Cache-Control: no-store`; the share route keeps its own. | `api/Configuration/SecurityHeaders.cs` |
+| Invitations | Only the playlist's owner creates, lists and deletes invitations; anyone else gets 404. The token is returned once and only its SHA-256 is stored. The link carries it in the fragment (`/app#/invite/<token>`), and the app posts it in the body. It works once and for 7 days; a playlist has at most 10 shares. Unknown, expired, used and deleted tokens give the same 404. The changes sit behind the CSRF header and the sensitive rate limit. Token, hash and label are never logged. Strim sends no e-mail and never matches an invitation by e-mail. | `api/Endpoints/ShareEndpoints.cs` |
+| Marks | A signed-in user reaches only their own marks. The key is derived on the server from the entry name. Changes sit behind the CSRF header. A user holds at most 5,000 marks. A mark never touches a playlist or a player link. | `api/Endpoints/MarkEndpoints.cs` |
+| TMDB | Off without `TMDB_READ_ACCESS_TOKEN`. One fixed HTTPS host. The token travels in the `Authorization` header only and never reaches a URL, a response, a log, an error or the browser. Redirects, timeouts and errors become "unavailable". After a 429 no request is made until its `Retry-After` has passed (at most one hour). Answers are kept in memory only. A film or series card sends only the cleaned title and year, or a TMDB id; nothing is sent for channels or adult groups. | `api/Services/TmdbClient.cs`, `api/Services/TmdbCache.cs`, `api/Endpoints/LibraryEndpoints.cs` |
 | Cookies | `__Host-` prefixed, `HttpOnly`, `Secure` in production. `SameSite=None` in production for cross-origin clients, `Lax` in development (browsers reject `None` without HTTPS). | `api/Configuration/Authentication.cs`, `Security.cs` |
 | CORS | Credentialed CORS only for origins listed in `ALLOWED_ORIGINS`; none in production otherwise (the UI is same-origin). Development allows localhost origins. | `api/Configuration/Security.cs` |
 | Rate limits | Per IP per minute: auth 20, analyze/generate 30, share links 30, general 100; per user: link toggle/regenerate 10. | `api/Configuration/Security.cs` |
@@ -30,7 +34,7 @@ What Strim protects, and where in the code each control lives.
 | Resource use | 50 MiB raw-text bodies, one raw upload and one processing job at a time, bounded downloads, disk-backed cache with size limits. | `ProcessingEndpoints.UseAnalyzeBodyGate`, `PlaylistJobGate`, `PlaylistCacheOptions` |
 | Logging | Share codes are logged truncated (first and last four characters). Of a provider URL only the host is logged. A client's `X-Correlation-ID` is kept only when it has 1 to 64 characters of `[A-Za-z0-9-_]`; otherwise Strim generates one. | `PlaylistEndpoints`, `api/Program.cs` |
 | API document | Swagger (`/swagger/v1/swagger.json`) and its UI are served in Development only. | `api/Program.cs` |
-| Frontend | No third-party scripts, styles or fonts. Each page carries a CSP without `unsafe-inline`; never add inline `<script>`, `<style>` or `style=""`. | `*.html` |
+| Frontend | No third-party scripts, styles or fonts. Each page carries a CSP without `unsafe-inline`; never add inline `<script>`, `<style>` or `style=""`. The editor's CSP allows images from `https://image.tmdb.org` and from no other outside host. | `*.html`, `api.Tests/ContentSecurityPolicyTests.cs` |
 
 ## Deployment notes
 
@@ -41,8 +45,8 @@ What Strim protects, and where in the code each control lives.
   partition. Do not expose the container port directly to the internet.
 - Behind Cloudflare, a valid `CF-Connecting-IP` from a trusted proxy or loopback is the client
   address for rate limits. From any other peer the header is ignored.
-- On the public instance, `/app` and `/api` sit behind Cloudflare Access except the share route,
-  which players must reach without a login.
+- The public instance asks for the Cloudflare Access sign-in on every page; only player links are
+  reachable without it.
 - The image runs as the non-root user `app` (UID and GID 1654, `USER $APP_UID`). The files under
   `/app` belong to root and are read-only for it, so a fault in the app cannot change them. It
   writes only to `/app/data` (SQLite), `/home/app/.aspnet/DataProtection-Keys` (cookie keys,
