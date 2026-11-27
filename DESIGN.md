@@ -554,7 +554,7 @@ the full width. An open film card is a centred dialog over the page and changes 
 ├─────────────────────────────────────────┤
 │ Main (max-w 1080px, 20px gutter)        │
 │  .page-head   eyebrow · h1 · lead       │
-│  .section     .section-head + .grid     │  cards, features, FAQ
+│  .section     .section-head + .grid     │  cards, FAQ
 │  .cta-band    inverted dock colours     │  closes most pages
 │ Landing: hero · stops · band · FAQ · closing band
 │ Guide: .guide (700px column)            │
@@ -569,7 +569,6 @@ Below 720px the nav moves to a horizontally scrollable row under the bar.
 
 - **Hero demo** (`.demo`): a still of the group picker drawn in HTML (rows, switches, dock), so it
   follows the theme. Use made-up group names and counts, never real provider data.
-- **Feature card** (`.feature`): icon tile tinted live/movies/series, h3, one short paragraph.
 - **Stops** (`.stops`): the landing page's numbered sections; the number sits in a tangerine
   circle in the eyebrow, then h2, one paragraph and three `.ticks`. Copy and still stand side by
   side from 880px and swap sides on every second stop; while a stop has no still it is one text

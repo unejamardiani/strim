@@ -265,45 +265,6 @@ kbd {
   margin-top: 4px;
 }
 
-/* Feature card with a small coloured icon tile. */
-.feature {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 22px;
-}
-
-.feature-icon {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 6px;
-  border-radius: 13px;
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-}
-
-.feature-icon svg {
-  width: 22px;
-  height: 22px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.feature-icon.movies {
-  background: var(--movies-soft);
-  color: var(--movies-ink);
-}
-
-.feature-icon.series {
-  background: var(--series-soft);
-  color: var(--series-ink);
-}
-
 .cta-row {
   display: flex;
   flex-wrap: wrap;
