@@ -102,6 +102,29 @@ public class ReadmeTests
   }
 
   [Fact]
+  public void MigrationTool_NoteNamesTablesItDoesNotCopyAndWarns()
+  {
+    var note = Regex.Match(Readme(), @"^\*\*Migration tool:\*\*(.*?)(?=\n\n)", RegexOptions.Singleline | RegexOptions.Multiline);
+    Assert.True(note.Success, "migration tool note missing");
+    var text = Regex.Replace(note.Groups[1].Value, @"\s+", " ");
+
+    Assert.Matches(new Regex(@"does not copy the tables `titlemarks`[^.]*`playlistshares`"), text);
+    Assert.Contains("Do not use it for a database that holds marks, shares or profiles", text);
+  }
+
+  [Theory]
+  [InlineData("titlemarks")]
+  [InlineData("playlistshares")]
+  public void MigrationTool_StillDoesNotCopyTable(string table)
+  {
+    var tool = File.ReadAllText(Path.Combine(Root, "tools", "Strim.DbMigrator", "Program.cs"));
+
+    Assert.False(
+      tool.Contains(table, StringComparison.OrdinalIgnoreCase),
+      $"tools/Strim.DbMigrator now names {table}: the README's migration tool note is due for a change.");
+  }
+
+  [Fact]
   public void RepositoryAddresses_PointToPlisLabs()
   {
     var addresses = Regex.Matches(Readme(), @"github\.com/[^/\s)""]+/strim\b", RegexOptions.IgnoreCase).Select(m => m.Value);

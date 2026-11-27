@@ -68,7 +68,13 @@ api/ ──▶ TMDB (optional, only with a token)                 film and serie
 | `api.Tests/` | Unit tests and integration tests (`WebApplicationFactory` with SQLite and a stubbed upstream) |
 | `*.html`, `*.css`, `main.js`, `library.js`, `library.css`, `theme-boot.js`, `fonts/` | Frontend, copied into `api/wwwroot` by the Dockerfile |
 | `deploy/sanitise/` | SQL that strips personal data from the staging copy of production |
-| `tools/Strim.DbMigrator` | One-off SQLite → PostgreSQL data migration |
+| `tools/Strim.DbMigrator` | One-off SQLite → PostgreSQL migration of accounts and playlists, written before marks, sharing and profiles existed (see the note below) |
+
+**Migration tool:** `tools/Strim.DbMigrator` copies the Identity tables, without the profile columns
+(`display_name`, `avatar`, `theme`), and the original 17 columns of `playlists`. It does not copy the tables
+`titlemarks` (marks and watchlist) and `playlistshares` (sharing), nor the later playlist columns: the Watchlist
+group, the refresh failure count, the provider account facts and the source validators. Do not use it for a
+database that holds marks, shares or profiles: that data is lost without an error.
 
 Playlists are streamed to disk, never held in memory as a whole. Sources, analyses and generated
 outputs are cached on disk and reused by content hash; only one processing job runs at a time.
