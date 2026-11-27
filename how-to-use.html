@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
-    <title>How to use | Strim</title>
-    <meta name="description" content="Step by step: paste your IPTV provider’s M3U link into Strim, switch off the groups you never watch, then download the cleaned file or add the player link to your IPTV app." />
+    <title>How to use Strim: player list, Library and sharing | Strim</title>
+    <meta name="description" content="Step by step: paste your IPTV provider’s M3U link into Strim, switch off the groups you never watch, add the player link to your IPTV app, then browse your list in the Library and share it." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://strim.plis.dev/how-to-use.html" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self';" />
@@ -34,7 +34,7 @@
       <header class="page-head">
         <span class="eyebrow">How to use</span>
         <h1>From provider link to <em>clean player list.</em></h1>
-        <p class="lead">You need the M3U link from your IPTV provider and about a minute. Here is the whole flow, step by step.</p>
+        <p class="lead">You need the M3U link from your IPTV provider and about a minute. Here is the whole flow, step by step, from a clean player list to the Library, your watchlist on the television and sharing.</p>
       </header>
 
       <ol class="guide">
@@ -50,8 +50,10 @@
             <li>Type in the search box to find a group by name.</li>
             <li>Use the <strong>Live</strong>, <strong>Movies</strong> and <strong>Series</strong> pills to show one type, then <strong>All off</strong> to drop all of it.</li>
             <li>Sort by <strong>Largest</strong> to find the groups that make your list slow.</li>
+            <li>Switch to <strong>Everything</strong> to find a film, series or channel by name; it leads you to its group.</li>
+            <li><strong>Hide adult groups</strong> turns off every adult group at once.</li>
           </ul>
-          <p>The bar at the bottom shows how many entries are still on.</p>
+          <p>A tap on <strong>All on</strong> or <strong>All off</strong> can be undone. The bar at the bottom shows how many entries are still on.</p>
         </li>
         <li>
           <h2>Download, or save for a player link</h2>
@@ -71,7 +73,24 @@
         <li>
           <h2>Change it whenever you like</h2>
           <p>Open the playlist in Strim, switch groups on or off and press <strong>Save</strong>. Players get the change on their next refresh; the link itself stays the same.</p>
-          <p>From the playlist’s menu you can turn the link off, create a new link (the old one stops working), switch on auto-refresh or delete the playlist.</p>
+          <p>The playlist’s menu holds <strong>Refresh every 6 hours</strong>, <strong>Turn link off</strong>, <strong>Replace link</strong> (the old link stops working) and <strong>Delete playlist</strong>.</p>
+          <p>When your provider is down, players get the last list that worked.</p>
+        </li>
+        <li>
+          <h2>Open the Library</h2>
+          <p><strong>Library</strong> on the playlist card opens a read-only view of what your list holds, with <strong>Home</strong>, <strong>Search</strong>, <strong>Groups</strong> and <strong>Marks</strong>. Nothing in it changes the playlist.</p>
+          <p>Mark a film or series <strong>Seen</strong>, give it a thumb up or down, or put it on your watchlist with <strong>Add to watchlist</strong>. <strong>Include switched-off groups</strong> in the menu shows the rest of the list.</p>
+          <p>Cards and posters appear where the server has a TMDB key.</p>
+        </li>
+        <li>
+          <h2>Put your watchlist on the television</h2>
+          <p>In the playlist’s menu, switch on <strong>Watchlist group</strong>. After your player reloads the list, “Watchlist” and “Watchlist · Series” are its first groups.</p>
+          <p>Titles in groups you switched off are left out.</p>
+        </li>
+        <li>
+          <h2>Share the Library</h2>
+          <p>Choose <strong>Share</strong> in the playlist’s menu, then <strong>Invite someone</strong>. Give the invitation a name, press <strong>Create invite link</strong> and send the link yourself. It works once and for 7 days.</p>
+          <p>The person signs in with their own account, browses read-only and keeps their own marks. They never get your provider link or your player link. <strong>Remove access</strong> ends it.</p>
         </li>
       </ol>
 
@@ -92,6 +111,14 @@
             <h3>A group is missing</h3>
             <p>Use the <strong>Off</strong> filter to list every group you switched off. Groups your provider removes disappear from Strim as well.</p>
           </article>
+          <article class="card">
+            <h3>The Library shows no posters or cards</h3>
+            <p>The server has no TMDB key. Everything else in the Library works.</p>
+          </article>
+          <article class="card">
+            <h3>An invitation does not work any more</h3>
+            <p>It was already used, or it is older than 7 days. Ask the person who sent it for a new one.</p>
+          </article>
         </div>
       </section>
 
@@ -106,7 +133,7 @@
 
     <footer class="site-footer">
       <span class="wordmark" aria-hidden="true">str<span class="wm-i">ı<span class="wm-dot"></span></span>m</span>
-      <p>Free M3U playlist editor. Open source on <a href="https://github.com/unejamardiani/strim" rel="noopener">GitHub</a>.</p>
+      <p>Free M3U playlist editor and library. Open source on <a href="https://github.com/plis-labs/strim" rel="noopener">GitHub</a>.</p>
       <nav aria-label="Footer">
         <a href="/app">App</a>
         <a href="features.html">Features</a>
