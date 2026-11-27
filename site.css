@@ -1225,9 +1225,6 @@ kbd {
 
 .note-tmdb { margin-top: 4px; color: var(--ink-3); font-size: 13.5px; }
 
-/* Until a stop has its still it is one text column. */
-.stop:not(:has(figure)) { grid-template-columns: minmax(0, 1fr); }
-
 /* ---------- Stills (landing) ---------- */
 
 .ic {
@@ -1640,6 +1637,241 @@ kbd {
 
 .fc-body .art { font-size: 11px; padding: 7px 7px 0; border-radius: 10px; }
 
+/* One more poster, the watchlist badge and the episodes bar */
+
+.p7 { background: linear-gradient(transparent 0 52%, var(--po-sea-2) 52% 62%, transparent 62% 70%, var(--po-sea-2) 70% 80%, transparent 80% 88%, var(--po-sea-2) 88%), var(--po-sea); color: var(--po-cream); }
+
+.art .eps {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 14px 8px 6px;
+  background: linear-gradient(transparent, rgba(14, 12, 10, 0.82));
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.art .bm {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--badge-bg);
+  color: var(--po-gold);
+  --hole: var(--po-ink);
+}
+
+.art .bm .ic { width: 12px; height: 12px; stroke-width: 2.6; }
+
+/* Still: Library Home on the phone */
+
+.lib-cover {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background:
+    radial-gradient(16rem 9rem at 100% 0, var(--accent-soft), transparent 70%),
+    radial-gradient(14rem 9rem at 0 100%, var(--series-soft), transparent 70%),
+    var(--surface-2);
+}
+
+.lib-cover strong {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.lib-cover > span {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border: 1.5px solid var(--edge);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+.field .ic { width: 16px; height: 16px; color: var(--edge); }
+
+.field b { color: var(--ink); font-weight: 600; }
+
+.tabbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  margin-top: 16px;
+  padding: 6px;
+  border: 1px solid var(--dock-border);
+  border-radius: 22px;
+  background: var(--dock-bg);
+  color: var(--dock-ink-2);
+}
+
+.tabbar span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0 5px;
+  border-radius: 16px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.tabbar .on {
+  background: color-mix(in srgb, var(--dock-ink) 16%, transparent);
+  color: var(--dock-ink);
+  font-weight: 800;
+}
+
+.tabbar .on .sig { fill: var(--accent); }
+
+/* Television of the hero */
+
+.tvset { --tv-screen: #0e0c0a; --tv-row: rgba(245, 238, 228, 0.08); margin: 0; min-width: 0; }
+
+.tv-body {
+  padding: 10px 10px 12px;
+  border: 1px solid var(--dock-border);
+  border-radius: 22px;
+  background: var(--dock-bg);
+  box-shadow: var(--shadow-pop);
+}
+
+/* The screen keeps the scan lines, vignette and rolling bar of the error pages' television (.tv-screen). */
+.tvset .tv-screen {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 12px;
+  aspect-ratio: 16 / 9.4;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 16px;
+  border-radius: 13px;
+  background:
+    radial-gradient(60% 70% at 100% 0, rgba(255, 106, 46, 0.2), transparent 70%),
+    var(--tv-screen);
+  color: var(--dock-ink);
+  font-size: 13px;
+}
+
+.tv-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.tv-col .lbl {
+  margin: 0 0 4px 10px;
+  color: var(--dock-ink-2);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tv-col span:not(.lbl) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 9px;
+  color: var(--dock-ink-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tv-col span b { flex: 1; min-width: 0; overflow: hidden; font-weight: inherit; text-overflow: ellipsis; }
+
+.tv-col span i { font-style: normal; font-size: 11.5px; font-variant-numeric: tabular-nums; opacity: 0.8; }
+
+.tv-col span.sel { background: var(--accent); color: var(--on-accent); font-weight: 800; }
+
+.tv-col span.hi { background: var(--tv-row); color: var(--dock-ink); }
+
+.tv-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 9px;
+  color: var(--dock-ink-2);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tv-foot i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+.tv-stand {
+  width: 34%;
+  height: 9px;
+  margin: 0 auto;
+  border-radius: 0 0 10px 10px;
+  background: var(--dock-bg);
+  border: 1px solid var(--dock-border);
+  border-top: 0;
+}
+
+/* Phone frame */
+
+.phone {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--dock-border);
+  border-radius: 36px;
+  background: var(--dock-bg);
+  box-shadow: var(--shadow-pop);
+}
+
+.phone .still {
+  padding: 14px 12px 12px;
+  border: 0;
+  border-radius: 30px;
+  background: var(--bg);
+  box-shadow: none;
+}
+
+.phone .tile { flex-basis: 80px; }
+
+.phone .art { font-size: 11.5px; padding: 8px 8px 0; }
+
+.phone .lib-cover strong { font-size: 22px; }
+
+/* Hero figure: television behind, phone in front */
+
+.duo {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: end;
+}
+
+.duo .tvset { grid-column: 1 / 13; grid-row: 1; align-self: start; }
+
+.duo .phone { grid-column: 7 / 13; grid-row: 1; z-index: 2; margin-top: 31%; }
+
+@media (max-width: 560px) {
+  .duo .phone { grid-column: 5 / 13; margin-top: 36%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wm-dot,
   .tv-card .wm-dot,
@@ -1667,4 +1899,6 @@ kbd {
   .band { border: 1px solid CanvasText; }
   .still { border: 1px solid CanvasText; }
   .art, .capsule, .watch { border: 1px solid CanvasText; }
+  .tv-body, .phone, .tabbar { border: 1px solid CanvasText; }
+  .tv-col span.sel { forced-color-adjust: none; background: Highlight; color: HighlightText; }
 }

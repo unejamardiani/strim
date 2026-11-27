@@ -567,12 +567,19 @@ Below 720px the nav moves to a horizontally scrollable row under the bar.
 
 ### Site components
 
-- **Hero demo** (`.demo`): a still of the group picker drawn in HTML (rows, switches, dock), so it
-  follows the theme. Use made-up group names and counts, never real provider data.
+- **Hero figure** (`.duo`): a 12-column grid with one row. The television (`.tvset`) spans all
+  columns; its screen (`.tv-screen`, so it keeps the error pages' scan lines, vignette and rolling
+  bar) lists the groups with "Watchlist" selected in tangerine and the Watchlist's titles. The
+  phone (`.phone`, a frame in the dock's colours around a `.still` on `--bg`) spans columns 7 to 12
+  (5 to 12 below 560px), lies over the television and starts lower, so the group list stays
+  visible; it shows the Library's cover, "Your watchlist" and the tab bar (`.tabbar`). Both are
+  pictures (`role="img"` with an `aria-label`) with made-up data.
+- **Group picker** (`.demo`): a still of the group picker drawn in HTML (rows, switches, dock), so
+  it follows the theme; it stands at the stop "Clean". Use made-up group names and counts, never
+  real provider data.
 - **Stops** (`.stops`): the landing page's numbered sections; the number sits in a tangerine
   circle in the eyebrow, then h2, one paragraph and three `.ticks`. Copy and still stand side by
-  side from 880px and swap sides on every second stop; while a stop has no still it is one text
-  column.
+  side from 880px and swap sides on every second stop.
 - **Stills** (`.still`): a `<figure role="img">` with an `aria-label`, drawn in HTML and CSS from
   the tokens like `.demo`, so it follows the theme. It is a picture: no link and no control in it,
   made-up data, and every control text is the app's own. Icons are inline SVG with the path data

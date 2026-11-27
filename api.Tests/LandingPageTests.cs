@@ -9,7 +9,8 @@ namespace Api.Tests;
 /// used (Clean, Link, Library, Together), the band about the link and five questions; the old group-editor sections
 /// are gone, and site.css styles the new parts before its forced-colours block. Stops 2 and 4 hold their stills
 /// (#601): pictures drawn with the app's own text and icons. Stop 3 holds a film card (#602) with drawn posters, never
-/// a poster image.
+/// a poster image. The hero shows a television with the Watchlist group and a phone with the Library (#603); the group
+/// picker moved to stop 1.
 /// </summary>
 public class LandingPageTests
 {
@@ -226,5 +227,102 @@ public class LandingPageTests
       Assert.True(at >= 0 && at < forced, $"site.css must hold {rule} before the forced-colors block.");
     }
     Assert.Contains(".still { border: 1px solid CanvasText; }", css[forced..]);
+  }
+
+  private static string Hero() => Block(Read("index.html"), @"<section class=""hero hero-tv"">(.*?)</section>");
+
+  private static string Duo()
+  {
+    var hero = Hero();
+    Assert.Single(Regex.Matches(hero, @"<div class=""duo"">"));
+    return Block(hero, @"<div class=""duo"">(.*)</div>\s*$");
+  }
+
+  private static string Phone() => Block(Duo(), @"<div class=""phone"">(.*?)</figure>");
+
+  [Fact]
+  public void Hero_HoldsATelevisionAndAPhone_BothPicturesWithoutLinksButtonsOrImages()
+  {
+    var duo = Duo();
+
+    var tv = Assert.Single(Regex.Matches(duo, @"<figure[^>]*class=""tvset""[^>]*>"));
+    Assert.Contains(@"role=""img""", tv.Value);
+    Assert.Matches(@"aria-label=""[^""]+""", tv.Value);
+
+    Assert.Single(Regex.Matches(duo, @"<div class=""phone"">"));
+    var still = Assert.Single(Regex.Matches(Block(duo, @"<div class=""phone"">(.*)"), @"<figure[^>]*>"));
+    Assert.Contains(@"class=""still", still.Value);
+    Assert.Contains(@"role=""img""", still.Value);
+    Assert.Matches(@"aria-label=""[^""]+""", still.Value);
+
+    Assert.DoesNotContain("<a", duo);
+    Assert.DoesNotContain("<button", duo);
+    Assert.DoesNotContain("<img", duo);
+  }
+
+  [Fact]
+  public void Television_ListsWatchlistAndWatchlistSeries_AsItsFirstGroups()
+  {
+    var groups = Block(Duo(), @"<div class=""tv-col"">(.*?)</div>");
+
+    Assert.Equal(
+      new[] { "Watchlist", "Watchlist · Series" },
+      Regex.Matches(groups, "<b>(.*?)</b>").Take(2).Select(match => match.Groups[1].Value));
+  }
+
+  [Fact]
+  public void GroupPicker_StandsInTheCleanStop_EveryStopHoldsOneFigure()
+  {
+    Assert.Single(Regex.Matches(Read("index.html"), @"class=""demo"""));
+    Assert.Contains(@"<figure class=""demo""", Stops()[0]);
+    Assert.Contains(@"<span class=""eyebrow"">Clean</span>", Stops()[0]);
+    foreach (var stop in Stops())
+      Assert.Single(Regex.Matches(stop, "<figure[ >]"));
+  }
+
+  [Theory]
+  [InlineData("Search this list")]
+  [InlineData("Your watchlist")]
+  [InlineData("Home")]
+  [InlineData("Search")]
+  [InlineData("Groups")]
+  [InlineData("Marks")]
+  public void PhoneStill_UsesTheLibrarysOwnText(string text)
+  {
+    Assert.Contains(text, Phone());
+    Assert.Contains(text, Read("library.js"));
+  }
+
+  [Theory]
+  [InlineData("search")]
+  [InlineData("bookmark")]
+  [InlineData("home")]
+  [InlineData("grid")]
+  [InlineData("marks")]
+  public void Hero_DrawsTheAppsIcons(string icon)
+  {
+    // The whole markup of the icon, not only its first d value: grid is drawn with rects and has no d.
+    var icons = Block(Read("main.js"), @"const ICONS = \{(.*?)\n\};");
+    var markup = Block(icons, $@"\n\s*{icon}: '([^']*)'");
+
+    Assert.Contains(markup, Block(Read("index.html"), @"<div class=""duo"">(.*?)</section>"));
+  }
+
+  [Fact]
+  public void SiteCss_StylesTheHeroFigure_BeforeTheForcedColoursBlock_WhichBordersIt()
+  {
+    var css = Read("site.css");
+    var forced = css.LastIndexOf("@media (forced-colors: active)", StringComparison.Ordinal);
+    Assert.True(forced >= 0, "site.css has no forced-colors block.");
+
+    foreach (var rule in new[] { ".duo {", ".tvset .tv-screen {", ".phone {", ".tabbar {" })
+    {
+      var at = css.IndexOf("\n" + rule, StringComparison.Ordinal);
+      Assert.True(at >= 0 && at < forced, $"site.css must hold {rule} before the forced-colors block.");
+    }
+    Assert.Contains(".tv-body, .phone, .tabbar { border: 1px solid CanvasText; }", css[forced..]);
+    Assert.Contains(
+      ".tv-col span.sel { forced-color-adjust: none; background: Highlight; color: HighlightText; }", css[forced..]);
+    Assert.DoesNotContain(".stop:not(:has(figure))", css);
   }
 }
