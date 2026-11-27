@@ -1428,6 +1428,218 @@ kbd {
 
 .ck.no .ic { color: var(--ink-3); }
 
+/* Poster art: fixed colours, the same in both themes, like a real poster image. */
+.site {
+  --po-teal: #12343b;
+  --po-sun: #f4511a;
+  --po-sand: #efe2c6;
+  --po-ink: #1d1a16;
+  --po-rust: #b23a08;
+  --po-rust-2: #d9531c;
+  --po-moss: #24321f;
+  --po-gold: #f0b04a;
+  --po-navy: #1c2440;
+  --po-violet: #9a80ff;
+  --po-plum: #3a1f3d;
+  --po-cream: #f5eee4;
+  --po-sea: #0f2a33;
+  --po-sea-2: #1f5361;
+  --badge-bg: rgba(14, 12, 10, 0.62);
+}
+
+/* Poster tiles */
+
+.rail {
+  display: flex;
+  gap: 10px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 78%, transparent);
+  mask-image: linear-gradient(90deg, #000 78%, transparent);
+}
+
+.tile {
+  flex: 0 0 96px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.art {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 9px 9px 0;
+  border-radius: 12px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+.tile .tt {
+  margin-top: 6px;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tile .tm {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.tile .tm i {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.p1 { background: radial-gradient(circle at 74% 80%, var(--po-sun) 0 33%, transparent 34%), linear-gradient(var(--po-teal), #0c262c); color: var(--po-cream); }
+
+.p2 { background: linear-gradient(112deg, transparent 0 50%, var(--po-ink) 50% 62%, transparent 62%), var(--po-sand); color: var(--po-ink); }
+
+.p3 { background: repeating-radial-gradient(circle at 50% 70%, var(--po-rust-2) 0 9px, var(--po-rust) 9px 18px); color: var(--po-cream); }
+
+.p4 { background: linear-gradient(var(--po-moss) 0 40%, transparent 40%), radial-gradient(var(--po-gold) 20%, transparent 22%) 0 0 / 20% 13.4%, var(--po-moss); color: var(--po-cream); }
+
+.p5 { background: radial-gradient(circle at 50% 104%, transparent 0 34%, var(--po-violet) 34% 40%, transparent 40% 52%, var(--po-violet) 52% 58%, transparent 58%), var(--po-navy); color: var(--po-cream); }
+
+.p6 { background: linear-gradient(var(--po-plum) 0 36%, transparent 36%), linear-gradient(135deg, transparent 0 58%, var(--po-gold) 58% 78%, transparent 78%), linear-gradient(45deg, transparent 0 58%, var(--po-gold) 58% 78%, transparent 78%), var(--po-plum); color: var(--po-cream); }
+
+/* Still: film card */
+
+.fc { padding: 0; overflow: hidden; }
+
+.fc-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 18px 16px;
+  text-align: center;
+  background:
+    radial-gradient(70% 60% at 68% 30%, color-mix(in srgb, var(--po-sun) 26%, transparent), transparent 72%),
+    radial-gradient(80% 70% at 22% 8%, color-mix(in srgb, var(--po-sea-2) 34%, transparent), transparent 72%);
+}
+
+.fc-poster {
+  width: 128px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  font-size: 17px;
+  text-align: left;
+}
+
+.fc-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 750;
+}
+
+.fc-title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.fc-genres { color: var(--ink-2); font-size: 13.5px; }
+
+.fc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 14px;
+  margin-top: 8px;
+}
+
+.fc-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-rating .ic { width: 15px; height: 15px; color: var(--movies); }
+
+.capsule {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+
+.capsule span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+
+.capsule .on { background: var(--accent-soft); color: var(--accent-ink); }
+
+.capsule .ic { width: 17px; height: 17px; }
+
+.watch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px 0 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 13.5px;
+  font-weight: 750;
+}
+
+.watch i {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.watch .ic { width: 15px; height: 15px; }
+
+.fc-body { padding: 0 18px 18px; }
+
+.fc-over {
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.fc-body .tile { flex-basis: 78px; }
+
+.fc-body .art { font-size: 11px; padding: 7px 7px 0; border-radius: 10px; }
+
 @media (prefers-reduced-motion: reduce) {
   .wm-dot,
   .tv-card .wm-dot,
@@ -1454,4 +1666,5 @@ kbd {
   .tv-card .wm-dot { animation: none; }
   .band { border: 1px solid CanvasText; }
   .still { border: 1px solid CanvasText; }
+  .art, .capsule, .watch { border: 1px solid CanvasText; }
 }
