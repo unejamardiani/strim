@@ -8,7 +8,8 @@ namespace Api.Tests;
 /// Pins the landing page to what Strim does today (#596): a hero in two sentences, four stops in the order Strim is
 /// used (Clean, Link, Library, Together), the band about the link and five questions; the old group-editor sections
 /// are gone, and site.css styles the new parts before its forced-colours block. Stops 2 and 4 hold their stills
-/// (#601): pictures drawn with the app's own text and icons.
+/// (#601): pictures drawn with the app's own text and icons. Stop 3 holds a film card (#602) with drawn posters, never
+/// a poster image.
 /// </summary>
 public class LandingPageTests
 {
@@ -126,8 +127,9 @@ public class LandingPageTests
 
   [Theory]
   [InlineData("Link")]
+  [InlineData("Library")]
   [InlineData("Together")]
-  public void LinkAndTogetherStops_HoldOneStill_APictureWithoutLinksOrButtons(string eyebrow)
+  public void LinkLibraryAndTogetherStops_HoldOneStill_APictureWithoutLinksButtonsOrImages(string eyebrow)
   {
     var stop = Stop(eyebrow);
 
@@ -138,6 +140,44 @@ public class LandingPageTests
     var still = Block(stop, "<figure[^>]*>(.*?)</figure>");
     Assert.DoesNotContain("<a", still);
     Assert.DoesNotContain("<button", still);
+    Assert.DoesNotContain("<img", still);
+  }
+
+  [Theory]
+  [InlineData("Similar films")]
+  [InlineData("On your watchlist")]
+  public void FilmCardStill_UsesTheLibrarysOwnText(string text)
+  {
+    var still = Block(Stop("Library"), "<figure[^>]*>(.*?)</figure>");
+
+    Assert.Contains(text, still);
+    Assert.Contains(text, Read("library.js"));
+  }
+
+  [Fact]
+  public void Page_ShowsNoPosterImage()
+  {
+    var html = Read("index.html");
+
+    Assert.DoesNotContain("image.tmdb.org", html);
+    Assert.DoesNotContain("<img", html);
+  }
+
+  [Fact]
+  public void SiteCss_DrawsThePosters_BeforeTheForcedColoursBlock_WhichBordersThem()
+  {
+    var css = Read("site.css");
+    var forced = css.LastIndexOf("@media (forced-colors: active)", StringComparison.Ordinal);
+    Assert.True(forced >= 0, "site.css has no forced-colors block.");
+    var before = css[..forced];
+
+    Assert.Contains("aspect-ratio: 2 / 3;", Block(before, @"\n\.art \{([^}]*)\}"));
+    foreach (var rule in new[] { ".p1 {", ".p2 {", ".p3 {", ".p4 {", ".p5 {", ".p6 {" })
+      Assert.Contains("\n" + rule, before);
+    var tokens = Block(before, @"\n\.site \{([^}]*--po-[^}]*)\}");
+    foreach (var token in new[] { "--po-teal:", "--po-sun:", "--po-sand:", "--po-ink:", "--po-cream:", "--po-sea-2:" })
+      Assert.Contains(token, tokens);
+    Assert.Contains(".art, .capsule, .watch { border: 1px solid CanvasText; }", css[forced..]);
   }
 
   [Theory]
@@ -162,6 +202,8 @@ public class LandingPageTests
   [InlineData("bookmark")]
   [InlineData("check")]
   [InlineData("star")]
+  [InlineData("up")]
+  [InlineData("down")]
   public void Stills_DrawTheAppsIcons(string icon)
   {
     var icons = Block(Read("main.js"), @"const ICONS = \{(.*?)\n\};");

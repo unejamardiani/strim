@@ -583,6 +583,16 @@ Below 720px the nav moves to a horizontally scrollable row under the bar.
   switched-on link settings. Stop 4 (Together) holds `.share-still`: the sharing page with two
   invited people and what they get. Each figure follows the `.stop-copy`, so from 880px it stands
   on the left of its stop.
+- **Poster art** (`.art`): the page shows no real poster (no image file, no outside host, and a
+  real poster is someone's work). A poster is drawn: a 2:3 box with one of the gradient pictures
+  `.p1` to `.p6` and a made-up title in the display face, never the title or poster of a real
+  film. Its colours, the tokens `--po-*` on `.site`, are fixed and the same in both themes, like
+  an image.
+- **Film card still** (`.fc`): stop 3 (Library). A stage washed with two soft glows in the
+  poster's colours holds the poster (128px), a kicker with the Movies diamond, the title, the
+  genres, the rating, the marks capsule (seen, thumbs up, thumbs down) and the Watchlist button.
+  Below it the overview and a rail of similar films (`.rail`, fading out on the right); a film
+  that is in the list has a green dot before its group.
 - **Band** (`.band`): the dock's colours with the accent glow, a heading and three facts under a
   hairline.
 - **Guide** (`.guide`): long-form numbered steps with a connecting line, tangerine numbers.
