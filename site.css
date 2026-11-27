@@ -1228,6 +1228,206 @@ kbd {
 /* Until a stop has its still it is one text column. */
 .stop:not(:has(figure)) { grid-template-columns: minmax(0, 1fr); }
 
+/* ---------- Stills (landing) ---------- */
+
+.ic {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ic .sig {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* State marks are filled: the body takes the ink, the signal dot becomes a hole. */
+.ic.fill .b {
+  fill: currentColor;
+}
+
+.ic.fill .sig {
+  fill: var(--hole, var(--surface));
+}
+
+.still {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border-radius: 26px;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow-pop);
+  font-size: 14px;
+  text-align: left;
+}
+
+.sec {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 16px 2px 8px;
+}
+
+.sec .h {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.sec .n {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.sec .all {
+  margin-left: auto;
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Still: player link */
+
+.pl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 2px 2px 12px;
+}
+
+.pl-head strong {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.pl-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pl-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.link-still .demo-link { margin-bottom: 0; }
+
+.link-still .demo-link .btn { min-height: 36px; }
+
+.pl-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 12px 2px 6px;
+  color: var(--ink-3);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pl-facts b { color: var(--ink-2); font-weight: 650; }
+
+.pl-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 2px;
+  border-top: 1px solid var(--line);
+}
+
+.pl-item > .ic { color: var(--ink-2); }
+
+.pl-item span:not(.switch) {
+  flex: 1;
+  min-width: 0;
+  font-weight: 650;
+}
+
+.pl-item small {
+  display: block;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 450;
+}
+
+.expiry {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+/* Still: sharing */
+
+.sh-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sh-person span:last-child { flex: 1; min-width: 0; font-weight: 700; }
+
+.sh-person small { display: block; color: var(--ink-3); font-size: 12.5px; font-weight: 450; }
+
+.av {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--series-soft);
+  color: var(--series-ink);
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  font-weight: 800;
+}
+
+.av.gold { background: var(--movies-soft); color: var(--movies-ink); }
+
+.av .ic { width: 18px; height: 18px; }
+
+.sh-what { display: flex; flex-direction: column; gap: 7px; margin: 14px 2px 2px; }
+
+.sh-what .lbl {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ck { display: flex; align-items: flex-start; gap: 9px; color: var(--ink-2); font-size: 13.5px; }
+
+.ck .ic { width: 16px; height: 16px; margin-top: 2px; color: var(--ok); stroke-width: 2.6; }
+
+.ck.no .ic { color: var(--ink-3); }
+
 @media (prefers-reduced-motion: reduce) {
   .wm-dot,
   .tv-card .wm-dot,
@@ -1253,4 +1453,5 @@ kbd {
   /* The television's own pulse rule outranks theme.css's; stop it so no tangerine ring is painted. */
   .tv-card .wm-dot { animation: none; }
   .band { border: 1px solid CanvasText; }
+  .still { border: 1px solid CanvasText; }
 }
