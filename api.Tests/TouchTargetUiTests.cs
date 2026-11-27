@@ -98,7 +98,7 @@ public class TouchTargetUiTests
     var css = Read("app.css");
     var block = PhoneBlocks(css).Single(b => b.Contains(AfterRule(".pills button", "-4px 0")));
     Assert.DoesNotContain(".site-links a::after", block);
-    Assert.Contains("<a href=\"https://github.com/unejamardiani/strim\" rel=\"noopener\">Source</a>\n      <p id=\"tmdb-attribution\"",
+    Assert.Contains("<a href=\"https://github.com/plis-labs/strim\" rel=\"noopener\">Source</a>\n      <p id=\"tmdb-attribution\"",
       Read("app.html"));
     // The footer must not move: no gap, margin or padding change on the footer row.
     Assert.DoesNotContain(".site-links {", block);
