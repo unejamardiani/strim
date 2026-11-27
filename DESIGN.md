@@ -573,6 +573,16 @@ Below 720px the nav moves to a horizontally scrollable row under the bar.
   circle in the eyebrow, then h2, one paragraph and three `.ticks`. Copy and still stand side by
   side from 880px and swap sides on every second stop; while a stop has no still it is one text
   column.
+- **Stills** (`.still`): a `<figure role="img">` with an `aria-label`, drawn in HTML and CSS from
+  the tokens like `.demo`, so it follows the theme. It is a picture: no link and no control in it,
+  made-up data, and every control text is the app's own. Icons are inline SVG with the path data
+  of `ICONS` in `main.js`, class `.ic`; a state mark is filled (`.ic.fill`: the body `.b` takes
+  the ink, the signal dot `.sig` becomes a hole). A section inside a still opens with `.sec`
+  (heading `.h`, count `.n`, action text `.all` on the right). Stop 2 (Link) holds
+  `.link-still`: a saved playlist with its player link on `strim.example`, facts and two
+  switched-on link settings. Stop 4 (Together) holds `.share-still`: the sharing page with two
+  invited people and what they get. Each figure follows the `.stop-copy`, so from 880px it stands
+  on the left of its stop.
 - **Band** (`.band`): the dock's colours with the accent glow, a heading and three facts under a
   hairline.
 - **Guide** (`.guide`): long-form numbered steps with a connecting line, tangerine numbers.

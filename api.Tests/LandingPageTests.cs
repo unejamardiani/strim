@@ -7,7 +7,8 @@ namespace Api.Tests;
 /// <summary>
 /// Pins the landing page to what Strim does today (#596): a hero in two sentences, four stops in the order Strim is
 /// used (Clean, Link, Library, Together), the band about the link and five questions; the old group-editor sections
-/// are gone, and site.css styles the new parts before its forced-colours block.
+/// are gone, and site.css styles the new parts before its forced-colours block. Stops 2 and 4 hold their stills
+/// (#601): pictures drawn with the app's own text and icons.
 /// </summary>
 public class LandingPageTests
 {
@@ -121,5 +122,67 @@ public class LandingPageTests
       Assert.True(at >= 0 && at < forced, $"site.css must hold {rule} before the forced-colors block.");
     }
     Assert.Contains(".band { border: 1px solid CanvasText; }", css[forced..]);
+  }
+
+  [Theory]
+  [InlineData("Link")]
+  [InlineData("Together")]
+  public void LinkAndTogetherStops_HoldOneStill_APictureWithoutLinksOrButtons(string eyebrow)
+  {
+    var stop = Stop(eyebrow);
+
+    var figure = Assert.Single(Regex.Matches(stop, "<figure[^>]*>"));
+    Assert.Contains(@"role=""img""", figure.Value);
+    Assert.Matches(@"aria-label=""[^""]+""", figure.Value);
+
+    var still = Block(stop, "<figure[^>]*>(.*?)</figure>");
+    Assert.DoesNotContain("<a", still);
+    Assert.DoesNotContain("<button", still);
+  }
+
+  [Theory]
+  [InlineData("Refresh every 6 hours")]
+  [InlineData("Keeps the provider list cached for players")]
+  [InlineData("Watchlist group")]
+  [InlineData("Players show changes when they reload the list")]
+  [InlineData("What they get")]
+  [InlineData("Browse and search the groups you switched on")]
+  [InlineData("Open film and series cards")]
+  [InlineData("Keep their own seen and thumbs marks")]
+  [InlineData("No player link, no source, no changes to the list")]
+  [InlineData("Invite someone")]
+  public void Stills_UseTheAppsOwnText(string text)
+  {
+    Assert.Contains(text, Read("index.html"));
+    Assert.Contains(text, Read("main.js"));
+  }
+
+  [Theory]
+  [InlineData("clock")]
+  [InlineData("bookmark")]
+  [InlineData("check")]
+  [InlineData("star")]
+  public void Stills_DrawTheAppsIcons(string icon)
+  {
+    var icons = Block(Read("main.js"), @"const ICONS = \{(.*?)\n\};");
+    var markup = Block(icons, $@"\n\s*{icon}: '([^']*)'");
+    var path = Block(markup, @"(?<![\w-])d=""([^""]+)""");
+
+    Assert.Contains($@"d=""{path}""", Read("index.html"));
+  }
+
+  [Fact]
+  public void SiteCss_StylesTheStills_BeforeTheForcedColoursBlock_WhichBordersTheStill()
+  {
+    var css = Read("site.css");
+    var forced = css.LastIndexOf("@media (forced-colors: active)", StringComparison.Ordinal);
+    Assert.True(forced >= 0, "site.css has no forced-colors block.");
+
+    foreach (var rule in new[] { ".still {", ".ic {" })
+    {
+      var at = css.IndexOf("\n" + rule, StringComparison.Ordinal);
+      Assert.True(at >= 0 && at < forced, $"site.css must hold {rule} before the forced-colors block.");
+    }
+    Assert.Contains(".still { border: 1px solid CanvasText; }", css[forced..]);
   }
 }
