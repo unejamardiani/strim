@@ -554,8 +554,9 @@ the full width. An open film card is a centred dialog over the page and changes 
 ├─────────────────────────────────────────┤
 │ Main (max-w 1080px, 20px gutter)        │
 │  .page-head   eyebrow · h1 · lead       │
-│  .section     .section-head + .grid     │  cards, features, steps, FAQ
+│  .section     .section-head + .grid     │  cards, features, FAQ
 │  .cta-band    inverted dock colours     │  closes most pages
+│ Landing: hero · stops · band · FAQ · closing band
 │ Guide: .guide (700px column)            │
 ├─────────────────────────────────────────┤
 │ Footer                                  │  wordmark · line · links
@@ -569,8 +570,13 @@ Below 720px the nav moves to a horizontally scrollable row under the bar.
 - **Hero demo** (`.demo`): a still of the group picker drawn in HTML (rows, switches, dock), so it
   follows the theme. Use made-up group names and counts, never real provider data.
 - **Feature card** (`.feature`): icon tile tinted live/movies/series, h3, one short paragraph.
-- **Steps** (`.steps`): numbered ink circles. **Guide** (`.guide`): long-form numbered steps with a
-  connecting line, tangerine numbers.
+- **Stops** (`.stops`): the landing page's numbered sections; the number sits in a tangerine
+  circle in the eyebrow, then h2, one paragraph and three `.ticks`. Copy and still stand side by
+  side from 880px and swap sides on every second stop; while a stop has no still it is one text
+  column.
+- **Band** (`.band`): the dock's colours with the accent glow, a heading and three facts under a
+  hairline.
+- **Guide** (`.guide`): long-form numbered steps with a connecting line, tangerine numbers.
 - **FAQ**: `<details class="card">` with a rotating plus.
 - **Error pages**: a small television (`.tv`, decorative, `aria-hidden`) in the dock's colours
   next to the copy (above it on phones): eyebrow with the status code, a heading with the one

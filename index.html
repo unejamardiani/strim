@@ -7,19 +7,19 @@
     <meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
 
-    <title>Strim - M3U playlist editor for IPTV</title>
-    <meta name="description" content="Switch off the IPTV groups you never watch, then download a clean M3U file or give your player one link that stays up to date. Strim edits the playlist only; it never hosts streams." />
+    <title>Strim - M3U playlist editor and library for IPTV</title>
+    <meta name="description" content="Switch off the IPTV groups you never watch, give your players one link that stays up to date, and browse what is left like a library. Strim edits the playlist only; it never hosts streams." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://strim.plis.dev/" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>" />
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://strim.plis.dev/" />
-    <meta property="og:title" content="Strim - your playlist, minus the noise" />
-    <meta property="og:description" content="Switch off the IPTV groups you never watch and get one clean link for your player." />
+    <meta property="og:title" content="Strim - pick it on the phone, find it on the TV" />
+    <meta property="og:description" content="Clean your IPTV playlist, give your players one link and browse what is left like a library." />
     <meta property="twitter:card" content="summary" />
-    <meta property="twitter:title" content="Strim - your playlist, minus the noise" />
-    <meta property="twitter:description" content="Switch off the IPTV groups you never watch and get one clean link for your player." />
+    <meta property="twitter:title" content="Strim - pick it on the phone, find it on the TV" />
+    <meta property="twitter:description" content="Clean your IPTV playlist, give your players one link and browse what is left like a library." />
 
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self';" />
 
@@ -42,18 +42,17 @@
     </header>
 
     <main class="site-main">
-      <section class="hero">
+      <section class="hero hero-tv">
         <div class="hero-copy">
-          <span class="eyebrow">M3U playlist editor</span>
-          <h1>Your playlist, <em>minus the noise.</em></h1>
+          <span class="eyebrow">Playlist editor and library</span>
+          <h1><span>Pick it on the phone.</span> <em>Find it on the TV.</em></h1>
           <p class="lead">
-            For anyone whose IPTV provider sends thousands of channels, movies and series they never
-            watch. Paste the provider’s link, switch off the groups you don’t want and download a
-            clean playlist, or sign in for a player link that stays up to date.
+            Strim trims the playlist your IPTV provider sends, gives your players one link that stays
+            current, and turns what is left into a library you can search, mark and share.
           </p>
           <div class="cta-row">
             <a class="btn btn-primary btn-lg" href="/app">Open Strim</a>
-            <a class="btn btn-lg" href="how-to-use.html">How to use</a>
+            <a class="btn btn-lg" href="features.html">All features</a>
           </div>
           <div class="types" aria-label="Content types">
             <span><span class="dot"></span>Live TV</span>
@@ -86,55 +85,66 @@
         </figure>
       </section>
 
-      <section class="section" aria-labelledby="how-title">
-        <div class="section-head">
-          <h2 id="how-title">How it works</h2>
-        </div>
-        <ol class="steps">
-          <li class="card">
-            <h3>Paste your link</h3>
-            <p>The M3U or M3U8 link from your provider. Strim downloads and reads it on the server, so lists with tens of thousands of entries load without freezing your phone.</p>
+      <section class="section" aria-label="What Strim does">
+        <ol class="stops">
+          <li class="stop">
+            <div class="stop-copy">
+              <span class="eyebrow">Clean</span>
+              <h2>Switch off what you never watch.</h2>
+              <p>Paste the provider’s link. Strim reads it on the server and lists every group with its size and type, so a list of tens of thousands of entries stays quick on a phone.</p>
+              <ul class="ticks">
+                <li><span><b>Live, movies and series apart.</b> A mixed group is split, so you keep “Germany” and drop “Germany · Series”.</span></li>
+                <li><span><b>Search everything.</b> Find a film, series or channel and jump to its group.</span></li>
+                <li><span><b>Safe bulk changes.</b> All on and All off say how many groups they touch and can be undone.</span></li>
+              </ul>
+            </div>
           </li>
-          <li class="card">
-            <h3>Pick your groups</h3>
-            <p>Every group is listed with its size and type. Search, filter by live, movies or series, and switch off whole groups at once.</p>
+          <li class="stop">
+            <div class="stop-copy">
+              <span class="eyebrow">Link</span>
+              <h2>One link for every player.</h2>
+              <p>Save the playlist and give the player link to TiviMate, IPTV Smarters, VLC, Kodi or any app that takes an M3U address. Each refresh starts from the provider’s current list and applies your choices.</p>
+              <ul class="ticks">
+                <li><span><b>Facts your TV app hides.</b> Subscription end, connections, and when a player last fetched the link.</span></li>
+                <li><span><b>Your watchlist as the first group.</b> One switch per playlist.</span></li>
+                <li><span><b>Yours to switch off.</b> Turn the link off, or replace it if it leaks.</span></li>
+              </ul>
+            </div>
           </li>
-          <li class="card">
-            <h3>Play it anywhere</h3>
-            <p>Download the cleaned .m3u, or sign in and save to get a player link for TiviMate, IPTV Smarters, VLC, Kodi or any app that takes an M3U URL.</p>
+          <li class="stop">
+            <div class="stop-copy">
+              <span class="eyebrow">Library</span>
+              <h2>Know what the list holds.</h2>
+              <p>Every saved playlist has a read-only Library. Search films, series and channels, browse by group, and open a card with poster, rating, seasons and the similar titles that are in your list.</p>
+              <ul class="ticks">
+                <li><span><b>Marks.</b> Seen, thumbs up, thumbs down and a watchlist, kept per person.</span></li>
+                <li><span><b>Suggestions from your own list.</b> Trending this week and “Because you liked”.</span></li>
+                <li><span><b>One row per series.</b> With the seasons and episodes your list has.</span></li>
+              </ul>
+              <p class="note-tmdb">Posters, cards and suggestions use TMDB and appear where the server has a TMDB key.</p>
+            </div>
+          </li>
+          <li class="stop">
+            <div class="stop-copy">
+              <span class="eyebrow">Together</span>
+              <h2>Share the library, keep the keys.</h2>
+              <p>Invite up to ten people to a playlist’s Library. They browse with their own account and keep their own marks. The provider link and the player link stay with you.</p>
+              <ul class="ticks">
+                <li><span><b>An invite link you send yourself.</b> It works once and for seven days.</span></li>
+                <li><span><b>Read-only.</b> Nothing an invited person does changes the list.</span></li>
+                <li><span><b>Shared watchlist on the TV.</b> Their bookmarks join the Watchlist group, without names.</span></li>
+              </ul>
+            </div>
           </li>
         </ol>
       </section>
 
-      <section class="section" aria-labelledby="features-title">
-        <div class="section-head">
-          <h2 id="features-title">What it does</h2>
-          <p>One job: keep the groups you watch and drop the rest. It does not edit single channels.</p>
-        </div>
-        <div class="grid grid-2">
-          <article class="card feature">
-            <span class="feature-icon series" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6" /></svg></span>
-            <h3>Live, movies and series apart</h3>
-            <p>Many providers put live channels and series episodes under the same group name. Strim splits them, so you can keep “Germany” live and drop “Germany · Series”.</p>
-          </article>
-          <article class="card feature">
-            <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" /><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" /></svg></span>
-            <h3>A link that stays current</h3>
-            <p>Each time your player refreshes the link, Strim reads the provider’s current list and applies your choices. New channels in the groups you kept simply appear.</p>
-          </article>
-          <article class="card feature">
-            <span class="feature-icon movies" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z" /></svg></span>
-            <h3>You stay in control</h3>
-            <p>Turn a link off, or replace it with a new one if it ever leaks. Strim shows when a player last fetched it.</p>
-          </article>
-          <article class="card feature">
-            <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14" /></svg></span>
-            <h3>Free and open source</h3>
-            <p>No ads, no tracking. The code is on GitHub and runs anywhere Docker runs, with SQLite or PostgreSQL.</p>
-          </article>
-        </div>
-        <div class="cta-row">
-          <a class="btn" href="features.html">All features</a>
+      <section class="band" aria-labelledby="band-title">
+        <h2 id="band-title">The link keeps <em>answering.</em></h2>
+        <div class="band-grid">
+          <div><b>Last good list</b><span>When the provider is down or slow, players get the last list that worked.</span></div>
+          <div><b>As the provider wrote it</b><span>Programme-guide address, logos, attributes and order pass through unchanged.</span></div>
+          <div><b>Fresh every 6 hours</b><span>Auto-refresh keeps the provider’s list ready, so a player refresh is fast.</span></div>
         </div>
       </section>
 
@@ -145,19 +155,23 @@
         <div class="faq">
           <details class="card">
             <summary>Do I need an account?</summary>
-            <p>No. You can load a playlist, pick groups and download the cleaned file as a guest. An account is only needed for a saved playlist and its player link.</p>
+            <p>Not to clean a list: load a playlist, pick groups and download the file as a guest. The player link, the Library, marks and sharing need an account.</p>
           </details>
           <details class="card">
-            <summary>Does Strim host or sell any streams?</summary>
-            <p>No. Strim only edits the playlist you bring. The streams stay with your provider, and the player plays them from there.</p>
+            <summary>Does Strim host or play any streams?</summary>
+            <p>No. Strim edits the playlist you bring and shows what is in it. The streams stay with your provider, and your player plays them from there.</p>
           </details>
           <details class="card">
-            <summary>What happens when my provider adds channels?</summary>
-            <p>The player link always starts from the provider’s current list. Channels added to groups you kept appear on the player’s next refresh; groups you switched off stay off.</p>
+            <summary>What if my provider is down?</summary>
+            <p>The player link answers with the last list that worked, so your player keeps its channels until the provider is back.</p>
           </details>
           <details class="card">
-            <summary>Is my provider link safe?</summary>
-            <p>The link usually contains your provider login, so treat it like a password. Strim keeps it only when you save a playlist, never puts it in the player link, and lets you replace a player link at any time.</p>
+            <summary>Where do posters and film details come from?</summary>
+            <p>From TMDB, on servers that have a TMDB key set up. Strim sends only a cleaned title and year, never your provider link. Without a key the Library works without posters and cards.</p>
+          </details>
+          <details class="card">
+            <summary>What can an invited person see?</summary>
+            <p>The Library of that one playlist, read-only, with their own marks and watchlist. Never the provider link, the player link or your marks.</p>
           </details>
         </div>
       </section>
