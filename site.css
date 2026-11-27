@@ -265,45 +265,6 @@ kbd {
   margin-top: 4px;
 }
 
-/* Feature card with a small coloured icon tile. */
-.feature {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 22px;
-}
-
-.feature-icon {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 6px;
-  border-radius: 13px;
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-}
-
-.feature-icon svg {
-  width: 22px;
-  height: 22px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.feature-icon.movies {
-  background: var(--movies-soft);
-  color: var(--movies-ink);
-}
-
-.feature-icon.series {
-  background: var(--series-soft);
-  color: var(--series-ink);
-}
-
 .cta-row {
   display: flex;
   flex-wrap: wrap;
@@ -611,39 +572,6 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-/* ---------- Steps ---------- */
-
-.steps {
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: 14px;
-  margin: 0;
-  padding: 0;
-  counter-reset: step;
-}
-
-.steps > li {
-  counter-increment: step;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.steps > li::before {
-  content: counter(step);
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 4px;
-  border-radius: 50%;
-  background: var(--ink);
-  color: var(--bg);
-  font-family: var(--font-display);
-  font-weight: 800;
 }
 
 /* Long-form numbered guide (how to use). */
@@ -1198,6 +1126,108 @@ kbd {
   }
 }
 
+/* ---------- Landing page: hero, stops, band ---------- */
+
+.hero-tv { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); }
+
+.hero-tv h1 { font-size: clamp(38px, 5.2vw, 56px); }
+
+.hero-tv h1 span, .hero-tv h1 em { display: block; }
+
+@media (max-width: 880px) {
+  .hero-tv { grid-template-columns: minmax(0, 1fr); }
+}
+
+.stops {
+  display: flex;
+  flex-direction: column;
+  gap: 84px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: stop;
+}
+
+.stop {
+  counter-increment: stop;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 32px 64px;
+}
+
+.stop-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+
+.stop:nth-child(even) .stop-copy { order: 2; }
+
+.stop-copy .eyebrow::before {
+  content: counter(stop);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.stop-copy p { max-width: 46ch; color: var(--ink-2); font-size: 16.5px; line-height: 1.55; }
+
+.ticks { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 0; padding: 0; list-style: none; color: var(--ink-2); }
+
+.ticks li { display: flex; gap: 10px; align-items: flex-start; }
+
+.ticks li::before { content: ""; width: 7px; height: 7px; flex-shrink: 0; margin-top: 8px; border-radius: 50%; background: var(--accent); }
+
+.ticks b { color: var(--ink); font-weight: 700; }
+
+@media (max-width: 880px) {
+  .stops { gap: 60px; }
+  .stop { grid-template-columns: minmax(0, 1fr); }
+  .stop:nth-child(even) .stop-copy { order: 0; }
+}
+
+.band {
+  margin-top: 84px;
+  padding: 36px;
+  border-radius: 28px;
+  background:
+    radial-gradient(30rem 14rem at 100% 0, rgba(255, 91, 31, 0.3), transparent 70%),
+    var(--dock-bg);
+  border: 1px solid var(--dock-border);
+  color: var(--dock-ink);
+}
+
+.band h2 { color: var(--dock-ink); max-width: 18ch; }
+
+.band h2 em { color: var(--accent); }
+
+.band-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 22px 36px;
+  margin-top: 26px;
+}
+
+.band-grid div { padding-top: 16px; border-top: 1px solid color-mix(in srgb, var(--dock-ink) 22%, transparent); }
+
+.band-grid b { display: block; margin-bottom: 4px; font-family: var(--font-display); font-size: 18px; font-weight: 750; letter-spacing: -0.02em; }
+
+.band-grid span { color: var(--dock-ink-2); }
+
+@media (max-width: 560px) {
+  .band { padding: 26px 22px; }
+}
+
+.note-tmdb { margin-top: 4px; color: var(--ink-3); font-size: 13.5px; }
+
+/* Until a stop has its still it is one text column. */
+.stop:not(:has(figure)) { grid-template-columns: minmax(0, 1fr); }
+
 @media (prefers-reduced-motion: reduce) {
   .wm-dot,
   .tv-card .wm-dot,
@@ -1222,4 +1252,5 @@ kbd {
   .dot, .dot.movies, .dot.series { forced-color-adjust: none; background: CanvasText; }
   /* The television's own pulse rule outranks theme.css's; stop it so no tangerine ring is painted. */
   .tv-card .wm-dot { animation: none; }
+  .band { border: 1px solid CanvasText; }
 }
