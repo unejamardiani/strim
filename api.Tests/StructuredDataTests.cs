@@ -40,17 +40,15 @@ public class StructuredDataTests
   }
 
   /// <summary>
-  /// The item's own markup: nested items are cut out, because their properties belong to them and not to the
-  /// enclosing item.
+  /// The item's own markup: the content of nested items is cut out, because their properties belong to them and
+  /// not to the enclosing item. A nested item's opening tag stays, because the <c>itemprop</c> on it is a
+  /// property of the enclosing item.
   /// </summary>
   private static string Own(string item)
   {
-    const string NestedItem = @"<(\w+)[^>]*\bitemscope\b[^>]*>";
-    for (var nested = Regex.Match(item, NestedItem); nested.Success; nested = Regex.Match(item, NestedItem))
-    {
-      var end = item.IndexOf('>', Closing(item, nested)) + 1;
-      item = item[..nested.Index] + item[end..];
-    }
+    var nestedItem = new Regex(@"<(\w+)[^>]*\bitemscope\b[^>]*>");
+    for (var nested = nestedItem.Match(item); nested.Success; nested = nestedItem.Match(item, nested.Index + nested.Length))
+      item = item[..(nested.Index + nested.Length)] + item[Closing(item, nested)..];
     return item;
   }
 
@@ -86,7 +84,7 @@ public class StructuredDataTests
     AssertMeta(own, "description", description);
     AssertMeta(own, "isAccessibleForFree", "true");
 
-    Assert.Contains($@"itemprop=""offers"" itemscope itemtype=""{Schema}Offer""", app);
+    Assert.Contains($@"itemprop=""offers"" itemscope itemtype=""{Schema}Offer""", own);
     AssertMeta(Own(Item(app, "Offer")), "price", "0");
   }
 
