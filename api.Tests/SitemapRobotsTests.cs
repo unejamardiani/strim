@@ -86,18 +86,27 @@ public class SitemapRobotsTests
 
   /// <summary>
   /// The <c>href</c> of every <c>&lt;link&gt;</c> outside HTML comments and inert <c>&lt;template&gt;</c> contents
-  /// whose <c>rel</c> names <c>canonical</c>, in any attribute order.
+  /// whose <c>rel</c> names <c>canonical</c>, in any attribute order. Template nesting is tracked, so a link after an
+  /// inner <c>&lt;/template&gt;</c> but still inside the outer template stays inert.
   /// </summary>
   private static List<string> CanonicalHrefs(string html)
   {
     var uncommented = Regex.Replace(html, "<!--.*?-->", "", RegexOptions.Singleline);
-    var active = Regex.Replace(uncommented, @"<template\b.*?</template\s*>", "",
-      RegexOptions.Singleline | RegexOptions.IgnoreCase);
     var hrefs = new List<string>();
-    foreach (Match link in Regex.Matches(active, @"<link\b([^>]*)>", RegexOptions.IgnoreCase))
+    var templateDepth = 0;
+    foreach (Match tag in Regex.Matches(uncommented, @"<(/?)(template|link)\b([^>]*)>", RegexOptions.IgnoreCase))
     {
+      var isClosing = tag.Groups[1].Value == "/";
+      if (tag.Groups[2].Value.Equals("template", StringComparison.OrdinalIgnoreCase))
+      {
+        templateDepth = isClosing ? Math.Max(0, templateDepth - 1) : templateDepth + 1;
+        continue;
+      }
+      if (isClosing || templateDepth > 0)
+        continue;
+
       var attributes = new Dictionary<string, string>();
-      foreach (Match a in Regex.Matches(link.Groups[1].Value, @"([\w-]+)\s*=\s*(?:""([^""]*)""|'([^']*)')"))
+      foreach (Match a in Regex.Matches(tag.Groups[3].Value, @"([\w-]+)\s*=\s*(?:""([^""]*)""|'([^']*)')"))
         attributes.TryAdd(a.Groups[1].Value.ToLowerInvariant(), a.Groups[2].Success ? a.Groups[2].Value : a.Groups[3].Value);
 
       var isCanonical = attributes.TryGetValue("rel", out var rel)
