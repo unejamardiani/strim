@@ -21,15 +21,37 @@ public class StructuredDataTests
   {
     var opening = Assert.Single(Regex.Matches(html, $@"<(\w+)[^>]*\bitemtype=""{Regex.Escape(Schema + type)}""[^>]*>"));
     Assert.Contains("itemscope", opening.Value);
+    return html[(opening.Index + opening.Length)..Closing(html, opening)];
+  }
+
+  /// <summary>Where the closing tag of the element that <paramref name="opening"/> opens starts.</summary>
+  private static int Closing(string html, Match opening)
+  {
     var tag = opening.Groups[1].Value;
+    var start = opening.Index + opening.Length;
     var depth = 1;
-    foreach (Match match in Regex.Matches(html[(opening.Index + opening.Length)..], $@"<(/?){tag}\b[^>]*>"))
+    foreach (Match match in Regex.Matches(html[start..], $@"<(/?){tag}\b[^>]*>"))
     {
       depth += match.Groups[1].Value == "/" ? -1 : 1;
       if (depth == 0)
-        return html.Substring(opening.Index + opening.Length, match.Index);
+        return start + match.Index;
     }
-    throw new Xunit.Sdk.XunitException($"<{tag}> of {type} is never closed");
+    throw new Xunit.Sdk.XunitException($"<{tag}> at {opening.Index} is never closed");
+  }
+
+  /// <summary>
+  /// The item's own markup: nested items are cut out, because their properties belong to them and not to the
+  /// enclosing item.
+  /// </summary>
+  private static string Own(string item)
+  {
+    const string NestedItem = @"<(\w+)[^>]*\bitemscope\b[^>]*>";
+    for (var nested = Regex.Match(item, NestedItem); nested.Success; nested = Regex.Match(item, NestedItem))
+    {
+      var end = item.IndexOf('>', Closing(item, nested)) + 1;
+      item = item[..nested.Index] + item[end..];
+    }
+    return item;
   }
 
   private static void AssertMeta(string item, string property, string content) =>
@@ -41,7 +63,7 @@ public class StructuredDataTests
   [Fact]
   public void WebSite_IsNamedStrim_WithTheSiteUrl()
   {
-    var site = Item(Landing(), "WebSite");
+    var site = Own(Item(Landing(), "WebSite"));
 
     AssertMeta(site, "name", "Strim");
     AssertUrl(site);
@@ -52,18 +74,20 @@ public class StructuredDataTests
   {
     var html = Landing();
     var app = Item(html, "SoftwareApplication");
+    var own = Own(app);
     var description = Regex.Match(html, @"<meta name=""description"" content=""([^""]+)"" />").Groups[1].Value;
 
-    AssertMeta(app, "name", "Strim");
-    AssertUrl(app);
-    AssertMeta(app, "applicationCategory", "MultimediaApplication");
-    AssertMeta(app, "operatingSystem", "Web");
+    Assert.Contains(@"<span itemprop=""name"">Strim</span>", own);
+    Assert.Single(Regex.Matches(own, @"itemprop=""name"""));
+    AssertUrl(own);
+    AssertMeta(own, "applicationCategory", "MultimediaApplication");
+    AssertMeta(own, "operatingSystem", "Web");
     Assert.NotEmpty(description);
-    AssertMeta(app, "description", description);
-    AssertMeta(app, "isAccessibleForFree", "true");
+    AssertMeta(own, "description", description);
+    AssertMeta(own, "isAccessibleForFree", "true");
 
     Assert.Contains($@"itemprop=""offers"" itemscope itemtype=""{Schema}Offer""", app);
-    AssertMeta(Item(app, "Offer"), "price", "0");
+    AssertMeta(Own(Item(app, "Offer")), "price", "0");
   }
 
   [Fact]
