@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Api.Tests.Integration;
 using Xunit;
@@ -278,6 +279,48 @@ public class LandingPageTests
     Assert.Contains(@"<span class=""eyebrow"">Clean</span>", Stops()[0]);
     foreach (var stop in Stops())
       Assert.Single(Regex.Matches(stop, "<figure[ >]"));
+  }
+
+  private static string Picker() => Block(Read("index.html"), @"<figure class=""demo""[^>]*>(.*?)</figure>");
+
+  /// <summary>Each row of the group picker: its name, its count and whether it is on (#618).</summary>
+  private static (string Name, int Count, bool On)[] PickerRows() =>
+    Regex.Matches(Picker(), @"<li class=""demo-row( off)?"">(.*?)</li>")
+      .Select(row =>
+      {
+        var markup = row.Groups[2].Value;
+        var on = row.Groups[1].Value == "";
+        Assert.Equal(on, markup.Contains(@"<span class=""switch on"">"));
+        return (
+          Block(markup, @"<span class=""name"">(.*?)</span>"),
+          int.Parse(Block(markup, @"<span class=""count"">(.*?)</span>"), NumberStyles.AllowThousands, CultureInfo.InvariantCulture),
+          on);
+      })
+      .ToArray();
+
+  [Fact]
+  public void GroupPicker_ShowsMovies4KSwitchedOn()
+  {
+    var movies = PickerRows().Single(row => row.Name == "Movies · 4K");
+
+    Assert.True(movies.On);
+    Assert.Matches(
+      @"<li class=""demo-row""><span class=""dot movies""></span><span class=""name"">Movies · 4K</span>.*?<span class=""switch on""></span></li>",
+      Picker());
+  }
+
+  [Fact]
+  public void GroupPickerDock_AddsUpTheRowsThatAreOn()
+  {
+    var rows = PickerRows();
+    var on = rows.Where(row => row.On).ToArray();
+    var dock = Block(Picker(), @"<div class=""demo-dock""[^>]*>(.*?)</div>");
+
+    Assert.Equal(6, rows.Length);
+    Assert.Contains(
+      $@"<span class=""value"">{on.Sum(row => row.Count).ToString("N0", CultureInfo.InvariantCulture)} <small>channels</small></span>",
+      dock);
+    Assert.Contains($@"<span class=""sub"">{on.Length} of {rows.Length} groups on</span>", dock);
   }
 
   [Theory]
