@@ -57,9 +57,6 @@ public class SitemapRobotsTests
   public void Sitemap_ListsEveryPublicPage_AndNothingElse()
   {
     var entries = SitemapEntries();
-    foreach (var entry in entries)
-      Assert.True(entry.Locs.Count == 1, $"sitemap {entry.Name}: {entry.Locs.Count} <loc> elements, expected exactly one");
-
     var locs = entries.SelectMany(e => e.Locs).ToList();
     var expected = PublicPages().Select(UrlOf).ToList();
 
@@ -69,6 +66,9 @@ public class SitemapRobotsTests
     Assert.True(missing.Count == 0, $"sitemap misses: {string.Join(", ", missing)}");
     var extra = locs.Except(expected).ToList();
     Assert.True(extra.Count == 0, $"sitemap lists pages that are not public pages: {string.Join(", ", extra)}");
+    // Checked last, so a <url> that lost its <loc> is first reported by the page it misses.
+    foreach (var entry in entries)
+      Assert.True(entry.Locs.Count == 1, $"sitemap {entry.Name}: {entry.Locs.Count} <loc> elements, expected exactly one");
   }
 
   [Fact]
@@ -85,12 +85,14 @@ public class SitemapRobotsTests
   }
 
   /// <summary>
-  /// The <c>href</c> of every <c>&lt;link&gt;</c> outside HTML comments whose <c>rel</c> names <c>canonical</c>, in
-  /// any attribute order.
+  /// The <c>href</c> of every <c>&lt;link&gt;</c> outside HTML comments and inert <c>&lt;template&gt;</c> contents
+  /// whose <c>rel</c> names <c>canonical</c>, in any attribute order.
   /// </summary>
   private static List<string> CanonicalHrefs(string html)
   {
-    var active = Regex.Replace(html, "<!--.*?-->", "", RegexOptions.Singleline);
+    var uncommented = Regex.Replace(html, "<!--.*?-->", "", RegexOptions.Singleline);
+    var active = Regex.Replace(uncommented, @"<template\b.*?</template\s*>", "",
+      RegexOptions.Singleline | RegexOptions.IgnoreCase);
     var hrefs = new List<string>();
     foreach (Match link in Regex.Matches(active, @"<link\b([^>]*)>", RegexOptions.IgnoreCase))
     {
@@ -146,13 +148,14 @@ public class SitemapRobotsTests
       .ToList();
 
   /// <summary>
-  /// The allow and disallow rules of the group that applies to every crawler. Consecutive <c>User-agent</c> lines open
-  /// a group; its rules run until the next <c>User-agent</c> line that follows a rule. Null when no group names <c>*</c>.
+  /// The allow and disallow rules of every group that applies to all crawlers. Consecutive <c>User-agent</c> lines open
+  /// a group; its rules run until the next <c>User-agent</c> line that follows a rule. The rules of all <c>*</c> groups
+  /// are collected, so an earlier group cannot hide behind a later one. Null when no group names <c>*</c>.
   /// </summary>
   private static List<(string Name, string Value)>? WildcardGroupRules(List<(string Name, string Value)> directives)
   {
     List<(string Name, string Value)>? wildcard = null;
-    var rules = new List<(string Name, string Value)>();
+    var groupIsWildcard = false;
     var inRules = false;
     foreach (var directive in directives)
     {
@@ -160,16 +163,20 @@ public class SitemapRobotsTests
       {
         if (inRules)
         {
-          rules = [];
+          groupIsWildcard = false;
           inRules = false;
         }
         if (directive.Value == "*")
-          wildcard = rules;
+        {
+          groupIsWildcard = true;
+          wildcard ??= [];
+        }
       }
       else if (directive.Name is "allow" or "disallow")
       {
         inRules = true;
-        rules.Add(directive);
+        if (groupIsWildcard)
+          wildcard!.Add(directive);
       }
     }
     return wildcard;
