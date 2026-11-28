@@ -102,7 +102,9 @@ public class SeoHeadTests
   public void Icon_IsTheLogoFile_NotADataUri(string page)
   {
     var head = Head(page);
-    Assert.DoesNotMatch(new Regex("rel=\"icon\"[^>]*href=\"data:"), head);
+    // Any attribute order: a data URI may sit before or after rel="icon".
+    var iconLinks = Regex.Matches(head, "<link\\b[^>]*\\brel=\"icon\"[^>]*>").Select(m => m.Value);
+    Assert.All(iconLinks, link => Assert.DoesNotContain("href=\"data:", link));
     Assert.Contains("<link rel=\"icon\" href=\"/logo-icon.svg\" type=\"image/svg+xml\" />", head);
   }
 
