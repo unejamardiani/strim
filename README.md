@@ -3,7 +3,7 @@
 <p align="center"><strong>Your IPTV playlist, minus the noise.</strong><br>
 Switch off the groups you never watch, give your players one link that stays up to date, and browse what is left like a library.</p>
 
-<p align="center"><a href="https://strim.plis.dev">strim.plis.dev</a> · <a href="https://opensource.org/licenses/MIT">MIT licence</a></p>
+<p align="center"><a href="https://strim.plis.dev">strim.plis.dev</a> · <a href="LICENSE">Apache 2.0 licence</a></p>
 
 ---
 
@@ -155,4 +155,4 @@ can fetch them.
 
 ## Licence
 
-MIT. Fonts: Bricolage Grotesque and Figtree, SIL Open Font License (see `fonts/`).
+Apache License 2.0, see [LICENSE](LICENSE). Fonts: Bricolage Grotesque and Figtree, SIL Open Font License (see `fonts/`).

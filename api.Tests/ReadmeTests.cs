@@ -131,4 +131,26 @@ public class ReadmeTests
 
     Assert.All(addresses, a => Assert.Equal("github.com/plis-labs/strim", a));
   }
+
+  [Fact]
+  public void Licence_NamesApacheAndLinksLicenseFile()
+  {
+    var readme = Readme();
+    var header = readme.Split('\n').First(line => line.Contains("strim.plis.dev</a>"));
+
+    Assert.DoesNotMatch(new Regex(@"\bMIT\b"), readme);
+    Assert.DoesNotContain("opensource.org/licenses/MIT", readme);
+    Assert.Contains("<a href=\"LICENSE\">Apache 2.0 licence</a>", header);
+    Assert.Contains("Apache License 2.0, see [LICENSE](LICENSE).", Section(readme, "Licence"));
+  }
+
+  [Fact]
+  public void Licence_MatchesTheLicenseFile()
+  {
+    var firstLine = File.ReadLines(Path.Combine(Root, "LICENSE")).First(line => line.Trim().Length > 0).Trim();
+
+    Assert.True(
+      firstLine == "Apache License",
+      $"LICENSE starts with \"{firstLine}\": the README names Apache 2.0 and is due for a change.");
+  }
 }
