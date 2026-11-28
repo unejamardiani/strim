@@ -102,11 +102,31 @@ public class SeoHeadTests
   public void Icon_IsTheLogoFile_NotADataUri(string page)
   {
     var head = Head(page);
-    // Any attribute order: a data URI may sit before or after rel="icon".
-    var iconLinks = Regex.Matches(head, "<link\\b[^>]*\\brel=\"icon\"[^>]*>").Select(m => m.Value);
-    Assert.All(iconLinks, link => Assert.DoesNotContain("href=\"data:", link));
+    Assert.DoesNotContain(IconHrefs(head), href => href.StartsWith("data:", StringComparison.Ordinal));
     Assert.Contains("<link rel=\"icon\" href=\"/logo-icon.svg\" type=\"image/svg+xml\" />", head);
   }
+
+  [Fact]
+  public void IconHrefs_FindsAnInlineSvgBeforeRel()
+  {
+    // Strim's former inline icon, with href written before rel.
+    const string inline = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22>"
+      + "<rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%231d1a16%22/><text x=%2229%22 y=%2249%22 "
+      + "text-anchor=%22middle%22 font-size=%2246%22 font-weight=%22800%22 font-family=%22system-ui,sans-serif%22 "
+      + "fill=%22%23f5eee4%22>s</text><circle cx=%2247%22 cy=%2219%22 r=%227.5%22 fill=%22%23ff5b1f%22/></svg>";
+    var head = $"<link href=\"{inline}\" rel=\"icon\" /><link rel=\"icon\" href=\"/logo-icon.svg\" type=\"image/svg+xml\" />";
+    Assert.Equal([inline, "/logo-icon.svg"], IconHrefs(head));
+  }
+
+  // Quoted attribute values may hold ">" (an inline SVG does), so a tag ends only at a ">" outside quotes, and
+  // the attributes may come in any order.
+  private static List<string> IconHrefs(string head) =>
+    Regex.Matches(head, "<link\\b(?:[^>\"']|\"[^\"]*\"|'[^']*')*>")
+      .Select(tag => Regex.Matches(tag.Value, "\\s([a-z]+)=\"([^\"]*)\"")
+        .ToDictionary(a => a.Groups[1].Value, a => a.Groups[2].Value))
+      .Where(attributes => attributes.GetValueOrDefault("rel") == "icon")
+      .Select(attributes => attributes.GetValueOrDefault("href", ""))
+      .ToList();
 
   [Fact]
   public void Image_ShipsTheLogoFile()
