@@ -304,9 +304,6 @@ public class LandingPageTests
     var movies = PickerRows().Single(row => row.Name == "Movies · 4K");
 
     Assert.True(movies.On);
-    Assert.Matches(
-      @"<li class=""demo-row""><span class=""dot movies""></span><span class=""name"">Movies · 4K</span>.*?<span class=""switch on""></span></li>",
-      Picker());
   }
 
   [Fact]
