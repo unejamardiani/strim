@@ -13,7 +13,7 @@ COPY . .
 # change here.
 RUN mkdir -p api/wwwroot && \
     cp index.html app.html features.html how-to-use.html comparison.html 404.html 500.html 50x.html api/wwwroot/ && \
-    cp *.css *.js robots.txt sitemap.xml tmdb-logo.svg api/wwwroot/ && \
+    cp *.css *.js robots.txt sitemap.xml tmdb-logo.svg logo-icon.svg api/wwwroot/ && \
     cp -r fonts api/wwwroot/
 
 # Version every stylesheet and script by content hash so a cached old file is never paired with a
